@@ -620,9 +620,13 @@ def run_pipeline_stage(
     return result
 
   result.status = "running"
+  stage_context = dict(known_outputs)
+  for key, value in stage_inputs.items():
+    if value and Path(str(value)).exists():
+      stage_context[key] = value
   try:
     runner = STAGE_RUNNERS[stage_id]
-    payload = runner(config, stage_output_dir, known_outputs)
+    payload = runner(config, stage_output_dir, stage_context)
     raw_paths = dict(payload.get("paths", {}) or {})
     result_paths = normalize_stage_outputs(
       stage_id,
@@ -647,8 +651,15 @@ def run_pipeline_stage(
       result.status = "failed"
       result.errors.append(message)
     elif "missing bigquery_light_dedup_csv" in message:
+      block_reason = classify_missing_input_block(
+        stage_id,
+        config,
+        manifest,
+        known_outputs,
+        ["bigquery_light_dedup_csv"],
+      )
       result.status = "blocked"
-      result.skipped_reason = "missing bigquery_light_dedup_csv"
+      result.skipped_reason = block_reason or message
     else:
       result.status = "failed"
       result.errors.append(message)
