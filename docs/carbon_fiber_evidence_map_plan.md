@@ -12,8 +12,13 @@
 
 ### Step 2: BigQuery Light Multi-Query Retrieval
 
-- Execute each query plan in lightweight dry-run / capped retrieval mode
-- Merge results into a retrieval corpus with source audit metadata
+- Use multiple `query_plan` objects from Search Strategy Builder
+- Run intent-specific lightweight BigQuery retrieval
+- Retrieve up to ~2,000 metadata records total
+- Do not fetch full text, claims, or description
+- Top5 full-text collection is a later phase
+- Attach `search_intent`, `query_plan_id`, and `matched_terms` to every record
+- Deduplicate by `publication_number` before export
 
 ### Step 3: AI Technology Clustering
 

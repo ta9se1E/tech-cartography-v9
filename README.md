@@ -67,3 +67,31 @@ Phase 1 focuses on building search strategy before any BigQuery execution.
 - Minimal Streamlit UI via `streamlit run app.py`
 
 See also: `docs/carbon_fiber_evidence_map_plan.md`
+
+## v7 Phase 2: BigQuery Light Multi-Query Retrieval
+
+Phase 2 executes lightweight BigQuery retrieval for each `QueryPlan` from Phase 1.
+
+- Metadata only: title, abstract, assignee, publication metadata, CPC/IPC
+- No claims, description, or full text
+- Dry-run by default with estimated GB / USD
+- `--execute` required for actual BigQuery execution
+- `maximum_bytes_billed` cap enforced per query
+- Results saved to `outputs/bigquery_light_retrieval/{timestamp}/`
+- Raw and deduplicated CSV plus `retrieval_summary.json`
+- Each record includes `search_intents`, `query_plan_ids`, `matched_terms`, `source_type`, `evidence_level`
+
+### Important note on LIMIT
+
+`LIMIT` alone does not reduce bytes scanned. Always filter with `WHERE` on
+`publication_date`, `country_code`, include terms, and exclude terms.
+
+### CLI examples
+
+```bash
+python scripts/run_bigquery_light_search.py --max-results-total 2000 --max-results-per-intent 500 --maximum-gb 300
+
+python scripts/run_bigquery_light_search.py --execute --max-results-total 2000 --max-results-per-intent 500 --maximum-gb 300
+```
+
+Default mode is dry-run. Pass `--execute` only when you intend to bill BigQuery.
