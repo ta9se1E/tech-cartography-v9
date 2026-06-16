@@ -86,7 +86,13 @@
 - Export `web_signal_patent_links.csv` and `web_signal_report.md`
 - No automatic Tavily/web search or Business View Agent in this step
 
-### Step 10: Business View & Synthesis
+### Step 10: Business View Agent
 
-- Business View Agent
+- Input: technical assessments, patent technical summary, web signal patent links
+- Rule-based business assessment for SMEs (commercialization signals, competitive watch, SME opportunity, design-around candidates)
+- Export `business_assessments.json`, `patent_business_summary.csv`, and `business_view_report.md`
+- No Synthesis Report, automatic Tavily/web search, or monthly update automation in this step
+
+### Step 11: Synthesis Report (future)
+
 - Final synthesis report for Carbon Fiber Evidence Map review

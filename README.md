@@ -294,3 +294,32 @@ Outputs are saved under `outputs/web_signal_mapping/{timestamp}/`:
 - `web_signals_by_company.csv`
 - `web_signals_by_cluster.csv`
 - `web_signal_report.md`
+
+## v7 Phase 10: Business View Agent
+
+Phase 10 integrates technical assessment (Phase 8) and web/company signal mapping (Phase 9) into preliminary business intelligence for SMEs.
+
+- Input: `technical_assessments.json`, `patent_technical_summary.csv`, `web_signal_patent_links.csv`
+- Optional: `ranked_patents.csv`, `patent_evidence_maps.json`
+- Rule-based business assessment (no automatic web search, no synthesis report yet)
+- Outputs commercialization signal candidates, competitive watch points, SME opportunity candidates, design-around hints, and recommended reader actions
+- Web signals are treated as business context candidates, not proof of commercialization
+
+### CLI example
+
+```bash
+python scripts/run_business_view_agent.py \
+  --technical-assessments-json outputs/technical_view_assessment/latest/technical_assessments.json \
+  --patent-technical-summary-csv outputs/technical_view_assessment/latest/patent_technical_summary.csv \
+  --web-signal-links-csv outputs/web_signal_mapping/latest/web_signal_patent_links.csv
+```
+
+Outputs are saved under `outputs/business_view_assessment/{timestamp}/`:
+
+- `business_assessments.json`
+- `business_assessment_items.csv`
+- `patent_business_summary.csv`
+- `sme_opportunity_candidates.csv`
+- `design_around_candidates.csv`
+- `common_business_risks.json`
+- `business_view_report.md`

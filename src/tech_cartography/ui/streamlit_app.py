@@ -27,10 +27,13 @@ from tech_cartography.reports.claim_paper_evidence_map_report import build_claim
 from tech_cartography.reports.evidence_map_export import save_claim_paper_evidence_map_outputs
 from tech_cartography.agents.technical_view_agent import run_technical_view_assessment
 from tech_cartography.reports.technical_assessment_export import save_technical_view_outputs
+from tech_cartography.reports.technical_view_report import build_technical_view_summary
 from tech_cartography.ingestion.web_signal_loader import load_web_signal_file, save_demo_web_signal_template
 from tech_cartography.reports.web_signal_export import run_web_signal_mapping, save_web_signal_outputs
 from tech_cartography.reports.web_signal_report import build_web_signal_summary
-from tech_cartography.reports.technical_view_report import build_technical_view_summary
+from tech_cartography.agents.business_view_agent import run_business_view_assessment
+from tech_cartography.reports.business_assessment_export import save_business_view_outputs
+from tech_cartography.reports.business_view_report import build_business_view_summary
 from tech_cartography.reports.fulltext_evidence_report import (
   build_fulltext_evidence_summary,
   render_fulltext_evidence_markdown,
@@ -60,7 +63,7 @@ def _split_csv(value: str) -> list[str]:
 
 def render_search_strategy_page() -> None:
   st.title("PatentScout AI v7 — Carbon Fiber Evidence Map")
-  st.caption("Phase 1-9: Strategy / BigQuery / Clustering / Full Text / Claims / OpenAlex / Evidence Map / Technical View / Web Signals")
+  st.caption("Phase 1-10: Strategy / BigQuery / Clustering / Full Text / Claims / OpenAlex / Evidence Map / Technical View / Web Signals / Business View")
 
   if st.button("Load carbon fiber demo profile"):
     demo = load_carbon_fiber_demo_profile()
@@ -670,6 +673,138 @@ def render_search_strategy_page() -> None:
       st.subheader("Web Signal Report")
       st.markdown(Path(report_path).read_text(encoding="utf-8"))
     st.write("保存先:", web_signal_mapping["paths"])
+
+  st.subheader("Phase 10: Business View Agent")
+  bv_tech_json = st.text_input(
+    "technical_assessments.json path",
+    value="outputs/technical_view_assessment/latest/technical_assessments.json",
+    key="phase10_tech_json",
+  )
+  bv_tech_csv = st.text_input(
+    "patent_technical_summary.csv path",
+    value="outputs/technical_view_assessment/latest/patent_technical_summary.csv",
+    key="phase10_tech_csv",
+  )
+  bv_web_csv = st.text_input(
+    "web_signal_patent_links.csv path",
+    value="outputs/web_signal_mapping/latest/web_signal_patent_links.csv",
+    key="phase10_web_csv",
+  )
+  bv_ranked_csv = st.text_input(
+    "ranked_patents.csv (optional)",
+    value="outputs/carbon_fiber_case_study/latest/ranked_patents.csv",
+    key="phase10_ranked_csv",
+  )
+  bv_maps_json = st.text_input(
+    "patent_evidence_maps.json (optional)",
+    value="outputs/claim_paper_evidence_map/latest/patent_evidence_maps.json",
+    key="phase10_maps_json",
+  )
+  bv_tech_upload = st.file_uploader("または technical_assessments.json アップロード", type=["json"], key="phase10_tech_upload")
+  bv_summary_upload = st.file_uploader("または patent_technical_summary.csv アップロード", type=["csv"], key="phase10_summary_upload")
+  bv_web_upload = st.file_uploader("または web_signal_patent_links.csv アップロード", type=["csv"], key="phase10_web_upload")
+
+  if st.button("Run Business View Agent", key="phase10_run_button"):
+    def _resolve_bv(path: Path, pattern: str) -> Path:
+      if not path.exists() and "latest" in str(path):
+        parent = path.parent.parent
+        candidates = sorted(parent.glob(f"*/{pattern}"))
+        if candidates:
+          return candidates[-1]
+      return path
+
+    tech_json_path = _resolve_bv(Path(bv_tech_json), "technical_assessments.json")
+    tech_csv_path = _resolve_bv(Path(bv_tech_csv), "patent_technical_summary.csv")
+    web_csv_path = _resolve_bv(Path(bv_web_csv), "web_signal_patent_links.csv")
+    ranked_path = _resolve_bv(Path(bv_ranked_csv), "ranked_patents.csv")
+    maps_path = _resolve_bv(Path(bv_maps_json), "patent_evidence_maps.json")
+
+    if bv_tech_upload is not None:
+      tmp = Path("outputs/_uploads/technical_assessments.json")
+      tmp.parent.mkdir(parents=True, exist_ok=True)
+      tmp.write_bytes(bv_tech_upload.getvalue())
+      tech_json_path = tmp
+    if bv_summary_upload is not None:
+      tmp = Path("outputs/_uploads/patent_technical_summary.csv")
+      tmp.parent.mkdir(parents=True, exist_ok=True)
+      tmp.write_bytes(bv_summary_upload.getvalue())
+      tech_csv_path = tmp
+    if bv_web_upload is not None:
+      tmp = Path("outputs/_uploads/web_signal_patent_links.csv")
+      tmp.parent.mkdir(parents=True, exist_ok=True)
+      tmp.write_bytes(bv_web_upload.getvalue())
+      web_csv_path = tmp
+
+    technical_assessments: list[dict] = []
+    if tech_json_path.exists():
+      with tech_json_path.open(encoding="utf-8") as handle:
+        technical_assessments = json.load(handle)
+      if not isinstance(technical_assessments, list):
+        technical_assessments = []
+
+    patent_technical_summary = load_records_csv(tech_csv_path) if tech_csv_path.exists() else []
+    web_signal_links = load_records_csv(web_csv_path) if web_csv_path.exists() else []
+    ranked_patents = load_records_csv(ranked_path) if ranked_path.exists() else None
+    patent_evidence_maps = None
+    if maps_path.exists():
+      with maps_path.open(encoding="utf-8") as handle:
+        maps_data = json.load(handle)
+      patent_evidence_maps = maps_data if isinstance(maps_data, list) else maps_data.get("patent_evidence_maps", [])
+
+    if not patent_technical_summary and not technical_assessments:
+      st.error("technical_assessments.json または patent_technical_summary.csv が必要です")
+    else:
+      bv_result = run_business_view_assessment(
+        technical_assessments,
+        patent_technical_summary,
+        web_signal_links,
+        ranked_patents=ranked_patents,
+        patent_evidence_maps=patent_evidence_maps,
+      )
+      bv_output_dir = build_output_directory("outputs/business_view_assessment")
+      bv_paths = save_business_view_outputs(bv_result, bv_output_dir)
+      bv_summary = build_business_view_summary(bv_result)
+      st.session_state["business_view"] = {
+        "result": bv_result,
+        "summary": bv_summary,
+        "paths": bv_paths,
+      }
+
+  business_view = st.session_state.get("business_view")
+  if business_view:
+    bv_summary = business_view["summary"]
+    st.write(
+      "business priority counts:",
+      {
+        "high": business_view["result"].get("high_business_priority_patents"),
+        "medium": business_view["result"].get("medium_business_priority_patents"),
+        "low": business_view["result"].get("low_business_priority_patents"),
+        "monitor_only": business_view["result"].get("monitor_only_patents"),
+        "expert_review_required": business_view["result"].get("expert_review_required"),
+      },
+    )
+    st.subheader("SME opportunity candidates")
+    st.dataframe(business_view["result"].get("sme_opportunity_candidates", []))
+    st.subheader("Design-around candidates")
+    st.dataframe(business_view["result"].get("design_around_candidates", []))
+    st.subheader("Patent business summary")
+    st.dataframe(
+      [
+        {
+          "publication_number": a.get("publication_number"),
+          "overall_business_confidence": a.get("overall_business_confidence"),
+          "overall_business_score": a.get("overall_business_score"),
+          "business_summary": a.get("business_summary"),
+          "recommended_reader_action": a.get("recommended_reader_action"),
+        }
+        for a in business_view["result"].get("business_assessments", [])
+      ],
+    )
+    report_path = business_view["paths"].get("business_view_report_md")
+    if report_path and Path(report_path).exists():
+      st.subheader("Business View Report")
+      st.markdown(Path(report_path).read_text(encoding="utf-8"))
+    st.write("保存先:", business_view["paths"])
 
   if strategy:
     with st.expander("Full strategy JSON"):
