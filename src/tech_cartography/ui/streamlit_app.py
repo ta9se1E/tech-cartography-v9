@@ -161,6 +161,72 @@ def render_search_strategy_page() -> None:
     st.markdown(result["markdown"])
     st.write("保存先:", case_study["paths"])
 
+  st.subheader("Phase 4: Top5 Full Text Evidence Collection")
+  top5_csv_path = st.text_input(
+    "top5_fulltext_candidates.csv path",
+    value="outputs/carbon_fiber_case_study/latest/top5_fulltext_candidates.csv",
+  )
+  top5_uploaded = st.file_uploader("またはTop5 CSVアップロード", type=["csv"], key="top5_csv")
+  ft_max_gb = st.number_input("full text maximum GB", min_value=1.0, value=50.0, key="ft_max_gb")
+  ft_execute = st.checkbox("Execute BigQuery full text", key="ft_execute")
+  ft_use_cache = st.checkbox("Use full text cache", value=True, key="ft_use_cache")
+
+  if st.button("Run Top5 Full Text Collection"):
+    if top5_uploaded is not None:
+      import pandas as pd
+
+      candidates = pd.read_csv(top5_uploaded).to_dict(orient="records")
+    else:
+      path = Path(top5_csv_path)
+      if not path.exists():
+        parent = path.parent.parent
+        candidates_paths = sorted(parent.glob("*/top5_fulltext_candidates.csv"))
+        if candidates_paths:
+          path = candidates_paths[-1]
+      candidates = load_records_csv(path) if path.exists() else []
+
+    if not candidates:
+      st.error("Top5 CSVが見つかりません")
+    else:
+      ft_config = FullTextRetrievalConfig(
+        dry_run=not ft_execute,
+        execute=ft_execute,
+        maximum_bytes_billed_gb=float(ft_max_gb),
+        use_cache=ft_use_cache,
+      )
+      ft_result = retrieve_fulltext_for_top_candidates(candidates, ft_config)
+      ft_summary = build_fulltext_evidence_summary(ft_result)
+      ft_markdown = render_fulltext_evidence_markdown(ft_summary)
+      ft_paths = save_fulltext_collection_results(
+        ft_result.get("retrieved_records", []),
+        ft_config.output_dir,
+        summary=ft_result,
+        manual_records=ft_result.get("manual_required_records", []),
+        markdown=ft_markdown,
+      )
+      st.session_state["fulltext_collection"] = {
+        "result": ft_result,
+        "summary": ft_summary,
+        "markdown": ft_markdown,
+        "paths": ft_paths,
+      }
+
+  fulltext_collection = st.session_state.get("fulltext_collection")
+  if fulltext_collection:
+    ft_result = fulltext_collection["result"]
+    st.write(f"mode: {ft_result.get('mode')}")
+    st.write(
+      f"estimated GB: {ft_result.get('total_estimated_gb', 0):.4f} / "
+      f"USD: {ft_result.get('total_estimated_usd', 0):.4f}",
+    )
+    st.write(f"cache hits: {ft_result.get('cache_hits')}")
+    st.write(f"manual required: {ft_result.get('manual_required_candidates')}")
+    st.dataframe(ft_result.get("retrieved_records", []))
+    st.subheader("Manual required")
+    st.dataframe(ft_result.get("manual_required_records", []))
+    st.markdown(fulltext_collection["markdown"])
+    st.write("保存先:", fulltext_collection["paths"])
+
   if strategy:
     with st.expander("Full strategy JSON"):
       st.code(json.dumps(strategy, indent=2, ensure_ascii=False), language="json")

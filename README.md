@@ -117,3 +117,29 @@ python scripts/build_carbon_fiber_case_study.py \
 ```
 
 Rule-based classification is the default. LLM-based clustering is reserved for future optional extension.
+
+## v7 Phase 4: Top5 Full Text Evidence Collection
+
+Phase 4 collects full text evidence for Top5 candidates from Phase 3.
+
+- US publications: BigQuery full text route (`claims_localized`, `description_localized`)
+- Non-US publications: `manual_fulltext_required` route
+- Dry-run by default; `--execute` required for BigQuery billing
+- `maximum_bytes_billed`, cache, and cost guard enforced
+- Evidence coverage and `evidence_level` assigned per record
+- Manual upload supported via TXT / MD / CSV / XLSX loader
+
+### CLI examples
+
+```bash
+python scripts/run_top5_fulltext_collection.py \
+  --input-csv outputs/carbon_fiber_case_study/latest/top5_fulltext_candidates.csv \
+  --maximum-gb 50
+
+python scripts/run_top5_fulltext_collection.py \
+  --input-csv outputs/carbon_fiber_case_study/latest/top5_fulltext_candidates.csv \
+  --maximum-gb 50 \
+  --execute
+```
+
+Outputs are saved under `outputs/top5_fulltext_collection/{timestamp}/`.

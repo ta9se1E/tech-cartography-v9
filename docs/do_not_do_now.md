@@ -12,3 +12,5 @@ The following are explicitly out of scope for the current v7 phases:
 Current focus: Search Strategy Builder (Phase 1), BigQuery light metadata retrieval (Phase 2), and technology clustering / ranking (Phase 3).
 
 Phase 3 does **not** fetch full text yet. It classifies and ranks Phase 2 CSV outputs only.
+
+Phase 4 collects full text evidence for Top5 candidates but does **not** run OpenAlex, paper mapping, or Deep Dive analysis.

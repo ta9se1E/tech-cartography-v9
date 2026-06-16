@@ -61,9 +61,13 @@ def _normalize_row_for_csv(record: dict[str, Any], fieldnames: list[str]) -> dic
       "matched_terms",
       "secondary_cluster_ids",
       "noise_signals",
+      "independent_claims",
+      "measured_properties",
+      "warnings",
+      "errors",
     }:
       row[key] = _serialize_list_field(value)
-    elif key in {"cluster_scores", "score_breakdown"}:
+    elif key in {"cluster_scores", "score_breakdown", "evidence_coverage"}:
       row[key] = _serialize_value(value)
     else:
       row[key] = "" if value is None else str(value)

@@ -32,8 +32,13 @@
 
 ### Step 4: Top5 Full Text Evidence Collection
 
-- Select top clusters and collect full-text evidence for representative patents
-- Score evidence readiness for downstream mapping
+- Input: `top5_fulltext_candidates.csv` from Phase 3
+- US route: BigQuery full text dry-run / execute with cost guard and cache
+- Non-US route: manual full text upload path
+- Extract claims, description, examples, measured properties
+- Evaluate evidence coverage (`high` / `medium` / `low` / `metadata_only`)
+- Export JSON/CSV and `fulltext_evidence_report.md`
+- No OpenAlex, no Deep Dive analysis in this step
 
 ### Step 5: Paper/Web Evidence Mapping
 
