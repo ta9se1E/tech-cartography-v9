@@ -40,7 +40,16 @@
 - Export JSON/CSV and `fulltext_evidence_report.md`
 - No OpenAlex, no Deep Dive analysis in this step
 
-### Step 5: Paper/Web Evidence Mapping
+### Step 5: Claim Element Extraction
+
+- Input: `top5_fulltext_records.json` from Phase 4
+- Rule-based decomposition of claims into technical elements (material, process, structure, property, etc.)
+- Map support from description, examples, and measured properties
+- Generate OpenAlex paper query candidates (no search in this step)
+- Export `claim_elements.json/csv`, `paper_query_candidates.csv`, `claim_element_report.md`
+- LLM-based extraction remains optional for future extension
+
+### Step 6: Paper/Web Evidence Mapping
 
 - Map patent clusters to papers and web signals
 - Produce Carbon Fiber Evidence Map outputs for review

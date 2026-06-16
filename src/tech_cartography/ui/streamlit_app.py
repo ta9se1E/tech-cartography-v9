@@ -13,10 +13,24 @@ from tech_cartography.reports.case_study_pipeline import (
   run_case_study_pipeline,
   save_case_study_outputs,
 )
+from tech_cartography.reports.claim_element_pipeline import (
+  run_claim_element_pipeline,
+  save_claim_element_outputs,
+)
+from tech_cartography.reports.claim_element_report import build_claim_element_summary
+from tech_cartography.reports.fulltext_evidence_report import (
+  build_fulltext_evidence_summary,
+  render_fulltext_evidence_markdown,
+)
 from tech_cartography.reports.project_export import build_output_directory, load_records_csv
 from tech_cartography.retrieval.bigquery_light_retriever import (
   RetrievalConfig,
   run_multi_query_retrieval,
+)
+from tech_cartography.retrieval.patent_fulltext_retriever import (
+  FullTextRetrievalConfig,
+  retrieve_fulltext_for_top_candidates,
+  save_fulltext_collection_results,
 )
 from tech_cartography.strategy.query_plan import QueryPlan
 from tech_cartography.strategy.search_strategy_builder import build_search_strategy
@@ -28,7 +42,7 @@ def _split_csv(value: str) -> list[str]:
 
 def render_search_strategy_page() -> None:
   st.title("PatentScout AI v7 — Carbon Fiber Evidence Map")
-  st.caption("Phase 1-3: Strategy / BigQuery Light / Clustering & Ranking")
+  st.caption("Phase 1-5: Strategy / BigQuery Light / Clustering / Full Text / Claim Elements")
 
   if st.button("Load carbon fiber demo profile"):
     demo = load_carbon_fiber_demo_profile()
@@ -226,6 +240,63 @@ def render_search_strategy_page() -> None:
     st.dataframe(ft_result.get("manual_required_records", []))
     st.markdown(fulltext_collection["markdown"])
     st.write("保存先:", fulltext_collection["paths"])
+
+  st.subheader("Phase 5: Claim Element Extraction")
+  top5_json_path = st.text_input(
+    "top5_fulltext_records.json path",
+    value="outputs/top5_fulltext_collection/latest/top5_fulltext_records.json",
+    key="phase5_json_path",
+  )
+  top5_json_uploaded = st.file_uploader(
+    "またはTop5 full text JSONアップロード",
+    type=["json"],
+    key="top5_json",
+  )
+
+  if st.button("Run Claim Element Extraction"):
+    if top5_json_uploaded is not None:
+      records = json.loads(top5_json_uploaded.getvalue().decode("utf-8"))
+      if isinstance(records, dict):
+        records = records.get("retrieved_records", [])
+    else:
+      path = Path(top5_json_path)
+      if not path.exists():
+        parent = path.parent.parent
+        candidates = sorted(parent.glob("*/top5_fulltext_records.json"))
+        if candidates:
+          path = candidates[-1]
+      if path.exists():
+        with path.open(encoding="utf-8") as handle:
+          data = json.load(handle)
+        records = data if isinstance(data, list) else data.get("retrieved_records", [])
+      else:
+        records = []
+
+    if not records:
+      st.error("top5_fulltext_records.json が見つかりません")
+    else:
+      ce_result = run_claim_element_pipeline(records)
+      ce_output_dir = build_output_directory("outputs/claim_element_extraction")
+      ce_paths = save_claim_element_outputs(ce_result, ce_output_dir)
+      ce_summary = build_claim_element_summary(ce_result)
+      st.session_state["claim_element_extraction"] = {
+        "result": ce_result,
+        "summary": ce_summary,
+        "paths": ce_paths,
+      }
+
+  claim_element_extraction = st.session_state.get("claim_element_extraction")
+  if claim_element_extraction:
+    ce_summary = claim_element_extraction["summary"]
+    st.write("element type別件数:", ce_summary.get("element_type_counts", {}))
+    st.write("support status別件数:", ce_summary.get("support_status_counts", {}))
+    st.subheader("Paper query candidates")
+    st.dataframe(claim_element_extraction["result"].get("paper_queries", []))
+    report_path = claim_element_extraction["paths"].get("claim_element_report_md")
+    if report_path and Path(report_path).exists():
+      st.subheader("Claim Element Report")
+      st.markdown(Path(report_path).read_text(encoding="utf-8"))
+    st.write("保存先:", claim_element_extraction["paths"])
 
   if strategy:
     with st.expander("Full strategy JSON"):

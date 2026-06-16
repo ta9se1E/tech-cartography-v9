@@ -2,15 +2,21 @@
 
 The following are explicitly out of scope for the current v7 phases:
 
-- Full text / claims / description retrieval from BigQuery
 - OpenAlex paper search
+- Web signal search
+- Patent × paper evidence mapping
+- Business analysis agents
 - Deep Dive full-text analysis pipeline
 - Cloud Run deployment
 - Cloud SQL integration
 - v6 weekly-watch baseline bulk copy
 
-Current focus: Search Strategy Builder (Phase 1), BigQuery light metadata retrieval (Phase 2), and technology clustering / ranking (Phase 3).
+Current focus through Phase 5:
 
-Phase 3 does **not** fetch full text yet. It classifies and ranks Phase 2 CSV outputs only.
+- Phase 1: Search Strategy Builder
+- Phase 2: BigQuery light metadata retrieval
+- Phase 3: Technology clustering / ranking
+- Phase 4: Top5 full text evidence collection
+- Phase 5: Claim element extraction and paper query candidate generation
 
-Phase 4 collects full text evidence for Top5 candidates but does **not** run OpenAlex, paper mapping, or Deep Dive analysis.
+Phase 5 decomposes claims into technical elements and builds OpenAlex query candidates but does **not** execute OpenAlex search, web signal search, or paper mapping yet.

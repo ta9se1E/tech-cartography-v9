@@ -143,3 +143,28 @@ python scripts/run_top5_fulltext_collection.py \
 ```
 
 Outputs are saved under `outputs/top5_fulltext_collection/{timestamp}/`.
+
+## v7 Phase 5: Claim Element Extraction
+
+Phase 5 consumes Phase 4 `top5_fulltext_records.json` and decomposes patent claims into technical elements for the next OpenAlex paper evidence search phase.
+
+- Rule-based extraction from claims, description, examples, and measured properties
+- Element types: material, process, structure, property, numerical_condition, application, and more
+- Support mapping: `supported_by_description`, `supported_by_examples`, `supported_by_measured_properties`, `claim_only`, `metadata_only`
+- Paper query candidates generated (search not executed in this phase)
+- Each element includes `source_section` and `evidence_snippet`
+- Records without claims use `metadata_only` or limited extraction
+
+### CLI example
+
+```bash
+python scripts/run_claim_element_extraction.py \
+  --input-json outputs/top5_fulltext_collection/latest/top5_fulltext_records.json
+```
+
+Outputs are saved under `outputs/claim_element_extraction/{timestamp}/`:
+
+- `claim_elements.json` / `claim_elements.csv`
+- `record_claim_element_summary.json`
+- `paper_query_candidates.csv`
+- `claim_element_report.md`
