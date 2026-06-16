@@ -43,3 +43,27 @@ streamlit run app.py
 ```bash
 python -m pytest -q
 ```
+
+## v7 Phase 1: Search Strategy Builder
+
+Phase 1 focuses on building search strategy before any BigQuery execution.
+
+- User input or `configs/carbon_fiber_demo_profile.yaml` becomes a `SearchProfile`
+- Optional seed patents are analyzed by `SeedPatentAnalyzer`
+- `SearchStrategyBuilder` generates intent-specific query plans:
+  - `core_manufacturing`
+  - `surface_interface`
+  - `bundle_prepreg`
+  - `application`
+  - `company_watch`
+- Recommended first plan: `core_manufacturing`
+- BigQuery execution is deferred to the next phase
+
+### Phase 1 deliverables
+
+- Domain models: `SearchProfile`, `PatentRecord`, `QueryPlan`
+- Strategy modules under `src/tech_cartography/strategy/`
+- Demo config under `configs/`
+- Minimal Streamlit UI via `streamlit run app.py`
+
+See also: `docs/carbon_fiber_evidence_map_plan.md`

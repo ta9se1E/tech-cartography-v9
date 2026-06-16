@@ -1,0 +1,38 @@
+default_exclude_terms:
+  - activated carbon
+  - carbon black
+  - carbon nanotube
+  - graphene
+  - battery
+  - electrode
+  - dye precursor
+  - thin film
+  - heavy oil
+  - gasification
+
+default_companies:
+  - TORAY
+  - TEIJIN
+  - MITSUBISHI CHEMICAL
+  - Hyosung
+  - Zhongfu Shenying
+
+preferred_countries:
+  - JP
+  - US
+  - EP
+  - CN
+  - KR
+
+preferred_year_range:
+  year_min: 2010
+  year_max: 2026
+
+recommended_first_plan: core_manufacturing
+
+search_intents:
+  - core_manufacturing
+  - surface_interface
+  - bundle_prepreg
+  - application
+  - company_watch

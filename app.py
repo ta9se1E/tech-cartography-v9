@@ -1,11 +1,6 @@
 """PatentScout AI v7 entry point."""
 
-from tech_cartography import PROJECT_NAME, PROJECT_VERSION
-
-
-def main() -> None:
-  print(f"{PROJECT_NAME} v{PROJECT_VERSION}")
-
+from tech_cartography.ui.streamlit_app import main
 
 if __name__ == "__main__":
   main()

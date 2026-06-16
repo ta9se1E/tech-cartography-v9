@@ -1,0 +1,50 @@
+theme: PAN-based carbon fiber manufacturing and evidence mapping
+invention_note: Focus on PAN precursor route, carbonization, and tensile properties for aerospace composites.
+materials:
+  - PAN
+  - polyacrylonitrile
+  - carbon fiber
+  - CFRP
+  - precursor fiber
+processes:
+  - stabilization
+  - oxidation
+  - carbonization
+  - graphitization
+  - heat treatment
+properties:
+  - tensile strength
+  - modulus
+  - defect
+  - void
+  - interface adhesion
+applications:
+  - aerospace
+  - pressure vessel
+  - prepreg
+  - composite
+  - automotive
+companies:
+  - TORAY
+  - TEIJIN
+  - MITSUBISHI CHEMICAL
+  - Hyosung
+  - Zhongfu Shenying
+countries:
+  - JP
+  - US
+  - EP
+  - CN
+  - KR
+include_terms:
+  - carbon fiber
+  - PAN
+  - carbonization
+exclude_terms:
+  - battery
+  - graphene
+year_min: 2010
+year_max: 2026
+search_goal: carbon fiber evidence map
+max_results_total: 500
+max_results_per_intent: 100
