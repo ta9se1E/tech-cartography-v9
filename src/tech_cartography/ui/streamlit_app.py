@@ -37,6 +37,8 @@ from tech_cartography.reports.business_view_report import build_business_view_su
 from tech_cartography.agents.synthesis_agent import run_synthesis_report
 from tech_cartography.reports.synthesis_export import save_synthesis_outputs
 from tech_cartography.reports.synthesis_report import build_synthesis_report_summary
+from tech_cartography.orchestration.case_study_runner import run_carbon_fiber_evidence_map_pipeline
+from tech_cartography.orchestration.pipeline_config import PipelineConfig
 from tech_cartography.reports.fulltext_evidence_report import (
   build_fulltext_evidence_summary,
   render_fulltext_evidence_markdown,
@@ -940,6 +942,66 @@ def render_search_strategy_page() -> None:
       st.subheader("Carbon Fiber Evidence Map v1")
       st.markdown(Path(report_path).read_text(encoding="utf-8"))
     st.write("保存先:", synthesis_report["paths"])
+
+  st.subheader("Phase 12: One Command Pipeline Runner")
+  pipeline_config_path = st.text_input(
+    "pipeline config YAML path",
+    value="configs/carbon_fiber_pipeline.yaml",
+    key="phase12_config",
+  )
+  execute_bigquery = st.checkbox("execute_bigquery (default off)", value=False, key="phase12_execute_bigquery")
+  execute_fulltext = st.checkbox("execute_fulltext (default off)", value=False, key="phase12_execute_fulltext")
+  execute_openalex = st.checkbox("execute_openalex (default off)", value=False, key="phase12_execute_openalex")
+  use_existing_light_csv = st.text_input(
+    "use_existing_light_csv (optional)",
+    value="",
+    key="phase12_existing_light",
+  )
+  web_signal_file = st.text_input(
+    "web_signal_file (optional override)",
+    value="case_studies/carbon_fiber/web_signals/carbon_fiber_web_signals_template.csv",
+    key="phase12_web_signal_file",
+  )
+  start_stage = st.text_input("start_stage (optional)", value="", key="phase12_start_stage")
+  stop_stage = st.text_input("stop_stage (optional)", value="", key="phase12_stop_stage")
+  skip_stage = st.text_input("skip_stage comma-separated (optional)", value="", key="phase12_skip_stage")
+
+  if st.button("Run Pipeline", key="phase12_run_pipeline"):
+    if not Path(pipeline_config_path).exists():
+      st.error("pipeline config が見つかりません")
+    else:
+      cfg = PipelineConfig.from_yaml(pipeline_config_path)
+      cfg.execute_bigquery = bool(execute_bigquery)
+      cfg.execute_fulltext = bool(execute_fulltext)
+      cfg.execute_openalex = bool(execute_openalex)
+      cfg.use_existing_light_csv = use_existing_light_csv or None
+      if web_signal_file:
+        cfg.web_signal_file = web_signal_file
+      cfg.start_stage = start_stage or None
+      cfg.stop_stage = stop_stage or None
+      if skip_stage.strip():
+        cfg.skip_stages = [s.strip() for s in skip_stage.split(",") if s.strip()]
+      result = run_carbon_fiber_evidence_map_pipeline(cfg)
+      st.session_state["pipeline_run"] = result
+
+  pipeline_run = st.session_state.get("pipeline_run")
+  if pipeline_run:
+    st.subheader("Pipeline Result")
+    st.write("run_id:", pipeline_run.get("run_id"))
+    st.write("manifest_path:", pipeline_run.get("manifest_path"))
+    st.write("final_report_path:", pipeline_run.get("final_report_path"))
+    st.write("artifact_index_path:", pipeline_run.get("artifact_index_path"))
+    st.write("stage_statuses:", pipeline_run.get("stage_statuses"))
+    if pipeline_run.get("manifest_path") and Path(pipeline_run["manifest_path"]).exists():
+      st.subheader("run_summary.md")
+      run_dir = Path(pipeline_run["manifest_path"]).parent
+      summary_path = run_dir / "run_summary.md"
+      if summary_path.exists():
+        st.markdown(summary_path.read_text(encoding="utf-8"))
+      report_path = pipeline_run.get("final_report_path")
+      if report_path and Path(report_path).exists():
+        st.subheader("final carbon_fiber_evidence_map_v1.md")
+        st.markdown(Path(report_path).read_text(encoding="utf-8"))
 
   if strategy:
     with st.expander("Full strategy JSON"):

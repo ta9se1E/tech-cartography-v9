@@ -104,3 +104,9 @@
 
 - Monthly / biweekly evidence map refresh
 - Optional email delivery and cloud scheduling
+
+### Step 12 (v7 Phase 12): One Command Pipeline Runner
+
+- Goal: run Phase 1–11 in one command for reproducible case studies
+- Save `run_manifest.json`, `run_summary.md`, and `artifact_index.md` per run
+- Safe-by-default: external API stages execute only with explicit flags

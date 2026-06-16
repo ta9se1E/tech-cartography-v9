@@ -1,0 +1,25 @@
+theme: PAN系炭素繊維の中温域炭化条件最適化
+run_name: carbon_fiber_evidence_map_v1
+output_root: outputs/pipeline_runs
+case_study_dir: case_studies/carbon_fiber
+profile_path: configs/carbon_fiber_demo_profile.yaml
+web_signal_file: case_studies/carbon_fiber/web_signals/carbon_fiber_web_signals_template.csv
+
+execute_bigquery: false
+execute_fulltext: false
+execute_openalex: false
+use_cache: true
+
+maximum_bigquery_gb: 300
+maximum_fulltext_gb: 50
+max_results_total: 2000
+max_results_per_intent: 500
+top_n: 20
+fulltext_top_n: 5
+openalex_max_queries: 20
+openalex_max_results_per_query: 10
+
+skip_stages: []
+start_stage:
+stop_stage:
+

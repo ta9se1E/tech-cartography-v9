@@ -355,3 +355,27 @@ Outputs are saved under `outputs/synthesis_report/{timestamp}/`:
 - `sme_action_plan.csv`
 - `next_update_recommendations.json`
 - `carbon_fiber_evidence_map_v1.md`
+
+## v7 Phase 12: One Command Pipeline Runner
+
+Phase 12 connects Phase 1–11 modules into a one-command pipeline runner for reproducible Carbon Fiber case studies.
+
+- Safe-by-default: external API stages do not execute unless explicitly enabled
+  - BigQuery: `--execute-bigquery` or reuse existing CSV
+  - Full text: `--execute-fulltext` or reuse cached/manual artifacts
+  - OpenAlex: `--execute-openalex` (or cache)
+- Run manifest + artifact index are saved per run (no symlinks)
+
+### CLI example
+
+```bash
+python scripts/run_carbon_fiber_evidence_map.py --config configs/carbon_fiber_pipeline.yaml
+```
+
+Outputs are saved under `outputs/pipeline_runs/{run_id}/`:
+
+- `run_manifest.json`
+- `run_summary.md`
+- `artifact_index.json`
+- `artifact_index.md`
+- stage outputs under `stages/*/`

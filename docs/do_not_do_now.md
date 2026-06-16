@@ -24,3 +24,10 @@ Current focus through Phase 11:
 - Phase 11: Synthesis Report
 
 Phase 11 produces the integrated Carbon Fiber Evidence Map report but does **not** automate periodic updates, email delivery, or cloud deployment yet.
+
+Phase 12 adds a one-command pipeline runner but still does **not** add:
+
+- Monthly / biweekly automatic updates
+- Email sending
+- Cloud Run / Cloud SQL / Scheduler
+- Automatic web search (Tavily, etc.)
