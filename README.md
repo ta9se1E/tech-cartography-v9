@@ -95,3 +95,25 @@ python scripts/run_bigquery_light_search.py --execute --max-results-total 2000 -
 ```
 
 Default mode is dry-run. Pass `--execute` only when you intend to bill BigQuery.
+
+## v7 Phase 3: Technology Clustering & Patent Ranking
+
+Phase 3 consumes Phase 2 deduplicated CSV and produces:
+
+- `classified_patents.csv`
+- `ranked_patents.csv`
+- `top20_patents.csv`
+- `top5_fulltext_candidates.csv`
+- `cluster_summary.json`
+- `carbon_fiber_evidence_map_report.md`
+
+### CLI example
+
+```bash
+python scripts/build_carbon_fiber_case_study.py \
+  --input-csv outputs/bigquery_light_retrieval/latest/bigquery_light_results_dedup.csv \
+  --top-n 20 \
+  --fulltext-top-n 5
+```
+
+Rule-based classification is the default. LLM-based clustering is reserved for future optional extension.

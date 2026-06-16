@@ -36,13 +36,35 @@ def _serialize_list_field(value: Any) -> str:
   return str(value)
 
 
-def _normalize_row_for_csv(record: dict[str, Any]) -> dict[str, str]:
-  row = {column: "" for column in CSV_COLUMNS}
+def _serialize_value(value: Any) -> str:
+  if value is None:
+    return ""
+  if isinstance(value, (dict, list)):
+    return json.dumps(value, ensure_ascii=False)
+  return str(value)
+
+
+def load_records_csv(path: str | Path) -> list[dict[str, Any]]:
+  csv_path = Path(path)
+  with csv_path.open(encoding="utf-8", newline="") as handle:
+    return list(csv.DictReader(handle))
+
+
+def _normalize_row_for_csv(record: dict[str, Any], fieldnames: list[str]) -> dict[str, str]:
+  row = {column: "" for column in fieldnames}
   for key, value in record.items():
     if key not in row:
       continue
-    if key in {"search_intents", "query_plan_ids", "matched_terms"}:
+    if key in {
+      "search_intents",
+      "query_plan_ids",
+      "matched_terms",
+      "secondary_cluster_ids",
+      "noise_signals",
+    }:
       row[key] = _serialize_list_field(value)
+    elif key in {"cluster_scores", "score_breakdown"}:
+      row[key] = _serialize_value(value)
     else:
       row[key] = "" if value is None else str(value)
   return row
@@ -51,11 +73,16 @@ def _normalize_row_for_csv(record: dict[str, Any]) -> dict[str, str]:
 def save_records_csv(records: list[dict[str, Any]], path: str | Path) -> str:
   output_path = Path(path)
   output_path.parent.mkdir(parents=True, exist_ok=True)
+  fieldnames = list(CSV_COLUMNS)
+  if records:
+    for key in records[0].keys():
+      if key not in fieldnames:
+        fieldnames.append(key)
   with output_path.open("w", encoding="utf-8", newline="") as handle:
-    writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
+    writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
     for record in records:
-      writer.writerow(_normalize_row_for_csv(record))
+      writer.writerow(_normalize_row_for_csv(record, fieldnames))
   return str(output_path)
 
 

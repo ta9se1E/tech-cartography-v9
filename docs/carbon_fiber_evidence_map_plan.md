@@ -20,10 +20,15 @@
 - Attach `search_intent`, `query_plan_id`, and `matched_terms` to every record
 - Deduplicate by `publication_number` before export
 
-### Step 3: AI Technology Clustering
+### Step 3: AI Technology Clustering & Patent Ranking
 
-- Cluster retrieved patents into technology branches for the evidence map
-- Label clusters with materials, processes, properties, and applications
+- Input: Phase 2 `bigquery_light_results_dedup.csv`
+- Rule-based technology classification into carbon fiber clusters
+- Noise scoring without automatic deletion
+- Rank patents and select Top20 important patents
+- Select Top5 full-text fetch candidates (metadata stage only)
+- Export classified/ranked CSV and `carbon_fiber_evidence_map_report.md`
+- LLM classification remains optional for future extension
 
 ### Step 4: Top5 Full Text Evidence Collection
 
