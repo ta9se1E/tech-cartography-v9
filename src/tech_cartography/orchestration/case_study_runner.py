@@ -224,6 +224,9 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
     execute_top_n=config.fulltext_execute_top_n,
     confirm_fulltext_execute=bool(config.confirm_fulltext_execute),
     require_fulltext_execute_confirmation=bool(config.require_fulltext_execute_confirmation),
+    fulltext_scope=config.fulltext_scope,
+    maximum_fulltext_usd=config.maximum_fulltext_usd,
+    allow_expensive_fulltext=bool(config.allow_expensive_fulltext),
   )
   result = retrieve_controlled_fulltext_run(
     candidates,

@@ -14,6 +14,93 @@ FULLTEXT_CAVEAT_JAPANESE = (
   "中国候補を除外しているわけではありません。"
 )
 
+CARBON_FIBER_RELEVANCE_TERMS = (
+  "carbon fiber",
+  "carbon fibre",
+  "pan",
+  "polyacrylonitrile",
+  "precursor",
+  "carbonization",
+  "carbonisation",
+  "surface treatment",
+  "sizing",
+  "tensile strength",
+  "modulus",
+  "炭素繊維",
+  "前駆体",
+  "炭化",
+)
+
+LOW_PRIORITY_EXECUTE_TERMS = (
+  "stretchable display",
+  "display panel",
+  "vessel assessment",
+  "nanoparticle sensor",
+  "generic vessel",
+)
+
+
+def pass_fulltext_execute_quality_gate(candidate: dict[str, Any]) -> dict[str, Any]:
+  title = str(candidate.get("title") or "")
+  abstract = str(candidate.get("abstract") or "")
+  text = f"{title} {abstract}".lower()
+  warnings: list[str] = []
+
+  route = _source_route(candidate) or str(candidate.get("source_route") or "")
+  if route not in {"", "us_bigquery_fulltext_candidate", "us_fulltext_candidate"}:
+    return {
+      "passed": False,
+      "warnings": ["source_route is not a US fulltext candidate"],
+      "quality_gate_reason": "invalid_source_route_for_execute",
+    }
+
+  for term in LOW_PRIORITY_EXECUTE_TERMS:
+    if term in text:
+      return {
+        "passed": False,
+        "warnings": [f"Low-priority topic for carbon-fiber execute trial: {term}"],
+        "quality_gate_reason": "low_priority_us_patent_topic",
+      }
+
+  noise_score = float(candidate.get("noise_score", 0) or 0)
+  if noise_score >= 0.45:
+    return {
+      "passed": False,
+      "warnings": [f"noise_score={noise_score} is high"],
+      "quality_gate_reason": "high_noise_score",
+    }
+
+  assignee = str(candidate.get("assignee") or "").strip()
+  if not assignee or assignee.lower() in {"unknown", "n/a", "none"}:
+    warnings.append("assignee is unknown; manual review recommended")
+
+  has_relevance = any(term in text for term in CARBON_FIBER_RELEVANCE_TERMS)
+  if not has_relevance:
+    return {
+      "passed": False,
+      "warnings": warnings + ["No carbon-fiber relevance keyword in title/abstract"],
+      "quality_gate_reason": "no_carbon_fiber_relevance_keywords",
+    }
+
+  return {
+    "passed": True,
+    "warnings": warnings,
+    "quality_gate_reason": "passed_carbon_fiber_relevance",
+  }
+
+
+def _quality_ranked_targets(targets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+  ranked: list[dict[str, Any]] = []
+  for row in targets:
+    gate = pass_fulltext_execute_quality_gate(row)
+    enriched = dict(row)
+    enriched["quality_gate"] = gate
+    enriched["quality_gate_passed"] = gate["passed"]
+    ranked.append(enriched)
+  passed = [row for row in ranked if row.get("quality_gate_passed")]
+  failed = [row for row in ranked if not row.get("quality_gate_passed")]
+  return passed + failed
+
 
 def _country(record: dict[str, Any]) -> str:
   return str(record.get("country", "") or "").upper()
@@ -67,8 +154,9 @@ def select_fulltext_execute_targets(
   limit: int = 1,
   publication_number: str | None = None,
   execute_top_n: int | None = None,
+  apply_quality_gate: bool = True,
 ) -> list[dict[str, Any]]:
-  targets = list(plan.get("fulltext_targets", []))
+  targets = _quality_ranked_targets(list(plan.get("fulltext_targets", [])))
   if publication_number:
     target_norm = _normalize_publication_number(publication_number)
     for row in targets:
@@ -76,10 +164,14 @@ def select_fulltext_execute_targets(
         return [dict(row)]
     return []
 
+  eligible = targets
+  if apply_quality_gate:
+    eligible = [row for row in targets if row.get("quality_gate_passed")]
+
   effective_limit = execute_top_n if execute_top_n is not None else limit
   if effective_limit is None or effective_limit < 1:
     effective_limit = 1
-  return [dict(row) for row in targets[:effective_limit]]
+  return [dict(row) for row in eligible[:effective_limit]]
 
 
 def mark_execute_selected_targets(
@@ -116,6 +208,11 @@ def build_fulltext_execute_preview(
   execute_limit: int | None = 1,
   selected_targets: list[dict[str, Any]] | None = None,
   dry_run_by_pub: dict[str, dict[str, Any]] | None = None,
+  scope_estimates: list[dict[str, Any]] | None = None,
+  fulltext_scope: str = "claims_only",
+  maximum_fulltext_gb: float = 50.0,
+  maximum_fulltext_usd: float = 10.0,
+  allow_expensive_fulltext: bool = False,
 ) -> dict[str, Any]:
   targets = list(plan.get("fulltext_targets", []))
   selected = selected_targets or []
@@ -155,17 +252,58 @@ def build_fulltext_execute_preview(
         "title": row.get("title"),
         "execute_selected": bool(row.get("execute_selected")),
         "execute_selection_reason": row.get("execute_selection_reason"),
+        "quality_gate_passed": row.get("quality_gate_passed"),
+        "quality_gate_reason": (row.get("quality_gate") or {}).get("quality_gate_reason"),
         "estimated_bytes": estimated_bytes,
         "estimated_gb": dry_run.get("estimated_gb", 0.0),
         "estimated_usd": dry_run.get("estimated_usd", 0.0),
-        "cost_guard_status": "failed"
-        if dry_run.get("would_be_blocked_by_max_bytes")
-        else ("unknown" if not dry_run else "ok"),
+        "cost_guard_status": dry_run.get("cost_guard_status", "unknown"),
+        "cost_guard_reason": dry_run.get("cost_guard_reason"),
+        "fulltext_scope": dry_run.get("fulltext_scope", fulltext_scope),
         "dry_run_status": dry_run.get("dry_run_status"),
       },
     )
 
   from tech_cartography.retrieval.bigquery_env import bytes_to_gb, estimate_usd_from_bytes
+
+  pub_filter = publication_number_filter or ""
+  base_cmd = (
+    "python scripts/run_carbon_fiber_evidence_map.py "
+    "--config configs/carbon_fiber_pipeline.yaml "
+    "--use-existing-light-csv <light_csv> "
+    "--start-stage technology_clustering_ranking "
+    "--stop-stage evidence_validation "
+    "--execute-fulltext "
+    f"--fulltext-scope {fulltext_scope} "
+  )
+  if pub_filter:
+    base_cmd += f"--fulltext-publication-number {pub_filter} "
+  recommended_safe_command = (
+    f"{base_cmd}--confirm-fulltext-execute"
+  )
+  recommended_expensive_command = (
+    f"{base_cmd}--confirm-fulltext-execute --allow-expensive-fulltext "
+    f"--maximum-fulltext-usd {maximum_fulltext_usd}"
+  )
+
+  selected_scope_estimate = next(
+    (
+      row
+      for row in (scope_estimates or [])
+      if row.get("scope") == fulltext_scope and row.get("publication_number") == publication_number_filter
+    ),
+    None,
+  )
+  if not selected_scope_estimate and scope_estimates:
+    selected_scope_estimate = next(
+      (row for row in scope_estimates if row.get("scope") == fulltext_scope),
+      scope_estimates[0] if scope_estimates else None,
+    )
+
+  cost_guard_requires_expensive = any(
+    row.get("cost_guard_status") == "blocked_by_gb_but_usd_allowed_requires_confirmation"
+    for row in preview_targets
+  )
 
   return {
     "execute_selected": selected_count > 0 and execute and not confirmation_required,
@@ -176,6 +314,17 @@ def build_fulltext_execute_preview(
     "confirm_fulltext_execute": bool(confirm_fulltext_execute),
     "execute_limit": execute_limit,
     "publication_number_filter": publication_number_filter,
+    "fulltext_scope": fulltext_scope,
+    "selected_scope": fulltext_scope,
+    "scope_estimates": scope_estimates or [],
+    "maximum_fulltext_gb": maximum_fulltext_gb,
+    "maximum_fulltext_usd": maximum_fulltext_usd,
+    "allow_expensive_fulltext": allow_expensive_fulltext,
+    "estimated_gb": selected_scope_estimate.get("estimated_gb") if selected_scope_estimate else bytes_to_gb(total_estimated_bytes),
+    "estimated_usd": selected_scope_estimate.get("estimated_usd") if selected_scope_estimate else estimate_usd_from_bytes(total_estimated_bytes),
+    "recommended_safe_command": recommended_safe_command.strip(),
+    "recommended_expensive_command": recommended_expensive_command.strip(),
+    "cost_guard_requires_expensive_confirmation": cost_guard_requires_expensive,
     "selected_for_execute_count": selected_count,
     "dry_run_only_count": dry_run_only_count if execute else len(targets),
     "skipped_not_selected_count": max(0, len(targets) - selected_count) if execute else 0,
@@ -199,6 +348,7 @@ def build_controlled_fulltext_plan(
   strategic_watch_candidates: list[dict[str, Any]] | None = None,
   *,
   execute: bool = False,
+  fulltext_scope: str = "claims_only",
 ) -> dict[str, Any]:
   strategic_watch_candidates = strategic_watch_candidates or []
   fulltext_targets: list[dict[str, Any]] = []
@@ -211,7 +361,9 @@ def build_controlled_fulltext_plan(
   for record in top5_candidates:
     pub = str(record.get("publication_number", "") or "")
     if _is_us_fulltext_target(record):
-      fulltext_targets.append(dict(record))
+      row = dict(record)
+      row["quality_gate"] = pass_fulltext_execute_quality_gate(row)
+      fulltext_targets.append(row)
       seen_pubs.add(pub)
     elif _country(record) in MANUAL_ROUTE_COUNTRIES or not is_us_publication(pub, _country(record)):
       manual_required_candidates.append(_manual_row(record))
@@ -255,6 +407,7 @@ def build_controlled_fulltext_plan(
       "cn_watch_count": cn_watch_count,
       "skipped_count": len(skipped_candidates),
       "estimated_mode": "execute" if execute else "dry_run",
+      "fulltext_scope": fulltext_scope,
       "caveat_japanese": FULLTEXT_CAVEAT_JAPANESE,
       "this_list_purpose": "US fulltext retrieval priority",
       "not_global_importance_ranking": True,

@@ -5,6 +5,7 @@ from tech_cartography.retrieval.bigquery_fulltext_query_builder import (
   build_us_fulltext_query,
   is_us_publication,
   normalize_us_publication_number,
+  validate_fulltext_scope,
 )
 
 
@@ -23,11 +24,34 @@ def test_manual_route_countries() -> None:
 
 
 def test_build_us_fulltext_query_contains_fields() -> None:
-  sql = build_us_fulltext_query("US-2026078228A1")
+  sql = build_us_fulltext_query("US-2026078228A1", scope="claims_and_description")
   assert "claims_localized" in sql
   assert "description_localized" in sql
   assert "publication_number" in sql
   assert "US-2026078228A1" in sql or "US2026078228A1" in sql
+
+
+def test_claims_only_scope_sql() -> None:
+  sql = build_us_fulltext_query("US-2026078228A1", scope="claims_only")
+  assert "claims_localized" in sql
+  assert "scope: claims_only" in sql
+  assert "description_localized" not in sql
+
+
+def test_description_only_scope_sql() -> None:
+  sql = build_us_fulltext_query("US-2026078228A1", scope="description_only")
+  assert "description_localized" in sql
+  assert "scope: description_only" in sql
+  assert "claims_localized" not in sql
+
+
+def test_invalid_scope_raises() -> None:
+  try:
+    validate_fulltext_scope("all_fields")
+    raised = False
+  except ValueError:
+    raised = True
+  assert raised
 
 
 def test_publication_number_variants() -> None:

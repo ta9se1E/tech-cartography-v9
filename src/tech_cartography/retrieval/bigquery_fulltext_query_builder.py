@@ -8,6 +8,10 @@ from typing import Any
 PUBLICATIONS_TABLE = "`patents-public-data.patents.publications`"
 US_PUB_PATTERN = re.compile(r"^US[\dA-Z\-]+$", re.IGNORECASE)
 
+VALID_FULLTEXT_SCOPES = frozenset(
+  {"claims_only", "description_only", "claims_and_description"},
+)
+
 
 def escape_sql_string(value: str) -> str:
   return "'" + str(value).replace("'", "''") + "'"
@@ -18,6 +22,16 @@ def normalize_us_publication_number(publication_number: str) -> str:
   if compact.startswith("US"):
     return compact
   return compact
+
+
+def validate_fulltext_scope(scope: str) -> str:
+  normalized = str(scope or "").strip().lower()
+  if normalized not in VALID_FULLTEXT_SCOPES:
+    raise ValueError(
+      f"Invalid fulltext scope '{scope}'. "
+      f"Expected one of: {', '.join(sorted(VALID_FULLTEXT_SCOPES))}",
+    )
+  return normalized
 
 
 def _kind_suffix_variants(core: str) -> list[str]:
@@ -96,14 +110,71 @@ def _localized_text_expr(field_name: str) -> str:
   )
 
 
-def build_us_fulltext_query(publication_number: str, *, country: str | None = None) -> str:
-  """Build BigQuery SQL to fetch US full text fields for one publication."""
+def _where_clause(literals: str) -> str:
+  return f"""
+WHERE publication_number IN ({literals})
+  AND country_code = 'US'
+LIMIT 1
+""".strip()
+
+
+def build_us_claims_query(publication_number: str, *, country: str | None = None) -> str:
   validation = validate_us_fulltext_request(publication_number, country)
   if not validation["ok"]:
     raise ValueError(validation["error"])
+  literals = ", ".join(escape_sql_string(item) for item in validation["variants"])
+  claims_expr = _localized_text_expr("claims_localized")
+  assignee_expr = (
+    "(SELECT STRING_AGG(DISTINCT ah.name, '; ' ORDER BY ah.name) "
+    "FROM UNNEST(IFNULL(assignee_harmonized, [])) AS ah "
+    "WHERE ah.name IS NOT NULL AND ah.name != '')"
+  )
+  return f"""
+-- scope: claims_only
+SELECT
+  publication_number,
+  publication_date,
+  country_code,
+  {assignee_expr} AS assignee,
+  {claims_expr} AS claims
+FROM {PUBLICATIONS_TABLE}
+{_where_clause(literals)}
+""".strip()
 
-  variants = validation["variants"]
-  literals = ", ".join(escape_sql_string(item) for item in variants)
+
+def build_us_description_query(publication_number: str, *, country: str | None = None) -> str:
+  validation = validate_us_fulltext_request(publication_number, country)
+  if not validation["ok"]:
+    raise ValueError(validation["error"])
+  literals = ", ".join(escape_sql_string(item) for item in validation["variants"])
+  description_expr = _localized_text_expr("description_localized")
+  assignee_expr = (
+    "(SELECT STRING_AGG(DISTINCT ah.name, '; ' ORDER BY ah.name) "
+    "FROM UNNEST(IFNULL(assignee_harmonized, [])) AS ah "
+    "WHERE ah.name IS NOT NULL AND ah.name != '')"
+  )
+  return f"""
+-- scope: description_only
+SELECT
+  publication_number,
+  publication_date,
+  country_code,
+  {assignee_expr} AS assignee,
+  {description_expr} AS description
+FROM {PUBLICATIONS_TABLE}
+{_where_clause(literals)}
+""".strip()
+
+
+def build_us_claims_and_description_query(
+  publication_number: str,
+  *,
+  country: str | None = None,
+) -> str:
+  validation = validate_us_fulltext_request(publication_number, country)
+  if not validation["ok"]:
+    raise ValueError(validation["error"])
+  literals = ", ".join(escape_sql_string(item) for item in validation["variants"])
   title_expr = _localized_text_expr("title_localized")
   abstract_expr = _localized_text_expr("abstract_localized")
   claims_expr = _localized_text_expr("claims_localized")
@@ -113,8 +184,8 @@ def build_us_fulltext_query(publication_number: str, *, country: str | None = No
     "FROM UNNEST(IFNULL(assignee_harmonized, [])) AS ah "
     "WHERE ah.name IS NOT NULL AND ah.name != '')"
   )
-
   return f"""
+-- scope: claims_and_description
 SELECT
   publication_number,
   publication_date,
@@ -125,7 +196,20 @@ SELECT
   {description_expr} AS description,
   {assignee_expr} AS assignee
 FROM {PUBLICATIONS_TABLE}
-WHERE publication_number IN ({literals})
-  AND country_code = 'US'
-LIMIT 1
+{_where_clause(literals)}
 """.strip()
+
+
+def build_us_fulltext_query(
+  publication_number: str,
+  scope: str = "claims_only",
+  *,
+  country: str | None = None,
+) -> str:
+  """Build BigQuery SQL to fetch US full text fields for one publication."""
+  normalized_scope = validate_fulltext_scope(scope)
+  if normalized_scope == "claims_only":
+    return build_us_claims_query(publication_number, country=country)
+  if normalized_scope == "description_only":
+    return build_us_description_query(publication_number, country=country)
+  return build_us_claims_and_description_query(publication_number, country=country)

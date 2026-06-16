@@ -123,6 +123,12 @@ FULLTEXT_RETRIEVAL_STATUS_LABELS: dict[str, tuple[str, str]] = {
   "manual_required": ("手動確認が必要", "非米国公報など、PDF/Google Patentsでの確認が必要です。"),
   "not_found": ("全文が見つかりません", "BigQueryで該当全文が見つかりませんでした。手動確認を検討してください。"),
   "cost_guard_failed": ("コスト上限で停止", "maximum_bytes_billedを超える見積もりのため実行を停止しました。"),
+  "cost_guard_requires_expensive_confirmation": (
+    "高コスト確認が必要",
+    "GB上限を超えていますがUSD見積もりは許容範囲です。--allow-expensive-fulltext が必要です。",
+  ),
+  "blocked_by_usd_guard": ("USD上限で停止", "maximum_fulltext_usdを超える見積もりのため実行を停止しました。"),
+  "allowed_expensive_execute": ("高コスト承認で取得済み", "明示承認のうえ全文を取得しました。1件ずつ確認してください。"),
   "query_error": ("クエリエラー", "BigQueryクエリでエラーが発生しました。"),
   "unsupported_country": ("非対応国", "米国公報以外はBigQuery全文取得の対象外です。手動ルートを使います。"),
   "skipped_not_selected": ("実行対象外", "今回のexecute limit / 公報指定の対象外です。"),
@@ -263,8 +269,11 @@ def explain_strategic_watch() -> str:
 def explain_fulltext_execute_trial() -> str:
   return (
     "まず1件だけ全文取得を試すのが安全です。"
+    "今回は請求項だけ取得します（claims_only）。明細書は後で必要に応じて取得します。"
     "US候補は自動取得を試せます。"
     "中国候補は別枠で手動確認リストに残しています。"
+    "GB上限は超えていますが、USD見積もりが許容範囲の場合、明示承認で実行できます。"
+    "高コスト実行は必ず1件ずつ確認してください。"
     "全文取得に失敗しても、その特許が重要でないという意味ではありません。"
   )
 
@@ -281,6 +290,24 @@ def explain_evidence_validation_readiness() -> str:
     "dry-runのみの場合は、まだ請求項を読めていません。"
     "中国候補は手動確認リストとして残しています。"
     "論文候補は裏取り候補であり、証明ではありません。"
+  )
+
+
+def explain_fulltext_scope(scope: str) -> str:
+  if scope == "claims_only":
+    return "今回は請求項だけ取得します。明細書は後で必要に応じて取得します。"
+  if scope == "description_only":
+    return "今回は明細書だけを取得します。"
+  if scope == "claims_and_description":
+    return "請求項と明細書の両方を取得します。コストが高くなりやすいので注意してください。"
+  return "全文取得スコープを確認してください。"
+
+
+def explain_expensive_fulltext_approval() -> str:
+  return (
+    "GB上限を超えていますが、USD見積もりが許容範囲の場合、"
+    "--allow-expensive-fulltext で明示承認後に実行できます。"
+    "高コスト実行は必ず1件ずつ確認してください。"
   )
 
 

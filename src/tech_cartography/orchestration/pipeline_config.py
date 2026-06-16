@@ -28,6 +28,11 @@ class PipelineConfig:
   require_fulltext_execute_confirmation: bool = True
   confirm_fulltext_execute: bool = False
 
+  fulltext_scope: str = "claims_only"
+  maximum_fulltext_usd: float = 10.0
+  allow_expensive_fulltext: bool = False
+  fulltext_claims_first: bool = True
+
   maximum_bigquery_gb: float = 300.0
   maximum_fulltext_gb: float = 50.0
   max_results_total: int = 2000
@@ -65,6 +70,10 @@ class PipelineConfig:
         data.get("require_fulltext_execute_confirmation", True),
       ),
       confirm_fulltext_execute=bool(data.get("confirm_fulltext_execute", False)),
+      fulltext_scope=str(data.get("fulltext_scope", cls.fulltext_scope)),
+      maximum_fulltext_usd=float(data.get("maximum_fulltext_usd", cls.maximum_fulltext_usd)),
+      allow_expensive_fulltext=bool(data.get("allow_expensive_fulltext", False)),
+      fulltext_claims_first=bool(data.get("fulltext_claims_first", True)),
       maximum_bigquery_gb=float(data.get("maximum_bigquery_gb", cls.maximum_bigquery_gb)),
       maximum_fulltext_gb=float(data.get("maximum_fulltext_gb", cls.maximum_fulltext_gb)),
       max_results_total=int(data.get("max_results_total", cls.max_results_total)),

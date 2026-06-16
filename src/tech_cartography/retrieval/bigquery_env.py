@@ -13,6 +13,12 @@ BYTES_PER_TB = 1024**4
 DIAGNOSTIC_SELECT_1_SQL = "SELECT 1 AS ok"
 
 
+def usd_to_bytes(usd: float, usd_per_tb: float = 5.0) -> int:
+  if usd <= 0:
+    return 0
+  return int((usd / usd_per_tb) * BYTES_PER_TB)
+
+
 def gb_to_bytes(gb: float) -> int:
   return int(gb * BYTES_PER_GB)
 

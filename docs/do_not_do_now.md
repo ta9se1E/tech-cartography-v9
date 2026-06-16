@@ -66,3 +66,11 @@ Phase 16 adds Controlled Full Text Execute Trial but still does **not** add:
 - Automatic PDF download / OCR
 - Automatic web search (Tavily, etc.)
 - Scope: controlled US execute trial + evidence validation handoff
+
+Phase 16.1 adds scoped fulltext + GB/USD guards but still does **not** add:
+
+- Unrestricted Top5 full execute (limit/publication filter required)
+- Unconditional `claims_and_description` execute for all candidates
+- Automatic PDF download / OCR
+- Automatic fulltext for CN/EP/JP
+- Automatic web search (Tavily, etc.)

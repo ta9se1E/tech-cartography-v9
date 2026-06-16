@@ -124,12 +124,30 @@ def test_evidence_validation_japanese_summary() -> None:
 
 def test_fulltext_execute_summary_japanese() -> None:
   html = render_fulltext_execute_summary(
-    {"selected_for_execute_count": 1, "estimated_mode": "execute", "confirmation_required": False},
-    {"retrieved_count": 1, "skipped_not_selected_count": 4, "cache_hit_count": 0},
+    {
+      "selected_for_execute_count": 1,
+      "estimated_mode": "execute",
+      "confirmation_required": False,
+      "fulltext_scope": "claims_only",
+      "cost_guard_requires_expensive_confirmation": True,
+      "recommended_expensive_command": "python scripts/run_carbon_fiber_evidence_map.py --allow-expensive-fulltext",
+    },
+    {"retrieved_count": 1, "skipped_not_selected_count": 4, "cache_hit_count": 0, "cost_guard_requires_expensive_count": 1},
   )
   assert "まず1件だけ" in html
   assert "中国候補" in html
-  assert "実行対象外" in html or "skipped" in html.lower()
+  assert "請求項だけ" in html
+  assert "allow-expensive-fulltext" in html
+  assert "USD" in html or "GB上限" in html
+
+
+def test_fulltext_execute_summary_claims_only_scope() -> None:
+  html = render_fulltext_execute_summary(
+    {"fulltext_scope": "claims_only", "estimated_mode": "dry_run"},
+    {"fulltext_scope": "claims_only"},
+  )
+  assert "請求項だけ" in html
+  assert "明細書は後で" in html
 
 
 def test_fulltext_status_skipped_not_selected_japanese() -> None:

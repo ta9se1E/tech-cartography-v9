@@ -10,9 +10,11 @@ import pandas as pd
 from tech_cartography.ui.japanese_labels import (
   explain_evidence_validation_mode,
   explain_evidence_validation_readiness,
+  explain_expensive_fulltext_approval,
   explain_fulltext_execute_trial,
   explain_fulltext_priority_top5,
   explain_fulltext_retrieval_status,
+  explain_fulltext_scope,
   explain_stage_status,
   explain_strategic_watch,
   translate_cluster_id,
@@ -269,13 +271,24 @@ def render_fulltext_execute_summary(preview: dict[str, Any] | None, summary: dic
   ]
   mode = preview.get("estimated_mode") or summary.get("mode") or "dry_run"
   confirm = preview.get("confirmation_required", False)
+  scope = preview.get("fulltext_scope") or summary.get("fulltext_scope") or "claims_only"
+  expensive_cmd = preview.get("recommended_expensive_command", "")
   confirm_note = "確認フラグが必要です（--confirm-fulltext-execute）" if confirm else "計画/プレビューまたは確認済みです"
+  expensive_note = ""
+  if preview.get("cost_guard_requires_expensive_confirmation") or summary.get("cost_guard_requires_expensive_count", 0) > 0:
+    expensive_note = (
+      f"<br><br>{explain_expensive_fulltext_approval()}"
+      f"<br>推奨コマンド: <code>{_safe(expensive_cmd)}</code>" if expensive_cmd else ""
+    )
   return (
     f"{render_info_box(explain_fulltext_execute_trial())}"
+    f"{render_info_box(explain_fulltext_scope(scope))}"
     f"{render_metric_cards(metrics)}"
     f'<div class="tc-patent-card"><div class="tc-patent-title">実行モード: {mode}</div>'
     f'<div class="tc-patent-meta">{confirm_note}<br>'
+    f"スコープ: {scope}<br>"
     f"まず1件だけ全文取得を試すのが安全です。中国候補は別枠で手動確認リストに残しています。"
+    f"{expensive_note}"
     f"</div></div>"
   )
 

@@ -26,6 +26,9 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--fulltext-execute-limit", type=int, default=None)
   parser.add_argument("--fulltext-publication-number", default="")
   parser.add_argument("--confirm-fulltext-execute", action="store_true", default=False)
+  parser.add_argument("--fulltext-scope", default="claims_only", choices=["claims_only", "description_only", "claims_and_description"])
+  parser.add_argument("--maximum-fulltext-usd", type=float, default=None)
+  parser.add_argument("--allow-expensive-fulltext", action="store_true", default=False)
   parser.add_argument("--execute-openalex", action="store_true", default=False)
 
   parser.add_argument("--use-existing-light-csv", default="")
@@ -54,6 +57,12 @@ def main() -> int:
     config.fulltext_publication_number = args.fulltext_publication_number
   if args.confirm_fulltext_execute:
     config.confirm_fulltext_execute = True
+  if args.fulltext_scope:
+    config.fulltext_scope = args.fulltext_scope
+  if args.maximum_fulltext_usd is not None:
+    config.maximum_fulltext_usd = float(args.maximum_fulltext_usd)
+  if args.allow_expensive_fulltext:
+    config.allow_expensive_fulltext = True
   if args.execute_openalex:
     config.execute_openalex = True
 

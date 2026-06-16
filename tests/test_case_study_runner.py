@@ -349,12 +349,18 @@ def test_fulltext_config_passed_to_retriever(tmp_path: Path, monkeypatch) -> Non
     fulltext_execute_limit=1,
     fulltext_publication_number="US-1",
     confirm_fulltext_execute=True,
+    fulltext_scope="claims_only",
+    maximum_fulltext_usd=15.0,
+    allow_expensive_fulltext=True,
   )
   runner.run_fulltext_collection_stage(cfg, str(tmp_path / "out"), {"top5_fulltext_candidates_csv": str(top5_csv)})
   assert captured
   assert captured[0].execute_limit == 1
   assert captured[0].publication_number == "US-1"
   assert captured[0].confirm_fulltext_execute is True
+  assert captured[0].fulltext_scope == "claims_only"
+  assert captured[0].maximum_fulltext_usd == 15.0
+  assert captured[0].allow_expensive_fulltext is True
 
 
 def test_evidence_validation_ready_with_retrieved_record(tmp_path: Path, monkeypatch) -> None:

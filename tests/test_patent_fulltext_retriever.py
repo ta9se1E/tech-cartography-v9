@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from tech_cartography.retrieval.patent_fulltext_retriever import (
   FullTextRetrievalConfig,
+  evaluate_cost_guard,
   execute_fulltext_query,
   retrieve_controlled_fulltext_run,
   retrieve_fulltext_for_candidate,
@@ -68,6 +69,9 @@ def test_config_defaults_safe() -> None:
   config = FullTextRetrievalConfig()
   assert config.dry_run is True
   assert config.execute is False
+  assert config.fulltext_scope == "claims_only"
+  assert config.maximum_fulltext_usd == 10.0
+  assert config.allow_expensive_fulltext is False
 
 
 def test_execute_false_skips_bigquery_execution() -> None:
@@ -110,22 +114,110 @@ def test_cache_hit_skips_execution(tmp_path) -> None:
   assert result["retrieval_status"] == "cache_hit"
 
 
-def test_blocked_by_cost_guard() -> None:
-  config = FullTextRetrievalConfig(execute=True, use_cache=False)
+def test_blocked_by_cost_guard_requires_expensive_confirmation() -> None:
+  config = FullTextRetrievalConfig(execute=True, use_cache=False, confirm_fulltext_execute=True)
   with patch(
     "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
     return_value={
       "dry_run_status": "ok",
       "estimated_bytes": 10**12,
+      "estimated_gb": 931.32,
+      "estimated_usd": 4.66,
+      "would_be_blocked_by_max_bytes": True,
+      "error": None,
+      "cost_guard_status": "blocked_by_gb_but_usd_allowed_requires_confirmation",
+    },
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_fulltext_query",
+  ) as execute_mock:
+    result = retrieve_fulltext_for_candidate({**_us_candidate(), "execute_selected": True}, config)
+  execute_mock.assert_not_called()
+  assert result["retrieval_status"] == "cost_guard_requires_expensive_confirmation"
+
+
+def test_allow_expensive_fulltext_executes() -> None:
+  config = FullTextRetrievalConfig(
+    execute=True,
+    use_cache=False,
+    confirm_fulltext_execute=True,
+    allow_expensive_fulltext=True,
+  )
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+    return_value={
+      "dry_run_status": "ok",
+      "estimated_bytes": 10**12,
+      "estimated_gb": 931.32,
+      "estimated_usd": 4.66,
+      "would_be_blocked_by_max_bytes": True,
+      "error": None,
+    },
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_fulltext_query",
+    return_value={
+      "execution_status": "executed",
+      "rows": [{"claims": "Claim 1", "description": ""}],
+      "error": None,
+    },
+  ):
+    result = retrieve_fulltext_for_candidate({**_us_candidate(), "execute_selected": True}, config)
+  assert result["retrieval_status"] == "allowed_expensive_execute"
+
+
+def test_blocked_by_usd_guard() -> None:
+  config = FullTextRetrievalConfig(execute=True, use_cache=False, maximum_fulltext_usd=1.0)
+  guard = evaluate_cost_guard(10**12, 50.0, config)
+  assert guard["cost_guard_status"] == "blocked_by_usd"
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+    return_value={
+      "dry_run_status": "ok",
+      "estimated_bytes": 10**12,
+      "estimated_gb": 931.32,
+      "estimated_usd": 50.0,
       "would_be_blocked_by_max_bytes": True,
       "error": None,
     },
   ), patch(
     "tech_cartography.retrieval.patent_fulltext_retriever.execute_fulltext_query",
   ) as execute_mock:
-    result = retrieve_fulltext_for_candidate(_us_candidate(), config)
+    result = retrieve_fulltext_for_candidate({**_us_candidate(), "execute_selected": True}, config)
   execute_mock.assert_not_called()
-  assert result["retrieval_status"] == "cost_guard_failed"
+  assert result["retrieval_status"] == "blocked_by_usd_guard"
+
+
+def test_claims_only_limited_extraction_without_description() -> None:
+  candidate = {**_us_candidate(), "execute_selected": True}
+  config = FullTextRetrievalConfig(execute=True, confirm_fulltext_execute=True, use_cache=False, fulltext_scope="claims_only")
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+    return_value={
+      "dry_run_status": "ok",
+      "estimated_bytes": 1000,
+      "would_be_blocked_by_max_bytes": False,
+      "error": None,
+    },
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_fulltext_query",
+    return_value={
+      "execution_status": "executed",
+      "rows": [
+        {
+          "publication_number": "US2024000001A1",
+          "claims": "Claim 1. Carbon fiber method",
+          "title": "PAN",
+          "assignee": "Toray",
+          "country_code": "US",
+        },
+      ],
+      "error": None,
+    },
+  ):
+    result = retrieve_fulltext_for_candidate(candidate, config)
+  record = result["record"]
+  assert record["retrieval_status"] == "retrieved"
+  assert record.get("claims_length", 0) > 0
+  assert record.get("description_length", 0) == 0
 
 
 def test_execute_passes_maximum_bytes_billed() -> None:
@@ -262,7 +354,7 @@ def test_execute_with_confirm_runs_selected_only() -> None:
   )
   calls: list[str] = []
 
-  def _fake_execute(candidate, cfg, client_factory=None):  # noqa: ANN001
+  def _fake_execute(candidate, cfg, client_factory=None, estimated_bytes=0):  # noqa: ANN001, ARG001
     calls.append(str(candidate.get("publication_number")))
     return {
       "execution_status": "executed",

@@ -37,6 +37,9 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--execute-limit", type=int, default=1)
   parser.add_argument("--publication-number", default=None)
   parser.add_argument("--confirm-fulltext-execute", action="store_true", default=False)
+  parser.add_argument("--fulltext-scope", default="claims_only", choices=["claims_only", "description_only", "claims_and_description"])
+  parser.add_argument("--maximum-fulltext-usd", type=float, default=10.0)
+  parser.add_argument("--allow-expensive-fulltext", action="store_true", default=False)
   parser.add_argument("--preview-only", action="store_true", default=False)
   parser.add_argument("--no-cache", action="store_true", default=False)
   return parser.parse_args()
@@ -68,6 +71,9 @@ def main() -> int:
     publication_number=args.publication_number,
     confirm_fulltext_execute=bool(args.confirm_fulltext_execute),
     preview_only=bool(args.preview_only),
+    fulltext_scope=args.fulltext_scope,
+    maximum_fulltext_usd=float(args.maximum_fulltext_usd),
+    allow_expensive_fulltext=bool(args.allow_expensive_fulltext),
   )
   result = retrieve_controlled_fulltext_run(
     candidates,

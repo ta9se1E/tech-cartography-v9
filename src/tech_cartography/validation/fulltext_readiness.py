@@ -88,12 +88,16 @@ def classify_fulltext_record_status(
     return "skipped_not_selected"
   if retrieval_status == "execute_blocked_confirmation_required":
     return "execute_blocked_confirmation_required"
-  if retrieval_status in {"cache_hit", "retrieved"}:
+  if retrieval_status == "cost_guard_failed":
+    return "cost_guard_failed"
+  if retrieval_status == "cost_guard_requires_expensive_confirmation":
+    return "cost_guard_requires_expensive_confirmation"
+  if retrieval_status == "blocked_by_usd_guard":
+    return "blocked_by_usd_guard"
+  if retrieval_status in {"cache_hit", "retrieved", "allowed_expensive_execute"}:
     pass
   if retrieval_status == "query_error":
     return "query_error"
-  if retrieval_status == "cost_guard_failed":
-    return "cost_guard_failed"
   if retrieval_status in {"not_found", "missing"}:
     return "not_found"
 
@@ -107,7 +111,10 @@ def classify_fulltext_record_status(
   if has_claims and has_supporting_body and evidence_level in FULLTEXT_EVIDENCE_LEVELS:
     return "ready_for_claim_extraction"
 
-  if (has_claims and not has_supporting_body) or (has_description and not has_claims):
+  if has_claims and not has_supporting_body:
+    return "limited_claim_extraction"
+
+  if has_description and not has_claims:
     return "limited_claim_extraction"
 
   return "metadata_only"
@@ -156,7 +163,15 @@ def build_fulltext_next_actions(readiness: dict[str, Any]) -> list[dict[str, Any
       {
         "action_id": "execute_fulltext_for_us_targets",
         "priority": "high",
-        "reason": "US fulltext targets are still dry-run or blocked; execute controlled fulltext to fetch claims.",
+        "reason": "US fulltext targets are still dry-run or blocked; execute controlled fulltext (claims_only first).",
+      },
+    )
+  if readiness.get("cost_guard_requires_expensive_count", 0) > 0:
+    actions.append(
+      {
+        "action_id": "allow_expensive_fulltext_for_us_target",
+        "priority": "high",
+        "reason": "GB limit exceeded but USD within budget; add --allow-expensive-fulltext after review.",
       },
     )
 
@@ -212,6 +227,8 @@ def assess_fulltext_readiness(
     "not_found": [],
     "query_error": [],
     "cost_guard_failed": [],
+    "cost_guard_requires_expensive_confirmation": [],
+    "blocked_by_usd_guard": [],
   }
 
   for record in records:
@@ -232,6 +249,8 @@ def assess_fulltext_readiness(
     + len(buckets["not_found"])
     + len(buckets["query_error"])
     + len(buckets["cost_guard_failed"])
+    + len(buckets["cost_guard_requires_expensive_confirmation"])
+    + len(buckets["blocked_by_usd_guard"])
     + dry_run_only_count
     + skipped_not_selected_count
     + len(buckets["execute_blocked_confirmation_required"])
@@ -246,6 +265,8 @@ def assess_fulltext_readiness(
     "execute_blocked_count": len(buckets["execute_blocked_confirmation_required"]),
     "manual_required_count": manual_required_count,
     "cost_guard_failed_count": len(buckets["cost_guard_failed"]),
+    "cost_guard_requires_expensive_count": len(buckets["cost_guard_requires_expensive_confirmation"]),
+    "blocked_by_usd_count": len(buckets["blocked_by_usd_guard"]),
     "not_ready_count": not_ready_count,
     "ready_records": buckets["ready_for_claim_extraction"],
     "limited_records": buckets["limited_claim_extraction"],

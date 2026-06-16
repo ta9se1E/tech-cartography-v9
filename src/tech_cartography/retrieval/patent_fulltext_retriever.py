@@ -24,10 +24,13 @@ from tech_cartography.retrieval.bigquery_env import (
   estimate_usd_from_bytes,
   gb_to_bytes,
   resolve_project_id,
+  usd_to_bytes,
 )
 from tech_cartography.retrieval.bigquery_fulltext_query_builder import (
+  VALID_FULLTEXT_SCOPES,
   build_us_fulltext_query,
   is_us_publication,
+  validate_fulltext_scope,
   validate_us_fulltext_request,
 )
 from tech_cartography.retrieval.controlled_fulltext_plan import (
@@ -62,9 +65,15 @@ class FullTextRetrievalConfig:
   confirm_fulltext_execute: bool = False
   require_fulltext_execute_confirmation: bool = True
   preview_only: bool = False
+  fulltext_scope: str = "claims_only"
+  maximum_fulltext_usd: float = 10.0
+  allow_expensive_fulltext: bool = False
 
   def maximum_bytes_billed(self) -> int:
     return gb_to_bytes(self.maximum_bytes_billed_gb)
+
+  def resolved_scope(self) -> str:
+    return validate_fulltext_scope(self.fulltext_scope)
 
 
 def _default_client_factory(project_id: str) -> Any:
@@ -73,25 +82,125 @@ def _default_client_factory(project_id: str) -> Any:
   return bigquery.Client(project=project_id)
 
 
+def evaluate_cost_guard(
+  estimated_bytes: int,
+  estimated_usd: float,
+  config: FullTextRetrievalConfig,
+) -> dict[str, Any]:
+  max_gb = float(config.maximum_bytes_billed_gb)
+  max_usd = float(config.maximum_fulltext_usd)
+  est_gb = bytes_to_gb(int(estimated_bytes or 0))
+  est_usd = float(estimated_usd or 0.0)
+
+  if estimated_bytes <= 0 and est_usd <= 0:
+    return {
+      "cost_guard_status": "not_estimated",
+      "cost_guard_reason": "Dry-run estimate unavailable",
+      "can_execute": False,
+      "requires_expensive_confirmation": False,
+      "estimated_gb": est_gb,
+      "estimated_usd": est_usd,
+      "maximum_fulltext_gb": max_gb,
+      "maximum_fulltext_usd": max_usd,
+      "allow_expensive_fulltext": bool(config.allow_expensive_fulltext),
+    }
+
+  if est_usd > max_usd:
+    return {
+      "cost_guard_status": "blocked_by_usd",
+      "cost_guard_reason": f"estimated_usd={est_usd:.4f} exceeds maximum_fulltext_usd={max_usd}",
+      "can_execute": False,
+      "requires_expensive_confirmation": False,
+      "estimated_gb": est_gb,
+      "estimated_usd": est_usd,
+      "maximum_fulltext_gb": max_gb,
+      "maximum_fulltext_usd": max_usd,
+      "allow_expensive_fulltext": bool(config.allow_expensive_fulltext),
+    }
+
+  if est_gb <= max_gb:
+    return {
+      "cost_guard_status": "pass",
+      "cost_guard_reason": "Within GB and USD limits",
+      "can_execute": True,
+      "requires_expensive_confirmation": False,
+      "estimated_gb": est_gb,
+      "estimated_usd": est_usd,
+      "maximum_fulltext_gb": max_gb,
+      "maximum_fulltext_usd": max_usd,
+      "allow_expensive_fulltext": bool(config.allow_expensive_fulltext),
+    }
+
+  if config.allow_expensive_fulltext:
+    return {
+      "cost_guard_status": "allowed_expensive_fulltext",
+      "cost_guard_reason": (
+        f"estimated_gb={est_gb:.4f} exceeds {max_gb} GB but USD {est_usd:.4f} <= {max_usd}; "
+        "explicit expensive approval granted"
+      ),
+      "can_execute": True,
+      "requires_expensive_confirmation": False,
+      "estimated_gb": est_gb,
+      "estimated_usd": est_usd,
+      "maximum_fulltext_gb": max_gb,
+      "maximum_fulltext_usd": max_usd,
+      "allow_expensive_fulltext": True,
+    }
+
+  return {
+    "cost_guard_status": "blocked_by_gb_but_usd_allowed_requires_confirmation",
+    "cost_guard_reason": (
+      f"estimated_gb={est_gb:.4f} exceeds {max_gb} GB but estimated_usd={est_usd:.4f} <= {max_usd}; "
+      "add --allow-expensive-fulltext to execute"
+    ),
+    "can_execute": False,
+    "requires_expensive_confirmation": True,
+    "estimated_gb": est_gb,
+    "estimated_usd": est_usd,
+    "maximum_fulltext_gb": max_gb,
+    "maximum_fulltext_usd": max_usd,
+    "allow_expensive_fulltext": False,
+  }
+
+
+def _execution_bytes_cap(config: FullTextRetrievalConfig, estimated_bytes: int) -> int:
+  gb_cap = config.maximum_bytes_billed()
+  usd_cap = usd_to_bytes(config.maximum_fulltext_usd)
+  if config.allow_expensive_fulltext:
+    return max(gb_cap, int(estimated_bytes or 0), usd_cap)
+  return gb_cap
+
+
 def _enrich_record_metadata(
   record: dict[str, Any],
   *,
   execute_selected: bool | None = None,
   execute_selection_reason: str | None = None,
   dry_run: dict[str, Any] | None = None,
+  cost_guard: dict[str, Any] | None = None,
+  config: FullTextRetrievalConfig | None = None,
 ) -> dict[str, Any]:
   enriched = dict(record)
   if execute_selected is not None:
     enriched["execute_selected"] = execute_selected
   if execute_selection_reason:
     enriched["execute_selection_reason"] = execute_selection_reason
+  if config:
+    enriched["fulltext_scope"] = config.resolved_scope()
+    enriched["maximum_fulltext_usd"] = config.maximum_fulltext_usd
+    enriched["allow_expensive_fulltext"] = config.allow_expensive_fulltext
   if dry_run:
     enriched["estimated_bytes"] = dry_run.get("estimated_bytes", 0)
     enriched["estimated_gb"] = dry_run.get("estimated_gb", 0.0)
     enriched["estimated_usd"] = dry_run.get("estimated_usd", 0.0)
-    enriched["cost_guard_status"] = (
-      "failed" if dry_run.get("would_be_blocked_by_max_bytes") else "ok"
-    )
+    enriched["fulltext_scope"] = dry_run.get("fulltext_scope", enriched.get("fulltext_scope"))
+  guard = cost_guard or (dry_run or {})
+  if guard.get("cost_guard_status"):
+    enriched["cost_guard_status"] = guard.get("cost_guard_status")
+    enriched["cost_guard_reason"] = guard.get("cost_guard_reason")
+  elif dry_run:
+    enriched["cost_guard_status"] = dry_run.get("cost_guard_status", "unknown")
+    enriched["cost_guard_reason"] = dry_run.get("cost_guard_reason")
   coverage = enriched.get("evidence_coverage") or {}
   enriched["claims_length"] = int(coverage.get("claims_length", 0) or len(str(enriched.get("claims") or "")))
   enriched["description_length"] = int(
@@ -112,6 +221,12 @@ def _next_action_for_record(record: dict[str, Any]) -> str:
     return "add_confirm_fulltext_execute"
   if status == "cost_guard_failed":
     return "review_cost_guard_or_manual_fulltext"
+  if status == "cost_guard_requires_expensive_confirmation":
+    return "add_allow_expensive_fulltext"
+  if status == "blocked_by_usd_guard":
+    return "reduce_scope_or_increase_usd_limit"
+  if status == "allowed_expensive_execute":
+    return "run_claim_element_extraction"
   if status in {"manual_required", "unsupported_country"}:
     return "manual_fulltext_review"
   return "review_metadata"
@@ -168,9 +283,11 @@ def dry_run_fulltext_query(
   config: FullTextRetrievalConfig,
   *,
   client_factory: ClientFactory | None = None,
+  scope: str | None = None,
 ) -> dict[str, Any]:
   publication_number = _safe_str(candidate.get("publication_number"))
   country = _safe_str(candidate.get("country"))
+  fulltext_scope = validate_fulltext_scope(scope or config.fulltext_scope)
   validation = validate_us_fulltext_request(publication_number, country or None)
   if not validation["ok"]:
     return {
@@ -182,9 +299,12 @@ def dry_run_fulltext_query(
       "sql": "",
       "error": validation["error"],
       "variants": validation.get("variants", []),
+      "fulltext_scope": fulltext_scope,
+      "cost_guard_status": "not_estimated",
+      "cost_guard_reason": validation["error"],
     }
   try:
-    sql = build_us_fulltext_query(publication_number, country=country or None)
+    sql = build_us_fulltext_query(publication_number, fulltext_scope, country=country or None)
   except ValueError as exc:
     return {
       "dry_run_status": "error",
@@ -195,6 +315,9 @@ def dry_run_fulltext_query(
       "sql": "",
       "error": str(exc),
       "variants": validation.get("variants", []),
+      "fulltext_scope": fulltext_scope,
+      "cost_guard_status": "not_estimated",
+      "cost_guard_reason": str(exc),
     }
   resolved = resolve_project_id(config.project_id)
   project_id = resolved.get("project_id", "")
@@ -207,6 +330,9 @@ def dry_run_fulltext_query(
       "would_be_blocked_by_max_bytes": False,
       "sql": sql,
       "error": resolved.get("error"),
+      "fulltext_scope": fulltext_scope,
+      "cost_guard_status": "not_estimated",
+      "cost_guard_reason": resolved.get("error"),
     }
 
   factory = client_factory or _default_client_factory
@@ -217,15 +343,19 @@ def dry_run_fulltext_query(
     job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=config.use_cache)
     job = client.query(sql, job_config=job_config)
     estimated_bytes = int(job.total_bytes_processed or 0)
+    estimated_usd = estimate_usd_from_bytes(estimated_bytes)
+    guard = evaluate_cost_guard(estimated_bytes, estimated_usd, config)
     return {
       "dry_run_status": "ok",
       "estimated_bytes": estimated_bytes,
       "estimated_gb": bytes_to_gb(estimated_bytes),
-      "estimated_usd": estimate_usd_from_bytes(estimated_bytes),
-      "would_be_blocked_by_max_bytes": estimated_bytes > config.maximum_bytes_billed(),
+      "estimated_usd": estimated_usd,
+      "would_be_blocked_by_max_bytes": guard["cost_guard_status"] not in {"pass", "allowed_expensive_fulltext"},
       "sql": sql,
       "error": None,
       "variants": validation.get("variants", []),
+      "fulltext_scope": fulltext_scope,
+      **guard,
     }
   except Exception as exc:  # noqa: BLE001
     return {
@@ -237,7 +367,35 @@ def dry_run_fulltext_query(
       "sql": sql,
       "error": str(exc),
       "variants": validation.get("variants", []),
+      "fulltext_scope": fulltext_scope,
+      "cost_guard_status": "not_estimated",
+      "cost_guard_reason": str(exc),
     }
+
+
+def dry_run_scope_estimates_for_candidate(
+  candidate: dict[str, Any],
+  config: FullTextRetrievalConfig,
+  *,
+  client_factory: ClientFactory | None = None,
+) -> list[dict[str, Any]]:
+  rows: list[dict[str, Any]] = []
+  pub = _safe_str(candidate.get("publication_number"))
+  for scope in sorted(VALID_FULLTEXT_SCOPES):
+    dry_run = dry_run_fulltext_query(candidate, config, client_factory=client_factory, scope=scope)
+    rows.append(
+      {
+        "publication_number": pub,
+        "scope": scope,
+        "estimated_bytes": dry_run.get("estimated_bytes", 0),
+        "estimated_gb": dry_run.get("estimated_gb", 0.0),
+        "estimated_usd": dry_run.get("estimated_usd", 0.0),
+        "cost_guard_status": dry_run.get("cost_guard_status"),
+        "cost_guard_reason": dry_run.get("cost_guard_reason"),
+        "dry_run_status": dry_run.get("dry_run_status"),
+      },
+    )
+  return rows
 
 
 def execute_fulltext_query(
@@ -245,12 +403,14 @@ def execute_fulltext_query(
   config: FullTextRetrievalConfig,
   *,
   client_factory: ClientFactory | None = None,
+  estimated_bytes: int = 0,
 ) -> dict[str, Any]:
   if not config.execute:
     return {"execution_status": "skipped", "rows": [], "error": None}
 
   publication_number = _safe_str(candidate.get("publication_number"))
   country = _safe_str(candidate.get("country"))
+  fulltext_scope = config.resolved_scope()
   if not is_us_publication(publication_number, country):
     return {
       "execution_status": "unsupported_country",
@@ -258,7 +418,7 @@ def execute_fulltext_query(
       "error": f"Non-US publication ({country or publication_number})",
     }
   try:
-    sql = build_us_fulltext_query(publication_number, country=country or None)
+    sql = build_us_fulltext_query(publication_number, fulltext_scope, country=country or None)
   except ValueError as exc:
     return {"execution_status": "query_error", "rows": [], "error": str(exc)}
   resolved = resolve_project_id(config.project_id)
@@ -271,13 +431,14 @@ def execute_fulltext_query(
     from google.cloud import bigquery
 
     client = factory(project_id)
+    bytes_cap = _execution_bytes_cap(config, estimated_bytes)
     job_config = bigquery.QueryJobConfig(
       dry_run=False,
       use_query_cache=config.use_cache,
-      maximum_bytes_billed=config.maximum_bytes_billed(),
+      maximum_bytes_billed=bytes_cap,
     )
     rows = [dict(row.items()) for row in client.query(sql, job_config=job_config).result()]
-    return {"execution_status": "executed", "rows": rows, "error": None}
+    return {"execution_status": "executed", "rows": rows, "error": None, "fulltext_scope": fulltext_scope}
   except Exception as exc:  # noqa: BLE001
     return {"execution_status": "error", "rows": [], "error": str(exc)}
 
@@ -352,12 +513,20 @@ def retrieve_fulltext_for_candidate(
     selected = True
   selection_reason = str(candidate.get("execute_selection_reason") or "")
 
-  def _finalize(result_status: str, record_dict: dict[str, Any], dry_run: dict[str, Any] | None, blocked: bool) -> dict[str, Any]:
+  def _finalize(
+    result_status: str,
+    record_dict: dict[str, Any],
+    dry_run: dict[str, Any] | None,
+    blocked: bool,
+    cost_guard: dict[str, Any] | None = None,
+  ) -> dict[str, Any]:
     enriched = _enrich_record_metadata(
       record_dict,
       execute_selected=selected,
       execute_selection_reason=selection_reason or None,
       dry_run=dry_run,
+      cost_guard=cost_guard or dry_run,
+      config=config,
     )
     return {
       "route": route,
@@ -365,6 +534,7 @@ def retrieve_fulltext_for_candidate(
       "record": enriched,
       "dry_run": dry_run,
       "blocked_by_cost_guard": blocked,
+      "cost_guard": cost_guard or dry_run,
     }
 
   if route["route"] == "manual_fulltext_required":
@@ -378,11 +548,13 @@ def retrieve_fulltext_for_candidate(
     return _finalize(status, record.to_dict(), None, False)
 
   if config.use_cache:
-    cached = load_fulltext_from_cache(publication_number, config.cache_dir)
+    cached = load_fulltext_from_cache(publication_number, config.cache_dir, config.resolved_scope())
     if cached:
       record = FullTextRecord.from_dict(cached)
       record.retrieval_status = "cache_hit"
-      return _finalize("cache_hit", record.to_dict(), None, False)
+      record_dict = record.to_dict()
+      record_dict["fulltext_scope"] = config.resolved_scope()
+      return _finalize("cache_hit", record_dict, None, False)
 
   if config.execute and not selected:
     record = _build_fulltext_record(
@@ -394,16 +566,53 @@ def retrieve_fulltext_for_candidate(
     return _finalize("skipped_not_selected", record.to_dict(), None, False)
 
   dry_run = dry_run_fulltext_query(candidate, config, client_factory=client_factory)
-  blocked = bool(dry_run.get("would_be_blocked_by_max_bytes"))
-  if blocked:
+  guard = evaluate_cost_guard(
+    int(dry_run.get("estimated_bytes", 0) or 0),
+    float(dry_run.get("estimated_usd", 0.0) or 0.0),
+    config,
+  )
+  dry_run = {**dry_run, **guard}
+
+  guard_status = str(guard.get("cost_guard_status") or "")
+  if guard_status == "blocked_by_usd":
+    record = _build_fulltext_record(
+      candidate,
+      route=route,
+      retrieval_status="blocked_by_usd_guard",
+      warnings=["Blocked by maximum_fulltext_usd guard"],
+      errors=[guard.get("cost_guard_reason", "")],
+    )
+    return _finalize("blocked_by_usd_guard", record.to_dict(), dry_run, True, guard)
+
+  if guard_status == "blocked_by_gb_but_usd_allowed_requires_confirmation":
+    record = _build_fulltext_record(
+      candidate,
+      route=route,
+      retrieval_status="cost_guard_requires_expensive_confirmation",
+      warnings=["GB limit exceeded but USD within budget; add --allow-expensive-fulltext"],
+      errors=[guard.get("cost_guard_reason", "")],
+    )
+    return _finalize("cost_guard_requires_expensive_confirmation", record.to_dict(), dry_run, True, guard)
+
+  if guard_status == "not_estimated" and dry_run.get("dry_run_status") == "error":
+    record = _build_fulltext_record(
+      candidate,
+      route=route,
+      retrieval_status="query_error",
+      warnings=["Dry-run estimate failed"],
+      errors=[dry_run.get("error", "estimate failed")],
+    )
+    return _finalize("query_error", record.to_dict(), dry_run, False, guard)
+
+  if guard_status not in {"pass", "allowed_expensive_fulltext"} and guard_status != "not_estimated":
     record = _build_fulltext_record(
       candidate,
       route=route,
       retrieval_status="cost_guard_failed",
-      warnings=["Blocked by maximum_bytes_billed guard"],
-      errors=[f"estimated_bytes={dry_run.get('estimated_bytes')}"],
+      warnings=["Blocked by cost guard"],
+      errors=[guard.get("cost_guard_reason", "")],
     )
-    return _finalize("cost_guard_failed", record.to_dict(), dry_run, True)
+    return _finalize("cost_guard_failed", record.to_dict(), dry_run, True, guard)
 
   if config.preview_only or not config.execute:
     record = _build_fulltext_record(
@@ -426,7 +635,12 @@ def retrieve_fulltext_for_candidate(
     )
     return _finalize("execute_blocked_confirmation_required", record.to_dict(), dry_run, False)
 
-  execution = execute_fulltext_query(candidate, config, client_factory=client_factory)
+  execution = execute_fulltext_query(
+    candidate,
+    config,
+    client_factory=client_factory,
+    estimated_bytes=int(dry_run.get("estimated_bytes", 0) or 0),
+  )
   if execution.get("execution_status") == "unsupported_country":
     record = _build_fulltext_record(
       candidate,
@@ -448,7 +662,10 @@ def retrieve_fulltext_for_candidate(
     return _finalize("query_error", record.to_dict(), dry_run, False)
 
   row = execution["rows"][0] if execution.get("rows") else {}
+  expensive = guard_status == "allowed_expensive_fulltext"
   retrieval_status = "retrieved" if row else "not_found"
+  if row and expensive:
+    retrieval_status = "allowed_expensive_execute"
   record = _build_fulltext_record(
     candidate,
     route=route,
@@ -457,9 +674,11 @@ def retrieve_fulltext_for_candidate(
     warnings=[] if row else ["No full text rows returned from BigQuery"],
     errors=[],
   )
-  if retrieval_status == "retrieved":
-    save_fulltext_to_cache(record.to_dict(), config.cache_dir)
-  return _finalize(record.retrieval_status, record.to_dict(), dry_run, False)
+  record_dict = record.to_dict()
+  record_dict["fulltext_scope"] = config.resolved_scope()
+  if retrieval_status in {"retrieved", "allowed_expensive_execute"}:
+    save_fulltext_to_cache(record_dict, config.cache_dir, config.resolved_scope())
+  return _finalize(retrieval_status, record_dict, dry_run, False, guard)
 
 
 def retrieve_fulltext_for_top_candidates(
@@ -558,6 +777,7 @@ def retrieve_controlled_fulltext_run(
     top5_candidates,
     strategic_watch_candidates,
     execute=config.execute,
+    fulltext_scope=config.resolved_scope(),
   )
   selected_targets = select_fulltext_execute_targets(
     plan,
@@ -582,9 +802,18 @@ def retrieve_controlled_fulltext_run(
     warnings_pub = []
 
   dry_run_by_pub: dict[str, dict[str, Any]] = {}
+  scope_estimates: list[dict[str, Any]] = []
   for candidate in plan["fulltext_targets"]:
     pub_norm = _normalize_publication_number(str(candidate.get("publication_number", "")))
-    dry_run_by_pub[pub_norm] = dry_run_fulltext_query(candidate, config, client_factory=client_factory)
+    dry_run_by_pub[pub_norm] = dry_run_fulltext_query(
+      candidate,
+      config,
+      client_factory=client_factory,
+      scope=config.resolved_scope(),
+    )
+    scope_estimates.extend(
+      dry_run_scope_estimates_for_candidate(candidate, config, client_factory=client_factory),
+    )
 
   execute_preview = build_fulltext_execute_preview(
     plan,
@@ -595,6 +824,11 @@ def retrieve_controlled_fulltext_run(
     execute_limit=config.execute_limit,
     selected_targets=selected_targets,
     dry_run_by_pub=dry_run_by_pub,
+    scope_estimates=scope_estimates,
+    fulltext_scope=config.resolved_scope(),
+    maximum_fulltext_gb=config.maximum_bytes_billed_gb,
+    maximum_fulltext_usd=config.maximum_fulltext_usd,
+    allow_expensive_fulltext=config.allow_expensive_fulltext,
   )
 
   warnings: list[str] = list(warnings_pub)
@@ -604,6 +838,8 @@ def retrieve_controlled_fulltext_run(
   dry_run_only_count = 0
   retrieved_count = 0
   blocked_by_cost_guard = 0
+  cost_guard_requires_expensive_count = 0
+  blocked_by_usd_count = 0
   skipped_not_selected_count = 0
   execute_blocked_count = 0
   total_estimated_bytes = 0
@@ -625,6 +861,9 @@ def retrieve_controlled_fulltext_run(
       confirm_fulltext_execute=config.confirm_fulltext_execute,
       require_fulltext_execute_confirmation=config.require_fulltext_execute_confirmation,
       preview_only=False,
+      fulltext_scope=config.fulltext_scope,
+      maximum_fulltext_usd=config.maximum_fulltext_usd,
+      allow_expensive_fulltext=config.allow_expensive_fulltext,
     )
 
   for candidate in plan["fulltext_targets"]:
@@ -646,6 +885,12 @@ def retrieve_controlled_fulltext_run(
     elif status == "execute_blocked_confirmation_required":
       execute_blocked_count += 1
     elif status in {"cost_guard_failed", "blocked_by_cost_guard"}:
+      blocked_by_cost_guard += 1
+    elif status == "cost_guard_requires_expensive_confirmation":
+      cost_guard_requires_expensive_count += 1
+      blocked_by_cost_guard += 1
+    elif status == "blocked_by_usd_guard":
+      blocked_by_usd_count += 1
       blocked_by_cost_guard += 1
     if result.get("dry_run"):
       total_estimated_bytes += int(result["dry_run"].get("estimated_bytes", 0))
@@ -681,7 +926,12 @@ def retrieve_controlled_fulltext_run(
     "strategic_watch_manual_count": len(strategic_rows),
     "blocked_by_cost_guard": blocked_by_cost_guard,
     "cost_guard_failed_count": blocked_by_cost_guard,
+    "cost_guard_requires_expensive_count": cost_guard_requires_expensive_count,
+    "blocked_by_usd_count": blocked_by_usd_count,
     "cost_guard_status": "failed" if blocked_by_cost_guard else "ok",
+    "fulltext_scope": config.resolved_scope(),
+    "maximum_fulltext_usd": config.maximum_fulltext_usd,
+    "allow_expensive_fulltext": config.allow_expensive_fulltext,
     "total_estimated_bytes": total_estimated_bytes,
     "total_estimated_gb": bytes_to_gb(total_estimated_bytes),
     "total_estimated_usd": estimate_usd_from_bytes(total_estimated_bytes),

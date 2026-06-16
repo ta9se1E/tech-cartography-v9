@@ -558,3 +558,36 @@ python scripts/run_top5_fulltext_collection.py \
   --execute-limit 1 \
   --confirm-fulltext-execute
 ```
+
+## v7 Phase 16.1: Fulltext Scope + GB/USD Cost Guard
+
+Phase 16.1 refines controlled fulltext execution with **scoped retrieval** and **dual cost guards** (GB + USD).
+
+- `fulltext_scope`: `claims_only` (default) | `description_only` | `claims_and_description`
+- `maximum_fulltext_usd` (default 10.0) — USD budget guard separate from GB limit
+- `--allow-expensive-fulltext` — required when GB exceeds limit but USD is within budget
+- Per-candidate × per-scope dry-run estimates saved in `fulltext_execute_preview.json` (`scope_estimates`)
+- Execute quality gate filters low-priority US noise (display/vessel assessment, etc.)
+- `claims_only` success → limited claim extraction / Evidence Validation `partial_success`
+- CN/EP/JP remain manual route (not excluded)
+
+### claims_only dry-run + execute (when GB high but USD OK)
+
+```bash
+python scripts/run_carbon_fiber_evidence_map.py \
+  --config configs/carbon_fiber_pipeline.yaml \
+  --use-existing-light-csv outputs/pipeline_runs/<run_id>/stages/bigquery_light_retrieval/<ts>/bigquery_light_results_dedup.csv \
+  --start-stage technology_clustering_ranking \
+  --stop-stage evidence_validation \
+  --execute-fulltext \
+  --fulltext-publication-number US-12565719-B2 \
+  --fulltext-scope claims_only \
+  --confirm-fulltext-execute
+```
+
+If dry-run shows GB over limit but USD within budget, add:
+
+```bash
+  --allow-expensive-fulltext \
+  --maximum-fulltext-usd 10
+```

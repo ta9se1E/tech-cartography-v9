@@ -154,3 +154,14 @@
 - CN/EP/JP manual watch unchanged
 - Outputs: `fulltext_execute_preview.json`, `fulltext_execute_results.csv`
 - Retrieved/cache_hit records flow into Evidence Validation claim extraction
+
+### Step 16.1 (v7 Phase 16.1): Fulltext Scope + GB/USD Cost Guard
+
+- Split fulltext scope: `claims_only` (default), `description_only`, `claims_and_description`
+- Dual cost guard: `maximum_fulltext_gb` + `maximum_fulltext_usd`
+- GB over limit but USD OK → `cost_guard_requires_expensive_confirmation` + `recommended_expensive_command`
+- `--allow-expensive-fulltext` required for expensive execute
+- Per-candidate scope dry-run estimates in `fulltext_execute_preview.json`
+- Execute quality gate for carbon-fiber relevance (low-priority US noise deprioritized)
+- `claims_only` → limited claim extraction without description
+- CN/EP/JP manual watch unchanged; do not auto-execute all Top5 or `claims_and_description` unconditionally
