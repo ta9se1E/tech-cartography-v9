@@ -1,0 +1,12 @@
+.env
+*.db
+**pycache**/
+*.pyc
+outputs/
+data/runtime/
+data/cache/
+.venv/
+.DS_Store
+.streamlit/secrets.toml
+credentials/
+*.jsonl
