@@ -68,6 +68,12 @@ def _normalize_row_for_csv(record: dict[str, Any], fieldnames: list[str]) -> dic
       "normalized_terms",
       "support_sections",
       "notes",
+      "authors",
+      "concepts",
+      "keywords",
+      "matched_terms",
+      "reasons",
+      "warnings",
     }:
       row[key] = _serialize_list_field(value)
     elif key in {"cluster_scores", "score_breakdown", "evidence_coverage"}:

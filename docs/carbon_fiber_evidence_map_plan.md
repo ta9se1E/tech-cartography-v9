@@ -49,7 +49,18 @@
 - Export `claim_elements.json/csv`, `paper_query_candidates.csv`, `claim_element_report.md`
 - LLM-based extraction remains optional for future extension
 
-### Step 6: Paper/Web Evidence Mapping
+### Step 6: OpenAlex Paper Evidence Search
+
+- Input: `paper_query_candidates.csv` and `claim_elements.csv` from Phase 5
+- Plan-only by default; explicit `--execute` for OpenAlex API calls
+- Cache-first JSON storage per query
+- Normalize works to `PaperRecord` with `display_url` and source metadata
+- Evaluate paper source quality with `SourceQualityAgent` v1
+- Map papers to claim elements as evidence relation candidates
+- Export `paper_evidence_links.csv` and `paper_evidence_report.md`
+- No web signal search or final synthesis report in this step
+
+### Step 7: Patent Claim × Paper Evidence Map
 
 - Map patent clusters to papers and web signals
 - Produce Carbon Fiber Evidence Map outputs for review

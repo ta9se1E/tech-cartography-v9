@@ -168,3 +168,40 @@ Outputs are saved under `outputs/claim_element_extraction/{timestamp}/`:
 - `record_claim_element_summary.json`
 - `paper_query_candidates.csv`
 - `claim_element_report.md`
+
+## v7 Phase 6: OpenAlex Paper Evidence Search
+
+Phase 6 consumes Phase 5 `paper_query_candidates.csv` and optionally `claim_elements.csv` to retrieve related papers from OpenAlex and map them to claim elements.
+
+- Default mode is plan-only (`execute=False`); pass `--execute` to call OpenAlex API
+- Cache-first under `data/runtime/openalex_cache/`
+- `PaperRecord` normalization with `display_url`, DOI, and source metadata
+- `SourceQualityAgent` v1 evaluates reference usability (not technical truth)
+- `PaperEvidenceMapper` links papers to claim elements as supporting/background/weak/unrelated candidates
+- No web signal search, business agents, or final synthesis report in this phase
+
+### CLI examples
+
+```bash
+python scripts/run_openalex_evidence.py \
+  --paper-query-csv outputs/claim_element_extraction/latest/paper_query_candidates.csv \
+  --claim-elements-csv outputs/claim_element_extraction/latest/claim_elements.csv \
+  --max-queries 20 \
+  --max-results-per-query 10
+
+python scripts/run_openalex_evidence.py \
+  --paper-query-csv outputs/claim_element_extraction/latest/paper_query_candidates.csv \
+  --claim-elements-csv outputs/claim_element_extraction/latest/claim_elements.csv \
+  --max-queries 20 \
+  --max-results-per-query 10 \
+  --execute
+```
+
+Outputs are saved under `outputs/openalex_paper_evidence/{timestamp}/`:
+
+- `openalex_query_plan.json`
+- `paper_records_raw.json` / `paper_records.csv` / `paper_records_dedup.csv`
+- `source_quality_results.csv`
+- `paper_evidence_links.csv`
+- `paper_evidence_by_patent.json`
+- `paper_evidence_report.md`

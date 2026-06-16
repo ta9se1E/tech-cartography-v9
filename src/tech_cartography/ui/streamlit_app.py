@@ -18,6 +18,11 @@ from tech_cartography.reports.claim_element_pipeline import (
   save_claim_element_outputs,
 )
 from tech_cartography.reports.claim_element_report import build_claim_element_summary
+from tech_cartography.reports.paper_evidence_pipeline import (
+  run_paper_evidence_pipeline,
+  save_paper_evidence_outputs,
+)
+from tech_cartography.reports.paper_evidence_report import build_paper_evidence_summary
 from tech_cartography.reports.fulltext_evidence_report import (
   build_fulltext_evidence_summary,
   render_fulltext_evidence_markdown,
@@ -32,6 +37,7 @@ from tech_cartography.retrieval.patent_fulltext_retriever import (
   retrieve_fulltext_for_top_candidates,
   save_fulltext_collection_results,
 )
+from tech_cartography.retrieval.openalex_retriever import OpenAlexRetrievalConfig
 from tech_cartography.strategy.query_plan import QueryPlan
 from tech_cartography.strategy.search_strategy_builder import build_search_strategy
 
@@ -42,7 +48,7 @@ def _split_csv(value: str) -> list[str]:
 
 def render_search_strategy_page() -> None:
   st.title("PatentScout AI v7 — Carbon Fiber Evidence Map")
-  st.caption("Phase 1-5: Strategy / BigQuery Light / Clustering / Full Text / Claim Elements")
+  st.caption("Phase 1-6: Strategy / BigQuery / Clustering / Full Text / Claim Elements / OpenAlex")
 
   if st.button("Load carbon fiber demo profile"):
     demo = load_carbon_fiber_demo_profile()
@@ -297,6 +303,75 @@ def render_search_strategy_page() -> None:
       st.subheader("Claim Element Report")
       st.markdown(Path(report_path).read_text(encoding="utf-8"))
     st.write("保存先:", claim_element_extraction["paths"])
+
+  st.subheader("Phase 6: OpenAlex Paper Evidence Search")
+  paper_query_csv_path = st.text_input(
+    "paper_query_candidates.csv path",
+    value="outputs/claim_element_extraction/latest/paper_query_candidates.csv",
+    key="phase6_query_csv",
+  )
+  claim_elements_csv_path = st.text_input(
+    "claim_elements.csv path",
+    value="outputs/claim_element_extraction/latest/claim_elements.csv",
+    key="phase6_elements_csv",
+  )
+  oa_max_queries = st.number_input("max queries", min_value=1, value=20, key="oa_max_queries")
+  oa_max_results = st.number_input(
+    "max results per query",
+    min_value=1,
+    value=10,
+    key="oa_max_results",
+  )
+  oa_execute = st.checkbox("Execute OpenAlex", key="oa_execute")
+  oa_use_cache = st.checkbox("Use OpenAlex cache", value=True, key="oa_use_cache")
+  oa_polite_email = st.text_input("polite email (optional)", key="oa_polite_email")
+
+  if st.button("Run OpenAlex Paper Evidence Search"):
+    query_path = Path(paper_query_csv_path)
+    elements_path = Path(claim_elements_csv_path)
+    for path, pattern in (
+      (query_path, "paper_query_candidates.csv"),
+      (elements_path, "claim_elements.csv"),
+    ):
+      if not path.exists() and "latest" in str(path):
+        parent = path.parent.parent
+        candidates = sorted(parent.glob(f"*/{pattern}"))
+        if candidates:
+          path = candidates[-1]
+    query_rows = load_records_csv(query_path) if query_path.exists() else []
+    claim_elements = load_records_csv(elements_path) if elements_path.exists() else []
+    if not query_rows:
+      st.error("paper_query_candidates.csv が見つかりません")
+    else:
+      oa_config = OpenAlexRetrievalConfig(
+        execute=oa_execute,
+        max_queries=int(oa_max_queries),
+        max_results_per_query=int(oa_max_results),
+        use_cache=oa_use_cache,
+        polite_email=oa_polite_email or None,
+      )
+      oa_result = run_paper_evidence_pipeline(query_rows, claim_elements, oa_config)
+      oa_output_dir = build_output_directory("outputs/openalex_paper_evidence")
+      oa_paths = save_paper_evidence_outputs(oa_result, oa_output_dir)
+      oa_summary = build_paper_evidence_summary(oa_result)
+      st.session_state["paper_evidence"] = {
+        "result": oa_result,
+        "summary": oa_summary,
+        "paths": oa_paths,
+      }
+
+  paper_evidence = st.session_state.get("paper_evidence")
+  if paper_evidence:
+    oa_summary = paper_evidence["summary"]
+    st.write(f"mode: {paper_evidence['result'].get('mode')}")
+    st.write("source quality集計:", oa_summary.get("source_quality_counts", {}))
+    st.subheader("Paper evidence links")
+    st.dataframe(paper_evidence["result"].get("evidence_links", []))
+    report_path = paper_evidence["paths"].get("paper_evidence_report_md")
+    if report_path and Path(report_path).exists():
+      st.subheader("Paper Evidence Report")
+      st.markdown(Path(report_path).read_text(encoding="utf-8"))
+    st.write("保存先:", paper_evidence["paths"])
 
   if strategy:
     with st.expander("Full strategy JSON"):
