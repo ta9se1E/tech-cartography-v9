@@ -69,8 +69,17 @@
 - Export `claim_paper_evidence_items.csv` and `claim_paper_evidence_map_report.md`
 - No web signal search or final synthesis report in this step
 
-### Step 8: Technical / Business View & Synthesis
+### Step 8: Technical View Agent
 
-- Technical View Agent and Business View Agent
+- Input: Phase 7 patent evidence maps, evidence items, and evidence gaps
+- Rule-based technical assessment for engineers (no Business View yet)
+- Score evidence strength, description/example support, paper support, measurement risk, implementation risk
+- Output patent technical summaries, assessment items, and recommended reader actions
+- Export `technical_assessments.json` and `technical_view_report.md`
+- No web signal mapping or final synthesis report in this step
+
+### Step 9: Business View & Synthesis
+
+- Business View Agent
 - Web / Company Signal Mapping
 - Final synthesis report for Carbon Fiber Evidence Map review

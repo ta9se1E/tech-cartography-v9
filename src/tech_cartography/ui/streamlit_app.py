@@ -25,6 +25,9 @@ from tech_cartography.reports.paper_evidence_pipeline import (
 from tech_cartography.evidence.claim_paper_evidence_map import build_claim_paper_evidence_map
 from tech_cartography.reports.claim_paper_evidence_map_report import build_claim_paper_evidence_map_summary
 from tech_cartography.reports.evidence_map_export import save_claim_paper_evidence_map_outputs
+from tech_cartography.agents.technical_view_agent import run_technical_view_assessment
+from tech_cartography.reports.technical_assessment_export import save_technical_view_outputs
+from tech_cartography.reports.technical_view_report import build_technical_view_summary
 from tech_cartography.reports.fulltext_evidence_report import (
   build_fulltext_evidence_summary,
   render_fulltext_evidence_markdown,
@@ -51,7 +54,7 @@ def _split_csv(value: str) -> list[str]:
 
 def render_search_strategy_page() -> None:
   st.title("PatentScout AI v7 — Carbon Fiber Evidence Map")
-  st.caption("Phase 1-7: Strategy / BigQuery / Clustering / Full Text / Claim Elements / OpenAlex / Evidence Map")
+  st.caption("Phase 1-8: Strategy / BigQuery / Clustering / Full Text / Claim Elements / OpenAlex / Evidence Map / Technical View")
 
   if st.button("Load carbon fiber demo profile"):
     demo = load_carbon_fiber_demo_profile()
@@ -463,6 +466,119 @@ def render_search_strategy_page() -> None:
       st.subheader("Claim × Paper Evidence Map Report")
       st.markdown(Path(report_path).read_text(encoding="utf-8"))
     st.write("保存先:", claim_paper_evidence_map["paths"])
+
+  st.subheader("Phase 8: Technical View Agent")
+  tv_maps_json = st.text_input(
+    "patent_evidence_maps.json path",
+    value="outputs/claim_paper_evidence_map/latest/patent_evidence_maps.json",
+    key="phase8_maps_json",
+  )
+  tv_items_csv = st.text_input(
+    "claim_paper_evidence_items.csv path",
+    value="outputs/claim_paper_evidence_map/latest/claim_paper_evidence_items.csv",
+    key="phase8_items_csv",
+  )
+  tv_gaps_csv = st.text_input(
+    "evidence_gaps.csv path",
+    value="outputs/claim_paper_evidence_map/latest/evidence_gaps.csv",
+    key="phase8_gaps_csv",
+  )
+  tv_claim_csv = st.text_input(
+    "claim_elements.csv (optional)",
+    value="outputs/claim_element_extraction/latest/claim_elements.csv",
+    key="phase8_claim_csv",
+  )
+  tv_fulltext_json = st.text_input(
+    "top5_fulltext_records.json (optional)",
+    value="outputs/top5_fulltext_collection/latest/top5_fulltext_records.json",
+    key="phase8_fulltext_json",
+  )
+
+  if st.button("Run Technical View Agent"):
+    def _resolve(path: Path, pattern: str) -> Path:
+      if not path.exists() and "latest" in str(path):
+        parent = path.parent.parent
+        candidates = sorted(parent.glob(f"*/{pattern}"))
+        if candidates:
+          return candidates[-1]
+      return path
+
+    maps_path = _resolve(Path(tv_maps_json), "patent_evidence_maps.json")
+    items_path = _resolve(Path(tv_items_csv), "claim_paper_evidence_items.csv")
+    gaps_path = _resolve(Path(tv_gaps_csv), "evidence_gaps.csv")
+    claim_path = _resolve(Path(tv_claim_csv), "claim_elements.csv")
+    fulltext_path = _resolve(Path(tv_fulltext_json), "top5_fulltext_records.json")
+
+    if maps_path.exists():
+      with maps_path.open(encoding="utf-8") as handle:
+        patent_maps = json.load(handle)
+      if isinstance(patent_maps, dict):
+        patent_maps = patent_maps.get("patent_evidence_maps", [])
+    else:
+      patent_maps = []
+
+    evidence_items = load_records_csv(items_path) if items_path.exists() else []
+    evidence_gaps = load_records_csv(gaps_path) if gaps_path.exists() else []
+    claim_elements = load_records_csv(claim_path) if claim_path.exists() else None
+    fulltext_records = None
+    if fulltext_path.exists():
+      with fulltext_path.open(encoding="utf-8") as handle:
+        fulltext_data = json.load(handle)
+      fulltext_records = (
+        fulltext_data if isinstance(fulltext_data, list) else fulltext_data.get("retrieved_records", [])
+      )
+
+    if not patent_maps:
+      st.error("patent_evidence_maps.json が見つかりません")
+    else:
+      tv_result = run_technical_view_assessment(
+        patent_maps,
+        evidence_items,
+        evidence_gaps,
+        claim_elements=claim_elements,
+        fulltext_records=fulltext_records,
+      )
+      tv_output_dir = build_output_directory("outputs/technical_view_assessment")
+      tv_paths = save_technical_view_outputs(tv_result, tv_output_dir)
+      tv_summary = build_technical_view_summary(tv_result)
+      st.session_state["technical_view"] = {
+        "result": tv_result,
+        "summary": tv_summary,
+        "paths": tv_paths,
+      }
+
+  technical_view = st.session_state.get("technical_view")
+  if technical_view:
+    tv_summary = technical_view["summary"]
+    st.write(
+      "confidence counts:",
+      {
+        "high": tv_summary.get("high_confidence"),
+        "medium": tv_summary.get("medium_confidence"),
+        "low": tv_summary.get("low_confidence"),
+        "human_review_required": tv_summary.get("human_review_required"),
+      },
+    )
+    st.subheader("Patent technical summaries")
+    st.dataframe(
+      [
+        {
+          "publication_number": a.get("publication_number"),
+          "overall_technical_confidence": a.get("overall_technical_confidence"),
+          "overall_technical_score": a.get("overall_technical_score"),
+          "technical_summary": a.get("technical_summary"),
+          "recommended_reader_action": a.get("recommended_reader_action"),
+        }
+        for a in technical_view["result"].get("technical_assessments", [])
+      ],
+    )
+    st.subheader("Common technical risks")
+    st.write(technical_view["result"].get("common_technical_risks", {}))
+    report_path = technical_view["paths"].get("technical_view_report_md")
+    if report_path and Path(report_path).exists():
+      st.subheader("Technical View Report")
+      st.markdown(Path(report_path).read_text(encoding="utf-8"))
+    st.write("保存先:", technical_view["paths"])
 
   if strategy:
     with st.expander("Full strategy JSON"):

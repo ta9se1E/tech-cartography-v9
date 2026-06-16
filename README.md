@@ -237,3 +237,31 @@ Outputs are saved under `outputs/claim_paper_evidence_map/{timestamp}/`:
 - `top_evidence_items.csv`
 - `claim_paper_evidence_map_summary.json`
 - `claim_paper_evidence_map_report.md`
+
+## v7 Phase 8: Technical View Agent
+
+Phase 8 consumes Phase 7 claim-paper evidence map outputs and produces rule-based technical assessments for engineers.
+
+- Input: `patent_evidence_maps.json`, `claim_paper_evidence_items.csv`, `evidence_gaps.csv`
+- Optional: `claim_elements.csv`, `top5_fulltext_records.json`
+- Patent-level technical score, confidence, summary, risks, and recommended checks
+- Assessment items for evidence strength, claim scope risk, implementation risk, measurement risk, and human review
+- Uses cautious wording: evidence candidates, not proof
+- No Business View Agent, web signal mapping, or final synthesis report in this phase
+
+### CLI example
+
+```bash
+python scripts/run_technical_view_agent.py \
+  --patent-evidence-maps-json outputs/claim_paper_evidence_map/latest/patent_evidence_maps.json \
+  --evidence-items-csv outputs/claim_paper_evidence_map/latest/claim_paper_evidence_items.csv \
+  --evidence-gaps-csv outputs/claim_paper_evidence_map/latest/evidence_gaps.csv
+```
+
+Outputs are saved under `outputs/technical_view_assessment/{timestamp}/`:
+
+- `technical_assessments.json`
+- `technical_assessment_items.csv`
+- `patent_technical_summary.csv`
+- `common_technical_risks.json`
+- `technical_view_report.md`
