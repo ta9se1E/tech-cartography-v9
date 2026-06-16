@@ -1,4 +1,4 @@
-"""Easy Japanese Streamlit app for Tech Cartography v7 pipeline results."""
+"""Tabbed Easy Japanese Streamlit app for Tech Cartography v7 (Phase 17)."""
 
 from __future__ import annotations
 
@@ -15,21 +15,39 @@ from tech_cartography.ui.easy_japanese_ui import (
   inject_easy_ui_css,
   prepare_patent_display_df,
   render_caveat_footer,
+  render_caution_box,
   render_evidence_validation_summary,
   render_fulltext_execute_summary,
   render_fulltext_status_card,
   render_fulltext_vs_watch_notice,
   render_info_box,
+  render_main_title,
   render_manual_checklist_notice,
+  render_markdown_preview,
   render_metric_cards,
+  render_next_action_box,
+  render_ok_box,
   render_patent_card,
-  render_step_header,
+  render_small_table,
+  render_status_card,
   render_strategic_watch_card,
   render_success_box,
   render_top5_fulltext_card,
+  render_user_badge,
+  render_watch_profile_card,
   render_warning_box,
   summarize_stage_statuses,
 )
+from tech_cartography.ui.japanese_labels import (
+  explain_cost_guard_status,
+  explain_fulltext_scope,
+  explain_watch_profile,
+  translate_fulltext_scope,
+  translate_tab_name,
+)
+from tech_cartography.ui.user_settings_view import render_user_settings_tab
+from tech_cartography.users.user_store import set_last_run_id
+from tech_cartography.users.watch_profile_store import get_active_watch_profile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_PIPELINE_ROOT = PROJECT_ROOT / "outputs" / "pipeline_runs"
@@ -78,293 +96,301 @@ def _load_text_artifact(manifest: dict[str, Any], key: str) -> str:
     return ""
 
 
-def _resolve_run_dir(run_id: str, pipeline_root: Path) -> Path:
-  return pipeline_root / run_id
+def _load_json_artifact(manifest: dict[str, Any], key: str) -> dict[str, Any] | None:
+  path = _artifact_path(manifest, key)
+  if not path:
+    return None
+  try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else None
+  except json.JSONDecodeError:
+    return None
 
 
-def _next_commands(manifest: dict[str, Any]) -> list[str]:
-  commands = manifest.get("config", {}).get("next_recommended_commands") or []
-  return [str(cmd) for cmd in commands if cmd]
-
-
-def render_easy_japanese_app() -> None:
-  st.markdown(inject_easy_ui_css(), unsafe_allow_html=True)
-  st.markdown('<div class="tc-easy-title">Tech Cartography v7 かんたん技術地図</div>', unsafe_allow_html=True)
-  st.markdown(
-    '<div class="tc-easy-subtitle">特許・論文・企業情報から、読むべき技術候補を整理します</div>',
-    unsafe_allow_html=True,
-  )
-
-  with st.sidebar:
-    st.header("設定")
-    pipeline_root = st.text_input("実行結果フォルダ", value=str(DEFAULT_PIPELINE_ROOT))
-    run_id = st.text_input("run_id", value="")
-    if st.button("latest_run から読み込む"):
-      pointer = read_latest_run_pointer(pipeline_root)
-      if pointer and pointer.get("run_id"):
-        st.session_state["easy_run_id"] = pointer["run_id"]
-        st.session_state["easy_manifest_path"] = pointer.get("manifest_path", "")
-        st.success(f"最新 run: {pointer['run_id']}")
-      else:
-        st.warning("latest_run.json が見つかりません。")
-    if st.session_state.get("easy_run_id"):
-      run_id = st.session_state["easy_run_id"]
-    display_mode = st.radio("表示モード", ["かんたん表示", "詳細表示"], index=0)
-    st.markdown(render_warning_box(
-      "BigQuery・OpenAlex・全文取得は有料/外部実行の可能性があります。"
-      "本画面は結果の整理用であり、法的判断は行いません。",
-    ), unsafe_allow_html=True)
-
-  manifest_data: dict[str, Any] | None = None
+def _resolve_manifest(
+  user: dict[str, Any],
+  pipeline_root: str,
+  run_id: str,
+) -> dict[str, Any] | None:
   manifest_path = st.session_state.get("easy_manifest_path")
   if manifest_path:
-    manifest_data = _load_manifest(manifest_path)
-  elif run_id:
-    candidate = _resolve_run_dir(run_id, Path(pipeline_root)) / "run_manifest.json"
-    manifest_data = _load_manifest(candidate)
+    return _load_manifest(manifest_path)
+  if run_id:
+    candidate = Path(pipeline_root) / run_id / "run_manifest.json"
+    return _load_manifest(candidate)
+  saved_run = user.get("last_run_id")
+  if saved_run:
+    candidate = Path(pipeline_root) / saved_run / "run_manifest.json"
+    manifest = _load_manifest(candidate)
+    if manifest:
+      return manifest
+  pointer = read_latest_run_pointer(pipeline_root)
+  if pointer and pointer.get("manifest_path"):
+    return _load_manifest(pointer["manifest_path"])
+  return None
 
-  if not manifest_data:
-    st.markdown(render_info_box(
-      "実行結果を選んでください。sidebar で run_id を入力するか、"
-      "「latest_run から読み込む」を押してください。",
-    ), unsafe_allow_html=True)
-    st.markdown(render_caveat_footer(), unsafe_allow_html=True)
-    return
 
-  # Step 1: 実行状況
+def _tab_start(user: dict[str, Any], watch: dict[str, Any], manifest: dict[str, Any] | None) -> None:
+  st.markdown(render_ok_box("このアプリでできること: 特許候補の整理、全文確認計画、技術の裏取り候補の確認"), unsafe_allow_html=True)
   st.markdown(
-    render_step_header(1, "実行状況", "パイプライン各段階の状態と、次に実行すべきコマンドを確認します"),
+    render_caution_box(
+      "ご利用上の注意: 特許の有効性・侵害・FTOは判断しません。"
+      "論文候補は裏取り候補であり証明ではありません。"
+      "BigQuery/OpenAlexの実行はこの画面からは自動では行いません。"
+    ),
     unsafe_allow_html=True,
   )
-  stage_rows = summarize_stage_statuses(manifest_data)
-  if stage_rows:
-    st.dataframe(pd.DataFrame(stage_rows)[["段階", "状態", "説明"]], use_container_width=True, hide_index=True)
+  st.markdown(render_watch_profile_card(watch), unsafe_allow_html=True)
+  st.markdown(render_info_box(explain_watch_profile()), unsafe_allow_html=True)
+  weekly = "ON" if user.get("weekly_email_enabled") else "OFF"
+  st.markdown(
+    render_info_box(
+      f"週次メール設定: {weekly}（送信先: {user.get('email', '')}）。"
+      "まだ送信は行いません。設定タブで変更できます。"
+    ),
+    unsafe_allow_html=True,
+  )
+  if manifest:
+    with st.expander("実行状況の詳細"):
+      stage_rows = summarize_stage_statuses(manifest)
+      if stage_rows:
+        render_small_table(pd.DataFrame(stage_rows)[["段階", "状態", "説明"]])
   else:
-    st.info("ステージ情報がありません。")
+    st.info("sidebar で run_id を指定するか、「latest_run を読み込む」を押してください。")
 
-  commands = _next_commands(manifest_data)
-  if commands:
-    st.markdown(render_info_box("次に実行すべきコマンド例:"), unsafe_allow_html=True)
-    for cmd in commands:
-      st.code(cmd)
 
-  # Step 2: 特許候補
-  st.markdown(
-    render_step_header(2, "特許候補をさがす", "分類・優先度付けされた特許候補を確認します"),
-    unsafe_allow_html=True,
-  )
-  ranked_df = _load_csv_artifact(manifest_data, "ranked_patents_csv")
-  top20_df = _load_csv_artifact(manifest_data, "top20_patents_csv")
-  if ranked_df.empty and not top20_df.empty:
-    ranked_df = top20_df
+def _tab_patents(manifest: dict[str, Any], display_mode: str) -> None:
+  st.markdown(render_info_box("中国候補を除外しているわけではありません。US全文候補と戦略監視候補は別枠です。"), unsafe_allow_html=True)
+  ranked_df = _load_csv_artifact(manifest, "ranked_patents_csv")
+  top20_df = _load_csv_artifact(manifest, "top20_patents_csv")
+  cluster_df = _load_csv_artifact(manifest, "cluster_summary_csv")
+  watch_df = _load_csv_artifact(manifest, "strategic_watch_candidates_csv")
+  company_df = _load_csv_artifact(manifest, "company_watch_summary_csv")
 
   metrics = [
     {"label": "ランク付け件数", "value": len(ranked_df)},
-    {"label": "Top20件数", "value": len(top20_df)},
+    {"label": "Top20", "value": len(top20_df)},
+    {"label": "戦略監視", "value": len(watch_df)},
   ]
-  if not top20_df.empty and "primary_cluster_id" in top20_df.columns:
-    metrics.append({"label": "技術分類数", "value": top20_df["primary_cluster_id"].nunique()})
-  if not top20_df.empty and "country" in top20_df.columns:
-    metrics.append({"label": "国数", "value": top20_df["country"].nunique()})
   st.markdown(render_metric_cards(metrics), unsafe_allow_html=True)
 
   if not top20_df.empty:
-    display_df = prepare_patent_display_df(top20_df)
-    if display_mode == "かんたん表示":
-      st.subheader("読むべき特許候補（Top20）")
-      for _, row in top20_df.head(20).iterrows():
-        st.markdown(render_patent_card(row.to_dict()), unsafe_allow_html=True)
-    else:
-      st.subheader("Top20（日本語列名）")
-      st.dataframe(display_df, use_container_width=True, hide_index=True)
-    if "primary_cluster_id" in top20_df.columns:
-      st.caption("技術分類別件数")
-      st.dataframe(top20_df["primary_cluster_id"].value_counts().reset_index(), hide_index=True)
-    if "country" in top20_df.columns:
-      st.caption("国別件数")
-      st.dataframe(top20_df["country"].value_counts().reset_index(), hide_index=True)
-    if "assignee" in top20_df.columns:
-      st.caption("出願人別件数")
-      st.dataframe(top20_df["assignee"].fillna("不明").value_counts().head(10).reset_index(), hide_index=True)
+    with st.expander("Top20 特許候補", expanded=display_mode == "かんたん表示"):
+      if display_mode == "かんたん表示":
+        for _, row in top20_df.head(10).iterrows():
+          st.markdown(render_patent_card(row.to_dict()), unsafe_allow_html=True)
+      else:
+        render_small_table(prepare_patent_display_df(top20_df))
   else:
-    st.warning("Top20 の成果物がまだありません。technology_clustering_ranking を実行してください。")
+    st.warning("Top20 の成果物がまだありません。")
 
-  # Step 3: 全文確認候補 + 戦略監視候補
-  st.markdown(
-    render_step_header(3, "読むべき特許を選ぶ", "全文取得候補と戦略監視候補を分けて確認します"),
-    unsafe_allow_html=True,
-  )
+  if not cluster_df.empty:
+    with st.expander("技術クラスタサマリー"):
+      render_small_table(cluster_df)
+  if not company_df.empty:
+    with st.expander("企業別監視サマリー"):
+      render_small_table(company_df.head(15))
+
+  if not watch_df.empty:
+    st.subheader("戦略監視候補（中国・EP・JP含む）")
+    cn_count = int((watch_df["country"].astype(str).str.upper() == "CN").sum()) if "country" in watch_df.columns else 0
+    st.markdown(render_info_box(f"戦略監視: {len(watch_df)} 件（中国: {cn_count} 件）"), unsafe_allow_html=True)
+    with st.expander("戦略監視候補一覧", expanded=False):
+      for _, row in watch_df.head(10).iterrows():
+        st.markdown(render_strategic_watch_card(row.to_dict()), unsafe_allow_html=True)
+
+
+def _tab_fulltext(manifest: dict[str, Any], display_mode: str) -> None:
   st.markdown(render_fulltext_vs_watch_notice(), unsafe_allow_html=True)
+  st.markdown(render_info_box(explain_fulltext_scope("claims_only")), unsafe_allow_html=True)
+  for scope in ("claims_only", "description_only", "claims_and_description"):
+    st.caption(f"{translate_fulltext_scope(scope)}: {explain_fulltext_scope(scope)}")
 
-  top5_df = _load_csv_artifact(manifest_data, "top5_fulltext_candidates_csv")
-  watch_df = _load_csv_artifact(manifest_data, "strategic_watch_candidates_csv")
-  country_watch_df = _load_csv_artifact(manifest_data, "country_watch_summary_csv")
-  company_watch_df = _load_csv_artifact(manifest_data, "company_watch_summary_csv")
+  top5_df = _load_csv_artifact(manifest, "top5_fulltext_candidates_csv")
+  records_df = _load_csv_artifact(manifest, "top5_fulltext_records_csv")
+  ft_preview = _load_json_artifact(manifest, "fulltext_execute_preview_json")
+  ft_summary = _load_json_artifact(manifest, "fulltext_retrieval_summary_json")
+  execute_df = _load_csv_artifact(manifest, "fulltext_execute_results_csv")
+  checklist_md = _load_text_artifact(manifest, "manual_fulltext_checklist_md")
+  strategic_manual_df = _load_csv_artifact(manifest, "strategic_watch_manual_fulltext_required_csv")
 
-  st.subheader("A. 全文を取りに行きやすい候補（US中心）")
-  fulltext_records_df = _load_csv_artifact(manifest_data, "top5_fulltext_records_csv")
-  checklist_md = _load_text_artifact(manifest_data, "manual_fulltext_checklist_md")
-  strategic_manual_df = _load_csv_artifact(manifest_data, "strategic_watch_manual_fulltext_required_csv")
+  if ft_preview or ft_summary:
+    st.markdown(render_fulltext_execute_summary(ft_preview, ft_summary), unsafe_allow_html=True)
+    guard_status = ""
+    if ft_preview and ft_preview.get("preview_targets"):
+      guard_status = str(ft_preview["preview_targets"][0].get("cost_guard_status", ""))
+    if guard_status:
+      st.markdown(render_info_box(explain_cost_guard_status(guard_status)), unsafe_allow_html=True)
 
   if not top5_df.empty:
-    st.markdown(render_success_box("米国公報は全文取得を試せます"), unsafe_allow_html=True)
-    st.markdown(render_success_box(f"全文を確認できそうな特許: {len(top5_df)} 件"), unsafe_allow_html=True)
-    caveat = str(top5_df.iloc[0].get("caveat_japanese", ""))
-    if caveat:
-      st.markdown(render_info_box(caveat), unsafe_allow_html=True)
-    for _, row in top5_df.iterrows():
-      st.markdown(render_top5_fulltext_card(row.to_dict()), unsafe_allow_html=True)
-    if display_mode == "詳細表示":
-      st.dataframe(prepare_patent_display_df(top5_df), use_container_width=True, hide_index=True)
+    st.subheader("US Top5 全文候補")
+    with st.expander("US Top5 一覧", expanded=display_mode == "かんたん表示"):
+      for _, row in top5_df.iterrows():
+        st.markdown(render_top5_fulltext_card(row.to_dict()), unsafe_allow_html=True)
   else:
     st.info("Top5 全文候補がまだありません。")
 
-  if not fulltext_records_df.empty:
-    st.caption("US全文取得の実行状態")
-    for _, row in fulltext_records_df.iterrows():
-      st.markdown(render_fulltext_status_card(row.to_dict()), unsafe_allow_html=True)
+  if not records_df.empty:
+    with st.expander("全文取得の実行状態"):
+      for _, row in records_df.iterrows():
+        st.markdown(render_fulltext_status_card(row.to_dict()), unsafe_allow_html=True)
+
+  if not execute_df.empty:
+    with st.expander("fulltext_execute_results"):
+      render_small_table(execute_df)
+
+  if checklist_md:
+    with st.expander("Manual Full Text Checklist"):
+      st.markdown(checklist_md)
+
+  if not strategic_manual_df.empty:
+    st.subheader("CN/EP/JP 手動全文確認候補")
+    render_small_table(prepare_patent_display_df(strategic_manual_df))
   elif not top5_df.empty:
     st.markdown(render_manual_checklist_notice(), unsafe_allow_html=True)
 
-  st.subheader("B. 戦略監視すべき候補（中国・EP・JP含む）")
-  if not watch_df.empty:
-    cn_count = 0
-    if "country" in watch_df.columns:
-      cn_count = int((watch_df["country"].astype(str).str.upper() == "CN").sum())
-    st.markdown(
-      render_info_box(
-        f"戦略監視候補: {len(watch_df)} 件（中国候補: {cn_count} 件）。"
-        "中国候補を除外しているわけではありません。",
-      ),
-      unsafe_allow_html=True,
-    )
-    for _, row in watch_df.head(15).iterrows():
-      st.markdown(render_strategic_watch_card(row.to_dict()), unsafe_allow_html=True)
-    if display_mode == "詳細表示":
-      st.dataframe(prepare_patent_display_df(watch_df), use_container_width=True, hide_index=True)
-    if not country_watch_df.empty:
-      st.caption("国別監視サマリー")
-      st.dataframe(country_watch_df, use_container_width=True, hide_index=True)
-    if not company_watch_df.empty:
-      st.caption("企業別監視サマリー")
-      st.dataframe(company_watch_df.head(15), use_container_width=True, hide_index=True)
-    if not strategic_manual_df.empty:
-      st.caption("戦略監視・手動全文確認リスト")
-      st.dataframe(prepare_patent_display_df(strategic_manual_df), use_container_width=True, hide_index=True)
-    if checklist_md:
-      with st.expander("Manual Full Text Check List"):
-        st.markdown(checklist_md)
-  else:
-    st.info("Strategic Watch 候補がまだありません。clustering を再実行してください。")
 
-  # Step 4: 技術の裏取り
-  st.markdown(
-    render_step_header(4, "技術の裏取りを見る", "請求項・論文による裏取り候補を確認します"),
-    unsafe_allow_html=True,
-  )
-  ft_preview: dict[str, Any] | None = None
-  ft_preview_path = _artifact_path(manifest_data, "fulltext_execute_preview_json")
-  if ft_preview_path and ft_preview_path.exists():
-    try:
-      ft_preview = json.loads(ft_preview_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-      ft_preview = None
-  ft_summary_path = _artifact_path(manifest_data, "fulltext_retrieval_summary_json")
-  ft_summary: dict[str, Any] | None = None
-  if ft_summary_path and ft_summary_path.exists():
-    try:
-      ft_summary = json.loads(ft_summary_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-      ft_summary = None
-  if ft_preview or ft_summary:
-    st.markdown(render_fulltext_execute_summary(ft_preview, ft_summary), unsafe_allow_html=True)
-
-  execute_results_df = _load_csv_artifact(manifest_data, "fulltext_execute_results_csv")
-  if not execute_results_df.empty:
-    st.caption("全文取得トライアル結果（US候補）")
-    st.dataframe(execute_results_df, use_container_width=True, hide_index=True)
-
-  ev_summary_json = _artifact_path(manifest_data, "evidence_validation_summary_json")
-  ev_summary: dict[str, Any] | None = None
-  if ev_summary_json and ev_summary_json.exists():
-    try:
-      ev_summary = json.loads(ev_summary_json.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-      ev_summary = None
+def _tab_evidence(manifest: dict[str, Any]) -> None:
+  st.markdown(render_caution_box("論文候補は証明ではありません。専門家レビューが必要です。"), unsafe_allow_html=True)
+  ev_summary = _load_json_artifact(manifest, "evidence_validation_summary_json")
   st.markdown(render_evidence_validation_summary(ev_summary), unsafe_allow_html=True)
 
-  manual_watch_df = _load_csv_artifact(manifest_data, "manual_fulltext_watch_csv")
-  if not manual_watch_df.empty:
-    st.caption("手動全文確認が必要な中国・非US候補")
-    st.dataframe(prepare_patent_display_df(manual_watch_df), use_container_width=True, hide_index=True)
+  claim_df = _load_csv_artifact(manifest, "claim_elements_csv")
+  paper_df = _load_csv_artifact(manifest, "paper_query_candidates_csv")
+  if not claim_df.empty:
+    with st.expander("Claim Elements"):
+      render_small_table(claim_df.head(50))
+  if not paper_df.empty:
+    with st.expander("Paper Query Candidates"):
+      render_small_table(paper_df.head(50))
 
-  ev_report_md = _load_text_artifact(manifest_data, "evidence_validation_report_md")
-  if ev_report_md:
-    with st.expander("Evidence Validation レポート"):
-      st.markdown(ev_report_md)
+  openalex_plan = _load_json_artifact(manifest, "openalex_query_plan_json")
+  if openalex_plan:
+    mode = openalex_plan.get("mode", "plan_only")
+    st.markdown(render_info_box(f"OpenAlex: {mode}"), unsafe_allow_html=True)
 
-  technical_md = _load_text_artifact(manifest_data, "technical_view_report_md")
-  claim_md = _load_text_artifact(manifest_data, "claim_element_report_md")
-  if technical_md or claim_md:
-    st.markdown(render_info_box("技術の裏取り候補があります。これは断定ではなく、追加確認が必要です。"), unsafe_allow_html=True)
-    if claim_md:
-      with st.expander("請求項要素レポート"):
-        st.markdown(claim_md)
-    if technical_md:
-      with st.expander("技術評価レポート"):
-        st.markdown(technical_md)
-  elif not ev_summary:
-    st.warning("まだ実行していません。次は Full Text / Evidence Validation を実行してください。")
 
-  # Step 5: 企業の動き
+def _tab_market(manifest: dict[str, Any]) -> None:
   st.markdown(
-    render_step_header(5, "企業の動きを見る", "Webシグナルや事業化候補を確認します"),
+    render_info_box(
+      "Toray / Teijin / Zhongfu Shenying などの企業動向は、"
+      "特許候補と併せて確認してください。自動Web検索はまだ行いません。"
+    ),
     unsafe_allow_html=True,
   )
-  web_df = _load_csv_artifact(manifest_data, "web_signal_patent_links_csv")
-  business_df = _load_csv_artifact(manifest_data, "patent_business_summary_csv")
+  web_df = _load_csv_artifact(manifest, "web_signal_patent_links_csv")
+  business_df = _load_csv_artifact(manifest, "patent_business_summary_csv")
+  company_df = _load_csv_artifact(manifest, "company_watch_summary_csv")
+
   if not web_df.empty or not business_df.empty:
-    st.markdown(render_info_box("企業の動きの候補があります。市場断定ではありません。"), unsafe_allow_html=True)
     if not web_df.empty:
-      st.dataframe(web_df.head(20), use_container_width=True, hide_index=True)
+      with st.expander("Web Signal"):
+        render_small_table(web_df.head(20))
     if not business_df.empty:
-      st.dataframe(business_df.head(20), use_container_width=True, hide_index=True)
+      with st.expander("Business Summary"):
+        render_small_table(business_df.head(20))
   else:
-    st.info("Web signal CSVを追加すると表示できます。")
+    st.info("Web signal CSV を追加するとここに表示されます。テンプレートを埋めてパイプラインを実行してください。")
 
-  # Step 6: まとめ
+  if not company_df.empty:
+    with st.expander("Company Watch"):
+      render_small_table(company_df.head(15))
+
+
+def _tab_reports(manifest: dict[str, Any]) -> None:
+  reports = [
+    ("carbon_fiber_evidence_map_report_md", "Carbon Fiber Evidence Map"),
+    ("fulltext_evidence_report_md", "Full Text Evidence"),
+    ("evidence_validation_report_md", "Evidence Validation"),
+    ("final_report_md", "Synthesis Report"),
+    ("carbon_fiber_evidence_map_v1_md", "Evidence Map v1"),
+  ]
+  found = False
+  for key, label in reports:
+    md = _load_text_artifact(manifest, key)
+    if md:
+      found = True
+      with st.expander(label):
+        st.markdown(render_markdown_preview(md))
+        st.text_area(f"{label}（コピー用）", value=md[:4000], height=200, key=f"copy_{key}")
+  if not found:
+    st.info("レポートがまだありません。パイプラインを実行してください。")
+
+
+def render_tabbed_easy_app(
+  user: dict[str, Any],
+  *,
+  pipeline_root: str | None = None,
+  run_id: str = "",
+  display_mode: str = "かんたん表示",
+) -> None:
+  st.markdown(inject_easy_ui_css(), unsafe_allow_html=True)
+  watch = get_active_watch_profile(user["user_id"])
   st.markdown(
-    render_step_header(6, "まとめレポート", "統合レポートで全体像を確認します"),
+    render_main_title("Tech Cartography v7", "炭素繊維 技術地図 — 特許・論文・企業情報から、読むべき技術候補を整理します"),
     unsafe_allow_html=True,
   )
-  synthesis_md = _load_text_artifact(manifest_data, "final_report_md") or _load_text_artifact(
-    manifest_data,
-    "carbon_fiber_evidence_map_v1_md",
-  )
-  if synthesis_md:
-    st.markdown(synthesis_md)
-  else:
-    st.info("まだ統合レポートはありません。")
+  header_cols = st.columns([2, 2, 2])
+  with header_cols[0]:
+    st.markdown(render_user_badge(user), unsafe_allow_html=True)
+  with header_cols[1]:
+    st.caption(f"Watch: {watch.get('theme', '')[:40]}…" if len(str(watch.get("theme", ""))) > 40 else f"Watch: {watch.get('theme', '')}")
+  with header_cols[2]:
+    st.caption(f"run_id: {run_id or user.get('last_run_id') or '未選択'}")
 
-  # Step 7: 次にやること
-  st.markdown(
-    render_step_header(7, "次にやること", "現在の run 状態から推奨アクションを確認します"),
-    unsafe_allow_html=True,
+  root = pipeline_root or str(DEFAULT_PIPELINE_ROOT)
+  manifest = _resolve_manifest(user, root, run_id)
+  if manifest and manifest.get("run_id"):
+    rid = str(manifest["run_id"])
+    if st.session_state.get("easy_saved_run_id") != rid:
+      set_last_run_id(user["user_id"], rid)
+      st.session_state["easy_saved_run_id"] = rid
+      refreshed = dict(user)
+      refreshed["last_run_id"] = rid
+      st.session_state["current_user"] = refreshed
+
+  if not manifest:
+    st.markdown(render_info_box("実行結果を読み込んでください。sidebar で run_id を指定するか latest_run を読み込みます。"), unsafe_allow_html=True)
+    _tab_start(user, watch, None)
+    st.markdown(render_caveat_footer(), unsafe_allow_html=True)
+    return
+
+  tabs = st.tabs(
+    [
+      translate_tab_name("start"),
+      translate_tab_name("patents"),
+      translate_tab_name("fulltext"),
+      translate_tab_name("evidence"),
+      translate_tab_name("market"),
+      translate_tab_name("reports"),
+      translate_tab_name("settings"),
+    ],
   )
-  recommendations: list[str] = []
-  if top20_df.empty:
-    recommendations.append("まず technology_clustering_ranking を完了させて Top20 を確認してください。")
-  elif top5_df.empty:
-    recommendations.append("Top20 確認後、fulltext_collection 段階へ進んでください。")
-  else:
-    recommendations.append("Top5 全文候補（US）と Strategic Watch 候補（中国・EP・JP含む）を確認してください。")
-  if web_df.empty:
-    recommendations.append("企業動向を見る場合は Web signal CSV テンプレートを埋めてください。")
-  if not synthesis_md:
-    recommendations.append("統合レポートが未作成なら synthesis_report 段階を実行してください。")
-  for item in recommendations:
-    st.markdown(f"- {item}")
-  if commands:
-    st.code(commands[0])
+  with tabs[0]:
+    _tab_start(user, watch, manifest)
+  with tabs[1]:
+    _tab_patents(manifest, display_mode)
+  with tabs[2]:
+    _tab_fulltext(manifest, display_mode)
+  with tabs[3]:
+    _tab_evidence(manifest)
+  with tabs[4]:
+    _tab_market(manifest)
+  with tabs[5]:
+    _tab_reports(manifest)
+  with tabs[6]:
+    render_user_settings_tab(user, current_run_id=manifest.get("run_id"))
 
   st.markdown(render_caveat_footer(), unsafe_allow_html=True)
+
+
+def render_easy_japanese_app() -> None:
+  """Backward-compatible entry for streamlit_app Expert mode switch."""
+  user = st.session_state.get("current_user")
+  if not user:
+    st.warning("ログインが必要です。app.py から起動してください。")
+    return
+  pipeline_root = st.session_state.get("easy_pipeline_root", str(DEFAULT_PIPELINE_ROOT))
+  run_id = st.session_state.get("easy_run_id", "")
+  display_mode = st.session_state.get("easy_display_mode", "かんたん表示")
+  render_tabbed_easy_app(user, pipeline_root=pipeline_root, run_id=run_id, display_mode=display_mode)

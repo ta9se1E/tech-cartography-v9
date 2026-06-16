@@ -591,3 +591,23 @@ If dry-run shows GB over limit but USD within budget, add:
   --allow-expensive-fulltext \
   --maximum-fulltext-usd 10
 ```
+
+## v7 Phase 17: Login + Tabbed Japanese UI
+
+Phase 17 adds **app2.py-style** Easy Japanese UI with local email login and tab navigation.
+
+- Login with email (no password; local dev only)
+- User profile + Watch Profile stored in `outputs/user_store/`
+- Tabbed UI: はじめる / 特許候補 / 全文確認 / 技術の裏取り / 企業・市場シグナル / レポート / 設定
+- Weekly email settings (save only; no sending yet)
+- `user.last_run_id` linked when loading pipeline results
+
+### Start the app
+
+```bash
+streamlit run app.py
+```
+
+- First screen: email login
+- After login: tabbed Easy Japanese View
+- CLI / pipeline unchanged (`scripts/run_carbon_fiber_evidence_map.py` etc.)

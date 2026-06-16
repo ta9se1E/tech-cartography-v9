@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from tech_cartography.ui.japanese_labels import (
+  explain_cost_guard_status,
   explain_evidence_validation_mode,
   explain_evidence_validation_readiness,
   explain_expensive_fulltext_approval,
@@ -20,11 +21,41 @@ from tech_cartography.ui.japanese_labels import (
   translate_cluster_id,
   translate_evidence_coverage_level,
   translate_fulltext_retrieval_status,
+  translate_fulltext_scope,
   translate_recommended_next_action,
   translate_source_route,
   translate_stage_id,
   translate_stage_status,
+  translate_tab_name,
 )
+
+V7_EASY_CSS = """
+<style>
+.tc-main-title { font-size: 2.2rem; font-weight: 700; margin-bottom: 0.35rem; color: var(--tc-text, #0f172a); }
+.tc-main-subtitle { font-size: 1.15rem; color: var(--tc-muted, #475569); line-height: 1.7; margin-bottom: 1rem; }
+.tc-card-box {
+  background: var(--tc-card-bg, #f8fafc); color: var(--tc-text, #0f172a);
+  border: 1px solid var(--tc-border, #dbeafe); border-radius: 12px;
+  padding: 1.2rem 1.4rem; margin: 0.8rem 0; font-size: 1.02rem; line-height: 1.65;
+}
+.tc-ok-box {
+  background: var(--tc-success-bg, #ecfdf5); color: var(--tc-success-text, #064e3b);
+  border: 1px solid var(--tc-success-border, #6ee7b7); border-radius: 12px;
+  padding: 1rem 1.2rem; margin: 1rem 0; font-size: 1.05rem;
+}
+.tc-caution-box {
+  background: var(--tc-warn-bg, #fff7ed); color: var(--tc-warn-text, #431407);
+  border: 1px solid var(--tc-warn-border, #fdba74); border-radius: 12px;
+  padding: 1rem 1.2rem; margin: 1rem 0; font-size: 1.05rem;
+}
+.tc-user-badge {
+  display: inline-block; background: var(--tc-info-bg, #eff6ff); color: var(--tc-text, #0f172a);
+  border: 1px solid var(--tc-info-border, #93c5fd); border-radius: 999px;
+  padding: 0.35rem 0.9rem; font-size: 0.92rem; margin: 0.25rem 0.4rem 0.25rem 0;
+}
+div.stButton > button { min-height: 2.75rem; font-size: 1.02rem; padding: 0.55rem 1.1rem; }
+</style>
+"""
 
 EASY_UI_CSS = """
 <style>
@@ -103,7 +134,86 @@ EASY_UI_CSS = """
 
 
 def inject_easy_ui_css() -> str:
-  return EASY_UI_CSS
+  return V7_EASY_CSS + EASY_UI_CSS
+
+
+def render_main_title(title: str, subtitle: str) -> str:
+  return (
+    f'<div class="tc-main-title">{title}</div>'
+    f'<div class="tc-main-subtitle">{subtitle}</div>'
+  )
+
+
+def render_login_notice() -> str:
+  return (
+    '<div class="tc-card-box">'
+    "<b>メールアドレスでログイン</b><br>"
+    "将来、週次レポートやWatch Profileをこのメールアドレスに紐づけます。<br>"
+    "現在はローカル開発用の簡易ログインです。パスワード認証やメール送信はまだ行いません。"
+    "</div>"
+  )
+
+
+def render_user_badge(user: dict[str, Any]) -> str:
+  name = _safe(user.get("display_name") or user.get("email"), "ユーザー")
+  company = _safe(user.get("company_name"), "")
+  company_html = f" / {company}" if company and company != "—" else ""
+  return f'<span class="tc-user-badge">{name}{company_html}</span>'
+
+
+def render_watch_profile_card(profile: dict[str, Any]) -> str:
+  theme = _safe(profile.get("theme"), "（テーマ未設定）")
+  keywords = ", ".join(profile.get("keywords") or [])[:200]
+  companies = ", ".join(profile.get("companies") or [])[:200]
+  countries = ", ".join(profile.get("countries") or [])
+  return (
+    f'<div class="tc-card-box">'
+    f"<b>Watch Profile</b><br>"
+    f"テーマ: {theme}<br>"
+    f"キーワード: {keywords or '—'}<br>"
+    f"注目企業: {companies or '—'}<br>"
+    f"対象国: {countries or '—'}"
+    f"</div>"
+  )
+
+
+def render_status_card(title: str, value: str, description: str = "") -> str:
+  desc_html = f"<br><span style='font-size:0.92rem;color:#64748b;'>{description}</span>" if description else ""
+  return (
+    f'<div class="tc-metric-card">'
+    f'<div class="tc-metric-label">{title}</div>'
+    f'<div class="tc-metric-value">{value}</div>{desc_html}'
+    f"</div>"
+  )
+
+
+def render_caution_box(text: str) -> str:
+  return f'<div class="tc-caution-box">{text}</div>'
+
+
+def render_ok_box(text: str) -> str:
+  return f'<div class="tc-ok-box">{text}</div>'
+
+
+def render_next_action_box(actions: list[str]) -> str:
+  items = "".join(f"<li>{_safe(action)}</li>" for action in actions if action)
+  return f'<div class="tc-card-box"><b>次にやること</b><ul>{items or "<li>実行結果を読み込んでください。</li>"}</ul></div>'
+
+
+def render_small_table(df: pd.DataFrame, height: int = 320) -> None:
+  import streamlit as st
+
+  if df is None or df.empty:
+    st.info("表示するデータがありません。")
+    return
+  st.dataframe(df, use_container_width=True, hide_index=True, height=height)
+
+
+def render_markdown_preview(md: str, max_chars: int = 4000) -> str:
+  text = str(md or "")
+  if len(text) > max_chars:
+    return text[:max_chars] + "\n\n…（以下省略）"
+  return text
 
 
 def render_info_box(text: str) -> str:

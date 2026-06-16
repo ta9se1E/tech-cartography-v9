@@ -165,3 +165,12 @@
 - Execute quality gate for carbon-fiber relevance (low-priority US noise deprioritized)
 - `claims_only` → limited claim extraction without description
 - CN/EP/JP manual watch unchanged; do not auto-execute all Top5 or `claims_and_description` unconditionally
+
+### Step 17 (v7 Phase 17): Login + Tabbed Japanese UI
+
+- Local email login (no password, no OAuth, no production auth)
+- `outputs/user_store/users.json` + per-user watch profiles
+- Tabbed Easy Japanese View (app2.py-inspired cards)
+- Weekly email ON/OFF saved only (no SMTP/Scheduler)
+- User `last_run_id` preference for pipeline results
+- BigQuery/OpenAlex not auto-triggered from UI

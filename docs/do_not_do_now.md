@@ -74,3 +74,12 @@ Phase 16.1 adds scoped fulltext + GB/USD guards but still does **not** add:
 - Automatic PDF download / OCR
 - Automatic fulltext for CN/EP/JP
 - Automatic web search (Tavily, etc.)
+
+Phase 17 adds login + tabbed UI but still does **not** add:
+
+- Production authentication (Google OAuth / Firebase Auth)
+- Password storage or verification
+- Email sending (Gmail / SMTP)
+- Scheduler / Cloud Run / Cloud SQL
+- Auto BigQuery or OpenAlex execution from UI buttons
+- Scope: local email login + tabbed Japanese UI + weekly email setting storage only

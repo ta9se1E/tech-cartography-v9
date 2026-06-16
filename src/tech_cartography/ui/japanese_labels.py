@@ -333,3 +333,78 @@ def explain_fulltext_retrieval_status(status: str) -> str:
 
 def translate_evidence_coverage_level(level: str) -> str:
   return EVIDENCE_LEVEL_JAPANESE.get(level, level or "不明")
+
+
+TAB_LABELS: dict[str, str] = {
+  "start": "はじめる",
+  "patents": "特許候補",
+  "fulltext": "全文確認",
+  "evidence": "技術の裏取り",
+  "market": "企業・市場シグナル",
+  "reports": "レポート",
+  "settings": "設定",
+}
+
+USER_SETTING_LABELS: dict[str, str] = {
+  "weekly_email_enabled": "週次メールを受け取る",
+  "email_destination": "送信先メールアドレス",
+  "watch_theme": "監視テーマ",
+  "weekly_email_day": "送信曜日",
+  "weekly_email_time": "送信時刻",
+  "display_name": "表示名",
+  "company_name": "会社名",
+}
+
+FULLTEXT_SCOPE_LABELS: dict[str, str] = {
+  "claims_only": "請求項だけ確認",
+  "description_only": "明細書だけ確認",
+  "claims_and_description": "請求項と明細書を確認",
+}
+
+COST_GUARD_STATUS_EXPLAIN: dict[str, str] = {
+  "pass": "コスト見積もりは許容範囲内です。",
+  "blocked_by_usd": "USD上限を超える見積もりのため実行を停止しました。",
+  "blocked_by_gb_but_usd_allowed_requires_confirmation": (
+    "データ量の上限は超えていますが、金額見積もりは許容範囲です。明示承認が必要です。"
+  ),
+  "allowed_expensive_fulltext": "明示承認のうえ高コスト実行が許可されています。",
+  "not_estimated": "コスト見積もりが取得できませんでした。",
+}
+
+
+def translate_tab_name(tab_id: str) -> str:
+  return TAB_LABELS.get(tab_id, tab_id or "タブ")
+
+
+def translate_user_setting(key: str) -> str:
+  return USER_SETTING_LABELS.get(key, key or "設定")
+
+
+def translate_weekly_email_status(enabled: bool) -> str:
+  if enabled:
+    return "週次メール設定をONに保存しました（送信処理は未実装です）。"
+  return "週次メール設定をOFFに保存しました。"
+
+
+def translate_fulltext_scope(scope: str) -> str:
+  return FULLTEXT_SCOPE_LABELS.get(scope, scope or "不明")
+
+
+def explain_cost_guard_status(status: str) -> str:
+  return COST_GUARD_STATUS_EXPLAIN.get(status, "コストガードの詳細はレポートを確認してください。")
+
+
+def explain_login_mode() -> str:
+  return (
+    "ローカル開発用の簡易ログインです。"
+    "本番のGoogle OAuth / パスワード認証 / メール送信はまだ実装していません。"
+    "入力したメールアドレスでWatch Profileと実行履歴を紐づけます。"
+  )
+
+
+def explain_watch_profile() -> str:
+  return (
+    "Watch Profileは、あなたが注目する技術テーマ・企業・国の監視設定です。"
+    "将来、週次レポートの内容はこのプロファイルに基づきます。"
+    "中国候補を除外しているわけではありません。"
+  )

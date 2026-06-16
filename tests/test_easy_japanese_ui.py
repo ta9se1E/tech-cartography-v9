@@ -11,7 +11,15 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_manual_checklist_notice,
   render_patent_card,
   render_strategic_watch_card,
+  render_user_badge,
+  render_watch_profile_card,
   summarize_stage_statuses,
+)
+from tech_cartography.ui.japanese_labels import (
+  explain_cost_guard_status,
+  explain_fulltext_scope,
+  translate_fulltext_scope,
+  translate_tab_name,
 )
 
 
@@ -160,3 +168,28 @@ def test_fulltext_status_skipped_not_selected_japanese() -> None:
     },
   )
   assert "実行対象外" in card
+
+
+def test_tab_labels_japanese() -> None:
+  assert translate_tab_name("start") == "はじめる"
+  assert translate_tab_name("fulltext") == "全文確認"
+  assert translate_tab_name("settings") == "設定"
+
+
+def test_fulltext_scope_labels() -> None:
+  assert translate_fulltext_scope("claims_only") == "請求項だけ確認"
+  assert "請求項" in explain_fulltext_scope("claims_only")
+
+
+def test_cost_guard_explanation_japanese() -> None:
+  text = explain_cost_guard_status("blocked_by_gb_but_usd_allowed_requires_confirmation")
+  assert "データ量" in text or "金額" in text
+
+
+def test_user_badge_and_watch_profile_helpers() -> None:
+  badge = render_user_badge({"display_name": "太郎", "email": "t@example.com", "company_name": "ACME"})
+  assert "太郎" in badge
+  card = render_watch_profile_card({"theme": "PAN系", "keywords": ["PAN"], "companies": ["Toray"], "countries": ["US"]})
+  assert "PAN" in card
+  assert "Toray" in card
+
