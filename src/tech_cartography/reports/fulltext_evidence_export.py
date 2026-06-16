@@ -60,6 +60,17 @@ def save_controlled_fulltext_outputs(
     out / "fulltext_retrieval_summary.json",
   )
 
+  execute_preview = result.get("execute_preview", {})
+  preview_path = out / "fulltext_execute_preview.json"
+  preview_path.write_text(json.dumps(execute_preview, indent=2, ensure_ascii=False), encoding="utf-8")
+  paths["fulltext_execute_preview_json"] = str(preview_path)
+
+  execute_results = result.get("execute_results", [])
+  paths["fulltext_execute_results_csv"] = save_records_csv(
+    execute_results,
+    out / "fulltext_execute_results.csv",
+  )
+
   report_path = out / "fulltext_evidence_report.md"
   report_path.write_text(markdown, encoding="utf-8")
   paths["fulltext_evidence_report_md"] = str(report_path)

@@ -34,6 +34,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--maximum-gb", type=float, default=50.0)
   parser.add_argument("--project-id", default=None)
   parser.add_argument("--execute", action="store_true", default=False)
+  parser.add_argument("--execute-limit", type=int, default=1)
+  parser.add_argument("--publication-number", default=None)
+  parser.add_argument("--confirm-fulltext-execute", action="store_true", default=False)
+  parser.add_argument("--preview-only", action="store_true", default=False)
   parser.add_argument("--no-cache", action="store_true", default=False)
   return parser.parse_args()
 
@@ -60,6 +64,10 @@ def main() -> int:
     output_dir=args.output_dir,
     cache_dir=args.cache_dir,
     use_cache=not args.no_cache,
+    execute_limit=int(args.execute_limit),
+    publication_number=args.publication_number,
+    confirm_fulltext_execute=bool(args.confirm_fulltext_execute),
+    preview_only=bool(args.preview_only),
   )
   result = retrieve_controlled_fulltext_run(
     candidates,

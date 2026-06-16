@@ -10,6 +10,7 @@ import pandas as pd
 from tech_cartography.ui.japanese_labels import (
   explain_evidence_validation_mode,
   explain_evidence_validation_readiness,
+  explain_fulltext_execute_trial,
   explain_fulltext_priority_top5,
   explain_fulltext_retrieval_status,
   explain_stage_status,
@@ -25,42 +26,75 @@ from tech_cartography.ui.japanese_labels import (
 
 EASY_UI_CSS = """
 <style>
-.tc-easy-title { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
-.tc-easy-subtitle { color: #4b5563; margin-bottom: 1rem; }
+.tc-easy-title { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; color: var(--tc-text, #0f172a); }
+.tc-easy-subtitle { color: var(--tc-muted, #475569); margin-bottom: 1rem; }
 .tc-info-box {
-  background: #eff6ff; border-left: 5px solid #2563eb;
+  background: var(--tc-info-bg, #dbeafe); color: var(--tc-info-text, #0f172a);
+  border-left: 5px solid var(--tc-info-border, #2563eb);
   padding: 1rem 1.1rem; border-radius: 8px; margin: 0.8rem 0;
 }
 .tc-warning-box {
-  background: #fff7ed; border-left: 5px solid #ea580c;
+  background: var(--tc-warn-bg, #ffedd5); color: var(--tc-warn-text, #431407);
+  border-left: 5px solid var(--tc-warn-border, #ea580c);
   padding: 1rem 1.1rem; border-radius: 8px; margin: 0.8rem 0;
 }
 .tc-success-box {
-  background: #ecfdf5; border-left: 5px solid #059669;
+  background: var(--tc-success-bg, #d1fae5); color: var(--tc-success-text, #064e3b);
+  border-left: 5px solid var(--tc-success-border, #059669);
   padding: 1rem 1.1rem; border-radius: 8px; margin: 0.8rem 0;
 }
 .tc-step-header {
-  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;
+  background: var(--tc-step-bg, #f1f5f9); color: var(--tc-text, #0f172a);
+  border: 1px solid var(--tc-border, #cbd5e1); border-radius: 12px;
   padding: 1rem 1.2rem; margin: 1rem 0 0.6rem 0;
 }
-.tc-step-no { color: #2563eb; font-weight: 700; font-size: 0.95rem; }
-.tc-step-title { font-size: 1.35rem; font-weight: 700; margin: 0.15rem 0; }
-.tc-step-subtitle { color: #64748b; font-size: 0.95rem; }
+.tc-step-no { color: var(--tc-accent, #2563eb); font-weight: 700; font-size: 0.95rem; }
+.tc-step-title { font-size: 1.35rem; font-weight: 700; margin: 0.15rem 0; color: var(--tc-text, #0f172a); }
+.tc-step-subtitle { color: var(--tc-muted, #64748b); font-size: 0.95rem; }
 .tc-metric-card {
-  background: white; border: 1px solid #e2e8f0; border-radius: 10px;
+  background: var(--tc-card-bg, #ffffff); color: var(--tc-text, #0f172a);
+  border: 1px solid var(--tc-border, #cbd5e1); border-radius: 10px;
   padding: 0.9rem 1rem; min-height: 88px;
 }
-.tc-metric-label { color: #64748b; font-size: 0.85rem; }
-.tc-metric-value { font-size: 1.5rem; font-weight: 700; margin-top: 0.2rem; }
+.tc-metric-label { color: var(--tc-muted, #64748b); font-size: 0.85rem; }
+.tc-metric-value { font-size: 1.5rem; font-weight: 700; margin-top: 0.2rem; color: var(--tc-text, #0f172a); }
 .tc-patent-card {
-  background: white; border: 1px solid #dbe3ef; border-radius: 12px;
+  background: var(--tc-card-bg, #ffffff); color: var(--tc-text, #0f172a);
+  border: 1px solid var(--tc-border, #cbd5e1); border-radius: 12px;
   padding: 1rem 1.1rem; margin: 0.7rem 0;
 }
-.tc-patent-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.35rem; }
-.tc-patent-meta { color: #475569; font-size: 0.92rem; line-height: 1.5; }
+.tc-patent-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.35rem; color: var(--tc-text, #0f172a); }
+.tc-patent-meta { color: var(--tc-muted, #475569); font-size: 0.92rem; line-height: 1.5; }
 .tc-caveat-footer {
-  background: #fafafa; border-top: 1px solid #e5e7eb;
-  padding: 1rem 0.2rem; color: #6b7280; font-size: 0.9rem;
+  background: var(--tc-footer-bg, #f8fafc); color: var(--tc-muted, #64748b);
+  border-top: 1px solid var(--tc-border, #e2e8f0);
+  padding: 1rem 0.2rem; font-size: 0.9rem;
+}
+[data-theme="dark"] .tc-easy-title,
+[data-theme="dark"] .tc-step-title,
+[data-theme="dark"] .tc-metric-value,
+[data-theme="dark"] .tc-patent-title,
+[data-theme="dark"] .tc-patent-card,
+[data-theme="dark"] .tc-metric-card,
+[data-theme="dark"] .tc-step-header {
+  --tc-text: #f1f5f9;
+  --tc-muted: #cbd5e1;
+  --tc-card-bg: #1e293b;
+  --tc-step-bg: #1e293b;
+  --tc-border: #475569;
+  --tc-footer-bg: #0f172a;
+}
+[data-theme="dark"] .tc-info-box {
+  --tc-info-bg: #1e3a5f; --tc-info-text: #e2e8f0; --tc-info-border: #60a5fa;
+}
+[data-theme="dark"] .tc-warning-box {
+  --tc-warn-bg: #431407; --tc-warn-text: #ffedd5; --tc-warn-border: #fb923c;
+}
+[data-theme="dark"] .tc-success-box {
+  --tc-success-bg: #064e3b; --tc-success-text: #d1fae5; --tc-success-border: #34d399;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="dark"] .tc-easy-subtitle { color: #cbd5e1; }
 }
 </style>
 """
@@ -219,6 +253,30 @@ def render_fulltext_vs_watch_notice() -> str:
     "中国候補を除外しているわけではありません。"
     f"<br><br>{explain_fulltext_priority_top5()}"
     f"<br><br>{explain_strategic_watch()}"
+  )
+
+
+def render_fulltext_execute_summary(preview: dict[str, Any] | None, summary: dict[str, Any] | None = None) -> str:
+  preview = preview or {}
+  summary = summary or {}
+  metrics = [
+    {"label": "全文実行対象", "value": preview.get("selected_for_execute_count", summary.get("execute_selected_count", 0))},
+    {"label": "取得できた件数", "value": summary.get("retrieved_count", 0)},
+    {"label": "キャッシュ利用", "value": summary.get("cache_hit_count", summary.get("cache_hits", 0))},
+    {"label": "実行対象外", "value": summary.get("skipped_not_selected_count", preview.get("skipped_not_selected_count", 0))},
+    {"label": "コストガード停止", "value": summary.get("cost_guard_failed_count", summary.get("blocked_by_cost_guard", 0))},
+    {"label": "手動確認（中国等）", "value": preview.get("manual_required_count", summary.get("manual_required_count", 0))},
+  ]
+  mode = preview.get("estimated_mode") or summary.get("mode") or "dry_run"
+  confirm = preview.get("confirmation_required", False)
+  confirm_note = "確認フラグが必要です（--confirm-fulltext-execute）" if confirm else "計画/プレビューまたは確認済みです"
+  return (
+    f"{render_info_box(explain_fulltext_execute_trial())}"
+    f"{render_metric_cards(metrics)}"
+    f'<div class="tc-patent-card"><div class="tc-patent-title">実行モード: {mode}</div>'
+    f'<div class="tc-patent-meta">{confirm_note}<br>'
+    f"まず1件だけ全文取得を試すのが安全です。中国候補は別枠で手動確認リストに残しています。"
+    f"</div></div>"
   )
 
 

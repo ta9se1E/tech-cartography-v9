@@ -219,6 +219,11 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
     output_dir=str(Path(output_dir)),
     cache_dir="data/runtime/fulltext_cache",
     use_cache=bool(config.use_cache),
+    execute_limit=int(config.fulltext_execute_limit or 1),
+    publication_number=config.fulltext_publication_number,
+    execute_top_n=config.fulltext_execute_top_n,
+    confirm_fulltext_execute=bool(config.confirm_fulltext_execute),
+    require_fulltext_execute_confirmation=bool(config.require_fulltext_execute_confirmation),
   )
   result = retrieve_controlled_fulltext_run(
     candidates,

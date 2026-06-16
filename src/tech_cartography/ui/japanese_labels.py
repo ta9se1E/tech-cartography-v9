@@ -125,6 +125,9 @@ FULLTEXT_RETRIEVAL_STATUS_LABELS: dict[str, tuple[str, str]] = {
   "cost_guard_failed": ("コスト上限で停止", "maximum_bytes_billedを超える見積もりのため実行を停止しました。"),
   "query_error": ("クエリエラー", "BigQueryクエリでエラーが発生しました。"),
   "unsupported_country": ("非対応国", "米国公報以外はBigQuery全文取得の対象外です。手動ルートを使います。"),
+  "skipped_not_selected": ("実行対象外", "今回のexecute limit / 公報指定の対象外です。"),
+  "execute_blocked_confirmation_required": ("確認待ち", "--confirm-fulltext-execute が必要です。"),
+  "retrieved": ("全文取得済み", "claims/descriptionを取得しました。"),
 }
 
 EVIDENCE_LEVEL_JAPANESE: dict[str, str] = {
@@ -254,6 +257,15 @@ def explain_strategic_watch() -> str:
   return (
     "戦略監視候補は、中国・欧州・日本など全文取得ルートが異なる重要特許を追跡するリストです。"
     "Top5全文候補と併せて確認してください。中国候補を除外しているわけではありません。"
+  )
+
+
+def explain_fulltext_execute_trial() -> str:
+  return (
+    "まず1件だけ全文取得を試すのが安全です。"
+    "US候補は自動取得を試せます。"
+    "中国候補は別枠で手動確認リストに残しています。"
+    "全文取得に失敗しても、その特許が重要でないという意味ではありません。"
   )
 
 

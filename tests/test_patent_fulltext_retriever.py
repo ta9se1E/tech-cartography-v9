@@ -220,3 +220,114 @@ def test_retrieval_status_fields_present() -> None:
   assert record["retrieval_status"] == "dry_run_only"
   assert "claims_source" in record
   assert "evidence_coverage" in record
+
+
+def test_execute_without_confirm_is_blocked() -> None:
+  candidate = {**_us_candidate(), "execute_selected": True}
+  config = FullTextRetrievalConfig(execute=True, confirm_fulltext_execute=False, use_cache=False)
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+    return_value={
+      "dry_run_status": "ok",
+      "estimated_bytes": 1000,
+      "estimated_gb": 0.001,
+      "estimated_usd": 0.0,
+      "would_be_blocked_by_max_bytes": False,
+      "error": None,
+    },
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_fulltext_query",
+  ) as execute_mock:
+    result = retrieve_fulltext_for_candidate(candidate, config)
+  execute_mock.assert_not_called()
+  assert result["retrieval_status"] == "execute_blocked_confirmation_required"
+
+
+def test_execute_with_confirm_runs_selected_only() -> None:
+  candidates = [
+    {**_us_candidate(), "publication_number": "US2024000001A1", "execute_selected": True},
+    {
+      "publication_number": "US2024000002A1",
+      "title": "Other",
+      "assignee": "Toray",
+      "country": "US",
+      "execute_selected": False,
+    },
+  ]
+  config = FullTextRetrievalConfig(
+    execute=True,
+    confirm_fulltext_execute=True,
+    execute_limit=1,
+    use_cache=False,
+  )
+  calls: list[str] = []
+
+  def _fake_execute(candidate, cfg, client_factory=None):  # noqa: ANN001
+    calls.append(str(candidate.get("publication_number")))
+    return {
+      "execution_status": "executed",
+      "rows": [
+        {
+          "publication_number": candidate.get("publication_number"),
+          "claims": "Claim 1",
+          "description": "Description",
+          "title": candidate.get("title"),
+          "assignee": "Toray",
+          "country_code": "US",
+        },
+      ],
+      "error": None,
+    }
+
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+    return_value={
+      "dry_run_status": "ok",
+      "estimated_bytes": 1000,
+      "would_be_blocked_by_max_bytes": False,
+      "error": None,
+    },
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_fulltext_query",
+    side_effect=_fake_execute,
+  ):
+    result = retrieve_fulltext_for_top_candidates(candidates, config)
+  assert calls == ["US2024000001A1"]
+  statuses = {row["publication_number"]: row["retrieval_status"] for row in result["retrieved_records"]}
+  assert statuses["US2024000001A1"] == "retrieved"
+  assert statuses["US2024000002A1"] == "skipped_not_selected"
+
+
+def test_retrieved_record_includes_claim_lengths() -> None:
+  candidate = {**_us_candidate(), "execute_selected": True}
+  config = FullTextRetrievalConfig(execute=True, confirm_fulltext_execute=True, use_cache=False)
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+    return_value={
+      "dry_run_status": "ok",
+      "estimated_bytes": 1000,
+      "would_be_blocked_by_max_bytes": False,
+      "error": None,
+    },
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_fulltext_query",
+    return_value={
+      "execution_status": "executed",
+      "rows": [
+        {
+          "publication_number": "US2024000001A1",
+          "claims": "Claim 1. Method",
+          "description": "Long description text",
+          "title": "PAN",
+          "assignee": "Toray",
+          "country_code": "US",
+        },
+      ],
+      "error": None,
+    },
+  ):
+    result = retrieve_fulltext_for_candidate(candidate, config)
+  record = result["record"]
+  assert record["retrieval_status"] == "retrieved"
+  assert record.get("claims_length", 0) > 0
+  assert record.get("description_length", 0) > 0

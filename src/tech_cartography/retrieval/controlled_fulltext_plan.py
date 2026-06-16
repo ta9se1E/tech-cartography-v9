@@ -57,6 +57,143 @@ def _manual_row(record: dict[str, Any]) -> dict[str, Any]:
   }
 
 
+def _normalize_publication_number(publication_number: str) -> str:
+  return str(publication_number or "").strip().upper().replace(" ", "").replace("-", "")
+
+
+def select_fulltext_execute_targets(
+  plan: dict[str, Any],
+  *,
+  limit: int = 1,
+  publication_number: str | None = None,
+  execute_top_n: int | None = None,
+) -> list[dict[str, Any]]:
+  targets = list(plan.get("fulltext_targets", []))
+  if publication_number:
+    target_norm = _normalize_publication_number(publication_number)
+    for row in targets:
+      if _normalize_publication_number(str(row.get("publication_number", ""))) == target_norm:
+        return [dict(row)]
+    return []
+
+  effective_limit = execute_top_n if execute_top_n is not None else limit
+  if effective_limit is None or effective_limit < 1:
+    effective_limit = 1
+  return [dict(row) for row in targets[:effective_limit]]
+
+
+def mark_execute_selected_targets(
+  plan: dict[str, Any],
+  selected_targets: list[dict[str, Any]],
+) -> dict[str, Any]:
+  selected_norms = {
+    _normalize_publication_number(str(row.get("publication_number", "")))
+    for row in selected_targets
+  }
+  updated_targets: list[dict[str, Any]] = []
+  for row in plan.get("fulltext_targets", []):
+    enriched = dict(row)
+    pub_norm = _normalize_publication_number(str(row.get("publication_number", "")))
+    if pub_norm in selected_norms:
+      enriched["execute_selected"] = True
+      enriched["execute_selection_reason"] = "selected_for_controlled_execute"
+    else:
+      enriched["execute_selected"] = False
+      enriched["execute_selection_reason"] = "not_selected_within_execute_limit"
+    updated_targets.append(enriched)
+  updated_plan = dict(plan)
+  updated_plan["fulltext_targets"] = updated_targets
+  return updated_plan
+
+
+def build_fulltext_execute_preview(
+  plan: dict[str, Any],
+  *,
+  execute: bool = False,
+  confirm_fulltext_execute: bool = False,
+  require_confirmation: bool = True,
+  publication_number_filter: str | None = None,
+  execute_limit: int | None = 1,
+  selected_targets: list[dict[str, Any]] | None = None,
+  dry_run_by_pub: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+  targets = list(plan.get("fulltext_targets", []))
+  selected = selected_targets or []
+  selected_count = len(selected)
+  dry_run_only_count = max(0, len(targets) - selected_count) if execute else len(targets)
+  manual_required_count = len(plan.get("manual_required_candidates", []))
+  strategic_watch_count = len(plan.get("strategic_watch_manual_candidates", []))
+
+  confirmation_required = bool(execute and require_confirmation and not confirm_fulltext_execute)
+  if publication_number_filter and not selected:
+    execute_selection_reason = "publication_not_eligible_for_us_execute"
+    estimated_mode = "manual_required"
+  elif not execute:
+    execute_selection_reason = "dry_run_only_no_execute_requested"
+    estimated_mode = "dry_run"
+  elif confirmation_required:
+    execute_selection_reason = "execute_blocked_until_confirm_fulltext_execute"
+    estimated_mode = "execute_blocked_confirmation_required"
+  elif selected_count == 0:
+    execute_selection_reason = "no_us_targets_selected"
+    estimated_mode = "dry_run"
+  else:
+    execute_selection_reason = f"execute_up_to_{selected_count}_us_target(s)"
+    estimated_mode = "execute"
+
+  preview_targets: list[dict[str, Any]] = []
+  total_estimated_bytes = 0
+  for row in targets:
+    pub = str(row.get("publication_number", ""))
+    pub_norm = _normalize_publication_number(pub)
+    dry_run = (dry_run_by_pub or {}).get(pub_norm, {})
+    estimated_bytes = int(dry_run.get("estimated_bytes", 0) or 0)
+    total_estimated_bytes += estimated_bytes
+    preview_targets.append(
+      {
+        "publication_number": pub,
+        "title": row.get("title"),
+        "execute_selected": bool(row.get("execute_selected")),
+        "execute_selection_reason": row.get("execute_selection_reason"),
+        "estimated_bytes": estimated_bytes,
+        "estimated_gb": dry_run.get("estimated_gb", 0.0),
+        "estimated_usd": dry_run.get("estimated_usd", 0.0),
+        "cost_guard_status": "failed"
+        if dry_run.get("would_be_blocked_by_max_bytes")
+        else ("unknown" if not dry_run else "ok"),
+        "dry_run_status": dry_run.get("dry_run_status"),
+      },
+    )
+
+  from tech_cartography.retrieval.bigquery_env import bytes_to_gb, estimate_usd_from_bytes
+
+  return {
+    "execute_selected": selected_count > 0 and execute and not confirmation_required,
+    "execute_selection_reason": execute_selection_reason,
+    "estimated_mode": estimated_mode,
+    "confirmation_required": confirmation_required,
+    "execute_requested": bool(execute),
+    "confirm_fulltext_execute": bool(confirm_fulltext_execute),
+    "execute_limit": execute_limit,
+    "publication_number_filter": publication_number_filter,
+    "selected_for_execute_count": selected_count,
+    "dry_run_only_count": dry_run_only_count if execute else len(targets),
+    "skipped_not_selected_count": max(0, len(targets) - selected_count) if execute else 0,
+    "manual_required_count": manual_required_count,
+    "strategic_watch_count": strategic_watch_count,
+    "total_estimated_bytes": total_estimated_bytes,
+    "total_estimated_gb": bytes_to_gb(total_estimated_bytes),
+    "total_estimated_usd": estimate_usd_from_bytes(total_estimated_bytes),
+    "selected_targets": selected,
+    "preview_targets": preview_targets,
+    "caveats": [
+      "Execute only US Top5 targets with explicit --confirm-fulltext-execute.",
+      "CN/EP/JP remain on manual strategic watch route.",
+      "Missing fulltext does not mean low strategic importance.",
+    ],
+  }
+
+
 def build_controlled_fulltext_plan(
   top5_candidates: list[dict[str, Any]],
   strategic_watch_candidates: list[dict[str, Any]] | None = None,

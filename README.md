@@ -512,3 +512,49 @@ Outputs under `stages/evidence_validation/`:
 - `claim_paper_evidence_items.csv`
 - `evidence_validation_summary.json`
 - `evidence_validation_report.md`
+
+## v7 Phase 16: Controlled Full Text Execute Trial
+
+Phase 16 adds **safe, limited** BigQuery fulltext execution for US Top5 only (1件または指定件数).
+
+- Default: still **no execute** — requires `--execute-fulltext` + `--confirm-fulltext-execute`
+- `--fulltext-execute-limit 1` — Top1 only (default limit=1)
+- `--fulltext-publication-number US-...` — single publication execute
+- Non-selected US targets → `skipped_not_selected`
+- CN/EP/JP remain manual strategic watch (not excluded)
+- Outputs: `fulltext_execute_preview.json`, `fulltext_execute_results.csv`
+
+### Dry-run through evidence_validation (no BigQuery execute)
+
+```bash
+python scripts/run_carbon_fiber_evidence_map.py \
+  --config configs/carbon_fiber_pipeline.yaml \
+  --use-existing-light-csv outputs/pipeline_runs/<run_id>/stages/bigquery_light_retrieval/<ts>/bigquery_light_results_dedup.csv \
+  --start-stage technology_clustering_ranking \
+  --stop-stage evidence_validation
+```
+
+### Recommended: Top1 execute trial (when ready to run BigQuery)
+
+```bash
+python scripts/run_carbon_fiber_evidence_map.py \
+  --config configs/carbon_fiber_pipeline.yaml \
+  --use-existing-light-csv outputs/pipeline_runs/<run_id>/stages/bigquery_light_retrieval/<ts>/bigquery_light_results_dedup.csv \
+  --start-stage technology_clustering_ranking \
+  --stop-stage evidence_validation \
+  --execute-fulltext \
+  --fulltext-execute-limit 1 \
+  --confirm-fulltext-execute
+```
+
+### Standalone Top1 execute
+
+```bash
+python scripts/run_top5_fulltext_collection.py \
+  --input-csv outputs/pipeline_runs/<run_id>/stages/technology_clustering_ranking/top5_fulltext_candidates.csv \
+  --strategic-watch-csv outputs/pipeline_runs/<run_id>/stages/technology_clustering_ranking/strategic_watch_candidates.csv \
+  --maximum-gb 50 \
+  --execute \
+  --execute-limit 1 \
+  --confirm-fulltext-execute
+```

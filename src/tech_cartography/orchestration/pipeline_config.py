@@ -22,6 +22,12 @@ class PipelineConfig:
   execute_openalex: bool = False
   use_cache: bool = True
 
+  fulltext_execute_limit: int | None = 1
+  fulltext_publication_number: str | None = None
+  fulltext_execute_top_n: int | None = None
+  require_fulltext_execute_confirmation: bool = True
+  confirm_fulltext_execute: bool = False
+
   maximum_bigquery_gb: float = 300.0
   maximum_fulltext_gb: float = 50.0
   max_results_total: int = 2000
@@ -52,6 +58,13 @@ class PipelineConfig:
       execute_fulltext=bool(data.get("execute_fulltext", False)),
       execute_openalex=bool(data.get("execute_openalex", False)),
       use_cache=bool(data.get("use_cache", True)),
+      fulltext_execute_limit=data.get("fulltext_execute_limit", 1),
+      fulltext_publication_number=data.get("fulltext_publication_number") or None,
+      fulltext_execute_top_n=data.get("fulltext_execute_top_n") or None,
+      require_fulltext_execute_confirmation=bool(
+        data.get("require_fulltext_execute_confirmation", True),
+      ),
+      confirm_fulltext_execute=bool(data.get("confirm_fulltext_execute", False)),
       maximum_bigquery_gb=float(data.get("maximum_bigquery_gb", cls.maximum_bigquery_gb)),
       maximum_fulltext_gb=float(data.get("maximum_fulltext_gb", cls.maximum_fulltext_gb)),
       max_results_total=int(data.get("max_results_total", cls.max_results_total)),

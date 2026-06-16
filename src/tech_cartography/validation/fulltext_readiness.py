@@ -84,6 +84,12 @@ def classify_fulltext_record_status(
   retrieval_status = str(record.get("retrieval_status") or "").strip().lower()
   if retrieval_status == "dry_run_only":
     return "dry_run_only"
+  if retrieval_status == "skipped_not_selected":
+    return "skipped_not_selected"
+  if retrieval_status == "execute_blocked_confirmation_required":
+    return "execute_blocked_confirmation_required"
+  if retrieval_status in {"cache_hit", "retrieved"}:
+    pass
   if retrieval_status == "query_error":
     return "query_error"
   if retrieval_status == "cost_guard_failed":
@@ -199,6 +205,8 @@ def assess_fulltext_readiness(
     "ready_for_claim_extraction": [],
     "limited_claim_extraction": [],
     "dry_run_only": [],
+    "skipped_not_selected": [],
+    "execute_blocked_confirmation_required": [],
     "manual_required": [],
     "metadata_only": [],
     "not_found": [],
@@ -218,12 +226,15 @@ def assess_fulltext_readiness(
   ready_count = len(buckets["ready_for_claim_extraction"])
   limited_count = len(buckets["limited_claim_extraction"])
   dry_run_only_count = len(buckets["dry_run_only"])
+  skipped_not_selected_count = len(buckets["skipped_not_selected"])
   not_ready_count = (
     len(buckets["metadata_only"])
     + len(buckets["not_found"])
     + len(buckets["query_error"])
     + len(buckets["cost_guard_failed"])
     + dry_run_only_count
+    + skipped_not_selected_count
+    + len(buckets["execute_blocked_confirmation_required"])
   )
 
   readiness = {
@@ -231,6 +242,8 @@ def assess_fulltext_readiness(
     "ready_count": ready_count,
     "limited_count": limited_count,
     "dry_run_only_count": dry_run_only_count,
+    "skipped_not_selected_count": skipped_not_selected_count,
+    "execute_blocked_count": len(buckets["execute_blocked_confirmation_required"]),
     "manual_required_count": manual_required_count,
     "cost_guard_failed_count": len(buckets["cost_guard_failed"]),
     "not_ready_count": not_ready_count,

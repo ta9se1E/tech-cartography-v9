@@ -144,3 +144,13 @@
 - Build claim×paper evidence links and `evidence_validation_report.md`
 - CN/EP/JP manual watch candidates retained (not excluded)
 - Does not prove patent claims from papers; expert review required
+
+### Step 16 (v7 Phase 16): Controlled Full Text Execute Trial
+
+- Execute US Top5 fulltext for **1件 or specified publication only**
+- Requires `--confirm-fulltext-execute` (no silent execute)
+- Preview dry-run cost per candidate before execute
+- `skipped_not_selected` for non-selected US targets
+- CN/EP/JP manual watch unchanged
+- Outputs: `fulltext_execute_preview.json`, `fulltext_execute_results.csv`
+- Retrieved/cache_hit records flow into Evidence Validation claim extraction

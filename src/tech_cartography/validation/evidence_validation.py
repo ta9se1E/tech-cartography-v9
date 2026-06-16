@@ -39,6 +39,12 @@ def _resolve_pipeline_status(
   limited = int(readiness.get("limited_count", 0))
   if ready == 0 and limited == 0:
     return "limited_no_fulltext"
+  if (ready > 0 or limited > 0) and (
+    readiness.get("dry_run_only_count", 0) > 0
+    or readiness.get("skipped_not_selected_count", 0) > 0
+    or readiness.get("cost_guard_failed_count", 0) > 0
+  ):
+    return "partial_success"
   if claim_element_result.get("elements"):
     return "success"
   return "partial_success"

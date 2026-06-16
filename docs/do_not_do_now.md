@@ -58,3 +58,11 @@ Phase 15 adds Evidence Validation but still does **not** add:
 - Automatic web search (Tavily, etc.)
 - Cloud Run / Scheduler / Email automation
 - Scope stops at Evidence Validation report (claim×paper plan/check)
+
+Phase 16 adds Controlled Full Text Execute Trial but still does **not** add:
+
+- Unrestricted Top5 full execute (limit/publication filter required)
+- Automatic fulltext for CN/EP/JP
+- Automatic PDF download / OCR
+- Automatic web search (Tavily, etc.)
+- Scope: controlled US execute trial + evidence validation handoff

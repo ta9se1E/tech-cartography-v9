@@ -142,7 +142,14 @@ def _build_evidence_gaps(
     gaps.append(
       {
         "gap_type": "dry_run_only",
-        "detail": f"{readiness.get('dry_run_only_count')} records are dry-run only.",
+        "detail": f"{readiness.get('dry_run_only_count')} records are dry-run only — まだ請求項を取得していません。",
+      },
+    )
+  if readiness.get("skipped_not_selected_count", 0) > 0:
+    gaps.append(
+      {
+        "gap_type": "skipped_not_selected",
+        "detail": f"{readiness.get('skipped_not_selected_count')} records were not selected for execute.",
       },
     )
   if claim_result.get("records_with_claims", 0) == 0 and claim_result.get("total_records", 0) > 0:
@@ -172,16 +179,19 @@ def _build_recommended_actions(
   pipeline_status: str | None,
 ) -> list[str]:
   actions: list[str] = []
-  if readiness.get("dry_run_only_count", 0) > 0 or readiness.get("cost_guard_failed_count", 0) > 0:
-    actions.append("US候補に対して execute-fulltext を実行する")
+  if pipeline_status == "limited_no_fulltext":
+    actions.append("まだ請求項を取得していません。--execute-fulltext --fulltext-execute-limit 1 --confirm-fulltext-execute を検討してください")
+  elif pipeline_status == "partial_success":
+    actions.append("取得できたUS公報のClaim Elementを人間確認してください")
+  if readiness.get("ready_count", 0) == 0 and readiness.get("limited_count", 0) == 0:
+    if readiness.get("dry_run_only_count", 0) > 0 or readiness.get("cost_guard_failed_count", 0) > 0:
+      actions.append("US候補に対して execute-fulltext（Top1から）を実行する")
   if readiness.get("manual_required_count", 0) > 0:
     actions.append("CN/EP/JP 候補は PDF / Google Patents で manual fulltext を追加する")
   if openalex.get("mode") == "plan_only":
     actions.append("必要に応じて OpenAlex を限定実行する（--execute-openalex）")
   if readiness.get("ready_count", 0) > 0 or readiness.get("limited_count", 0) > 0:
     actions.append("Claim Element 抽出結果を人間確認する")
-  if pipeline_status == "limited_no_fulltext":
-    actions.append("全文取得後に evidence_validation を再実行する")
   return actions
 
 

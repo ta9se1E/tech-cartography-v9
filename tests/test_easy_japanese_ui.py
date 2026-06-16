@@ -5,6 +5,7 @@ import pandas as pd
 from tech_cartography.ui.easy_japanese_ui import (
   prepare_patent_display_df,
   render_evidence_validation_summary,
+  render_fulltext_execute_summary,
   render_fulltext_status_card,
   render_fulltext_vs_watch_notice,
   render_manual_checklist_notice,
@@ -119,3 +120,25 @@ def test_evidence_validation_japanese_summary() -> None:
   assert "中国候補" in html
   assert "裏取り候補" in html
   assert "execute-fulltext" in html
+
+
+def test_fulltext_execute_summary_japanese() -> None:
+  html = render_fulltext_execute_summary(
+    {"selected_for_execute_count": 1, "estimated_mode": "execute", "confirmation_required": False},
+    {"retrieved_count": 1, "skipped_not_selected_count": 4, "cache_hit_count": 0},
+  )
+  assert "まず1件だけ" in html
+  assert "中国候補" in html
+  assert "実行対象外" in html or "skipped" in html.lower()
+
+
+def test_fulltext_status_skipped_not_selected_japanese() -> None:
+  card = render_fulltext_status_card(
+    {
+      "title": "Fiber",
+      "publication_number": "US-2",
+      "retrieval_status": "skipped_not_selected",
+      "evidence_level": "metadata_only",
+    },
+  )
+  assert "実行対象外" in card

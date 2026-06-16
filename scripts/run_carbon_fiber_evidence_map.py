@@ -23,6 +23,9 @@ def parse_args() -> argparse.Namespace:
 
   parser.add_argument("--execute-bigquery", action="store_true", default=False)
   parser.add_argument("--execute-fulltext", action="store_true", default=False)
+  parser.add_argument("--fulltext-execute-limit", type=int, default=None)
+  parser.add_argument("--fulltext-publication-number", default="")
+  parser.add_argument("--confirm-fulltext-execute", action="store_true", default=False)
   parser.add_argument("--execute-openalex", action="store_true", default=False)
 
   parser.add_argument("--use-existing-light-csv", default="")
@@ -45,6 +48,12 @@ def main() -> int:
     config.execute_bigquery = True
   if args.execute_fulltext:
     config.execute_fulltext = True
+  if args.fulltext_execute_limit is not None:
+    config.fulltext_execute_limit = int(args.fulltext_execute_limit)
+  if args.fulltext_publication_number:
+    config.fulltext_publication_number = args.fulltext_publication_number
+  if args.confirm_fulltext_execute:
+    config.confirm_fulltext_execute = True
   if args.execute_openalex:
     config.execute_openalex = True
 

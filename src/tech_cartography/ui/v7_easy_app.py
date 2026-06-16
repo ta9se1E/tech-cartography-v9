@@ -16,6 +16,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   prepare_patent_display_df,
   render_caveat_footer,
   render_evidence_validation_summary,
+  render_fulltext_execute_summary,
   render_fulltext_status_card,
   render_fulltext_vs_watch_notice,
   render_info_box,
@@ -261,6 +262,28 @@ def render_easy_japanese_app() -> None:
     render_step_header(4, "技術の裏取りを見る", "請求項・論文による裏取り候補を確認します"),
     unsafe_allow_html=True,
   )
+  ft_preview: dict[str, Any] | None = None
+  ft_preview_path = _artifact_path(manifest_data, "fulltext_execute_preview_json")
+  if ft_preview_path and ft_preview_path.exists():
+    try:
+      ft_preview = json.loads(ft_preview_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+      ft_preview = None
+  ft_summary_path = _artifact_path(manifest_data, "fulltext_retrieval_summary_json")
+  ft_summary: dict[str, Any] | None = None
+  if ft_summary_path and ft_summary_path.exists():
+    try:
+      ft_summary = json.loads(ft_summary_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+      ft_summary = None
+  if ft_preview or ft_summary:
+    st.markdown(render_fulltext_execute_summary(ft_preview, ft_summary), unsafe_allow_html=True)
+
+  execute_results_df = _load_csv_artifact(manifest_data, "fulltext_execute_results_csv")
+  if not execute_results_df.empty:
+    st.caption("全文取得トライアル結果（US候補）")
+    st.dataframe(execute_results_df, use_container_width=True, hide_index=True)
+
   ev_summary_json = _artifact_path(manifest_data, "evidence_validation_summary_json")
   ev_summary: dict[str, Any] | None = None
   if ev_summary_json and ev_summary_json.exists():
