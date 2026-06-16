@@ -16,6 +16,11 @@ from tech_cartography.curation.patent_ranker import (
   select_fulltext_candidates,
   select_top_patents,
 )
+from tech_cartography.curation.strategic_watch_selector import (
+  build_company_watch_summary,
+  build_country_watch_summary,
+  select_strategic_watch_candidates,
+)
 from tech_cartography.curation.top_candidate_selector import enrich_top_records_for_display
 from tech_cartography.curation.technology_classifier import (
   build_cluster_summary,
@@ -32,6 +37,7 @@ from tech_cartography.reports.project_export import (
   load_records_csv,
   save_records_csv,
   save_retrieval_summary,
+  save_summary_csv,
 )
 
 
@@ -41,6 +47,7 @@ def run_case_study_pipeline(
   profile: SearchProfile | None = None,
   top_n: int = 20,
   fulltext_top_n: int = 5,
+  strategic_watch_top_n: int = 20,
 ) -> dict[str, Any]:
   profile = profile or load_carbon_fiber_demo_profile()
 
@@ -55,6 +62,12 @@ def run_case_study_pipeline(
   ranked_records = rank_patent_records(classified_records, profile)
   top_records = enrich_top_records_for_display(select_top_patents(ranked_records, top_n=top_n))
   fulltext_candidates = select_fulltext_candidates(ranked_records, top_n=fulltext_top_n)
+  strategic_watch_candidates = select_strategic_watch_candidates(
+    ranked_records,
+    top_n=strategic_watch_top_n,
+  )
+  country_watch_summary = build_country_watch_summary(strategic_watch_candidates)
+  company_watch_summary = build_company_watch_summary(strategic_watch_candidates)
   cluster_summary = build_cluster_summary(ranked_records)
 
   summary = build_evidence_map_summary(
@@ -62,6 +75,9 @@ def run_case_study_pipeline(
     ranked_records,
     top_records=top_records,
     fulltext_candidates=fulltext_candidates,
+    strategic_watch_candidates=strategic_watch_candidates,
+    country_watch_summary=country_watch_summary,
+    company_watch_summary=company_watch_summary,
     cluster_summary=cluster_summary,
   )
   markdown = render_evidence_map_markdown(summary)
@@ -71,6 +87,9 @@ def run_case_study_pipeline(
     "ranked_records": ranked_records,
     "top_records": top_records,
     "fulltext_candidates": fulltext_candidates,
+    "strategic_watch_candidates": strategic_watch_candidates,
+    "country_watch_summary": country_watch_summary,
+    "company_watch_summary": company_watch_summary,
     "cluster_summary": cluster_summary,
     "summary": summary,
     "markdown": markdown,
@@ -96,6 +115,18 @@ def save_case_study_outputs(result: dict[str, Any], output_dir: str | Path) -> d
     "top5_fulltext_candidates_csv": save_records_csv(
       result["fulltext_candidates"],
       output_path / "top5_fulltext_candidates.csv",
+    ),
+    "strategic_watch_candidates_csv": save_records_csv(
+      result["strategic_watch_candidates"],
+      output_path / "strategic_watch_candidates.csv",
+    ),
+    "country_watch_summary_csv": save_summary_csv(
+      result["country_watch_summary"],
+      output_path / "country_watch_summary.csv",
+    ),
+    "company_watch_summary_csv": save_summary_csv(
+      result["company_watch_summary"],
+      output_path / "company_watch_summary.csv",
     ),
     "cluster_summary_json": save_retrieval_summary(
       {"clusters": result["cluster_summary"]},

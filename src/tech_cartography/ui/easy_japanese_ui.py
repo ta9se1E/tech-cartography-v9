@@ -8,8 +8,11 @@ from typing import Any
 import pandas as pd
 
 from tech_cartography.ui.japanese_labels import (
+  explain_fulltext_priority_top5,
   explain_stage_status,
+  explain_strategic_watch,
   translate_cluster_id,
+  translate_recommended_next_action,
   translate_source_route,
   translate_stage_id,
   translate_stage_status,
@@ -154,6 +157,40 @@ def render_top5_fulltext_card(row: dict[str, Any]) -> str:
   )
 
 
+def render_strategic_watch_card(row: dict[str, Any]) -> str:
+  title = _safe(row.get("title") or row.get("発明の名称"), "（タイトル不明）")
+  pub = _safe(row.get("publication_number") or row.get("公開番号"))
+  assignee = _safe(row.get("assignee") or row.get("出願人"), "出願人不明")
+  country = _safe(row.get("country") or row.get("国"))
+  watch_reason = _safe(row.get("watch_reason_japanese") or row.get("監視理由"), "戦略監視候補")
+  manual = _safe(row.get("manual_route_reason") or row.get("手動確認理由"), "")
+  action = _safe(
+    row.get("recommended_next_action_japanese")
+    or translate_recommended_next_action(str(row.get("recommended_next_action", ""))),
+  )
+  manual_html = f"<br>手動確認: {manual}" if manual else ""
+  return (
+    f'<div class="tc-patent-card">'
+    f'<div class="tc-patent-title">{title}</div>'
+    f'<div class="tc-patent-meta">'
+    f"公開番号: {pub} / 国: {country}<br>"
+    f"出願人: {assignee}<br>"
+    f"監視理由: {watch_reason}{manual_html}<br>"
+    f"次の確認: {action}"
+    f"</div></div>"
+  )
+
+
+def render_fulltext_vs_watch_notice() -> str:
+  return render_info_box(
+    "米国公報は全文取得しやすいため、先に深掘りします。"
+    "中国・欧州・日本の重要特許は、PDFやGoogle Patentsで手動確認する候補として別枠で残します。"
+    "中国候補を除外しているわけではありません。"
+    f"<br><br>{explain_fulltext_priority_top5()}"
+    f"<br><br>{explain_strategic_watch()}"
+  )
+
+
 def render_caveat_footer() -> str:
   lines = [
     "本ツールは特許の有効性・侵害・FTOを判断しません。",
@@ -180,6 +217,12 @@ DISPLAY_COLUMN_MAP = {
   "attention_flag": "注意表示",
   "rank": "順位",
   "fulltext_candidate_rank": "全文候補順位",
+  "strategic_watch_rank": "戦略監視順位",
+  "strategic_watch_score": "戦略監視スコア",
+  "watch_reason_japanese": "監視理由",
+  "manual_route_reason": "手動確認理由",
+  "recommended_next_action_japanese": "次の確認",
+  "caveat_japanese": "注意書き",
 }
 
 

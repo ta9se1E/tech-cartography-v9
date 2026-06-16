@@ -15,10 +15,12 @@ from tech_cartography.ui.easy_japanese_ui import (
   inject_easy_ui_css,
   prepare_patent_display_df,
   render_caveat_footer,
+  render_fulltext_vs_watch_notice,
   render_info_box,
   render_metric_cards,
   render_patent_card,
   render_step_header,
+  render_strategic_watch_card,
   render_success_box,
   render_top5_fulltext_card,
   render_warning_box,
@@ -183,24 +185,55 @@ def render_easy_japanese_app() -> None:
   else:
     st.warning("Top20 の成果物がまだありません。technology_clustering_ranking を実行してください。")
 
-  # Step 3: 全文確認候補
+  # Step 3: 全文確認候補 + 戦略監視候補
   st.markdown(
-    render_step_header(3, "読むべき特許を選ぶ", "全文を確認できそうな特許と、手動確認が必要な候補を分けます"),
+    render_step_header(3, "読むべき特許を選ぶ", "全文取得候補と戦略監視候補を分けて確認します"),
     unsafe_allow_html=True,
   )
+  st.markdown(render_fulltext_vs_watch_notice(), unsafe_allow_html=True)
+
   top5_df = _load_csv_artifact(manifest_data, "top5_fulltext_candidates_csv")
+  watch_df = _load_csv_artifact(manifest_data, "strategic_watch_candidates_csv")
+  country_watch_df = _load_csv_artifact(manifest_data, "country_watch_summary_csv")
+  company_watch_df = _load_csv_artifact(manifest_data, "company_watch_summary_csv")
+
+  st.subheader("A. 全文を取りに行きやすい候補（US中心）")
   if not top5_df.empty:
-    us_df = top5_df[top5_df.get("country", pd.Series(dtype=str)).astype(str).str.upper() == "US"] if "country" in top5_df.columns else top5_df
-    manual_df = top5_df[top5_df.get("country", pd.Series(dtype=str)).astype(str).str.upper() != "US"] if "country" in top5_df.columns else pd.DataFrame()
-    st.markdown(render_success_box(f"全文を確認できそうな特許: {len(us_df)} 件"), unsafe_allow_html=True)
-    if not manual_df.empty:
-      st.markdown(render_warning_box(f"PDF確認が必要な特許: {len(manual_df)} 件"), unsafe_allow_html=True)
+    st.markdown(render_success_box(f"全文を確認できそうな特許: {len(top5_df)} 件"), unsafe_allow_html=True)
+    caveat = str(top5_df.iloc[0].get("caveat_japanese", ""))
+    if caveat:
+      st.markdown(render_info_box(caveat), unsafe_allow_html=True)
     for _, row in top5_df.iterrows():
       st.markdown(render_top5_fulltext_card(row.to_dict()), unsafe_allow_html=True)
     if display_mode == "詳細表示":
       st.dataframe(prepare_patent_display_df(top5_df), use_container_width=True, hide_index=True)
   else:
     st.info("Top5 全文候補がまだありません。")
+
+  st.subheader("B. 戦略監視すべき候補（中国・EP・JP含む）")
+  if not watch_df.empty:
+    cn_count = 0
+    if "country" in watch_df.columns:
+      cn_count = int((watch_df["country"].astype(str).str.upper() == "CN").sum())
+    st.markdown(
+      render_info_box(
+        f"戦略監視候補: {len(watch_df)} 件（中国候補: {cn_count} 件）。"
+        "中国候補を除外しているわけではありません。",
+      ),
+      unsafe_allow_html=True,
+    )
+    for _, row in watch_df.head(15).iterrows():
+      st.markdown(render_strategic_watch_card(row.to_dict()), unsafe_allow_html=True)
+    if display_mode == "詳細表示":
+      st.dataframe(prepare_patent_display_df(watch_df), use_container_width=True, hide_index=True)
+    if not country_watch_df.empty:
+      st.caption("国別監視サマリー")
+      st.dataframe(country_watch_df, use_container_width=True, hide_index=True)
+    if not company_watch_df.empty:
+      st.caption("企業別監視サマリー")
+      st.dataframe(company_watch_df.head(15), use_container_width=True, hide_index=True)
+  else:
+    st.info("Strategic Watch 候補がまだありません。clustering を再実行してください。")
 
   # Step 4: 技術の裏取り
   st.markdown(
@@ -261,7 +294,7 @@ def render_easy_japanese_app() -> None:
   elif top5_df.empty:
     recommendations.append("Top20 確認後、fulltext_collection 段階へ進んでください。")
   else:
-    recommendations.append("Top5 全文候補を確認し、US候補は fulltext stage、非USはPDF手動確認へ。")
+    recommendations.append("Top5 全文候補（US）と Strategic Watch 候補（中国・EP・JP含む）を確認してください。")
   if web_df.empty:
     recommendations.append("企業動向を見る場合は Web signal CSV テンプレートを埋めてください。")
   if not synthesis_md:

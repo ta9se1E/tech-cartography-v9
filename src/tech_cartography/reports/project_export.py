@@ -101,6 +101,23 @@ def _normalize_row_for_csv(record: dict[str, Any], fieldnames: list[str]) -> dic
   return row
 
 
+def save_summary_csv(records: list[dict[str, Any]], path: str | Path) -> str:
+  """Save summary tables without patent-record column padding."""
+  output_path = Path(path)
+  output_path.parent.mkdir(parents=True, exist_ok=True)
+  fieldnames: list[str] = []
+  for record in records:
+    for key in record.keys():
+      if key not in fieldnames:
+        fieldnames.append(key)
+  with output_path.open("w", encoding="utf-8", newline="") as handle:
+    writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for record in records:
+      writer.writerow({key: _serialize_value(record.get(key)) for key in fieldnames})
+  return str(output_path)
+
+
 def save_records_csv(records: list[dict[str, Any]], path: str | Path) -> str:
   output_path = Path(path)
   output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -17,6 +17,9 @@ PRIMARY_ARTIFACT_KEYS = [
   "ranked_patents_csv",
   "top20_patents_csv",
   "top5_fulltext_candidates_csv",
+  "strategic_watch_candidates_csv",
+  "country_watch_summary_csv",
+  "company_watch_summary_csv",
   "final_report_md",
 ]
 

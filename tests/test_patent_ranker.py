@@ -34,6 +34,45 @@ def test_score_breakdown_present() -> None:
   assert "score_breakdown" in scored
   assert scored["score_breakdown"]["theme_relevance_score"] >= 0
   assert scored["score_breakdown"]["core_technology_score"] >= 0
+  assert "fulltext_route_score" in scored["score_breakdown"]
+  assert "strategic_score" in scored
+
+
+def test_fulltext_route_and_strategic_score_separated() -> None:
+  cn = score_patent_record(
+    _classified(
+      publication_number="CN-2024-000001",
+      country="CN",
+      assignee="ZHONGFU SHENYING CARBON FIBER CO LTD",
+      title="PAN precursor carbonization large-tow",
+      abstract="polyacrylonitrile dry-jet wet-spinning carbonization",
+    ),
+  )
+  us = score_patent_record(_classified(publication_number="US-2024-000010", country="US"))
+  assert cn["strategic_score"] == cn["total_score"]
+  assert us["fulltext_route_score"] > cn["fulltext_route_score"]
+  assert cn["strategic_score"] >= us["strategic_score"] * 0.8
+
+
+def test_zhongfu_assignee_boosted() -> None:
+  zhongfu = score_patent_record(
+    _classified(
+      publication_number="CN-2024-000001",
+      country="CN",
+      assignee="ZHONGFU SHENYING CARBON FIBER CO LTD",
+    ),
+  )
+  generic = score_patent_record(
+    _classified(
+      publication_number="CN-2024-000002",
+      country="CN",
+      assignee="Generic Composite Co",
+      title="Generic composite article",
+      abstract="general composite",
+      matched_terms=["composite"],
+    ),
+  )
+  assert zhongfu["score_breakdown"]["assignee_importance_score"] > generic["score_breakdown"]["assignee_importance_score"]
 
 
 def test_pan_carbonization_tensile_strength_high_score() -> None:
@@ -65,7 +104,7 @@ def test_surface_treatment_interface_adhesion_high_score() -> None:
     ),
   )
   assert scored["score_breakdown"]["core_technology_score"] >= 0.2
-  assert scored["total_score"] >= 0.45
+  assert scored["total_score"] >= 0.43
 
 
 def test_unknown_assignee_penalized() -> None:

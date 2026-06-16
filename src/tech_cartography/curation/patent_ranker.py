@@ -37,6 +37,27 @@ IMPORTANT_ASSIGNEES = [
   "zoltek",
 ]
 
+ZHONGFU_ASSIGNEE_PATTERNS = [
+  "zhongfu shenying carbon fiber",
+  "zhongfu shenying carbon fiber lianyungang",
+  "zhongfu shenying carbon fiber xining",
+  "zhongfu shenying shanghai tech",
+  "jiangsu zhongfu shenying carbon fiber eng center",
+  "china nat building material",
+  "gaosheng hyosung carbon mat jiangsu",
+]
+
+GLOBAL_STRATEGIC_ASSIGNEES = ZHONGFU_ASSIGNEE_PATTERNS + [
+  "toray",
+  "teijin",
+  "mitsubishi chemical",
+  "mitsubishi",
+  "hyosung",
+  "sgl",
+  "hexcel",
+  "solvay",
+]
+
 CARBON_FIBER_TERMS = [
   "carbon fiber",
   "carbon fibre",
@@ -180,8 +201,10 @@ def _assignee_importance_score(record: dict[str, Any]) -> float:
   if _is_unknown_assignee(record):
     return 0.0
   assignee = str(record.get("assignee", "") or "").lower()
+  if any(pattern in assignee for pattern in ZHONGFU_ASSIGNEE_PATTERNS):
+    return 1.0
   hits = sum(1 for company in IMPORTANT_ASSIGNEES if company in assignee)
-  return min(1.0, 0.35 * hits + (0.15 if hits == 0 and assignee else 0.0))
+  return min(1.0, 0.40 * hits + (0.12 if hits == 0 and assignee else 0.0))
 
 
 def _recency_score(record: dict[str, Any]) -> float:
@@ -199,13 +222,18 @@ def _recency_score(record: dict[str, Any]) -> float:
   return 0.35
 
 
-def _source_route_score(record: dict[str, Any]) -> float:
+def _fulltext_route_score(record: dict[str, Any]) -> float:
+  """US advantage applies only to fulltext retrieval routing, not strategic importance."""
   country = str(record.get("country", "") or "").upper()
   if country == "US":
     return 1.0
   if country in {"EP", "WO", "JP", "CN", "KR"}:
     return 0.55
   return 0.4
+
+
+def _source_route_score(record: dict[str, Any]) -> float:
+  return _fulltext_route_score(record)
 
 
 def _multi_intent_score(record: dict[str, Any]) -> float:
@@ -263,24 +291,25 @@ def score_patent_record(
     "cluster_priority_score": round(_cluster_priority_score(record), 4),
     "assignee_importance_score": round(_assignee_importance_score(record), 4),
     "recency_score": round(_recency_score(record), 4),
+    "fulltext_route_score": round(_fulltext_route_score(record), 4),
     "source_route_score": round(_source_route_score(record), 4),
     "multi_intent_score": round(_multi_intent_score(record), 4),
     "noise_penalty": round(noise_score, 4),
     "application_only_penalty": round(application_penalty, 4),
   }
-  total_score = round(
+  strategic_score = round(
     breakdown["theme_relevance_score"] * 0.15
-    + breakdown["core_technology_score"] * 0.30
-    + breakdown["cluster_priority_score"] * 0.20
-    + breakdown["assignee_importance_score"] * 0.10
+    + breakdown["core_technology_score"] * 0.32
+    + breakdown["cluster_priority_score"] * 0.22
+    + breakdown["assignee_importance_score"] * 0.12
     + breakdown["recency_score"] * 0.08
-    + breakdown["source_route_score"] * 0.07
-    + breakdown["multi_intent_score"] * 0.05
+    + breakdown["multi_intent_score"] * 0.06
     - breakdown["noise_penalty"] * 0.25
     - breakdown["application_only_penalty"] * 0.10,
     4,
   )
-  total_score = max(0.0, min(1.0, total_score))
+  strategic_score = max(0.0, min(1.0, strategic_score))
+  total_score = strategic_score
 
   rank_reason_parts = [
     f"cluster={record.get('primary_cluster_id')}",
@@ -301,6 +330,8 @@ def score_patent_record(
   enriched["noise_categories"] = record.get("noise_categories") or []
   enriched["total_score"] = total_score
   enriched["final_score"] = total_score
+  enriched["strategic_score"] = strategic_score
+  enriched["fulltext_route_score"] = breakdown["fulltext_route_score"]
   enriched["score_breakdown"] = breakdown
   enriched["rank_reason"] = "; ".join(rank_reason_parts)
   enriched["recommended_action"] = _recommended_action(record, total_score, noise_score)

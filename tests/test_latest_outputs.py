@@ -42,9 +42,16 @@ def test_artifact_index_markdown_contains_outputs(tmp_path: Path) -> None:
     ),
   )
   manifest.final_outputs["final_report_md"] = "outputs/x.md"
-  index = build_artifact_index(manifest, {"ranked_patents_csv": "outputs/x.csv"})
+  index = build_artifact_index(
+    manifest,
+    {
+      "ranked_patents_csv": "outputs/x.csv",
+      "strategic_watch_candidates_csv": "outputs/watch.csv",
+    },
+  )
   md = render_artifact_index_markdown(index)
   assert "final_report_md" in md
+  assert "strategic_watch_candidates_csv" in md
   path = save_artifact_index(index, str(tmp_path))
   assert Path(path).exists()
   assert (tmp_path / "artifact_index.json").exists()

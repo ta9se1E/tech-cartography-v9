@@ -114,6 +114,29 @@ READER_ACTION_LABELS: dict[str, str] = {
   "likely_noise": "ノイズ候補として注意",
 }
 
+RECOMMENDED_NEXT_ACTION_LABELS: dict[str, tuple[str, str]] = {
+  "manual_pdf_check": (
+    "PDFで手動確認",
+    "Google PatentsやPDFで請求項・明細書を確認してください。",
+  ),
+  "monitor_company_activity": (
+    "企業動向を監視",
+    "出願人の動きを定期的にウォッチしてください。",
+  ),
+  "compare_with_us_fulltext_candidate": (
+    "米国候補と比較",
+    "US Top5全文候補と内容を突き合わせてください。",
+  ),
+  "add_to_monthly_watch": (
+    "月次ウォッチに追加",
+    "次回更新時に再確認する候補として残します。",
+  ),
+  "expert_review_required": (
+    "専門家レビュー推奨",
+    "ノイズの可能性があるため、専門家の確認を推奨します。",
+  ),
+}
+
 
 def _lookup(mapping: dict[str, str | tuple[str, str]], key: str, default_label: str) -> str:
   if not key or str(key).lower() in {"nan", "none", "unknown", "null"}:
@@ -192,4 +215,31 @@ def explain_stage_status(status: str) -> str:
     STAGE_STATUS_LABELS,
     status,
     "実行状況の詳細はログを確認してください。",
+  )
+
+
+def translate_recommended_next_action(action: str) -> str:
+  return _lookup(RECOMMENDED_NEXT_ACTION_LABELS, action, action or "次の確認を検討")
+
+
+def explain_recommended_next_action(action: str) -> str:
+  return _lookup_explain(
+    RECOMMENDED_NEXT_ACTION_LABELS,
+    action,
+    "追加確認の方法はケースごとに異なります。",
+  )
+
+
+def explain_strategic_watch() -> str:
+  return (
+    "戦略監視候補は、中国・欧州・日本など全文取得ルートが異なる重要特許を追跡するリストです。"
+    "Top5全文候補と併せて確認してください。中国候補を除外しているわけではありません。"
+  )
+
+
+def explain_fulltext_priority_top5() -> str:
+  return (
+    "Top5全文候補は、BigQueryで請求項・明細書を取得しやすい米国公報を優先したリストです。"
+    "世界の戦略的重要度ランキングではありません。"
+    "中国・EP・JP等は Strategic Watch Candidates で別途確認してください。"
   )

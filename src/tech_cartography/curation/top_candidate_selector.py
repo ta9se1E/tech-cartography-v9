@@ -22,9 +22,16 @@ from tech_cartography.curation.patent_ranker import (
   _record_text,
 )
 from tech_cartography.ui.japanese_labels import (
+  explain_fulltext_priority_top5,
   explain_source_route,
   translate_cluster_id,
   translate_source_route,
+)
+
+FULLTEXT_LIST_PURPOSE = "US fulltext retrieval priority"
+FULLTEXT_CAVEAT_JAPANESE = (
+  "このTop5は全文取得しやすい米国公報を優先したリストです。"
+  "中国・EP・JP等の重要特許は Strategic Watch Candidates で別途確認してください。"
 )
 
 US_COUNTRIES = {"US"}
@@ -157,13 +164,12 @@ def _build_why_selected_japanese(record: dict[str, Any], route: str) -> str:
 
 
 def _selection_score(record: dict[str, Any]) -> float:
-  score = float(record.get("total_score", record.get("final_score", 0)) or 0)
+  score = float(record.get("strategic_score", record.get("total_score", 0)) or 0)
   country = _country(record)
 
+  score += float(record.get("fulltext_route_score", 0) or 0) * 0.20
   if country == "US":
-    score += 0.25
-  elif country in MANUAL_ROUTE_COUNTRIES:
-    score -= 0.15
+    score += 0.15
 
   cluster = str(record.get("primary_cluster_id", ""))
   if cluster in FULLTEXT_PRIORITY_CLUSTERS:
@@ -254,6 +260,10 @@ def select_top_fulltext_candidates(
     row["noise_categories"] = noise_categories
     row["why_selected_japanese"] = _build_why_selected_japanese(record, route)
     row["fulltext_candidate_reason"] = row["fulltext_priority_reason"]
+    row["this_list_purpose"] = FULLTEXT_LIST_PURPOSE
+    row["not_global_importance_ranking"] = True
+    row["caveat_japanese"] = FULLTEXT_CAVEAT_JAPANESE
+    row["fulltext_list_explanation_japanese"] = explain_fulltext_priority_top5()
     row["source_route_japanese"] = translate_source_route(route)
     row["next_step"] = (
       "全文取得候補。次フェーズでclaims/description取得"

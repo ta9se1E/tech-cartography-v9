@@ -16,10 +16,16 @@ def build_evidence_map_summary(
   *,
   top_records: list[dict[str, Any]] | None = None,
   fulltext_candidates: list[dict[str, Any]] | None = None,
+  strategic_watch_candidates: list[dict[str, Any]] | None = None,
+  country_watch_summary: list[dict[str, Any]] | None = None,
+  company_watch_summary: list[dict[str, Any]] | None = None,
   cluster_summary: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
   top_records = top_records or []
   fulltext_candidates = fulltext_candidates or []
+  strategic_watch_candidates = strategic_watch_candidates or []
+  country_watch_summary = country_watch_summary or []
+  company_watch_summary = company_watch_summary or []
   cluster_summary = cluster_summary or []
   noise_candidates = [
     {
@@ -39,12 +45,17 @@ def build_evidence_map_summary(
     "cluster_count": len(cluster_summary),
     "top20_count": len(top_records),
     "top5_fulltext_count": len(fulltext_candidates),
+    "strategic_watch_count": len(strategic_watch_candidates),
     "cluster_summary": cluster_summary,
     "top20_patents": top_records,
     "top5_fulltext_candidates": fulltext_candidates,
+    "strategic_watch_candidates": strategic_watch_candidates,
+    "country_watch_summary": country_watch_summary,
+    "company_watch_summary": company_watch_summary,
     "noise_candidates": noise_candidates,
     "next_phases": [
       "Top5 full text取得",
+      "Strategic Watch候補のPDF/manual確認",
       "Claim Element Extraction",
       "OpenAlex paper evidence",
       "SourceQuality評価",
@@ -63,6 +74,10 @@ def render_evidence_map_markdown(summary: dict[str, Any]) -> str:
     f"- クラスタ数: {summary.get('cluster_count', 0)}",
     f"- Top20重要特許: {summary.get('top20_count', 0)}",
     f"- Top5全文取得候補: {summary.get('top5_fulltext_count', 0)}",
+    f"- Strategic Watch候補: {summary.get('strategic_watch_count', 0)}",
+    "",
+    "> US Top5は全文取得優先リストであり、世界の重要度ランキングではありません。",
+    "> CN/EP/JP等は全文取得ルートが異なるため、Strategic Watchとして別管理します。",
     "",
     "## 2. 技術クラスタ",
     "",
@@ -94,15 +109,66 @@ def render_evidence_map_markdown(summary: dict[str, Any]) -> str:
       f"{record.get('recommended_action', '')} | {record.get('rank_reason', '')} |",
     )
 
-  lines.extend(["", "## 4. Top5全文取得候補", ""])
+  lines.extend(
+    [
+      "",
+      "## 4. Top5全文取得候補",
+      "",
+      "- 目的: BigQueryでclaims/descriptionを取得しやすいUS公報を優先",
+      "- 注意: このリストは全文取得容易性の優先であり、世界の戦略的重要度ランキングではない",
+      "",
+    ],
+  )
   for record in summary.get("top5_fulltext_candidates", []):
     lines.extend(
       [
         f"- {record.get('publication_number')} | {record.get('title')} | {record.get('assignee')}",
         f"  - reason: {record.get('fulltext_candidate_reason', '')}",
+        f"  - caveat: {record.get('caveat_japanese', '')}",
         f"  - next_step: {record.get('next_step', '')}",
       ],
     )
+
+  lines.extend(
+    [
+      "",
+      "## Strategic Watch Candidates",
+      "",
+      "中国・EP・JP等を含む戦略監視候補。Full text取得しやすさとは別に、技術・競合として重要な候補。",
+      "metadata_onlyであり、PDF/manual確認が必要な場合があります。",
+      "",
+    ],
+  )
+  for record in summary.get("strategic_watch_candidates", [])[:20]:
+    lines.extend(
+      [
+        f"- {record.get('publication_number')} | {record.get('country')} | {record.get('assignee')}",
+        f"  - title: {record.get('title')}",
+        f"  - watch_reason: {record.get('watch_reason_japanese', '')}",
+        f"  - manual_route: {record.get('manual_route_reason', '')}",
+        f"  - next_action: {record.get('recommended_next_action', '')}",
+      ],
+    )
+
+  lines.extend(["", "## China / Non-US Watch", ""])
+  cn_rows = [
+    row for row in summary.get("country_watch_summary", []) if str(row.get("country")) == "CN"
+  ]
+  if cn_rows:
+    for row in cn_rows:
+      lines.append(
+        f"- CN候補{row.get('candidate_count')}件 / priority={row.get('watch_priority')} / "
+        f"{row.get('note_japanese', '')}",
+      )
+    zhongfu_rows = [
+      row
+      for row in summary.get("company_watch_summary", [])
+      if "Zhongfu" in str(row.get("normalized_company", ""))
+    ]
+    if zhongfu_rows:
+      lines.append("- Zhongfu Shenying系の監視候補が複数検出されています。PDF/Google Patentsで追加確認してください。")
+  else:
+    lines.append("- 今回のStrategic Watch候補にCNは未検出、または件数が少ないです。")
 
   lines.extend(["", "## 5. ノイズ・注意候補", ""])
   for item in summary.get("noise_candidates", [])[:20]:

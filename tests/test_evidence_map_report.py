@@ -36,11 +36,21 @@ def test_evidence_map_markdown_contains_top_sections() -> None:
   ranked = rank_patent_records(records)
   top20 = select_top_patents(ranked, top_n=20)
   top5 = select_fulltext_candidates(ranked, top_n=5)
-  summary = build_evidence_map_summary(records, ranked, top_records=top20, fulltext_candidates=top5)
+  from tech_cartography.curation.strategic_watch_selector import select_strategic_watch_candidates
+
+  watch = select_strategic_watch_candidates(ranked, top_n=5)
+  summary = build_evidence_map_summary(
+    records,
+    ranked,
+    top_records=top20,
+    fulltext_candidates=top5,
+    strategic_watch_candidates=watch,
+  )
   markdown = render_evidence_map_markdown(summary)
   assert "Carbon Fiber Evidence Map v1" in markdown
   assert "## 3. 重要特許Top20" in markdown
   assert "## 4. Top5全文取得候補" in markdown
+  assert "## Strategic Watch Candidates" in markdown
 
 
 def test_case_study_pipeline_runs() -> None:

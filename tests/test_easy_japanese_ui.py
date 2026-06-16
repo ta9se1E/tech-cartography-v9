@@ -4,7 +4,9 @@ import pandas as pd
 
 from tech_cartography.ui.easy_japanese_ui import (
   prepare_patent_display_df,
+  render_fulltext_vs_watch_notice,
   render_patent_card,
+  render_strategic_watch_card,
   summarize_stage_statuses,
 )
 
@@ -49,3 +51,29 @@ def test_missing_artifact_ui_helpers_do_not_crash() -> None:
   assert summarize_stage_statuses(None) == []
   card = render_patent_card({})
   assert "タイトル不明" in card or "—" in card
+
+
+def test_strategic_watch_japanese_display() -> None:
+  df = pd.DataFrame(
+    [
+      {
+        "publication_number": "CN-2024-000001",
+        "title": "PAN carbon fiber",
+        "assignee": "ZHONGFU SHENYING CARBON FIBER CO LTD",
+        "country": "CN",
+        "watch_reason_japanese": "中複神鷹系の出願",
+        "manual_route_reason": "CN公報のためPDF確認",
+        "recommended_next_action_japanese": "PDFで手動確認",
+      },
+    ],
+  )
+  display = prepare_patent_display_df(df)
+  assert "監視理由" in display.columns
+  card = render_strategic_watch_card(df.iloc[0].to_dict())
+  assert "中複神鷹" in card or "PDF" in card
+
+
+def test_china_not_excluded_notice() -> None:
+  notice = render_fulltext_vs_watch_notice()
+  assert "中国候補を除外しているわけではありません" in notice
+  assert "手動確認" in notice or "PDF" in notice

@@ -119,3 +119,11 @@
 - Top5 fulltext selector: US-first, manual route for JP/EP/WO/CN/KR, `why_selected_japanese` and quality flags
 - Streamlit Easy Japanese View (7 steps) alongside Expert Pipeline View
 - No new external APIs; no additional BigQuery/OpenAlex/fulltext execution logic
+
+### Step 13.1 (v7 Phase 13.1): Non-US Strategic Watch Candidates
+
+- Keep Top5 fulltext US-prioritized for BigQuery retrieval feasibility
+- Add Strategic Watch Candidates for CN/EP/JP/WO/KR (Zhongfu Shenying, etc.)
+- Separate `strategic_score` from `fulltext_route_score` in ranking
+- Export `strategic_watch_candidates.csv`, `country_watch_summary.csv`, `company_watch_summary.csv`
+- Easy Japanese UI shows US Top5 and Strategic Watch as distinct sections

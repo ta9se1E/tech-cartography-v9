@@ -38,3 +38,9 @@ Phase 13 improves ranking quality and Japanese UI but still does **not** add:
 - Cloud Run / Cloud SQL / Scheduler
 - Email sending
 - Scope remains: ranking quality + easy Japanese UI (no new external APIs)
+
+Phase 13.1 clarifies:
+
+- Chinese patents are **not** excluded — they appear in Strategic Watch Candidates
+- Top5 Fulltext Candidates prioritize US retrieval feasibility, not global strategic importance
+- Non-US important patents are tracked via Strategic Watch Candidates (manual/PDF route)

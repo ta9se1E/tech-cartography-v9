@@ -415,3 +415,20 @@ New/updated modules:
 - `src/tech_cartography/ui/japanese_labels.py`
 - `src/tech_cartography/ui/easy_japanese_ui.py`
 - `src/tech_cartography/ui/v7_easy_app.py`
+
+## v7 Phase 13.1: Non-US Strategic Watch Candidates
+
+Phase 13.1 separates **Top5 Fulltext Candidates** (US-first for BigQuery retrieval) from **Strategic Watch Candidates** (CN/EP/JP/WO/KR and global competition monitoring).
+
+- Top5 remains US-prioritized for fulltext retrieval — not a global importance ranking
+- Strategic Watch keeps Zhongfu Shenying and other major CN/EP/JP patents visible
+- New outputs: `strategic_watch_candidates.csv`, `country_watch_summary.csv`, `company_watch_summary.csv`
+- `app.py` adds `src/` to `sys.path` so `streamlit run app.py` works without editable install
+
+### Run UI
+
+```bash
+streamlit run app.py
+```
+
+Sidebar: **Easy Japanese View** shows US Top5 and Strategic Watch side by side.
