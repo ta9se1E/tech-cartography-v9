@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Top5 full text evidence collection."""
+"""Run Top5 controlled full text evidence collection."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
   sys.path.insert(0, str(SRC_ROOT))
 
+from tech_cartography.reports.fulltext_evidence_export import save_controlled_fulltext_outputs
 from tech_cartography.reports.fulltext_evidence_report import (
   build_fulltext_evidence_summary,
   render_fulltext_evidence_markdown,
@@ -20,14 +21,14 @@ from tech_cartography.reports.fulltext_evidence_report import (
 from tech_cartography.reports.project_export import load_records_csv
 from tech_cartography.retrieval.patent_fulltext_retriever import (
   FullTextRetrievalConfig,
-  retrieve_fulltext_for_top_candidates,
-  save_fulltext_collection_results,
+  retrieve_controlled_fulltext_run,
 )
 
 
 def parse_args() -> argparse.Namespace:
-  parser = argparse.ArgumentParser(description="Collect Top5 full text evidence")
+  parser = argparse.ArgumentParser(description="Collect Top5 controlled full text evidence")
   parser.add_argument("--input-csv", required=True)
+  parser.add_argument("--strategic-watch-csv", default=None)
   parser.add_argument("--output-dir", default="outputs/top5_fulltext_collection")
   parser.add_argument("--cache-dir", default="data/runtime/fulltext_cache")
   parser.add_argument("--maximum-gb", type=float, default=50.0)
@@ -47,6 +48,10 @@ def main() -> int:
       input_path = candidates[-1]
 
   candidates = load_records_csv(input_path)
+  strategic_watch = []
+  if args.strategic_watch_csv and Path(args.strategic_watch_csv).exists():
+    strategic_watch = load_records_csv(args.strategic_watch_csv)
+
   config = FullTextRetrievalConfig(
     project_id=args.project_id,
     dry_run=not args.execute,
@@ -56,15 +61,20 @@ def main() -> int:
     cache_dir=args.cache_dir,
     use_cache=not args.no_cache,
   )
-  result = retrieve_fulltext_for_top_candidates(candidates, config)
+  result = retrieve_controlled_fulltext_run(
+    candidates,
+    config,
+    strategic_watch_candidates=strategic_watch,
+  )
   summary = build_fulltext_evidence_summary(result)
   markdown = render_fulltext_evidence_markdown(summary)
-  paths = save_fulltext_collection_results(
-    result.get("retrieved_records", []),
+  paths = save_controlled_fulltext_outputs(
     config.output_dir,
-    summary=result,
-    manual_records=result.get("manual_required_records", []),
+    plan=result.get("plan", {}),
+    result={**result, "summary": summary},
     markdown=markdown,
+    checklist_md=result.get("checklist_markdown", ""),
+    use_timestamp_subdir=True,
   )
   payload = {"result": result, "summary": summary, "paths": paths}
   print(json.dumps(payload, indent=2, ensure_ascii=False))

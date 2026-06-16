@@ -51,14 +51,14 @@ from tech_cartography.reports.technical_assessment_export import save_technical_
 from tech_cartography.reports.web_signal_export import run_web_signal_mapping, save_web_signal_outputs
 from tech_cartography.retrieval.bigquery_light_retriever import RetrievalConfig, run_multi_query_retrieval
 from tech_cartography.retrieval.openalex_retriever import OpenAlexRetrievalConfig
-from tech_cartography.retrieval.patent_fulltext_retriever import (
-  FullTextRetrievalConfig,
-  retrieve_fulltext_for_top_candidates,
-  save_fulltext_collection_results,
-)
+from tech_cartography.reports.fulltext_evidence_export import save_controlled_fulltext_outputs
 from tech_cartography.reports.fulltext_evidence_report import (
   build_fulltext_evidence_summary,
   render_fulltext_evidence_markdown,
+)
+from tech_cartography.retrieval.patent_fulltext_retriever import (
+  FullTextRetrievalConfig,
+  retrieve_controlled_fulltext_run,
 )
 from tech_cartography.strategy.query_plan import QueryPlan
 from tech_cartography.strategy.search_strategy_builder import build_search_strategy
@@ -198,6 +198,12 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
   if not candidates_csv:
     raise FileNotFoundError("top5_fulltext_candidates_csv is missing")
   candidates = load_records_csv(candidates_csv)
+
+  strategic_watch_csv = previous_outputs.get("strategic_watch_candidates_csv")
+  strategic_watch: list[dict[str, Any]] = []
+  if strategic_watch_csv and Path(strategic_watch_csv).exists():
+    strategic_watch = load_records_csv(strategic_watch_csv)
+
   cfg = FullTextRetrievalConfig(
     project_id=None,
     dry_run=not config.execute_fulltext,
@@ -207,16 +213,24 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
     cache_dir="data/runtime/fulltext_cache",
     use_cache=bool(config.use_cache),
   )
-  result = retrieve_fulltext_for_top_candidates(candidates, cfg)
+  result = retrieve_controlled_fulltext_run(
+    candidates,
+    cfg,
+    strategic_watch_candidates=strategic_watch,
+  )
   summary = build_fulltext_evidence_summary(result)
   markdown = render_fulltext_evidence_markdown(summary)
-  paths = normalize_stage_outputs("top5_fulltext_collection", save_fulltext_collection_results(
-    result.get("retrieved_records", []),
-    cfg.output_dir,
-    summary=result,
-    manual_records=result.get("manual_required_records", []),
-    markdown=markdown,
-  ))
+  paths = normalize_stage_outputs(
+    "top5_fulltext_collection",
+    save_controlled_fulltext_outputs(
+      output_dir,
+      plan=result.get("plan", {}),
+      result={**result, "summary": summary},
+      markdown=markdown,
+      checklist_md=result.get("checklist_markdown", ""),
+      use_timestamp_subdir=False,
+    ),
+  )
   return {
     "status": result.get("status", "ok"),
     "paths": paths,
@@ -225,6 +239,8 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
       "output_dir": output_dir,
       "produced_outputs": paths,
       "record_count": len(result.get("retrieved_records", [])),
+      "execute_fulltext": bool(config.execute_fulltext),
+      "mode": "execute" if config.execute_fulltext else "dry_run",
     },
   }
 
@@ -591,13 +607,7 @@ def run_pipeline_stage(
     result.finished_at = _now_iso()
     return result
 
-  if stage_id == "top5_fulltext_collection" and not config.execute_fulltext:
-    result.status = "skipped"
-    result.skipped_reason = (
-      "execute_fulltext is false; provide --execute-fulltext or use cached/manual fulltext outputs"
-    )
-    result.finished_at = _now_iso()
-    return result
+  # top5_fulltext_collection runs in dry-run mode when execute_fulltext is false
 
   if stage_id == "openalex_paper_evidence" and not config.execute_openalex and not config.use_cache:
     result.status = "skipped"

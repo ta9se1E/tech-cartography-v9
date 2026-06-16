@@ -7,6 +7,7 @@ from unittest.mock import patch
 from tech_cartography.retrieval.patent_fulltext_retriever import (
   FullTextRetrievalConfig,
   execute_fulltext_query,
+  retrieve_controlled_fulltext_run,
   retrieve_fulltext_for_candidate,
   retrieve_fulltext_for_top_candidates,
   route_fulltext_candidate,
@@ -124,27 +125,7 @@ def test_blocked_by_cost_guard() -> None:
   ) as execute_mock:
     result = retrieve_fulltext_for_candidate(_us_candidate(), config)
   execute_mock.assert_not_called()
-  assert result["retrieval_status"] == "blocked_by_cost_guard"
-
-
-def test_manual_required_output_in_top_candidates() -> None:
-  candidates = [
-    _us_candidate(),
-    {"publication_number": "JP2020000001", "country": "JP", "title": "JP patent"},
-  ]
-  config = FullTextRetrievalConfig(use_cache=False)
-  with patch(
-    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
-    return_value={
-      "dry_run_status": "ok",
-      "estimated_bytes": 1000,
-      "would_be_blocked_by_max_bytes": False,
-      "error": None,
-    },
-  ):
-    result = retrieve_fulltext_for_top_candidates(candidates, config)
-  assert result["manual_required_candidates"] == 1
-  assert result["manual_required_records"]
+  assert result["retrieval_status"] == "cost_guard_failed"
 
 
 def test_execute_passes_maximum_bytes_billed() -> None:
@@ -184,3 +165,58 @@ def test_execute_passes_maximum_bytes_billed() -> None:
     )
   assert execution["execution_status"] == "executed"
   assert fake_client.last_job_config.maximum_bytes_billed > 0
+
+
+def test_cn_execute_returns_unsupported_country() -> None:
+  config = FullTextRetrievalConfig(execute=True, use_cache=False)
+  execution = execute_fulltext_query(
+    {"publication_number": "CN121137864A", "country": "CN"},
+    config,
+  )
+  assert execution["execution_status"] == "unsupported_country"
+
+
+def test_controlled_run_keeps_cn_in_manual_package() -> None:
+  top5 = [_us_candidate()]
+  strategic = [
+    {
+      "publication_number": "CN-121137864-A",
+      "title": "PAN carbon fiber",
+      "assignee": "ZHONGFU SHENYING CARBON FIBER CO LTD",
+      "country": "CN",
+      "source_route": "manual_fulltext_required",
+      "watch_reason_japanese": "中国候補",
+    },
+  ]
+  config = FullTextRetrievalConfig(execute=False, use_cache=False)
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+    return_value={
+      "dry_run_status": "ok",
+      "estimated_bytes": 1000,
+      "would_be_blocked_by_max_bytes": False,
+      "error": None,
+    },
+  ):
+    result = retrieve_controlled_fulltext_run(top5, config, strategic_watch_candidates=strategic)
+  assert result["dry_run_only_count"] >= 1
+  assert result["strategic_watch_manual_count"] >= 1
+  assert any(row.get("country") == "CN" for row in result["strategic_watch_manual_rows"])
+
+
+def test_retrieval_status_fields_present() -> None:
+  config = FullTextRetrievalConfig(execute=False, use_cache=False)
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+    return_value={
+      "dry_run_status": "ok",
+      "estimated_bytes": 1000,
+      "would_be_blocked_by_max_bytes": False,
+      "error": None,
+    },
+  ):
+    result = retrieve_fulltext_for_candidate(_us_candidate(), config)
+  record = result["record"]
+  assert record["retrieval_status"] == "dry_run_only"
+  assert "claims_source" in record
+  assert "evidence_coverage" in record

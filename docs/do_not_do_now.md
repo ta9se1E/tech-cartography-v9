@@ -44,3 +44,10 @@ Phase 13.1 clarifies:
 - Chinese patents are **not** excluded — they appear in Strategic Watch Candidates
 - Top5 Fulltext Candidates prioritize US retrieval feasibility, not global strategic importance
 - Non-US important patents are tracked via Strategic Watch Candidates (manual/PDF route)
+
+Phase 14 adds Controlled Full Text Run but still does **not** add:
+
+- Automatic PDF download
+- OCR
+- Automatic web search (Tavily, etc.)
+- Scope: US Top5 controlled fulltext + manual watch package for CN/EP/JP

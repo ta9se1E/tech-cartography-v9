@@ -432,3 +432,42 @@ streamlit run app.py
 ```
 
 Sidebar: **Easy Japanese View** shows US Top5 and Strategic Watch side by side.
+
+## v7 Phase 14: Controlled Full Text Run
+
+Phase 14 runs a **controlled** full text collection for US Top5 candidates only, while preserving CN/EP/JP strategic watch candidates in a manual fulltext package.
+
+- Default: **dry-run / plan-only** (`execute_fulltext=False`)
+- `--execute-fulltext` runs BigQuery for US targets only (cache-first, `maximum_bytes_billed` guard)
+- Non-US strategic watch → `strategic_watch_manual_fulltext_required.csv` + `manual_fulltext_checklist.md`
+- Claims not fetched does **not** mean low strategic value
+
+### CLI example (dry-run through fulltext stage)
+
+```bash
+python scripts/run_carbon_fiber_evidence_map.py \
+  --config configs/carbon_fiber_pipeline.yaml \
+  --use-existing-light-csv outputs/pipeline_runs/<run_id>/stages/bigquery_light_retrieval/<ts>/bigquery_light_results_dedup.csv \
+  --start-stage technology_clustering_ranking \
+  --stop-stage top5_fulltext_collection
+```
+
+### Execute fulltext (US only)
+
+```bash
+python scripts/run_carbon_fiber_evidence_map.py \
+  --config configs/carbon_fiber_pipeline.yaml \
+  --use-existing-light-csv <light_csv> \
+  --start-stage technology_clustering_ranking \
+  --stop-stage top5_fulltext_collection \
+  --execute-fulltext
+```
+
+Outputs under `stages/top5_fulltext_collection/`:
+
+- `fulltext_plan.json`
+- `top5_fulltext_records.json` / `.csv`
+- `manual_fulltext_required.csv`
+- `strategic_watch_manual_fulltext_required.csv`
+- `manual_fulltext_checklist.md`
+- `fulltext_evidence_report.md`

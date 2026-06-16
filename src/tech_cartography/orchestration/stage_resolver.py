@@ -112,6 +112,16 @@ def resolve_required_inputs(
       or config.use_existing_top5_csv
       or find_latest_output("top5_fulltext_candidates.csv")
     )
+    out["strategic_watch_candidates_csv"] = (
+      known_outputs.get("strategic_watch_candidates_csv")
+      or find_latest_output("strategic_watch_candidates.csv")
+    )
+    out["country_watch_summary_csv"] = known_outputs.get("country_watch_summary_csv") or find_latest_output(
+      "country_watch_summary.csv",
+    )
+    out["company_watch_summary_csv"] = known_outputs.get("company_watch_summary_csv") or find_latest_output(
+      "company_watch_summary.csv",
+    )
     out["execute"] = config.execute_fulltext
     out["maximum_gb"] = config.maximum_fulltext_gb
     out["use_cache"] = config.use_cache

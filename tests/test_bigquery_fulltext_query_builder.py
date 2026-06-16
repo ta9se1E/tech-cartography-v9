@@ -34,3 +34,21 @@ def test_publication_number_variants() -> None:
   variants = build_publication_number_variants("US-2026078228A1")
   assert "US2026078228A1" in variants
   assert normalize_us_publication_number("US-12590616B2") == "US12590616B2"
+
+
+def test_us_12565719_b2_variants() -> None:
+  variants = build_publication_number_variants("US-12565719-B2")
+  assert "US12565719B2" in variants or "US-12565719B2" in variants
+
+
+def test_non_us_sql_not_built() -> None:
+  from tech_cartography.retrieval.bigquery_fulltext_query_builder import validate_us_fulltext_request
+
+  result = validate_us_fulltext_request("CN-121137864-A", "CN")
+  assert not result["ok"]
+  try:
+    build_us_fulltext_query("CN-121137864-A", country="CN")
+    raised = False
+  except ValueError:
+    raised = True
+  assert raised

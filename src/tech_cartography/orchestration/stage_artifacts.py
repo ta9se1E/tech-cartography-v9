@@ -20,6 +20,10 @@ PRIMARY_ARTIFACT_KEYS = [
   "strategic_watch_candidates_csv",
   "country_watch_summary_csv",
   "company_watch_summary_csv",
+  "fulltext_plan_json",
+  "top5_fulltext_records_json",
+  "manual_fulltext_checklist_md",
+  "fulltext_evidence_report_md",
   "final_report_md",
 ]
 

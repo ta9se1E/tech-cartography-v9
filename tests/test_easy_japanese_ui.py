@@ -4,7 +4,9 @@ import pandas as pd
 
 from tech_cartography.ui.easy_japanese_ui import (
   prepare_patent_display_df,
+  render_fulltext_status_card,
   render_fulltext_vs_watch_notice,
+  render_manual_checklist_notice,
   render_patent_card,
   render_strategic_watch_card,
   summarize_stage_statuses,
@@ -77,3 +79,21 @@ def test_china_not_excluded_notice() -> None:
   notice = render_fulltext_vs_watch_notice()
   assert "中国候補を除外しているわけではありません" in notice
   assert "手動確認" in notice or "PDF" in notice
+
+
+def test_fulltext_status_japanese_display() -> None:
+  card = render_fulltext_status_card(
+    {
+      "title": "PAN carbon fiber",
+      "publication_number": "US-12565719-B2",
+      "retrieval_status": "dry_run_only",
+      "evidence_level": "metadata_only",
+    },
+  )
+  assert "ドライラン" in card
+  assert "根拠レベル" in card
+
+
+def test_manual_checklist_notice_text() -> None:
+  notice = render_manual_checklist_notice()
+  assert "中国候補を除外しているわけではありません" in notice

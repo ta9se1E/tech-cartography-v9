@@ -9,9 +9,12 @@ import pandas as pd
 
 from tech_cartography.ui.japanese_labels import (
   explain_fulltext_priority_top5,
+  explain_fulltext_retrieval_status,
   explain_stage_status,
   explain_strategic_watch,
   translate_cluster_id,
+  translate_evidence_coverage_level,
+  translate_fulltext_retrieval_status,
   translate_recommended_next_action,
   translate_source_route,
   translate_stage_id,
@@ -181,9 +184,35 @@ def render_strategic_watch_card(row: dict[str, Any]) -> str:
   )
 
 
+def render_fulltext_status_card(row: dict[str, Any]) -> str:
+  title = _safe(row.get("title"), "（タイトル不明）")
+  pub = _safe(row.get("publication_number"))
+  status = _safe(row.get("retrieval_status"), "unknown")
+  status_ja = translate_fulltext_retrieval_status(status)
+  status_explain = explain_fulltext_retrieval_status(status)
+  evidence = translate_evidence_coverage_level(str(row.get("evidence_level", "")))
+  return (
+    f'<div class="tc-patent-card">'
+    f'<div class="tc-patent-title">{title}</div>'
+    f'<div class="tc-patent-meta">'
+    f"公開番号: {pub}<br>"
+    f"全文取得状態: {status_ja}<br>"
+    f"説明: {status_explain}<br>"
+    f"根拠レベル: {evidence}"
+    f"</div></div>"
+  )
+
+
+def render_manual_checklist_notice() -> str:
+  return render_info_box(
+    "全文が取れない場合でも、戦略監視候補として重要な場合があります。"
+    "中国候補を除外しているわけではありません。"
+  )
+
+
 def render_fulltext_vs_watch_notice() -> str:
   return render_info_box(
-    "米国公報は全文取得しやすいため、先に深掘りします。"
+    "米国公報は全文取得を試せます。"
     "中国・欧州・日本の重要特許は、PDFやGoogle Patentsで手動確認する候補として別枠で残します。"
     "中国候補を除外しているわけではありません。"
     f"<br><br>{explain_fulltext_priority_top5()}"

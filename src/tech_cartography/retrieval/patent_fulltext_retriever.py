@@ -28,6 +28,11 @@ from tech_cartography.retrieval.bigquery_env import (
 from tech_cartography.retrieval.bigquery_fulltext_query_builder import (
   build_us_fulltext_query,
   is_us_publication,
+  validate_us_fulltext_request,
+)
+from tech_cartography.retrieval.controlled_fulltext_plan import (
+  build_controlled_fulltext_plan,
+  render_manual_fulltext_checklist,
 )
 from tech_cartography.retrieval.fulltext_cache import (
   load_fulltext_from_cache,
@@ -91,7 +96,32 @@ def dry_run_fulltext_query(
   client_factory: ClientFactory | None = None,
 ) -> dict[str, Any]:
   publication_number = _safe_str(candidate.get("publication_number"))
-  sql = build_us_fulltext_query(publication_number)
+  country = _safe_str(candidate.get("country"))
+  validation = validate_us_fulltext_request(publication_number, country or None)
+  if not validation["ok"]:
+    return {
+      "dry_run_status": "error",
+      "estimated_bytes": 0,
+      "estimated_gb": 0.0,
+      "estimated_usd": 0.0,
+      "would_be_blocked_by_max_bytes": False,
+      "sql": "",
+      "error": validation["error"],
+      "variants": validation.get("variants", []),
+    }
+  try:
+    sql = build_us_fulltext_query(publication_number, country=country or None)
+  except ValueError as exc:
+    return {
+      "dry_run_status": "error",
+      "estimated_bytes": 0,
+      "estimated_gb": 0.0,
+      "estimated_usd": 0.0,
+      "would_be_blocked_by_max_bytes": False,
+      "sql": "",
+      "error": str(exc),
+      "variants": validation.get("variants", []),
+    }
   resolved = resolve_project_id(config.project_id)
   project_id = resolved.get("project_id", "")
   if not project_id:
@@ -121,6 +151,7 @@ def dry_run_fulltext_query(
       "would_be_blocked_by_max_bytes": estimated_bytes > config.maximum_bytes_billed(),
       "sql": sql,
       "error": None,
+      "variants": validation.get("variants", []),
     }
   except Exception as exc:  # noqa: BLE001
     return {
@@ -131,6 +162,7 @@ def dry_run_fulltext_query(
       "would_be_blocked_by_max_bytes": False,
       "sql": sql,
       "error": str(exc),
+      "variants": validation.get("variants", []),
     }
 
 
@@ -144,7 +176,17 @@ def execute_fulltext_query(
     return {"execution_status": "skipped", "rows": [], "error": None}
 
   publication_number = _safe_str(candidate.get("publication_number"))
-  sql = build_us_fulltext_query(publication_number)
+  country = _safe_str(candidate.get("country"))
+  if not is_us_publication(publication_number, country):
+    return {
+      "execution_status": "unsupported_country",
+      "rows": [],
+      "error": f"Non-US publication ({country or publication_number})",
+    }
+  try:
+    sql = build_us_fulltext_query(publication_number, country=country or None)
+  except ValueError as exc:
+    return {"execution_status": "query_error", "rows": [], "error": str(exc)}
   resolved = resolve_project_id(config.project_id)
   project_id = resolved.get("project_id", "")
   if not project_id:
@@ -229,15 +271,16 @@ def retrieve_fulltext_for_candidate(
   publication_number = _safe_str(candidate.get("publication_number"))
 
   if route["route"] == "manual_fulltext_required":
+    status = "unsupported_country" if config.execute else "manual_required"
     record = _build_fulltext_record(
       candidate,
       route=route,
-      retrieval_status="manual_required",
+      retrieval_status=status,
       warnings=["Manual full text upload required for non-US publication"],
     )
     return {
       "route": route,
-      "retrieval_status": "manual_required",
+      "retrieval_status": status,
       "record": record.to_dict(),
       "dry_run": None,
       "blocked_by_cost_guard": False,
@@ -262,13 +305,13 @@ def retrieve_fulltext_for_candidate(
     record = _build_fulltext_record(
       candidate,
       route=route,
-      retrieval_status="blocked_by_cost_guard",
+      retrieval_status="cost_guard_failed",
       warnings=["Blocked by maximum_bytes_billed guard"],
       errors=[f"estimated_bytes={dry_run.get('estimated_bytes')}"],
     )
     return {
       "route": route,
-      "retrieval_status": "blocked_by_cost_guard",
+      "retrieval_status": "cost_guard_failed",
       "record": record.to_dict(),
       "dry_run": dry_run,
       "blocked_by_cost_guard": True,
@@ -290,16 +333,49 @@ def retrieve_fulltext_for_candidate(
     }
 
   execution = execute_fulltext_query(candidate, config, client_factory=client_factory)
+  if execution.get("execution_status") == "unsupported_country":
+    record = _build_fulltext_record(
+      candidate,
+      route=route,
+      retrieval_status="unsupported_country",
+      warnings=["Non-US publication cannot be executed via BigQuery fulltext"],
+      errors=[execution.get("error")] if execution.get("error") else [],
+    )
+    return {
+      "route": route,
+      "retrieval_status": "unsupported_country",
+      "record": record.to_dict(),
+      "dry_run": dry_run,
+      "blocked_by_cost_guard": False,
+    }
+
+  if execution.get("execution_status") == "error" or execution.get("execution_status") == "query_error":
+    record = _build_fulltext_record(
+      candidate,
+      route=route,
+      retrieval_status="query_error",
+      warnings=["BigQuery fulltext query failed"],
+      errors=[execution.get("error")] if execution.get("error") else [],
+    )
+    return {
+      "route": route,
+      "retrieval_status": "query_error",
+      "record": record.to_dict(),
+      "dry_run": dry_run,
+      "blocked_by_cost_guard": False,
+    }
+
   row = execution["rows"][0] if execution.get("rows") else {}
+  retrieval_status = "retrieved" if row else "not_found"
   record = _build_fulltext_record(
     candidate,
     route=route,
     row=row,
-    retrieval_status=execution.get("execution_status", "error"),
+    retrieval_status=retrieval_status,
     warnings=[] if row else ["No full text rows returned from BigQuery"],
-    errors=[execution["error"]] if execution.get("error") else [],
+    errors=[],
   )
-  if record.retrieval_status == "executed":
+  if retrieval_status == "retrieved":
     save_fulltext_to_cache(record.to_dict(), config.cache_dir)
   return {
     "route": route,
@@ -346,7 +422,7 @@ def retrieve_fulltext_for_top_candidates(
     status = result.get("retrieval_status")
     if status == "manual_required":
       manual_required_records.append(result["record"])
-    elif status == "blocked_by_cost_guard":
+    elif status == "blocked_by_cost_guard" or status == "cost_guard_failed":
       blocked_by_cost_guard += 1
       retrieved_records.append(result["record"])
     else:
@@ -363,6 +439,7 @@ def retrieve_fulltext_for_top_candidates(
     "cache_hits": cache_hits,
     "cache_misses": cache_misses,
     "blocked_by_cost_guard": blocked_by_cost_guard,
+    "cost_guard_failed_count": blocked_by_cost_guard,
     "total_estimated_bytes": total_estimated_bytes,
     "total_estimated_gb": bytes_to_gb(total_estimated_bytes),
     "total_estimated_usd": estimate_usd_from_bytes(total_estimated_bytes),
@@ -371,6 +448,109 @@ def retrieve_fulltext_for_top_candidates(
     "manual_required_records": manual_required_records,
     "warnings": warnings,
     "errors": errors,
+  }
+
+
+def _count_evidence_levels(records: list[dict[str, Any]]) -> dict[str, int]:
+  counts = {
+    "high_fulltext_evidence_count": 0,
+    "medium_fulltext_evidence_count": 0,
+    "low_fulltext_evidence_count": 0,
+    "metadata_only_count": 0,
+  }
+  for record in records:
+    level = str(record.get("evidence_level", "metadata_only"))
+    if level == "high_fulltext_evidence":
+      counts["high_fulltext_evidence_count"] += 1
+    elif level == "medium_fulltext_evidence":
+      counts["medium_fulltext_evidence_count"] += 1
+    elif level == "low_fulltext_evidence":
+      counts["low_fulltext_evidence_count"] += 1
+    else:
+      counts["metadata_only_count"] += 1
+  return counts
+
+
+def retrieve_controlled_fulltext_run(
+  top5_candidates: list[dict[str, Any]],
+  config: FullTextRetrievalConfig,
+  strategic_watch_candidates: list[dict[str, Any]] | None = None,
+  *,
+  client_factory: ClientFactory | None = None,
+) -> dict[str, Any]:
+  plan = build_controlled_fulltext_plan(
+    top5_candidates,
+    strategic_watch_candidates,
+    execute=config.execute,
+  )
+  warnings: list[str] = []
+  errors: list[str] = []
+  retrieved_records: list[dict[str, Any]] = []
+  cache_hits = 0
+  dry_run_only_count = 0
+  retrieved_count = 0
+  blocked_by_cost_guard = 0
+  total_estimated_bytes = 0
+
+  for candidate in plan["fulltext_targets"]:
+    result = retrieve_fulltext_for_candidate(
+      candidate,
+      config,
+      client_factory=client_factory,
+    )
+    status = str(result.get("retrieval_status", ""))
+    if status == "cache_hit":
+      cache_hits += 1
+    elif status == "dry_run_only":
+      dry_run_only_count += 1
+    elif status == "retrieved":
+      retrieved_count += 1
+    elif status in {"cost_guard_failed", "blocked_by_cost_guard"}:
+      blocked_by_cost_guard += 1
+    if result.get("dry_run"):
+      total_estimated_bytes += int(result["dry_run"].get("estimated_bytes", 0))
+    retrieved_records.append(result["record"])
+    if result["record"].get("errors"):
+      errors.extend(result["record"]["errors"])
+
+  manual_rows = list(plan["manual_required_candidates"])
+  strategic_rows = list(plan["strategic_watch_manual_candidates"])
+  evidence_counts = _count_evidence_levels(retrieved_records)
+
+  summary = {
+    "status": "ok" if not errors else "error",
+    "mode": "execute" if config.execute else "dry_run",
+    "total_top5_candidates": len(top5_candidates),
+    "total_candidates": len(top5_candidates),
+    "us_fulltext_targets": len(plan["fulltext_targets"]),
+    "us_fulltext_candidates": len(plan["fulltext_targets"]),
+    "retrieved_count": retrieved_count,
+    "cache_hit_count": cache_hits,
+    "cache_hits": cache_hits,
+    "dry_run_only_count": dry_run_only_count,
+    "manual_required_count": len(manual_rows),
+    "manual_required_candidates": len(manual_rows) + len(strategic_rows),
+    "strategic_watch_manual_count": len(strategic_rows),
+    "blocked_by_cost_guard": blocked_by_cost_guard,
+    "cost_guard_status": "failed" if blocked_by_cost_guard else "ok",
+    "total_estimated_bytes": total_estimated_bytes,
+    "total_estimated_gb": bytes_to_gb(total_estimated_bytes),
+    "total_estimated_usd": estimate_usd_from_bytes(total_estimated_bytes),
+    "maximum_bytes_billed_gb": config.maximum_bytes_billed_gb,
+    "warnings": warnings + [plan["plan_summary"].get("caveat_japanese", "")],
+    "errors": errors,
+    **evidence_counts,
+  }
+
+  return {
+    **summary,
+    "plan": plan,
+    "retrieved_records": retrieved_records,
+    "manual_required_records": manual_rows + strategic_rows,
+    "manual_required_rows": manual_rows,
+    "strategic_watch_manual_rows": strategic_rows,
+    "checklist_markdown": render_manual_fulltext_checklist(plan),
+    "summary": summary,
   }
 
 

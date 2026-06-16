@@ -127,3 +127,11 @@
 - Separate `strategic_score` from `fulltext_route_score` in ranking
 - Export `strategic_watch_candidates.csv`, `country_watch_summary.csv`, `company_watch_summary.csv`
 - Easy Japanese UI shows US Top5 and Strategic Watch as distinct sections
+
+### Step 14 (v7 Phase 14): Controlled Full Text Run
+
+- US Top5 only for BigQuery fulltext retrieval (`--execute-fulltext` explicit)
+- Default dry-run: plan + cost estimate, no BigQuery execution
+- Strategic watch CN/EP/JP → manual fulltext package (not excluded)
+- Outputs: `fulltext_plan.json`, `manual_fulltext_checklist.md`, `strategic_watch_manual_fulltext_required.csv`
+- No automatic PDF download, OCR, or web search in this step

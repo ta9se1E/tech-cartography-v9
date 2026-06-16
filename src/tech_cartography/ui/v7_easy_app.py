@@ -15,8 +15,10 @@ from tech_cartography.ui.easy_japanese_ui import (
   inject_easy_ui_css,
   prepare_patent_display_df,
   render_caveat_footer,
+  render_fulltext_status_card,
   render_fulltext_vs_watch_notice,
   render_info_box,
+  render_manual_checklist_notice,
   render_metric_cards,
   render_patent_card,
   render_step_header,
@@ -198,7 +200,12 @@ def render_easy_japanese_app() -> None:
   company_watch_df = _load_csv_artifact(manifest_data, "company_watch_summary_csv")
 
   st.subheader("A. 全文を取りに行きやすい候補（US中心）")
+  fulltext_records_df = _load_csv_artifact(manifest_data, "top5_fulltext_records_csv")
+  checklist_md = _load_text_artifact(manifest_data, "manual_fulltext_checklist_md")
+  strategic_manual_df = _load_csv_artifact(manifest_data, "strategic_watch_manual_fulltext_required_csv")
+
   if not top5_df.empty:
+    st.markdown(render_success_box("米国公報は全文取得を試せます"), unsafe_allow_html=True)
     st.markdown(render_success_box(f"全文を確認できそうな特許: {len(top5_df)} 件"), unsafe_allow_html=True)
     caveat = str(top5_df.iloc[0].get("caveat_japanese", ""))
     if caveat:
@@ -209,6 +216,13 @@ def render_easy_japanese_app() -> None:
       st.dataframe(prepare_patent_display_df(top5_df), use_container_width=True, hide_index=True)
   else:
     st.info("Top5 全文候補がまだありません。")
+
+  if not fulltext_records_df.empty:
+    st.caption("US全文取得の実行状態")
+    for _, row in fulltext_records_df.iterrows():
+      st.markdown(render_fulltext_status_card(row.to_dict()), unsafe_allow_html=True)
+  elif not top5_df.empty:
+    st.markdown(render_manual_checklist_notice(), unsafe_allow_html=True)
 
   st.subheader("B. 戦略監視すべき候補（中国・EP・JP含む）")
   if not watch_df.empty:
@@ -232,6 +246,12 @@ def render_easy_japanese_app() -> None:
     if not company_watch_df.empty:
       st.caption("企業別監視サマリー")
       st.dataframe(company_watch_df.head(15), use_container_width=True, hide_index=True)
+    if not strategic_manual_df.empty:
+      st.caption("戦略監視・手動全文確認リスト")
+      st.dataframe(prepare_patent_display_df(strategic_manual_df), use_container_width=True, hide_index=True)
+    if checklist_md:
+      with st.expander("Manual Full Text Check List"):
+        st.markdown(checklist_md)
   else:
     st.info("Strategic Watch 候補がまだありません。clustering を再実行してください。")
 

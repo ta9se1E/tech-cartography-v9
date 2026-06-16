@@ -114,6 +114,24 @@ READER_ACTION_LABELS: dict[str, str] = {
   "likely_noise": "ノイズ候補として注意",
 }
 
+FULLTEXT_RETRIEVAL_STATUS_LABELS: dict[str, tuple[str, str]] = {
+  "dry_run_only": ("ドライランのみ", "BigQuery本実行はしていません。計画と見積もりのみです。"),
+  "retrieved": ("全文取得済み", "claims/description等を取得しました。追加確認は専門家レビュー推奨です。"),
+  "cache_hit": ("キャッシュ利用", "以前取得した全文キャッシュを利用しました。"),
+  "manual_required": ("手動確認が必要", "非米国公報など、PDF/Google Patentsでの確認が必要です。"),
+  "not_found": ("全文が見つかりません", "BigQueryで該当全文が見つかりませんでした。手動確認を検討してください。"),
+  "cost_guard_failed": ("コスト上限で停止", "maximum_bytes_billedを超える見積もりのため実行を停止しました。"),
+  "query_error": ("クエリエラー", "BigQueryクエリでエラーが発生しました。"),
+  "unsupported_country": ("非対応国", "米国公報以外はBigQuery全文取得の対象外です。手動ルートを使います。"),
+}
+
+EVIDENCE_LEVEL_JAPANESE: dict[str, str] = {
+  "high_fulltext_evidence": "高：請求項・明細書・実施例/物性あり",
+  "medium_fulltext_evidence": "中：請求項と明細書あり",
+  "low_fulltext_evidence": "低：請求項または明細書のみ",
+  "metadata_only": "書誌・要約のみ",
+}
+
 RECOMMENDED_NEXT_ACTION_LABELS: dict[str, tuple[str, str]] = {
   "manual_pdf_check": (
     "PDFで手動確認",
@@ -243,3 +261,19 @@ def explain_fulltext_priority_top5() -> str:
     "世界の戦略的重要度ランキングではありません。"
     "中国・EP・JP等は Strategic Watch Candidates で別途確認してください。"
   )
+
+
+def translate_fulltext_retrieval_status(status: str) -> str:
+  return _lookup(FULLTEXT_RETRIEVAL_STATUS_LABELS, status, status or "不明")
+
+
+def explain_fulltext_retrieval_status(status: str) -> str:
+  return _lookup_explain(
+    FULLTEXT_RETRIEVAL_STATUS_LABELS,
+    status,
+    "全文取得状況の詳細はレポートを確認してください。",
+  )
+
+
+def translate_evidence_coverage_level(level: str) -> str:
+  return EVIDENCE_LEVEL_JAPANESE.get(level, level or "不明")
