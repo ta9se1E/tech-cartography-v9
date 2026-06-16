@@ -265,3 +265,32 @@ Outputs are saved under `outputs/technical_view_assessment/{timestamp}/`:
 - `patent_technical_summary.csv`
 - `common_technical_risks.json`
 - `technical_view_report.md`
+
+## v7 Phase 9: Web / Company Signal Mapping
+
+Phase 9 maps manually curated web / company signals to patents and technology clusters.
+
+- Input: web signal CSV/JSON/YAML and patents CSV (`top20_patents.csv` or `ranked_patents.csv`)
+- Company name normalization (TORAY / 東レ / TORAY INDUSTRIES, etc.)
+- Web signal source quality evaluation (official / IR / press release / industry news)
+- Patent linkage with `business_signal_candidate`, `technology_background_signal`, `weak_signal`, `unrelated`
+- Default is manual file input; Tavily/automatic web search is future extension only
+- No Business View Agent or final synthesis report in this phase
+
+### CLI example
+
+```bash
+python scripts/run_web_signal_mapping.py \
+  --web-signal-file case_studies/carbon_fiber/web_signals/carbon_fiber_web_signals_template.csv \
+  --patents-csv outputs/carbon_fiber_case_study/latest/top20_patents.csv
+```
+
+Outputs are saved under `outputs/web_signal_mapping/{timestamp}/`:
+
+- `normalized_web_signals.csv`
+- `web_signal_quality_results.csv`
+- `web_signal_patent_links.csv`
+- `web_signals_by_patent.json`
+- `web_signals_by_company.csv`
+- `web_signals_by_cluster.csv`
+- `web_signal_report.md`

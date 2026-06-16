@@ -3,13 +3,13 @@
 The following are explicitly out of scope for the current v7 phases:
 
 - Business analysis agents
-- Web signal search / company signal mapping
 - Final synthesis / integrated Deep Dive report
+- Automatic web search (Tavily API, etc.)
 - Cloud Run deployment
 - Cloud SQL integration
 - v6 weekly-watch baseline bulk copy
 
-Current focus through Phase 8:
+Current focus through Phase 9:
 
 - Phase 1: Search Strategy Builder
 - Phase 2: BigQuery light metadata retrieval
@@ -19,5 +19,6 @@ Current focus through Phase 8:
 - Phase 6: OpenAlex paper evidence search
 - Phase 7: Patent Claim × Paper Evidence Map
 - Phase 8: Technical View Agent
+- Phase 9: Web / Company Signal Mapping (manual input)
 
-Phase 8 provides rule-based technical screening assessments but does **not** run Business View Agent, web signal mapping, or the final synthesis report yet.
+Phase 9 maps manually curated web/company signals to patents but does **not** run Business View Agent, automatic web search, or the final synthesis report yet.

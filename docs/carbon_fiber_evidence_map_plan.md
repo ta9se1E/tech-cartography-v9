@@ -78,8 +78,15 @@
 - Export `technical_assessments.json` and `technical_view_report.md`
 - No web signal mapping or final synthesis report in this step
 
-### Step 9: Business View & Synthesis
+### Step 9: Web / Company Signal Mapping
+
+- Input: manual web signal CSV/JSON/YAML and patents CSV
+- Normalize company names and evaluate web source quality
+- Map signals to patents and technology clusters
+- Export `web_signal_patent_links.csv` and `web_signal_report.md`
+- No automatic Tavily/web search or Business View Agent in this step
+
+### Step 10: Business View & Synthesis
 
 - Business View Agent
-- Web / Company Signal Mapping
 - Final synthesis report for Carbon Fiber Evidence Map review

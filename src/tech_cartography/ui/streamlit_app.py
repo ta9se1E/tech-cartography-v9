@@ -27,6 +27,9 @@ from tech_cartography.reports.claim_paper_evidence_map_report import build_claim
 from tech_cartography.reports.evidence_map_export import save_claim_paper_evidence_map_outputs
 from tech_cartography.agents.technical_view_agent import run_technical_view_assessment
 from tech_cartography.reports.technical_assessment_export import save_technical_view_outputs
+from tech_cartography.ingestion.web_signal_loader import load_web_signal_file, save_demo_web_signal_template
+from tech_cartography.reports.web_signal_export import run_web_signal_mapping, save_web_signal_outputs
+from tech_cartography.reports.web_signal_report import build_web_signal_summary
 from tech_cartography.reports.technical_view_report import build_technical_view_summary
 from tech_cartography.reports.fulltext_evidence_report import (
   build_fulltext_evidence_summary,
@@ -48,13 +51,16 @@ from tech_cartography.strategy.query_plan import QueryPlan
 from tech_cartography.strategy.search_strategy_builder import build_search_strategy
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _split_csv(value: str) -> list[str]:
   return [part.strip() for part in value.split(",") if part.strip()]
 
 
 def render_search_strategy_page() -> None:
   st.title("PatentScout AI v7 — Carbon Fiber Evidence Map")
-  st.caption("Phase 1-8: Strategy / BigQuery / Clustering / Full Text / Claim Elements / OpenAlex / Evidence Map / Technical View")
+  st.caption("Phase 1-9: Strategy / BigQuery / Clustering / Full Text / Claims / OpenAlex / Evidence Map / Technical View / Web Signals")
 
   if st.button("Load carbon fiber demo profile"):
     demo = load_carbon_fiber_demo_profile()
@@ -579,6 +585,91 @@ def render_search_strategy_page() -> None:
       st.subheader("Technical View Report")
       st.markdown(Path(report_path).read_text(encoding="utf-8"))
     st.write("保存先:", technical_view["paths"])
+
+  st.subheader("Phase 9: Web / Company Signal Mapping")
+  ws_file_path = st.text_input(
+    "web signal CSV/JSON/YAML path",
+    value="case_studies/carbon_fiber/web_signals/carbon_fiber_web_signals_template.csv",
+    key="phase9_ws_file",
+  )
+  ws_patents_csv = st.text_input(
+    "patents CSV path",
+    value="outputs/carbon_fiber_case_study/latest/top20_patents.csv",
+    key="phase9_patents_csv",
+  )
+  ws_uploaded = st.file_uploader("またはWeb signalファイルアップロード", type=["csv", "json", "yaml", "yml"], key="phase9_ws_upload")
+  ws_patents_uploaded = st.file_uploader("またはpatents CSVアップロード", type=["csv"], key="phase9_patents_upload")
+
+  if st.button("Generate Web Signal Template CSV"):
+    template_path = save_demo_web_signal_template("case_studies/carbon_fiber/web_signals")
+    st.success(f"Template saved: {template_path}")
+
+  if st.button("Run Web Signal Mapping"):
+    if ws_uploaded is not None:
+      import tempfile
+
+      suffix = Path(ws_uploaded.name).suffix or ".csv"
+      with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(ws_uploaded.getvalue())
+        tmp_path = tmp.name
+      signals = load_web_signal_file(tmp_path)
+    else:
+      ws_path = Path(ws_file_path)
+      if not ws_path.exists():
+        ws_path = PROJECT_ROOT / ws_file_path if "case_studies" in ws_file_path else ws_path
+      signals = load_web_signal_file(str(ws_path)) if ws_path.exists() else []
+
+    if ws_patents_uploaded is not None:
+      import pandas as pd
+
+      patents = pd.read_csv(ws_patents_uploaded).to_dict(orient="records")
+    else:
+      patents_path = Path(ws_patents_csv)
+      if not patents_path.exists() and "latest" in str(patents_path):
+        parent = patents_path.parent.parent
+        candidates = sorted(parent.glob("*/top20_patents.csv")) or sorted(parent.glob("*/ranked_patents.csv"))
+        if candidates:
+          patents_path = candidates[-1]
+      patents = load_records_csv(patents_path) if patents_path.exists() else []
+
+    if not signals:
+      st.error("Web signalファイルが見つかりません")
+    elif not patents:
+      st.error("patents CSVが見つかりません")
+    else:
+      ws_result = run_web_signal_mapping(signals, patents)
+      ws_output_dir = build_output_directory("outputs/web_signal_mapping")
+      ws_paths = save_web_signal_outputs(ws_result, ws_output_dir)
+      ws_summary = build_web_signal_summary(ws_result)
+      st.session_state["web_signal_mapping"] = {
+        "result": ws_result,
+        "summary": ws_summary,
+        "paths": ws_paths,
+      }
+
+  web_signal_mapping = st.session_state.get("web_signal_mapping")
+  if web_signal_mapping:
+    ws_summary = web_signal_mapping["summary"]
+    st.write(
+      "summary:",
+      {
+        "signals": ws_summary.get("signals_loaded"),
+        "patent links": ws_summary.get("patent_links"),
+        "business candidates": ws_summary.get("business_signal_candidates"),
+        "background": ws_summary.get("background_signals"),
+      },
+    )
+    st.subheader("Signals by company")
+    st.dataframe(web_signal_mapping["result"].get("by_company", []))
+    st.subheader("Signals by cluster")
+    st.dataframe(web_signal_mapping["result"].get("by_cluster", []))
+    st.subheader("Patent links")
+    st.dataframe(web_signal_mapping["result"].get("links", []))
+    report_path = web_signal_mapping["paths"].get("web_signal_report_md")
+    if report_path and Path(report_path).exists():
+      st.subheader("Web Signal Report")
+      st.markdown(Path(report_path).read_text(encoding="utf-8"))
+    st.write("保存先:", web_signal_mapping["paths"])
 
   if strategy:
     with st.expander("Full strategy JSON"):
