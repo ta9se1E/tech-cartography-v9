@@ -22,11 +22,14 @@ from tech_cartography.reports.paper_evidence_pipeline import (
   run_paper_evidence_pipeline,
   save_paper_evidence_outputs,
 )
-from tech_cartography.reports.paper_evidence_report import build_paper_evidence_summary
+from tech_cartography.evidence.claim_paper_evidence_map import build_claim_paper_evidence_map
+from tech_cartography.reports.claim_paper_evidence_map_report import build_claim_paper_evidence_map_summary
+from tech_cartography.reports.evidence_map_export import save_claim_paper_evidence_map_outputs
 from tech_cartography.reports.fulltext_evidence_report import (
   build_fulltext_evidence_summary,
   render_fulltext_evidence_markdown,
 )
+from tech_cartography.reports.paper_evidence_report import build_paper_evidence_summary
 from tech_cartography.reports.project_export import build_output_directory, load_records_csv
 from tech_cartography.retrieval.bigquery_light_retriever import (
   RetrievalConfig,
@@ -48,7 +51,7 @@ def _split_csv(value: str) -> list[str]:
 
 def render_search_strategy_page() -> None:
   st.title("PatentScout AI v7 — Carbon Fiber Evidence Map")
-  st.caption("Phase 1-6: Strategy / BigQuery / Clustering / Full Text / Claim Elements / OpenAlex")
+  st.caption("Phase 1-7: Strategy / BigQuery / Clustering / Full Text / Claim Elements / OpenAlex / Evidence Map")
 
   if st.button("Load carbon fiber demo profile"):
     demo = load_carbon_fiber_demo_profile()
@@ -372,6 +375,94 @@ def render_search_strategy_page() -> None:
       st.subheader("Paper Evidence Report")
       st.markdown(Path(report_path).read_text(encoding="utf-8"))
     st.write("保存先:", paper_evidence["paths"])
+
+  st.subheader("Phase 7: Claim × Paper Evidence Map")
+  map_claim_csv = st.text_input(
+    "claim_elements.csv path",
+    value="outputs/claim_element_extraction/latest/claim_elements.csv",
+    key="phase7_claim_csv",
+  )
+  map_links_csv = st.text_input(
+    "paper_evidence_links.csv path",
+    value="outputs/openalex_paper_evidence/latest/paper_evidence_links.csv",
+    key="phase7_links_csv",
+  )
+  map_records_csv = st.text_input(
+    "paper_records_dedup.csv path",
+    value="outputs/openalex_paper_evidence/latest/paper_records_dedup.csv",
+    key="phase7_records_csv",
+  )
+  map_quality_csv = st.text_input(
+    "source_quality_results.csv path",
+    value="outputs/openalex_paper_evidence/latest/source_quality_results.csv",
+    key="phase7_quality_csv",
+  )
+  map_top_n = st.number_input("top evidence items", min_value=5, value=30, key="phase7_top_n")
+
+  if st.button("Build Claim × Paper Evidence Map"):
+    paths_and_patterns = [
+      (Path(map_claim_csv), "claim_elements.csv"),
+      (Path(map_links_csv), "paper_evidence_links.csv"),
+      (Path(map_records_csv), "paper_records_dedup.csv"),
+      (Path(map_quality_csv), "source_quality_results.csv"),
+    ]
+    resolved: list[Path] = []
+    for path, pattern in paths_and_patterns:
+      if not path.exists() and "latest" in str(path):
+        parent = path.parent.parent
+        candidates = sorted(parent.glob(f"*/{pattern}"))
+        if candidates:
+          path = candidates[-1]
+      resolved.append(path)
+
+    claim_elements = load_records_csv(resolved[0]) if resolved[0].exists() else []
+    paper_links = load_records_csv(resolved[1]) if resolved[1].exists() else []
+    paper_records = load_records_csv(resolved[2]) if resolved[2].exists() else []
+    source_quality = load_records_csv(resolved[3]) if resolved[3].exists() else []
+
+    if not claim_elements:
+      st.error("claim_elements.csv が見つかりません")
+    else:
+      map_result = build_claim_paper_evidence_map(
+        claim_elements,
+        paper_links,
+        paper_records=paper_records,
+        source_quality_results=source_quality,
+      )
+      map_output_dir = build_output_directory("outputs/claim_paper_evidence_map")
+      map_paths = save_claim_paper_evidence_map_outputs(
+        map_result,
+        map_output_dir,
+        top_n=int(map_top_n),
+      )
+      map_summary = build_claim_paper_evidence_map_summary(map_result)
+      st.session_state["claim_paper_evidence_map"] = {
+        "result": map_result,
+        "summary": map_summary,
+        "paths": map_paths,
+      }
+
+  claim_paper_evidence_map = st.session_state.get("claim_paper_evidence_map")
+  if claim_paper_evidence_map:
+    map_summary = claim_paper_evidence_map["summary"]
+    st.write("summary:", {
+      "patents": map_summary.get("total_patents"),
+      "claim elements": map_summary.get("total_claim_elements"),
+      "evidence items": map_summary.get("total_evidence_items"),
+      "supporting": map_summary.get("supporting_evidence_candidates"),
+      "no paper evidence": map_summary.get("no_paper_evidence"),
+    })
+    st.subheader("Patent-level evidence maps")
+    st.dataframe(claim_paper_evidence_map["result"].get("patent_evidence_maps", []))
+    st.subheader("Top evidence items")
+    st.dataframe(claim_paper_evidence_map["result"].get("top_evidence_items", []))
+    st.subheader("Evidence gaps")
+    st.dataframe(claim_paper_evidence_map["result"].get("evidence_gaps", []))
+    report_path = claim_paper_evidence_map["paths"].get("claim_paper_evidence_map_report_md")
+    if report_path and Path(report_path).exists():
+      st.subheader("Claim × Paper Evidence Map Report")
+      st.markdown(Path(report_path).read_text(encoding="utf-8"))
+    st.write("保存先:", claim_paper_evidence_map["paths"])
 
   if strategy:
     with st.expander("Full strategy JSON"):

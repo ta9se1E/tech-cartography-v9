@@ -62,5 +62,15 @@
 
 ### Step 7: Patent Claim × Paper Evidence Map
 
-- Map patent clusters to papers and web signals
-- Produce Carbon Fiber Evidence Map outputs for review
+- Input: Phase 5 `claim_elements.csv` and Phase 6 paper evidence outputs
+- Integrate claim elements with paper evidence links and source quality
+- Assign evidence relation, confidence, caveat, and human review recommendations
+- Build patent-level evidence maps and evidence gap analysis
+- Export `claim_paper_evidence_items.csv` and `claim_paper_evidence_map_report.md`
+- No web signal search or final synthesis report in this step
+
+### Step 8: Technical / Business View & Synthesis
+
+- Technical View Agent and Business View Agent
+- Web / Company Signal Mapping
+- Final synthesis report for Carbon Fiber Evidence Map review

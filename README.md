@@ -205,3 +205,35 @@ Outputs are saved under `outputs/openalex_paper_evidence/{timestamp}/`:
 - `paper_evidence_links.csv`
 - `paper_evidence_by_patent.json`
 - `paper_evidence_report.md`
+
+## v7 Phase 7: Patent Claim × Paper Evidence Map
+
+Phase 7 integrates Phase 5 claim elements and Phase 6 OpenAlex paper evidence into a patent-level evidence candidate map.
+
+- Combines `claim_elements.csv`, `paper_evidence_links.csv`, `paper_records_dedup.csv`, and `source_quality_results.csv`
+- Builds `ClaimPaperEvidenceItem` rows with `evidence_relation`, `evidence_confidence`, `caveat`, and `recommended_human_check`
+- Creates `PatentEvidenceMap` per publication with coverage and gap summaries
+- Detects evidence gaps (`no_paper_found`, `weak_only`, `background_only`, etc.)
+- Papers are evidence candidates only — not proof of patent claims
+- No web signal search, business agents, or final synthesis report in this phase
+
+### CLI example
+
+```bash
+python scripts/build_claim_paper_evidence_map.py \
+  --claim-elements-csv outputs/claim_element_extraction/latest/claim_elements.csv \
+  --paper-links-csv outputs/openalex_paper_evidence/latest/paper_evidence_links.csv \
+  --paper-records-csv outputs/openalex_paper_evidence/latest/paper_records_dedup.csv \
+  --source-quality-csv outputs/openalex_paper_evidence/latest/source_quality_results.csv \
+  --top-n 30
+```
+
+Outputs are saved under `outputs/claim_paper_evidence_map/{timestamp}/`:
+
+- `claim_paper_evidence_items.csv`
+- `patent_evidence_maps.json`
+- `evidence_by_element_type.csv`
+- `evidence_gaps.csv`
+- `top_evidence_items.csv`
+- `claim_paper_evidence_map_summary.json`
+- `claim_paper_evidence_map_report.md`
