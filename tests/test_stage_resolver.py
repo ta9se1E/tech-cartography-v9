@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from tech_cartography.orchestration.pipeline_config import PipelineConfig
 from tech_cartography.orchestration.stage_resolver import (
+  resolve_required_inputs,
   resolve_stage_order,
   should_run_stage,
   validate_stage_inputs,
@@ -27,6 +30,23 @@ def test_start_stop_stage_range() -> None:
   assert should_run_stage("technology_clustering_ranking", cfg) is True
   assert should_run_stage("business_view_agent", cfg) is True
   assert should_run_stage("synthesis_report", cfg) is False
+
+
+def test_stop_stage_only_runs_until_stop() -> None:
+  cfg = PipelineConfig(stop_stage="technology_clustering_ranking")
+  assert should_run_stage("search_strategy", cfg) is True
+  assert should_run_stage("technology_clustering_ranking", cfg) is True
+  assert should_run_stage("top5_fulltext_collection", cfg) is False
+
+
+def test_clustering_requires_bigquery_light_dedup_csv(tmp_path: Path, monkeypatch) -> None:
+  monkeypatch.chdir(tmp_path)
+  (tmp_path / "outputs").mkdir()
+  inputs = resolve_required_inputs("technology_clustering_ranking", {}, PipelineConfig())
+  assert "bigquery_light_dedup_csv" in inputs
+  validation = validate_stage_inputs("technology_clustering_ranking", inputs)
+  assert validation["ok"] is False
+  assert "bigquery_light_dedup_csv" in validation["missing"]
 
 
 def test_validate_stage_inputs_detects_missing() -> None:

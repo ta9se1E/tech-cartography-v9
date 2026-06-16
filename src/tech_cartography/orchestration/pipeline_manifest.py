@@ -143,15 +143,46 @@ def _render_run_summary_markdown(manifest: PipelineManifest) -> str:
     f"- started_at: {summary.get('started_at')}",
     f"- finished_at: {summary.get('finished_at')}",
     "",
-    "## Stage Status",
+    "## Stage Table",
     "",
+    "| stage_id | status | skipped_reason |",
+    "| --- | --- | --- |",
   ]
-  for stage in sorted(manifest.stage_results, key=lambda s: s.stage_id):
-    extra = f" ({stage.skipped_reason})" if stage.status == "skipped" and stage.skipped_reason else ""
-    lines.append(f"- {stage.stage_id}: {stage.status}{extra}")
+  for stage in manifest.stage_results:
+    reason = stage.skipped_reason or ""
+    lines.append(f"| {stage.stage_id} | {stage.status} | {reason} |")
+
+  failed_stages = [s for s in manifest.stage_results if s.status == "failed"]
+  if failed_stages:
+    lines.extend(["", "## Failed Stage Details", ""])
+    for stage in failed_stages:
+      lines.append(f"### {stage.stage_id}")
+      if stage.errors:
+        for err in stage.errors[:5]:
+          lines.append(f"- error: {err}")
+      if stage.summary.get("missing_inputs"):
+        lines.append(f"- missing_inputs: {stage.summary.get('missing_inputs')}")
+
+  blocked_stages = [s for s in manifest.stage_results if s.status == "blocked"]
+  if blocked_stages:
+    lines.extend(["", "## Blocked Stage Reasons", ""])
+    for stage in blocked_stages:
+      lines.append(f"- {stage.stage_id}: {stage.skipped_reason or 'blocked'}")
+
   lines.extend(["", "## Final Outputs", ""])
   for key, value in (manifest.final_outputs or {}).items():
     lines.append(f"- {key}: {value}")
+
+  next_commands = manifest.config.get("next_recommended_commands")
+  if not next_commands:
+    from tech_cartography.orchestration.stage_artifacts import build_next_recommended_commands
+
+    next_commands = build_next_recommended_commands(manifest, PipelineConfig.from_dict(manifest.config))
+  if next_commands:
+    lines.extend(["", "## Next Recommended Command", ""])
+    for cmd in next_commands:
+      lines.append(f"- `{cmd}`")
+
   if manifest.warnings:
     lines.extend(["", "## Warnings", ""])
     for w in manifest.warnings:

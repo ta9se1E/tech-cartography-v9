@@ -31,8 +31,14 @@ from tech_cartography.orchestration.stage_resolver import (
   resolve_output_dir,
   resolve_required_inputs,
   resolve_stage_order,
-  should_run_stage,
   validate_stage_inputs,
+)
+from tech_cartography.orchestration.stage_artifacts import (
+  build_next_recommended_commands,
+  classify_missing_input_block,
+  get_stage_skip_reason,
+  normalize_stage_outputs,
+  validate_clustering_csv,
 )
 from tech_cartography.reports.business_assessment_export import save_business_view_outputs
 from tech_cartography.reports.case_study_pipeline import run_case_study_pipeline, save_case_study_outputs
@@ -77,10 +83,18 @@ def run_search_strategy_stage(config: PipelineConfig, output_dir: str) -> dict[s
   strategy = build_search_strategy(profile)
   path = Path(output_dir) / "search_strategy.json"
   path.write_text(json.dumps(strategy, indent=2, ensure_ascii=False), encoding="utf-8")
+  paths = normalize_stage_outputs(
+    "search_strategy",
+    {"search_strategy_json": str(path)},
+  )
   return {
     "strategy": strategy,
-    "paths": {"search_strategy_json": str(path)},
-    "summary": {"query_plans": len(strategy.get("query_plans", []))},
+    "paths": paths,
+    "summary": {
+      "query_plans": len(strategy.get("query_plans", [])),
+      "output_dir": output_dir,
+      "produced_outputs": paths,
+    },
   }
 
 
@@ -88,11 +102,19 @@ def run_bigquery_light_stage(config: PipelineConfig, output_dir: str, previous_o
   _safe_mkdir(output_dir)
 
   if config.use_existing_light_csv:
-    # Caller wants to reuse a prior retrieval CSV without running BigQuery.
+    paths = normalize_stage_outputs(
+      "bigquery_light_retrieval",
+      {"bigquery_light_dedup_csv": str(Path(config.use_existing_light_csv))},
+    )
     return {
       "status": "cached",
-      "paths": {"bigquery_light_results_dedup_csv": str(Path(config.use_existing_light_csv))},
-      "summary": {"mode": "use_existing_light_csv"},
+      "paths": paths,
+      "summary": {
+        "mode": "use_existing_light_csv",
+        "used_existing_input": True,
+        "produced_outputs": paths,
+        "output_dir": output_dir,
+      },
     }
 
   profile = load_carbon_fiber_demo_profile()
@@ -110,21 +132,64 @@ def run_bigquery_light_stage(config: PipelineConfig, output_dir: str, previous_o
     use_cache=bool(config.use_cache),
   )
   result = run_multi_query_retrieval(query_plans, config_obj)
-  # Retriever writes outputs under output_dir directly; the key file is bigquery_light_results_dedup.csv
-  results_csv = Path(output_dir) / "bigquery_light_results_dedup.csv"
-  paths = {"bigquery_light_results_dedup_csv": str(results_csv)} if results_csv.exists() else {}
-  return {"status": result.get("status"), "paths": paths, "summary": result}
+  paths = normalize_stage_outputs("bigquery_light_retrieval", {}, result)
+  if not paths.get("bigquery_light_dedup_csv"):
+    dedup_guess = Path(output_dir)
+    for candidate in sorted(dedup_guess.glob("**/bigquery_light_results_dedup.csv")):
+      paths = normalize_stage_outputs(
+        "bigquery_light_retrieval",
+        {"bigquery_light_dedup_csv": str(candidate)},
+        result,
+      )
+      break
+  return {
+    "status": result.get("status"),
+    "paths": paths,
+    "summary": {
+      **{k: v for k, v in result.items() if k not in {"query_results"}},
+      "output_dir": output_dir,
+      "produced_outputs": paths,
+      "record_count": result.get("total_records_after_dedup"),
+    },
+    "result": result,
+  }
 
 
 def run_clustering_ranking_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
   _safe_mkdir(output_dir)
-  input_csv = previous_outputs.get("bigquery_light_results_dedup_csv") or config.use_existing_light_csv
+  input_csv = (
+    config.use_existing_light_csv
+    or previous_outputs.get("bigquery_light_dedup_csv")
+    or previous_outputs.get("bigquery_light_results_dedup_csv")
+  )
+  resolved_inputs = {"bigquery_light_dedup_csv": input_csv}
   if not input_csv:
-    raise FileNotFoundError("bigquery_light_results_dedup_csv is missing")
+    raise ValueError("missing bigquery_light_dedup_csv")
+
+  validation = validate_clustering_csv(input_csv)
+  if not validation.get("ok"):
+    reason = validation.get("reason")
+    if reason == "empty":
+      raise ValueError("input CSV is empty")
+    if reason == "missing_columns":
+      raise ValueError(f"missing required columns: {validation.get('missing_columns')}")
+    raise FileNotFoundError(str(validation.get("path")))
+
   records = load_records_csv(input_csv)
   result = run_case_study_pipeline(records, top_n=config.top_n, fulltext_top_n=config.fulltext_top_n)
-  paths = save_case_study_outputs(result, output_dir)
-  return {"status": "ok", "paths": paths, "summary": result.get("summary", {})}
+  paths = normalize_stage_outputs("technology_clustering_ranking", save_case_study_outputs(result, output_dir))
+  return {
+    "status": "ok",
+    "paths": paths,
+    "summary": {
+      **result.get("summary", {}),
+      "output_dir": output_dir,
+      "resolved_inputs": resolved_inputs,
+      "produced_outputs": paths,
+      "record_count": len(records),
+      "used_existing_input": bool(config.use_existing_light_csv),
+    },
+  }
 
 
 def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
@@ -145,14 +210,23 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
   result = retrieve_fulltext_for_top_candidates(candidates, cfg)
   summary = build_fulltext_evidence_summary(result)
   markdown = render_fulltext_evidence_markdown(summary)
-  paths = save_fulltext_collection_results(
+  paths = normalize_stage_outputs("top5_fulltext_collection", save_fulltext_collection_results(
     result.get("retrieved_records", []),
     cfg.output_dir,
     summary=result,
     manual_records=result.get("manual_required_records", []),
     markdown=markdown,
-  )
-  return {"status": result.get("status", "ok"), "paths": paths, "summary": summary}
+  ))
+  return {
+    "status": result.get("status", "ok"),
+    "paths": paths,
+    "summary": {
+      **summary,
+      "output_dir": output_dir,
+      "produced_outputs": paths,
+      "record_count": len(result.get("retrieved_records", [])),
+    },
+  }
 
 
 def run_claim_element_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
@@ -185,8 +259,17 @@ def run_claim_element_stage(config: PipelineConfig, output_dir: str, previous_ou
         )
 
   result = run_claim_element_pipeline(records)
-  paths = save_claim_element_outputs(result, output_dir)
-  return {"status": "ok", "paths": paths, "summary": {"total_elements": len(result.get("elements", []))}}
+  paths = normalize_stage_outputs("claim_element_extraction", save_claim_element_outputs(result, output_dir))
+  return {
+    "status": "ok",
+    "paths": paths,
+    "summary": {
+      "total_elements": len(result.get("elements", [])),
+      "output_dir": output_dir,
+      "produced_outputs": paths,
+      "record_count": len(records),
+    },
+  }
 
 
 def run_openalex_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
@@ -208,8 +291,17 @@ def run_openalex_stage(config: PipelineConfig, output_dir: str, previous_outputs
     output_dir=str(Path(output_dir)),
   )
   result = run_paper_evidence_pipeline(query_rows, claim_elements, cfg)
-  paths = save_paper_evidence_outputs(result, output_dir)
-  return {"status": "ok", "paths": paths, "summary": {"papers": len(result.get("papers_dedup", []))}}
+  paths = normalize_stage_outputs("openalex_paper_evidence", save_paper_evidence_outputs(result, output_dir))
+  return {
+    "status": "ok",
+    "paths": paths,
+    "summary": {
+      "papers": len(result.get("papers_dedup", [])),
+      "output_dir": output_dir,
+      "produced_outputs": paths,
+      "record_count": len(result.get("papers_dedup", [])),
+    },
+  }
 
 
 def run_claim_paper_map_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
@@ -232,8 +324,19 @@ def run_claim_paper_map_stage(config: PipelineConfig, output_dir: str, previous_
     paper_records=paper_records,
     source_quality_results=source_quality,
   )
-  paths = save_claim_paper_evidence_map_outputs(result, output_dir, top_n=30)
-  return {"status": "ok", "paths": paths, "summary": {"total_patents": result.get("total_patents", 0)}}
+  paths = normalize_stage_outputs(
+    "claim_paper_evidence_map",
+    save_claim_paper_evidence_map_outputs(result, output_dir, top_n=30),
+  )
+  return {
+    "status": "ok",
+    "paths": paths,
+    "summary": {
+      "total_patents": result.get("total_patents", 0),
+      "output_dir": output_dir,
+      "produced_outputs": paths,
+    },
+  }
 
 
 def run_technical_view_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
@@ -265,8 +368,16 @@ def run_technical_view_stage(config: PipelineConfig, output_dir: str, previous_o
     claim_elements=claim_elements,
     fulltext_records=fulltext_records,
   )
-  paths = save_technical_view_outputs(result, output_dir)
-  return {"status": "ok", "paths": paths, "summary": {"assessed": result.get("total_patents", 0)}}
+  paths = normalize_stage_outputs("technical_view_agent", save_technical_view_outputs(result, output_dir))
+  return {
+    "status": "ok",
+    "paths": paths,
+    "summary": {
+      "assessed": result.get("total_patents", 0),
+      "output_dir": output_dir,
+      "produced_outputs": paths,
+    },
+  }
 
 
 def run_web_signal_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
@@ -282,8 +393,16 @@ def run_web_signal_stage(config: PipelineConfig, output_dir: str, previous_outpu
   signals = load_web_signal_file(config.web_signal_file) if Path(config.web_signal_file).exists() else []
   patents = load_records_csv(patents_csv)
   result = run_web_signal_mapping(signals, patents)
-  paths = save_web_signal_outputs(result, output_dir)
-  return {"status": "ok", "paths": paths, "summary": {"links": len(result.get("links", []))}}
+  paths = normalize_stage_outputs("web_signal_mapping", save_web_signal_outputs(result, output_dir))
+  return {
+    "status": "ok",
+    "paths": paths,
+    "summary": {
+      "links": len(result.get("links", [])),
+      "output_dir": output_dir,
+      "produced_outputs": paths,
+    },
+  }
 
 
 def run_business_view_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
@@ -316,8 +435,16 @@ def run_business_view_stage(config: PipelineConfig, output_dir: str, previous_ou
     ranked_patents=ranked_patents,
     patent_evidence_maps=patent_evidence_maps,
   )
-  paths = save_business_view_outputs(result, output_dir)
-  return {"status": "ok", "paths": paths, "summary": {"assessed": result.get("total_patents", 0)}}
+  paths = normalize_stage_outputs("business_view_agent", save_business_view_outputs(result, output_dir))
+  return {
+    "status": "ok",
+    "paths": paths,
+    "summary": {
+      "assessed": result.get("total_patents", 0),
+      "output_dir": output_dir,
+      "produced_outputs": paths,
+    },
+  }
 
 
 def run_synthesis_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
@@ -386,8 +513,16 @@ def run_synthesis_stage(config: PipelineConfig, output_dir: str, previous_output
     web_signals_by_cluster=web_by_cluster,
     theme=config.theme,
   )
-  paths = save_synthesis_outputs(result, output_dir)
-  return {"status": "ok", "paths": paths, "summary": {"report": paths.get("carbon_fiber_evidence_map_md")}}
+  paths = normalize_stage_outputs("synthesis_report", save_synthesis_outputs(result, output_dir))
+  return {
+    "status": "ok",
+    "paths": paths,
+    "summary": {
+      "report": paths.get("carbon_fiber_evidence_map_v1_md"),
+      "output_dir": output_dir,
+      "produced_outputs": paths,
+    },
+  }
 
 
 STAGE_RUNNERS: dict[str, Callable[[PipelineConfig, str, dict[str, Any]], dict[str, Any]]] = {
@@ -420,30 +555,50 @@ def run_pipeline_stage(
   result = PipelineStageResult(stage_id=stage_id, stage_name=stage_name, status="pending")
   result.input_paths = stage_inputs
   result.started_at = _now_iso()
+  result.summary = {"output_dir": stage_output_dir, "resolved_inputs": stage_inputs}
 
   if blocked:
     result.status = "blocked"
-    result.skipped_reason = "blocked by previous failure"
+    result.skipped_reason = "blocked by previous failure or missing upstream artifact"
     result.finished_at = _now_iso()
     return result
 
-  if not should_run_stage(stage_id, config):
+  if stage_id == "bigquery_light_retrieval" and config.use_existing_light_csv:
+    paths = normalize_stage_outputs(
+      "bigquery_light_retrieval",
+      {"bigquery_light_dedup_csv": config.use_existing_light_csv},
+    )
     result.status = "skipped"
-    result.skipped_reason = "skip_stages/start_stage/stop_stage"
+    result.skipped_reason = "use_existing_light_csv provided"
+    result.output_paths = paths
+    result.summary.update({"produced_outputs": paths, "used_existing_input": True})
     result.finished_at = _now_iso()
     return result
 
-  # External stages are safe-by-default: skip if execute flag is false AND no explicit existing input.
-  if stage_id == "bigquery_light_retrieval" and not config.execute_bigquery and not config.use_existing_light_csv:
+  skip_reason = get_stage_skip_reason(stage_id, config)
+  if skip_reason:
     result.status = "skipped"
-    result.skipped_reason = "execute_bigquery is false (dry-run not executed); provide --execute-bigquery or --use-existing-light-csv"
+    result.skipped_reason = skip_reason
     result.finished_at = _now_iso()
     return result
-  if stage_id == "top5_fulltext_collection" and not config.execute_fulltext and not (known_outputs.get("top5_fulltext_candidates_csv") or config.use_existing_top5_csv):
+
+  if stage_id == "bigquery_light_retrieval" and not config.execute_bigquery:
     result.status = "skipped"
-    result.skipped_reason = "execute_fulltext is false; provide --execute-fulltext or use cached/manual fulltext outputs"
+    result.skipped_reason = (
+      "execute_bigquery is false (dry-run not executed); "
+      "provide --execute-bigquery or --use-existing-light-csv"
+    )
     result.finished_at = _now_iso()
     return result
+
+  if stage_id == "top5_fulltext_collection" and not config.execute_fulltext:
+    result.status = "skipped"
+    result.skipped_reason = (
+      "execute_fulltext is false; provide --execute-fulltext or use cached/manual fulltext outputs"
+    )
+    result.finished_at = _now_iso()
+    return result
+
   if stage_id == "openalex_paper_evidence" and not config.execute_openalex and not config.use_cache:
     result.status = "skipped"
     result.skipped_reason = "execute_openalex is false and use_cache is false; enable cache or execute explicitly"
@@ -452,8 +607,15 @@ def run_pipeline_stage(
 
   validation = validate_stage_inputs(stage_id, stage_inputs)
   if not validation.get("ok", True):
-    result.status = "failed"
-    result.errors.append(f"missing required inputs: {validation.get('missing')}")
+    missing = list(validation.get("missing", []))
+    block_reason = classify_missing_input_block(stage_id, config, manifest, known_outputs, missing)
+    result.summary["missing_inputs"] = missing
+    if block_reason:
+      result.status = "blocked"
+      result.skipped_reason = block_reason
+    else:
+      result.status = "failed"
+      result.errors.append(f"missing required inputs: {missing}")
     result.finished_at = _now_iso()
     return result
 
@@ -461,12 +623,36 @@ def run_pipeline_stage(
   try:
     runner = STAGE_RUNNERS[stage_id]
     payload = runner(config, stage_output_dir, known_outputs)
+    raw_paths = dict(payload.get("paths", {}) or {})
+    result_paths = normalize_stage_outputs(
+      stage_id,
+      raw_paths,
+      payload.get("result") if isinstance(payload.get("result"), dict) else payload,
+    )
     result.status = "success"
-    result.output_paths = dict(payload.get("paths", {}) or {})
-    result.summary = dict(payload.get("summary", {}) or {})
+    result.output_paths = result_paths
+    result.summary = {
+      **result.summary,
+      **dict(payload.get("summary", {}) or {}),
+      "produced_outputs": result_paths,
+    }
     if payload.get("status") and payload.get("status") not in {"ok", "success", "cached"}:
       result.warnings.append(f"stage returned status={payload.get('status')}")
-  except Exception as exc:  # noqa: BLE001 (intentionally capturing stage error)
+    if stage_id == "bigquery_light_retrieval" and not result_paths.get("bigquery_light_dedup_csv"):
+      result.status = "failed"
+      result.errors.append("BigQuery stage completed but bigquery_light_dedup_csv was not produced")
+  except ValueError as exc:
+    message = str(exc)
+    if "input CSV is empty" in message or "missing required columns" in message:
+      result.status = "failed"
+      result.errors.append(message)
+    elif "missing bigquery_light_dedup_csv" in message:
+      result.status = "blocked"
+      result.skipped_reason = "missing bigquery_light_dedup_csv"
+    else:
+      result.status = "failed"
+      result.errors.append(message)
+  except Exception as exc:  # noqa: BLE001
     result.status = "failed"
     result.errors.append(str(exc))
     result.errors.append(traceback.format_exc(limit=5))
@@ -490,21 +676,29 @@ def run_carbon_fiber_evidence_map_pipeline(config: PipelineConfig) -> dict[str, 
     stage_result = run_pipeline_stage(stage_id, config, manifest, known_outputs, blocked=blocked)
     manifest = update_stage_result(manifest, stage_result)
 
-    # Update known outputs for later stages.
-    if stage_result.status == "success":
+    if stage_result.status == "success" or (
+      stage_result.status == "skipped" and stage_result.output_paths
+    ):
       known_outputs.update(stage_result.output_paths)
     elif stage_result.status == "failed":
       blocked = True
       manifest.errors.append(f"stage failed: {stage_id}")
+    elif stage_result.status == "blocked":
+      blocked = True
 
-    # Persist manifest after every stage for recoverability.
     manifest_path = save_manifest(manifest, manifest_dir)
     manifest.config["manifest_path"] = manifest_path
 
   manifest.finished_at = _now_iso()
-  manifest.status = "failed" if any(s.status == "failed" for s in manifest.stage_results) else "success"
+  has_failed = any(s.status == "failed" for s in manifest.stage_results)
+  manifest.status = "failed" if has_failed else "success"
+  manifest.config["next_recommended_commands"] = build_next_recommended_commands(manifest, config)
 
-  final_report = known_outputs.get("carbon_fiber_evidence_map_md")
+  final_report = (
+    known_outputs.get("final_report_md")
+    or known_outputs.get("carbon_fiber_evidence_map_v1_md")
+    or known_outputs.get("carbon_fiber_evidence_map_md")
+  )
   if final_report:
     manifest.final_outputs["final_report_md"] = final_report
   manifest.final_outputs["run_manifest_json"] = str(Path(manifest_dir) / "run_manifest.json")
@@ -513,7 +707,7 @@ def run_carbon_fiber_evidence_map_pipeline(config: PipelineConfig) -> dict[str, 
   manifest_path = save_manifest(manifest, manifest_dir)
   manifest.config["manifest_path"] = manifest_path
 
-  artifact_index = build_artifact_index(manifest)
+  artifact_index = build_artifact_index(manifest, known_outputs)
   artifact_md_path = save_artifact_index(artifact_index, manifest_dir)
   manifest.final_outputs["artifact_index_md"] = artifact_md_path
   save_manifest(manifest, manifest_dir)

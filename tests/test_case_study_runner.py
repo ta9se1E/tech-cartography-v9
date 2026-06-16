@@ -1,12 +1,29 @@
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 
 import tech_cartography.orchestration.case_study_runner as runner
 from tech_cartography.orchestration.pipeline_config import PipelineConfig
 
 
-def test_pipeline_runner_creates_manifest_with_mock_stages(tmp_path: Path, monkeypatch) -> None:
+def _write_light_csv(path: Path, rows: list[dict] | None = None) -> None:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  rows = rows or [
+    {
+      "publication_number": "US1",
+      "title": "Carbon fiber",
+      "assignee": "TORAY",
+      "abstract": "prepreg",
+    },
+  ]
+  with path.open("w", encoding="utf-8", newline="") as handle:
+    writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(rows)
+
+
+def test_safe_run_blocks_clustering_without_existing_csv(tmp_path: Path, monkeypatch) -> None:
   monkeypatch.chdir(tmp_path)
   (tmp_path / "outputs").mkdir()
 
@@ -14,34 +31,161 @@ def test_pipeline_runner_creates_manifest_with_mock_stages(tmp_path: Path, monke
     theme="test",
     run_name="demo",
     output_root="outputs/pipeline_runs",
-    web_signal_file="case_studies/carbon_fiber/web_signals/x.csv",
-    use_cache=True,
+    execute_bigquery=False,
   )
 
-  called: list[str] = []
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "search_strategy", lambda c, d, p: {
+    "status": "ok",
+    "paths": {"search_strategy_json": str(Path(d) / "search_strategy.json")},
+    "summary": {},
+  })
 
-  def _ok(stage_key: str):
-    def _fn(_cfg, out_dir: str, _prev):
-      called.append(stage_key)
-      Path(out_dir).mkdir(parents=True, exist_ok=True)
-      return {"status": "ok", "paths": {f"{stage_key}_out": str(Path(out_dir) / "x.txt")}, "summary": {"k": stage_key}}
-
-    return _fn
-
-  def _fail(_cfg, out_dir: str, _prev):
-    called.append("fail_stage")
-    raise RuntimeError("boom")
-
-  monkeypatch.setitem(runner.STAGE_RUNNERS, "search_strategy", _ok("search_strategy"))
-  monkeypatch.setitem(runner.STAGE_RUNNERS, "bigquery_light_retrieval", _ok("bigquery"))
-  monkeypatch.setitem(runner.STAGE_RUNNERS, "technology_clustering_ranking", _fail)
-  monkeypatch.setitem(runner.STAGE_RUNNERS, "top5_fulltext_collection", _ok("fulltext"))
-
-  cfg.execute_bigquery = True
   result = runner.run_carbon_fiber_evidence_map_pipeline(cfg)
-  assert result["run_id"]
-  assert Path(result["manifest_path"]).exists()
-  # After failure, later stages should be blocked (unless skipped).
-  assert result["stage_statuses"]["technology_clustering_ranking"] == "failed"
-  assert result["stage_statuses"]["top5_fulltext_collection"] == "blocked"
+  statuses = result["stage_statuses"]
+  assert statuses["search_strategy"] == "success"
+  assert statuses["bigquery_light_retrieval"] == "skipped"
+  assert statuses["technology_clustering_ranking"] == "blocked"
+  assert statuses["top5_fulltext_collection"] == "blocked"
 
+  summary_md = Path(result["manifest_path"]).parent / "run_summary.md"
+  assert "Next Recommended Command" in summary_md.read_text(encoding="utf-8")
+
+
+def test_execute_bigquery_passes_dedup_csv_to_clustering(tmp_path: Path, monkeypatch) -> None:
+  monkeypatch.chdir(tmp_path)
+  (tmp_path / "outputs").mkdir()
+  dedup = tmp_path / "dedup.csv"
+  _write_light_csv(dedup)
+
+  cfg = PipelineConfig(
+    theme="test",
+    output_root="outputs/pipeline_runs",
+    execute_bigquery=True,
+    stop_stage="technology_clustering_ranking",
+  )
+  clustering_called: list[str] = []
+
+  def _bq(_c, _d, _p):
+    return {
+      "status": "ok",
+      "result": {
+        "output_csv_path": str(dedup),
+        "output_raw_csv_path": str(tmp_path / "raw.csv"),
+        "output_summary_path": str(tmp_path / "summary.json"),
+      },
+      "paths": {},
+      "summary": {"total_records_after_dedup": 1},
+    }
+
+  def _cluster(_c, _d, prev):
+    clustering_called.append(prev.get("bigquery_light_dedup_csv", ""))
+    return {"status": "ok", "paths": {"top20_patents_csv": str(Path(_d) / "top20.csv")}, "summary": {}}
+
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "search_strategy", lambda c, d, p: {
+    "status": "ok",
+    "paths": {"search_strategy_json": str(Path(d) / "search_strategy.json")},
+    "summary": {},
+  })
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "bigquery_light_retrieval", _bq)
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "technology_clustering_ranking", _cluster)
+
+  result = runner.run_carbon_fiber_evidence_map_pipeline(cfg)
+  assert result["stage_statuses"]["bigquery_light_retrieval"] == "success"
+  assert result["stage_statuses"]["technology_clustering_ranking"] == "success"
+  assert clustering_called == [str(dedup)]
+  assert result["stage_statuses"]["top5_fulltext_collection"] == "skipped"
+
+
+def test_use_existing_light_csv_skips_bigquery_and_runs_clustering(tmp_path: Path, monkeypatch) -> None:
+  monkeypatch.chdir(tmp_path)
+  (tmp_path / "outputs").mkdir()
+  existing = tmp_path / "existing.csv"
+  _write_light_csv(existing)
+
+  cfg = PipelineConfig(
+    theme="test",
+    output_root="outputs/pipeline_runs",
+    use_existing_light_csv=str(existing),
+    stop_stage="technology_clustering_ranking",
+  )
+  clustering_input: list[str] = []
+
+  def _cluster(_c, _d, prev):
+    clustering_input.append(prev.get("bigquery_light_dedup_csv", ""))
+    return {"status": "ok", "paths": {"top20_patents_csv": str(Path(_d) / "top20.csv")}, "summary": {}}
+
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "search_strategy", lambda c, d, p: {
+    "status": "ok",
+    "paths": {"search_strategy_json": str(Path(d) / "search_strategy.json")},
+    "summary": {},
+  })
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "technology_clustering_ranking", _cluster)
+
+  result = runner.run_carbon_fiber_evidence_map_pipeline(cfg)
+  assert result["stage_statuses"]["bigquery_light_retrieval"] == "skipped"
+  assert result["stage_statuses"]["technology_clustering_ranking"] == "success"
+  assert clustering_input == [str(existing)]
+
+
+def test_bigquery_success_without_dedup_blocks_clustering(tmp_path: Path, monkeypatch) -> None:
+  monkeypatch.chdir(tmp_path)
+  (tmp_path / "outputs").mkdir()
+
+  cfg = PipelineConfig(theme="test", output_root="outputs/pipeline_runs", execute_bigquery=True)
+
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "search_strategy", lambda c, d, p: {
+    "status": "ok",
+    "paths": {"search_strategy_json": str(Path(d) / "search_strategy.json")},
+    "summary": {},
+  })
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "bigquery_light_retrieval", lambda c, d, p: {
+    "status": "ok",
+    "paths": {},
+    "summary": {},
+  })
+
+  result = runner.run_carbon_fiber_evidence_map_pipeline(cfg)
+  assert result["stage_statuses"]["bigquery_light_retrieval"] == "failed"
+  assert result["stage_statuses"]["technology_clustering_ranking"] == "blocked"
+
+
+def test_clustering_empty_csv_fails(tmp_path: Path, monkeypatch) -> None:
+  monkeypatch.chdir(tmp_path)
+  empty = tmp_path / "empty.csv"
+  empty.write_text("publication_number,title\n", encoding="utf-8")
+
+  cfg = PipelineConfig(
+    theme="test",
+    output_root="outputs/pipeline_runs",
+    use_existing_light_csv=str(empty),
+    stop_stage="technology_clustering_ranking",
+  )
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "search_strategy", lambda c, d, p: {
+    "status": "ok",
+    "paths": {"search_strategy_json": str(Path(d) / "search_strategy.json")},
+    "summary": {},
+  })
+
+  result = runner.run_carbon_fiber_evidence_map_pipeline(cfg)
+  assert result["stage_statuses"]["technology_clustering_ranking"] == "failed"
+
+
+def test_clustering_missing_columns_fails(tmp_path: Path, monkeypatch) -> None:
+  monkeypatch.chdir(tmp_path)
+  bad = tmp_path / "bad.csv"
+  bad.write_text("title,assignee\nCarbon fiber,TORAY\n", encoding="utf-8")
+
+  cfg = PipelineConfig(
+    theme="test",
+    output_root="outputs/pipeline_runs",
+    use_existing_light_csv=str(bad),
+    stop_stage="technology_clustering_ranking",
+  )
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "search_strategy", lambda c, d, p: {
+    "status": "ok",
+    "paths": {"search_strategy_json": str(Path(d) / "search_strategy.json")},
+    "summary": {},
+  })
+
+  result = runner.run_carbon_fiber_evidence_map_pipeline(cfg)
+  assert result["stage_statuses"]["technology_clustering_ranking"] == "failed"

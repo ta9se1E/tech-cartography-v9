@@ -42,7 +42,7 @@ def test_artifact_index_markdown_contains_outputs(tmp_path: Path) -> None:
     ),
   )
   manifest.final_outputs["final_report_md"] = "outputs/x.md"
-  index = build_artifact_index(manifest)
+  index = build_artifact_index(manifest, {"ranked_patents_csv": "outputs/x.csv"})
   md = render_artifact_index_markdown(index)
   assert "final_report_md" in md
   path = save_artifact_index(index, str(tmp_path))

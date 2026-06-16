@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from tech_cartography.orchestration.pipeline_manifest import PipelineManifest
+from tech_cartography.orchestration.stage_artifacts import PRIMARY_ARTIFACT_KEYS, collect_primary_artifacts
 
 
 def write_latest_run_pointer(run_id: str, manifest_path: str, output_root: str) -> str:
@@ -34,9 +35,10 @@ def read_latest_run_pointer(output_root: str) -> dict[str, Any] | None:
   return data if isinstance(data, dict) else None
 
 
-def build_artifact_index(manifest: PipelineManifest) -> dict[str, Any]:
+def build_artifact_index(manifest: PipelineManifest, known_outputs: dict[str, Any] | None = None) -> dict[str, Any]:
+  known_outputs = known_outputs or {}
   stages = []
-  for stage in sorted(manifest.stage_results, key=lambda s: s.stage_id):
+  for stage in manifest.stage_results:
     stages.append(
       {
         "stage_id": stage.stage_id,
@@ -47,12 +49,14 @@ def build_artifact_index(manifest: PipelineManifest) -> dict[str, Any]:
         "skipped_reason": stage.skipped_reason,
       },
     )
+  primary_artifacts = collect_primary_artifacts(known_outputs, manifest.final_outputs)
   return {
     "run_id": manifest.run_id,
     "run_name": manifest.run_name,
     "theme": manifest.theme,
     "manifest_path": manifest.config.get("manifest_path"),
     "final_outputs": manifest.final_outputs,
+    "primary_artifacts": primary_artifacts,
     "stages": stages,
   }
 
@@ -69,6 +73,11 @@ def render_artifact_index_markdown(index: dict[str, Any]) -> str:
     "",
   ]
   for key, value in (index.get("final_outputs") or {}).items():
+    lines.append(f"- {key}: {value}")
+
+  lines.extend(["", "## Primary Artifacts", ""])
+  for key in PRIMARY_ARTIFACT_KEYS:
+    value = (index.get("primary_artifacts") or {}).get(key, "missing")
     lines.append(f"- {key}: {value}")
 
   lines.extend(["", "## Stages", ""])

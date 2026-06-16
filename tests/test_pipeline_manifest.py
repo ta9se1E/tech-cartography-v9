@@ -41,3 +41,36 @@ def test_manifest_summary_counts(tmp_path: Path) -> None:
   assert summary["stage_counts"]["success"] == 1
   assert summary["stage_counts"]["failed"] == 1
 
+
+def test_run_summary_includes_blocked_and_next_command(tmp_path: Path) -> None:
+  cfg = PipelineConfig(theme="test", run_name="demo", output_root=str(tmp_path))
+  manifest = create_manifest(cfg, run_id="RID", run_output_dir=str(tmp_path / "RID"))
+  manifest = update_stage_result(
+    manifest,
+    PipelineStageResult(
+      stage_id="bigquery_light_retrieval",
+      stage_name="bq",
+      status="skipped",
+      skipped_reason="execute_bigquery is false",
+    ),
+  )
+  manifest = update_stage_result(
+    manifest,
+    PipelineStageResult(
+      stage_id="technology_clustering_ranking",
+      stage_name="cluster",
+      status="blocked",
+      skipped_reason="BigQuery light retrieval was skipped and no existing light CSV was provided.",
+    ),
+  )
+  manifest.config["next_recommended_commands"] = [
+    "python scripts/run_carbon_fiber_evidence_map.py --config configs/carbon_fiber_pipeline.yaml --execute-bigquery",
+  ]
+  path = save_manifest(manifest, tmp_path)
+  summary_md = (tmp_path / "run_summary.md").read_text(encoding="utf-8")
+  assert "Blocked Stage Reasons" in summary_md
+  assert "technology_clustering_ranking" in summary_md
+  assert "Next Recommended Command" in summary_md
+  loaded = load_manifest(path)
+  assert loaded.stage_results[1].status == "blocked"
+

@@ -96,9 +96,10 @@ def resolve_required_inputs(
     return out
 
   if stage_id == "technology_clustering_ranking":
-    out["bigquery_light_results_csv"] = (
-      known_outputs.get("bigquery_light_results_dedup_csv")
-      or config.use_existing_light_csv
+    out["bigquery_light_dedup_csv"] = (
+      config.use_existing_light_csv
+      or known_outputs.get("bigquery_light_dedup_csv")
+      or known_outputs.get("bigquery_light_results_dedup_csv")
       or find_latest_output("bigquery_light_results_dedup.csv")
     )
     out["top_n"] = config.top_n
@@ -222,7 +223,7 @@ def resolve_required_inputs(
 def validate_stage_inputs(stage_id: str, input_paths: dict[str, Any]) -> dict[str, Any]:
   required: list[str] = []
   if stage_id == "technology_clustering_ranking":
-    required = ["bigquery_light_results_csv"]
+    required = ["bigquery_light_dedup_csv"]
   elif stage_id == "top5_fulltext_collection":
     required = ["top5_candidates_csv"]
   elif stage_id == "claim_element_extraction":
