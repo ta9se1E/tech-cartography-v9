@@ -80,6 +80,8 @@ STAGE_LABELS: dict[str, str] = {
   "bigquery_light_retrieval": "特許候補の軽量検索（BigQuery）",
   "technology_clustering_ranking": "技術分類と優先順位付け",
   "fulltext_collection": "全文テキスト取得",
+  "top5_fulltext_collection": "Top5全文テキスト取得",
+  "evidence_validation": "技術裏取り検証（全文準備×論文計画）",
   "claim_element_extraction": "請求項要素の抽出",
   "openalex_paper_evidence": "論文による裏取り検索",
   "claim_paper_evidence_map": "特許×論文の根拠マップ",
@@ -252,6 +254,21 @@ def explain_strategic_watch() -> str:
   return (
     "戦略監視候補は、中国・欧州・日本など全文取得ルートが異なる重要特許を追跡するリストです。"
     "Top5全文候補と併せて確認してください。中国候補を除外しているわけではありません。"
+  )
+
+
+def explain_evidence_validation_mode(mode: str) -> str:
+  if mode == "execute":
+    return "OpenAlex を実行しました（またはキャッシュを利用）。結果は裏取り候補であり証明ではありません。"
+  return "OpenAlex は計画のみです。--execute-openalex で限定実行できます。"
+
+
+def explain_evidence_validation_readiness() -> str:
+  return (
+    "全文が取れた特許だけ、技術要素の分解へ進みます。"
+    "dry-runのみの場合は、まだ請求項を読めていません。"
+    "中国候補は手動確認リストとして残しています。"
+    "論文候補は裏取り候補であり、証明ではありません。"
   )
 
 

@@ -15,6 +15,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   inject_easy_ui_css,
   prepare_patent_display_df,
   render_caveat_footer,
+  render_evidence_validation_summary,
   render_fulltext_status_card,
   render_fulltext_vs_watch_notice,
   render_info_box,
@@ -260,6 +261,25 @@ def render_easy_japanese_app() -> None:
     render_step_header(4, "技術の裏取りを見る", "請求項・論文による裏取り候補を確認します"),
     unsafe_allow_html=True,
   )
+  ev_summary_json = _artifact_path(manifest_data, "evidence_validation_summary_json")
+  ev_summary: dict[str, Any] | None = None
+  if ev_summary_json and ev_summary_json.exists():
+    try:
+      ev_summary = json.loads(ev_summary_json.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+      ev_summary = None
+  st.markdown(render_evidence_validation_summary(ev_summary), unsafe_allow_html=True)
+
+  manual_watch_df = _load_csv_artifact(manifest_data, "manual_fulltext_watch_csv")
+  if not manual_watch_df.empty:
+    st.caption("手動全文確認が必要な中国・非US候補")
+    st.dataframe(prepare_patent_display_df(manual_watch_df), use_container_width=True, hide_index=True)
+
+  ev_report_md = _load_text_artifact(manifest_data, "evidence_validation_report_md")
+  if ev_report_md:
+    with st.expander("Evidence Validation レポート"):
+      st.markdown(ev_report_md)
+
   technical_md = _load_text_artifact(manifest_data, "technical_view_report_md")
   claim_md = _load_text_artifact(manifest_data, "claim_element_report_md")
   if technical_md or claim_md:
@@ -270,8 +290,8 @@ def render_easy_japanese_app() -> None:
     if technical_md:
       with st.expander("技術評価レポート"):
         st.markdown(technical_md)
-  else:
-    st.warning("まだ実行していません。次は Full Text / Claim Element を実行してください。")
+  elif not ev_summary:
+    st.warning("まだ実行していません。次は Full Text / Evidence Validation を実行してください。")
 
   # Step 5: 企業の動き
   st.markdown(

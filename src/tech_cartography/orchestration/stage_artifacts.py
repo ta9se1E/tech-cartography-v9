@@ -24,6 +24,11 @@ PRIMARY_ARTIFACT_KEYS = [
   "top5_fulltext_records_json",
   "manual_fulltext_checklist_md",
   "fulltext_evidence_report_md",
+  "fulltext_readiness_json",
+  "ready_for_claim_extraction_csv",
+  "manual_fulltext_watch_csv",
+  "evidence_validation_summary_json",
+  "evidence_validation_report_md",
   "final_report_md",
 ]
 

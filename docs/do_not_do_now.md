@@ -51,3 +51,10 @@ Phase 14 adds Controlled Full Text Run but still does **not** add:
 - OCR
 - Automatic web search (Tavily, etc.)
 - Scope: US Top5 controlled fulltext + manual watch package for CN/EP/JP
+
+Phase 15 adds Evidence Validation but still does **not** add:
+
+- Automatic PDF download / OCR
+- Automatic web search (Tavily, etc.)
+- Cloud Run / Scheduler / Email automation
+- Scope stops at Evidence Validation report (claim×paper plan/check)

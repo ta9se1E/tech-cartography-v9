@@ -4,6 +4,7 @@ import pandas as pd
 
 from tech_cartography.ui.easy_japanese_ui import (
   prepare_patent_display_df,
+  render_evidence_validation_summary,
   render_fulltext_status_card,
   render_fulltext_vs_watch_notice,
   render_manual_checklist_notice,
@@ -97,3 +98,24 @@ def test_fulltext_status_japanese_display() -> None:
 def test_manual_checklist_notice_text() -> None:
   notice = render_manual_checklist_notice()
   assert "中国候補を除外しているわけではありません" in notice
+
+
+def test_evidence_validation_japanese_summary() -> None:
+  summary = {
+    "summary": {
+      "fulltext_records": 5,
+      "ready_for_claim_extraction": 0,
+      "dry_run_only": 5,
+      "manual_required": 2,
+      "generated_claim_elements": 0,
+      "generated_paper_queries": 0,
+      "openalex_mode": "plan_only",
+    },
+    "recommended_actions": ["US候補に対して execute-fulltext を実行する"],
+  }
+  html = render_evidence_validation_summary(summary)
+  assert "全文が取れた特許だけ" in html
+  assert "dry-run" in html or "ドライラン" in html or "dry_run" in html.lower()
+  assert "中国候補" in html
+  assert "裏取り候補" in html
+  assert "execute-fulltext" in html

@@ -15,6 +15,8 @@ def test_stage_order_phase_1_to_11() -> None:
   order = resolve_stage_order()
   assert order[0] == "search_strategy"
   assert order[-1] == "synthesis_report"
+  assert order.index("evidence_validation") > order.index("top5_fulltext_collection")
+  assert order.index("claim_element_extraction") > order.index("evidence_validation")
   assert order.index("business_view_agent") > order.index("web_signal_mapping")
 
 

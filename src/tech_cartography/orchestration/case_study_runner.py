@@ -13,6 +13,7 @@ from tech_cartography.agents.synthesis_agent import run_synthesis_report
 from tech_cartography.agents.technical_view_agent import run_technical_view_assessment
 from tech_cartography.config import load_carbon_fiber_demo_profile
 from tech_cartography.evidence.claim_paper_evidence_map import build_claim_paper_evidence_map
+from tech_cartography.validation.evidence_validation import run_evidence_validation
 from tech_cartography.orchestration.latest_outputs import (
   build_artifact_index,
   save_artifact_index,
@@ -44,6 +45,12 @@ from tech_cartography.reports.business_assessment_export import save_business_vi
 from tech_cartography.reports.case_study_pipeline import run_case_study_pipeline, save_case_study_outputs
 from tech_cartography.reports.claim_element_pipeline import run_claim_element_pipeline, save_claim_element_outputs
 from tech_cartography.reports.evidence_map_export import save_claim_paper_evidence_map_outputs
+from tech_cartography.reports.evidence_validation_export import save_evidence_validation_outputs
+from tech_cartography.reports.evidence_validation_report import (
+  build_evidence_validation_summary,
+  render_evidence_validation_markdown,
+  save_evidence_validation_report,
+)
 from tech_cartography.reports.paper_evidence_pipeline import run_paper_evidence_pipeline, save_paper_evidence_outputs
 from tech_cartography.reports.project_export import load_records_csv, save_records_csv
 from tech_cartography.reports.synthesis_export import save_synthesis_outputs
@@ -241,6 +248,63 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
       "record_count": len(result.get("retrieved_records", [])),
       "execute_fulltext": bool(config.execute_fulltext),
       "mode": "execute" if config.execute_fulltext else "dry_run",
+    },
+  }
+
+
+def run_evidence_validation_stage(
+  config: PipelineConfig,
+  output_dir: str,
+  previous_outputs: dict[str, Any],
+) -> dict[str, Any]:
+  _safe_mkdir(output_dir)
+  fulltext_json = previous_outputs.get("top5_fulltext_records_json")
+  if not fulltext_json or not Path(fulltext_json).exists():
+    raise FileNotFoundError("top5_fulltext_records_json is missing")
+
+  fulltext_data = _read_json(fulltext_json)
+  fulltext_records = (
+    fulltext_data if isinstance(fulltext_data, list) else fulltext_data.get("retrieved_records", [])
+  )
+
+  manual_candidates: list[dict[str, Any]] = []
+  manual_csv = previous_outputs.get("strategic_watch_manual_fulltext_required_csv")
+  if manual_csv and Path(str(manual_csv)).exists():
+    manual_candidates = load_records_csv(str(manual_csv))
+
+  result = run_evidence_validation(
+    fulltext_records=fulltext_records,
+    manual_candidates=manual_candidates,
+    execute_openalex=bool(config.execute_openalex),
+    openalex_max_queries=int(config.openalex_max_queries),
+    openalex_max_results_per_query=int(config.openalex_max_results_per_query),
+    use_cache=bool(config.use_cache),
+    output_dir=output_dir,
+  )
+
+  summary = result.get("evidence_validation_summary") or build_evidence_validation_summary(result)
+  markdown = render_evidence_validation_markdown(summary)
+  paths = normalize_stage_outputs(
+    "evidence_validation",
+    save_evidence_validation_outputs(result, output_dir),
+  )
+  paths["evidence_validation_report_md"] = save_evidence_validation_report(markdown, output_dir)
+
+  validation_status = result.get("status", "success")
+  return {
+    "status": validation_status,
+    "paths": paths,
+    "summary": {
+      "validation_status": validation_status,
+      "ready_count": (result.get("fulltext_readiness") or {}).get("ready_count", 0),
+      "limited_count": (result.get("fulltext_readiness") or {}).get("limited_count", 0),
+      "dry_run_only_count": (result.get("fulltext_readiness") or {}).get("dry_run_only_count", 0),
+      "manual_required_count": (result.get("fulltext_readiness") or {}).get("manual_required_count", 0),
+      "claim_elements": len((result.get("claim_element_result") or {}).get("elements", [])),
+      "paper_queries": (result.get("paper_query_result") or {}).get("total_queries", 0),
+      "openalex_mode": (result.get("openalex_result") or {}).get("mode", "plan_only"),
+      "output_dir": output_dir,
+      "produced_outputs": paths,
     },
   }
 
@@ -546,6 +610,7 @@ STAGE_RUNNERS: dict[str, Callable[[PipelineConfig, str, dict[str, Any]], dict[st
   "bigquery_light_retrieval": lambda c, d, prev: run_bigquery_light_stage(c, d, prev),
   "technology_clustering_ranking": lambda c, d, prev: run_clustering_ranking_stage(c, d, prev),
   "top5_fulltext_collection": lambda c, d, prev: run_fulltext_collection_stage(c, d, prev),
+  "evidence_validation": lambda c, d, prev: run_evidence_validation_stage(c, d, prev),
   "claim_element_extraction": lambda c, d, prev: run_claim_element_stage(c, d, prev),
   "openalex_paper_evidence": lambda c, d, prev: run_openalex_stage(c, d, prev),
   "claim_paper_evidence_map": lambda c, d, prev: run_claim_paper_map_stage(c, d, prev),
@@ -650,8 +715,10 @@ def run_pipeline_stage(
       **dict(payload.get("summary", {}) or {}),
       "produced_outputs": result_paths,
     }
-    if payload.get("status") and payload.get("status") not in {"ok", "success", "cached"}:
+    if payload.get("status") and payload.get("status") not in {"ok", "success", "cached", "limited_no_fulltext", "partial_success"}:
       result.warnings.append(f"stage returned status={payload.get('status')}")
+    if stage_id == "evidence_validation" and payload.get("status") in {"limited_no_fulltext", "partial_success"}:
+      result.summary["validation_status"] = payload.get("status")
     if stage_id == "bigquery_light_retrieval" and not result_paths.get("bigquery_light_dedup_csv"):
       result.status = "failed"
       result.errors.append("BigQuery stage completed but bigquery_light_dedup_csv was not produced")

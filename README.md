@@ -471,3 +471,44 @@ Outputs under `stages/top5_fulltext_collection/`:
 - `strategic_watch_manual_fulltext_required.csv`
 - `manual_fulltext_checklist.md`
 - `fulltext_evidence_report.md`
+
+## v7 Phase 15: Evidence Validation Pipeline
+
+Phase 15 validates fulltext readiness and runs a **safe** Claim Element × OpenAlex evidence check from Phase 14 outputs.
+
+- `evidence_validation` stage sits after `top5_fulltext_collection` (existing claim/openalex stages remain for compatibility)
+- Default: **OpenAlex plan-only** (`execute_openalex=False`); `--execute-openalex` for limited execution (cache-first)
+- US records with fetched claims/description → claim element extraction; dry-run only → `limited_no_fulltext` (not a failure)
+- CN/EP/JP manual watch candidates preserved in `manual_fulltext_watch.csv`
+- Paper evidence is **Evidence Candidate**, not proof of patent claims
+
+### Standalone CLI (plan-only)
+
+```bash
+python scripts/run_evidence_validation.py \
+  --fulltext-records-json outputs/pipeline_runs/<run_id>/stages/top5_fulltext_collection/top5_fulltext_records.json \
+  --manual-candidates-csv outputs/pipeline_runs/<run_id>/stages/top5_fulltext_collection/strategic_watch_manual_fulltext_required.csv
+```
+
+### Pipeline through evidence_validation
+
+```bash
+python scripts/run_carbon_fiber_evidence_map.py \
+  --config configs/carbon_fiber_pipeline.yaml \
+  --use-existing-light-csv outputs/pipeline_runs/<run_id>/stages/bigquery_light_retrieval/<ts>/bigquery_light_results_dedup.csv \
+  --start-stage technology_clustering_ranking \
+  --stop-stage evidence_validation
+```
+
+Outputs under `stages/evidence_validation/`:
+
+- `fulltext_readiness.json`
+- `ready_for_claim_extraction.csv`
+- `manual_fulltext_watch.csv`
+- `claim_elements.csv`
+- `paper_query_candidates.csv`
+- `openalex_query_plan.json`
+- `paper_evidence_links.csv`
+- `claim_paper_evidence_items.csv`
+- `evidence_validation_summary.json`
+- `evidence_validation_report.md`

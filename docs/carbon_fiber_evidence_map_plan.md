@@ -135,3 +135,12 @@
 - Strategic watch CN/EP/JP → manual fulltext package (not excluded)
 - Outputs: `fulltext_plan.json`, `manual_fulltext_checklist.md`, `strategic_watch_manual_fulltext_required.csv`
 - No automatic PDF download, OCR, or web search in this step
+
+### Step 15 (v7 Phase 15): Evidence Validation Pipeline
+
+- Assess fulltext readiness (`ready` / `limited` / `dry_run_only` / `manual_required`)
+- Claim element extraction only for US records with fetched claims/description
+- OpenAlex default plan-only; explicit `--execute-openalex` for limited run
+- Build claim×paper evidence links and `evidence_validation_report.md`
+- CN/EP/JP manual watch candidates retained (not excluded)
+- Does not prove patent claims from papers; expert review required

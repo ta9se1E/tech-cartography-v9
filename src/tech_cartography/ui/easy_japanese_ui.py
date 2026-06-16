@@ -8,6 +8,8 @@ from typing import Any
 import pandas as pd
 
 from tech_cartography.ui.japanese_labels import (
+  explain_evidence_validation_mode,
+  explain_evidence_validation_readiness,
   explain_fulltext_priority_top5,
   explain_fulltext_retrieval_status,
   explain_stage_status,
@@ -217,6 +219,34 @@ def render_fulltext_vs_watch_notice() -> str:
     "中国候補を除外しているわけではありません。"
     f"<br><br>{explain_fulltext_priority_top5()}"
     f"<br><br>{explain_strategic_watch()}"
+  )
+
+
+def render_evidence_validation_summary(summary: dict[str, Any] | None) -> str:
+  if not summary:
+    return render_warning_box("Evidence Validation の結果がまだありません。")
+
+  s = summary.get("summary") if isinstance(summary.get("summary"), dict) else summary
+  openalex_mode = str(s.get("openalex_mode") or summary.get("openalex_mode") or "plan_only")
+  metrics = [
+    {"label": "全文レコード", "value": s.get("fulltext_records", 0)},
+    {"label": "請求項分解可能", "value": s.get("ready_for_claim_extraction", 0)},
+    {"label": "dry-runのみ", "value": s.get("dry_run_only", 0)},
+    {"label": "手動確認", "value": s.get("manual_required", 0)},
+    {"label": "Claim Element", "value": s.get("generated_claim_elements", 0)},
+    {"label": "論文クエリ候補", "value": s.get("generated_paper_queries", 0)},
+  ]
+  next_actions = summary.get("recommended_actions") or []
+  action_html = "".join(f"<li>{_safe(action)}</li>" for action in next_actions[:5])
+  return (
+    f"{render_info_box(explain_evidence_validation_readiness())}"
+    f"{render_metric_cards(metrics)}"
+    f'<div class="tc-patent-card">'
+    f'<div class="tc-patent-title">OpenAlex: {openalex_mode}</div>'
+    f'<div class="tc-patent-meta">{explain_evidence_validation_mode(openalex_mode)}</div>'
+    f"</div>"
+    f'<div class="tc-patent-card"><div class="tc-patent-title">次にやるべきこと</div>'
+    f"<ul>{action_html or '<li>全文取得または手動確認リストを確認してください。</li>'}</ul></div>"
   )
 
 

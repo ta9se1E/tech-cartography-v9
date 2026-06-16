@@ -254,3 +254,64 @@ def test_fulltext_stage_dry_run_success(tmp_path: Path, monkeypatch) -> None:
   result = runner.run_carbon_fiber_evidence_map_pipeline(cfg)
   assert result["stage_statuses"]["technology_clustering_ranking"] == "success"
   assert result["stage_statuses"]["top5_fulltext_collection"] == "success"
+
+
+def test_evidence_validation_stage_order_and_stop(tmp_path: Path, monkeypatch) -> None:
+  from tech_cartography.orchestration.stage_resolver import resolve_stage_order
+
+  order = resolve_stage_order()
+  assert order.index("evidence_validation") == order.index("top5_fulltext_collection") + 1
+
+  monkeypatch.chdir(tmp_path)
+  (tmp_path / "outputs").mkdir()
+  existing = tmp_path / "existing.csv"
+  _write_light_csv(existing)
+  top5 = tmp_path / "top5.csv"
+  top5.write_text("publication_number,title\nUS-1,Carbon\n", encoding="utf-8")
+  fulltext_json = tmp_path / "fulltext.json"
+  fulltext_json.write_text(
+    '[{"publication_number":"US-1","country":"US","retrieval_status":"dry_run_only","evidence_level":"metadata_only"}]',
+    encoding="utf-8",
+  )
+  manual = tmp_path / "manual.csv"
+  manual.write_text("publication_number,country\nCN-1,CN\n", encoding="utf-8")
+
+  cfg = PipelineConfig(
+    theme="test",
+    output_root="outputs/pipeline_runs",
+    use_existing_light_csv=str(existing),
+    stop_stage="evidence_validation",
+    execute_fulltext=False,
+  )
+
+  def _cluster(_c, _d, prev):
+    return {
+      "status": "ok",
+      "paths": {
+        "top20_patents_csv": str(Path(_d) / "top20.csv"),
+        "top5_fulltext_candidates_csv": str(top5),
+      },
+      "summary": {},
+    }
+
+  def _fulltext(_c, _d, prev):
+    return {
+      "status": "ok",
+      "paths": {
+        "top5_fulltext_records_json": str(fulltext_json),
+        "strategic_watch_manual_fulltext_required_csv": str(manual),
+      },
+      "summary": {},
+    }
+
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "search_strategy", lambda c, d, p: {
+    "status": "ok",
+    "paths": {"search_strategy_json": str(Path(d) / "search_strategy.json")},
+    "summary": {},
+  })
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "technology_clustering_ranking", _cluster)
+  monkeypatch.setitem(runner.STAGE_RUNNERS, "top5_fulltext_collection", _fulltext)
+
+  result = runner.run_carbon_fiber_evidence_map_pipeline(cfg)
+  assert result["stage_statuses"]["evidence_validation"] == "success"
+  assert result["stage_statuses"]["claim_element_extraction"] == "skipped"

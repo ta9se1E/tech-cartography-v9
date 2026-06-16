@@ -13,6 +13,7 @@ STAGE_ORDER = [
   "bigquery_light_retrieval",
   "technology_clustering_ranking",
   "top5_fulltext_collection",
+  "evidence_validation",
   "claim_element_extraction",
   "openalex_paper_evidence",
   "claim_paper_evidence_map",
@@ -28,6 +29,7 @@ STAGE_NAMES = {
   "bigquery_light_retrieval": "BigQuery Light Multi-Query Retrieval",
   "technology_clustering_ranking": "Technology Clustering / Patent Ranking",
   "top5_fulltext_collection": "Top5 Full Text Evidence Collection",
+  "evidence_validation": "Evidence Validation (Fulltext Readiness + Claim×Paper Plan)",
   "claim_element_extraction": "Claim Element Extraction",
   "openalex_paper_evidence": "OpenAlex Paper Evidence Search",
   "claim_paper_evidence_map": "Patent Claim × Paper Evidence Map",
@@ -124,6 +126,20 @@ def resolve_required_inputs(
     )
     out["execute"] = config.execute_fulltext
     out["maximum_gb"] = config.maximum_fulltext_gb
+    out["use_cache"] = config.use_cache
+    return out
+
+  if stage_id == "evidence_validation":
+    out["top5_fulltext_records_json"] = (
+      known_outputs.get("top5_fulltext_records_json") or find_latest_output("top5_fulltext_records.json")
+    )
+    out["strategic_watch_manual_fulltext_required_csv"] = (
+      known_outputs.get("strategic_watch_manual_fulltext_required_csv")
+      or find_latest_output("strategic_watch_manual_fulltext_required.csv")
+    )
+    out["execute_openalex"] = config.execute_openalex
+    out["max_queries"] = config.openalex_max_queries
+    out["max_results_per_query"] = config.openalex_max_results_per_query
     out["use_cache"] = config.use_cache
     return out
 
@@ -236,6 +252,8 @@ def validate_stage_inputs(stage_id: str, input_paths: dict[str, Any]) -> dict[st
     required = ["bigquery_light_dedup_csv"]
   elif stage_id == "top5_fulltext_collection":
     required = ["top5_candidates_csv"]
+  elif stage_id == "evidence_validation":
+    required = ["top5_fulltext_records_json"]
   elif stage_id == "claim_element_extraction":
     required = ["top20_patents_csv"]
   elif stage_id == "openalex_paper_evidence":
