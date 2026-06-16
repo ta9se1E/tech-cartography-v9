@@ -33,6 +33,77 @@ def test_score_breakdown_present() -> None:
   assert "total_score" in scored
   assert "score_breakdown" in scored
   assert scored["score_breakdown"]["theme_relevance_score"] >= 0
+  assert scored["score_breakdown"]["core_technology_score"] >= 0
+
+
+def test_pan_carbonization_tensile_strength_high_score() -> None:
+  good = score_patent_record(
+    _classified(
+      title="PAN precursor fiber carbonization with tensile strength and modulus control",
+      abstract="polyacrylonitrile stabilization oxidation carbonization furnace residence time",
+      matched_terms=["PAN", "carbonization", "tensile strength", "modulus"],
+    ),
+  )
+  weak = score_patent_record(
+    _classified(
+      title="Generic composite article",
+      abstract="general composite",
+      search_intents=["other_related"],
+      matched_terms=["composite"],
+    ),
+  )
+  assert good["total_score"] > weak["total_score"]
+
+
+def test_surface_treatment_interface_adhesion_high_score() -> None:
+  scored = score_patent_record(
+    _classified(
+      title="Surface treatment and sizing for interface adhesion",
+      abstract="epoxy sizing resin impregnation interfacial shear strength",
+      search_intents=["surface_interface"],
+      matched_terms=["surface treatment", "sizing", "interface adhesion"],
+    ),
+  )
+  assert scored["score_breakdown"]["core_technology_score"] >= 0.2
+  assert scored["total_score"] >= 0.45
+
+
+def test_unknown_assignee_penalized() -> None:
+  known = score_patent_record(_classified(assignee="Toray Industries"))
+  unknown = score_patent_record(_classified(assignee="Unknown"))
+  assert known["total_score"] > unknown["total_score"]
+
+
+def test_display_apparatus_low_score() -> None:
+  noisy = score_patent_record(
+    _classified(
+      title="Display apparatus and method of manufacturing the display apparatus",
+      abstract="semiconductor thin film electronic device",
+      search_intents=["other_related"],
+      matched_terms=["display"],
+    ),
+  )
+  core = score_patent_record(_classified())
+  assert noisy["total_score"] < core["total_score"]
+
+
+def test_application_only_lower_than_core_manufacturing() -> None:
+  app_record = _classified(
+    title="Aerospace pressure vessel composite tank",
+    abstract="pressure vessel aerospace application",
+    search_intents=["application_pressure_aerospace"],
+    matched_terms=["pressure vessel", "aerospace"],
+  )
+  app_only = score_patent_record(app_record)
+  core = score_patent_record(
+    _classified(
+      title="PAN precursor carbonization process",
+      abstract="polyacrylonitrile precursor fiber carbonization furnace",
+      search_intents=["core_manufacturing"],
+      matched_terms=["PAN", "carbonization", "precursor fiber"],
+    ),
+  )
+  assert core["total_score"] > app_only["total_score"]
 
 
 def test_top20_sorted_by_rank() -> None:
@@ -61,19 +132,23 @@ def test_us_patent_preferred_for_fulltext_candidates() -> None:
       publication_number="US-2024-000010",
       country="US",
       assignee="Toray Industries",
-      title="PAN carbon fiber carbonization prepreg",
+      title="PAN carbon fiber carbonization prepreg surface treatment",
       search_intents=["core_manufacturing", "bundle_prepreg"],
     ),
   ]
   ranked = rank_patent_records(records)
   candidates = select_fulltext_candidates(ranked, top_n=5)
   assert len(candidates) <= 5
-  assert any(item["country"] == "US" for item in candidates)
+  assert candidates[0]["country"] == "US"
 
 
 def test_fulltext_candidates_limited_to_five() -> None:
   records = [
-    _classified(publication_number=f"US-2024-{index:06d}", assignee=f"Company {index % 4}")
+    _classified(
+      publication_number=f"US-2024-{index:06d}",
+      assignee=f"Company {index % 4}",
+      title=f"PAN precursor carbonization surface treatment {index}",
+    )
     for index in range(12)
   ]
   ranked = rank_patent_records(records)

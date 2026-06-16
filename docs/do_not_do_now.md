@@ -31,3 +31,10 @@ Phase 12 adds a one-command pipeline runner but still does **not** add:
 - Email sending
 - Cloud Run / Cloud SQL / Scheduler
 - Automatic web search (Tavily, etc.)
+
+Phase 13 improves ranking quality and Japanese UI but still does **not** add:
+
+- Automatic web search (Tavily, etc.)
+- Cloud Run / Cloud SQL / Scheduler
+- Email sending
+- Scope remains: ranking quality + easy Japanese UI (no new external APIs)

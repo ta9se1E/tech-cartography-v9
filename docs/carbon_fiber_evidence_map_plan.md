@@ -110,3 +110,12 @@
 - Goal: run Phase 1–11 in one command for reproducible case studies
 - Save `run_manifest.json`, `run_summary.md`, and `artifact_index.md` per run
 - Safe-by-default: external API stages execute only with explicit flags
+
+### Step 13 (v7 Phase 13): Ranking Quality and Easy Japanese UI
+
+- Goal: fix Top20/Top5 noise issues seen in real-data runs; add SME-friendly Japanese UI
+- Stronger noise filter (display, sensor membrane, 3D printing carbon/graphite, battery, graphene/CNT, activated carbon, unknown assignee)
+- Boost core carbon-fiber manufacturing / surface / bundle / property terms in ranking
+- Top5 fulltext selector: US-first, manual route for JP/EP/WO/CN/KR, `why_selected_japanese` and quality flags
+- Streamlit Easy Japanese View (7 steps) alongside Expert Pipeline View
+- No new external APIs; no additional BigQuery/OpenAlex/fulltext execution logic

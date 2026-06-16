@@ -1009,6 +1009,18 @@ def render_search_strategy_page() -> None:
 
 
 def main() -> None:
+  st.set_page_config(page_title="PatentScout AI v7", layout="wide")
+  with st.sidebar:
+    view_mode = st.radio(
+      "表示モード",
+      ["Expert Pipeline View", "Easy Japanese View"],
+      index=0,
+    )
+  if view_mode == "Easy Japanese View":
+    from tech_cartography.ui.v7_easy_app import render_easy_japanese_app
+
+    render_easy_japanese_app()
+    return
   render_search_strategy_page()
 
 

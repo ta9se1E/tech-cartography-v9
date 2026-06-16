@@ -379,3 +379,39 @@ Outputs are saved under `outputs/pipeline_runs/{run_id}/`:
 - `artifact_index.json`
 - `artifact_index.md`
 - stage outputs under `stages/*/`
+
+## v7 Phase 13: Ranking Quality and Easy Japanese UI
+
+Phase 13 improves Top20/Top5 candidate quality and adds a non-expert Japanese UI inspired by v6 `app2.py`.
+
+- Stronger noise filtering (display/sensor/3D printing/battery/graphene/CNT/activated carbon, unknown assignee penalty)
+- Core carbon-fiber manufacturing term boosting (PAN, carbonization, surface treatment, prepreg, tensile strength, etc.)
+- Top5 fulltext selection prefers US + low-noise + core clusters (CN/EP/JP/WO → manual route)
+- Japanese labels, card UI, and 7-step Easy Japanese View in Streamlit
+
+### UI
+
+```bash
+streamlit run app.py
+```
+
+Sidebar: **Expert Pipeline View** or **Easy Japanese View**
+
+### CLI re-run example (clustering only, existing light CSV)
+
+```bash
+python scripts/run_carbon_fiber_evidence_map.py \
+  --config configs/carbon_fiber_pipeline.yaml \
+  --use-existing-light-csv outputs/pipeline_runs/<run_id>/stages/bigquery_light_retrieval/<ts>/bigquery_light_results_dedup.csv \
+  --start-stage technology_clustering_ranking \
+  --stop-stage technology_clustering_ranking
+```
+
+New/updated modules:
+
+- `src/tech_cartography/curation/noise_filter.py`
+- `src/tech_cartography/curation/patent_ranker.py`
+- `src/tech_cartography/curation/top_candidate_selector.py`
+- `src/tech_cartography/ui/japanese_labels.py`
+- `src/tech_cartography/ui/easy_japanese_ui.py`
+- `src/tech_cartography/ui/v7_easy_app.py`

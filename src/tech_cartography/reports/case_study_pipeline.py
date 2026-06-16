@@ -6,12 +6,17 @@ from pathlib import Path
 from typing import Any
 
 from tech_cartography.config import load_carbon_fiber_demo_profile
-from tech_cartography.curation.noise_filter import compute_noise_score, detect_noise_signals
+from tech_cartography.curation.noise_filter import (
+  compute_noise_score,
+  detect_noise_categories,
+  detect_noise_signals,
+)
 from tech_cartography.curation.patent_ranker import (
   rank_patent_records,
   select_fulltext_candidates,
   select_top_patents,
 )
+from tech_cartography.curation.top_candidate_selector import enrich_top_records_for_display
 from tech_cartography.curation.technology_classifier import (
   build_cluster_summary,
   classify_patent_record,
@@ -43,11 +48,12 @@ def run_case_study_pipeline(
   for record in records:
     enriched = classify_patent_record(record)
     enriched["noise_signals"] = detect_noise_signals(enriched)
+    enriched["noise_categories"] = detect_noise_categories(enriched)
     enriched["noise_score"] = compute_noise_score(enriched)
     classified_records.append(enriched)
 
   ranked_records = rank_patent_records(classified_records, profile)
-  top_records = select_top_patents(ranked_records, top_n=top_n)
+  top_records = enrich_top_records_for_display(select_top_patents(ranked_records, top_n=top_n))
   fulltext_candidates = select_fulltext_candidates(ranked_records, top_n=fulltext_top_n)
   cluster_summary = build_cluster_summary(ranked_records)
 
