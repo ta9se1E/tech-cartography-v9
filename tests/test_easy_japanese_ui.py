@@ -193,3 +193,17 @@ def test_user_badge_and_watch_profile_helpers() -> None:
   assert "PAN" in card
   assert "Toray" in card
 
+
+def test_streamlit_state_keys_are_separated() -> None:
+  from tech_cartography.ui.streamlit_session import (
+    STATE_PIPELINE_ROOT,
+    STATE_SELECTED_RUN_ID,
+    WIDGET_PIPELINE_ROOT,
+    WIDGET_SELECTED_RUN_ID,
+    assert_no_widget_internal_key_collision,
+  )
+
+  assert_no_widget_internal_key_collision()
+  assert WIDGET_PIPELINE_ROOT != STATE_PIPELINE_ROOT
+  assert WIDGET_SELECTED_RUN_ID != STATE_SELECTED_RUN_ID
+

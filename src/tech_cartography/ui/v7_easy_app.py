@@ -46,11 +46,18 @@ from tech_cartography.ui.japanese_labels import (
   translate_tab_name,
 )
 from tech_cartography.ui.user_settings_view import render_user_settings_tab
+from tech_cartography.ui.streamlit_session import (
+  DISPLAY_MODE_OPTIONS,
+  STATE_CURRENT_USER,
+  STATE_DISPLAY_MODE,
+  STATE_MANIFEST_PATH,
+  STATE_PIPELINE_ROOT,
+  STATE_SAVED_RUN_ID,
+  STATE_SELECTED_RUN_ID,
+  default_pipeline_root,
+)
 from tech_cartography.users.user_store import set_last_run_id
 from tech_cartography.users.watch_profile_store import get_active_watch_profile
-
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_PIPELINE_ROOT = PROJECT_ROOT / "outputs" / "pipeline_runs"
 
 
 def _load_manifest(path: str | Path) -> dict[str, Any] | None:
@@ -112,7 +119,7 @@ def _resolve_manifest(
   pipeline_root: str,
   run_id: str,
 ) -> dict[str, Any] | None:
-  manifest_path = st.session_state.get("easy_manifest_path")
+  manifest_path = st.session_state.get(STATE_MANIFEST_PATH)
   if manifest_path:
     return _load_manifest(manifest_path)
   if run_id:
@@ -338,16 +345,16 @@ def render_tabbed_easy_app(
   with header_cols[2]:
     st.caption(f"run_id: {run_id or user.get('last_run_id') or '未選択'}")
 
-  root = pipeline_root or str(DEFAULT_PIPELINE_ROOT)
+  root = pipeline_root or default_pipeline_root()
   manifest = _resolve_manifest(user, root, run_id)
   if manifest and manifest.get("run_id"):
     rid = str(manifest["run_id"])
-    if st.session_state.get("easy_saved_run_id") != rid:
+    if st.session_state.get(STATE_SAVED_RUN_ID) != rid:
       set_last_run_id(user["user_id"], rid)
-      st.session_state["easy_saved_run_id"] = rid
+      st.session_state[STATE_SAVED_RUN_ID] = rid
       refreshed = dict(user)
       refreshed["last_run_id"] = rid
-      st.session_state["current_user"] = refreshed
+      st.session_state[STATE_CURRENT_USER] = refreshed
 
   if not manifest:
     st.markdown(render_info_box("実行結果を読み込んでください。sidebar で run_id を指定するか latest_run を読み込みます。"), unsafe_allow_html=True)
@@ -386,11 +393,15 @@ def render_tabbed_easy_app(
 
 def render_easy_japanese_app() -> None:
   """Backward-compatible entry for streamlit_app Expert mode switch."""
-  user = st.session_state.get("current_user")
+  user = st.session_state.get(STATE_CURRENT_USER)
   if not user:
     st.warning("ログインが必要です。app.py から起動してください。")
     return
-  pipeline_root = st.session_state.get("easy_pipeline_root", str(DEFAULT_PIPELINE_ROOT))
-  run_id = st.session_state.get("easy_run_id", "")
-  display_mode = st.session_state.get("easy_display_mode", "かんたん表示")
+  pipeline_root = st.session_state.get(STATE_PIPELINE_ROOT, default_pipeline_root())
+  run_id = st.session_state.get(STATE_SELECTED_RUN_ID, "")
+  display_mode = st.session_state.get(STATE_DISPLAY_MODE, DISPLAY_MODE_OPTIONS[0])
   render_tabbed_easy_app(user, pipeline_root=pipeline_root, run_id=run_id, display_mode=display_mode)
+
+
+# Backward-compatible alias used by app.py import
+DEFAULT_PIPELINE_ROOT = default_pipeline_root()

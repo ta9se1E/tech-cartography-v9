@@ -17,7 +17,9 @@ from tech_cartography.users.user_profile import validate_email
 from tech_cartography.users.user_store import get_or_create_user
 from tech_cartography.users.watch_profile_store import ensure_default_watch_profile
 
-SESSION_USER_KEY = "current_user"
+from tech_cartography.ui.streamlit_session import STATE_CURRENT_USER
+
+SESSION_USER_KEY = STATE_CURRENT_USER
 
 
 def process_login_submission(

@@ -17,6 +17,17 @@ from tech_cartography.ui.japanese_labels import (
   translate_user_setting,
   translate_weekly_email_status,
 )
+from tech_cartography.ui.streamlit_session import (
+  STATE_CURRENT_USER,
+  STATE_WEEKLY_EMAIL_ENABLED,
+  WIDGET_SETTINGS_COMPANY_NAME,
+  WIDGET_SETTINGS_DISPLAY_NAME,
+  WIDGET_EMAIL_DESTINATION_DISPLAY,
+  WIDGET_WATCH_THEME_DISPLAY,
+  WIDGET_WEEKLY_DAY,
+  WIDGET_WEEKLY_EMAIL,
+  WIDGET_WEEKLY_TIME,
+)
 from tech_cartography.users.user_store import set_last_run_id, set_weekly_email_enabled, update_user_profile
 from tech_cartography.users.watch_profile_store import (
   get_active_watch_profile,
@@ -38,14 +49,22 @@ def render_user_settings_tab(user: dict[str, Any], *, current_run_id: str | None
   st.markdown(render_watch_profile_card(watch), unsafe_allow_html=True)
 
   with st.expander("ユーザープロファイル編集", expanded=False):
-    display_name = st.text_input("表示名", value=user.get("display_name") or "", key="settings_display_name")
-    company_name = st.text_input("会社名", value=user.get("company_name") or "", key="settings_company_name")
+    display_name = st.text_input(
+      "表示名",
+      value=user.get("display_name") or "",
+      key=WIDGET_SETTINGS_DISPLAY_NAME,
+    )
+    company_name = st.text_input(
+      "会社名",
+      value=user.get("company_name") or "",
+      key=WIDGET_SETTINGS_COMPANY_NAME,
+    )
     if st.button("プロファイルを保存", key="save_user_profile"):
       updated = update_user_profile(
         user["user_id"],
         {"display_name": display_name.strip() or None, "company_name": company_name.strip() or None},
       )
-      st.session_state["current_user"] = updated
+      st.session_state[STATE_CURRENT_USER] = updated
       st.success("プロファイルを保存しました。")
       st.rerun()
 
@@ -60,17 +79,34 @@ def render_user_settings_tab(user: dict[str, Any], *, current_run_id: str | None
   weekly_enabled = st.checkbox(
     translate_user_setting("weekly_email_enabled"),
     value=bool(user.get("weekly_email_enabled")),
-    key="weekly_email_checkbox",
+    key=WIDGET_WEEKLY_EMAIL,
   )
-  st.text_input(translate_user_setting("email_destination"), value=user.get("email", ""), disabled=True)
-  st.text_input(translate_user_setting("watch_theme"), value=watch.get("theme", ""), disabled=True)
+  st.text_input(
+    translate_user_setting("email_destination"),
+    value=user.get("email", ""),
+    disabled=True,
+    key=WIDGET_EMAIL_DESTINATION_DISPLAY,
+  )
+  st.text_input(
+    translate_user_setting("watch_theme"),
+    value=watch.get("theme", ""),
+    disabled=True,
+    key=WIDGET_WATCH_THEME_DISPLAY,
+  )
+  day_options = list(WEEKDAY_OPTIONS.keys())
+  day_default = str(user.get("weekly_email_day", "monday"))
   day_key = st.selectbox(
     translate_user_setting("weekly_email_day"),
-    options=list(WEEKDAY_OPTIONS.keys()),
+    options=day_options,
     format_func=lambda k: WEEKDAY_OPTIONS[k],
-    index=list(WEEKDAY_OPTIONS.keys()).index(str(user.get("weekly_email_day", "monday"))),
+    index=day_options.index(day_default) if day_default in day_options else 0,
+    key=WIDGET_WEEKLY_DAY,
   )
-  email_time = st.text_input(translate_user_setting("weekly_email_time"), value=user.get("weekly_email_time", "09:00"))
+  email_time = st.text_input(
+    translate_user_setting("weekly_email_time"),
+    value=user.get("weekly_email_time", "09:00"),
+    key=WIDGET_WEEKLY_TIME,
+  )
 
   if st.button("週次メール設定を保存", key="save_weekly_email"):
     set_weekly_email_enabled(user["user_id"], weekly_enabled)
@@ -87,18 +123,19 @@ def render_user_settings_tab(user: dict[str, Any], *, current_run_id: str | None
         "weekly_email_time": email_time,
       },
     )
-    refreshed = dict(st.session_state.get("current_user") or user)
+    refreshed = dict(st.session_state.get(STATE_CURRENT_USER) or user)
     refreshed["weekly_email_enabled"] = weekly_enabled
     refreshed["weekly_email_day"] = day_key
     refreshed["weekly_email_time"] = email_time
-    st.session_state["current_user"] = refreshed
+    st.session_state[STATE_CURRENT_USER] = refreshed
+    st.session_state[STATE_WEEKLY_EMAIL_ENABLED] = weekly_enabled
     st.markdown(render_ok_box(translate_weekly_email_status(weekly_enabled)), unsafe_allow_html=True)
 
   if current_run_id:
     st.caption(f"現在表示中の run_id: {current_run_id}")
     if st.button("この run_id をユーザーに保存", key="save_last_run"):
       updated = set_last_run_id(user["user_id"], current_run_id)
-      st.session_state["current_user"] = updated
+      st.session_state[STATE_CURRENT_USER] = updated
       update_watch_profile(
         user["user_id"],
         watch["watch_profile_id"],
@@ -107,7 +144,10 @@ def render_user_settings_tab(user: dict[str, Any], *, current_run_id: str | None
       st.success(f"last_run_id を {current_run_id} に保存しました。")
 
   if st.button("セッションをリセット", key="reset_session"):
+    preserved_user = st.session_state.get(STATE_CURRENT_USER)
     for key in list(st.session_state.keys()):
-      if key != "current_user":
+      if key != STATE_CURRENT_USER:
         del st.session_state[key]
+    if preserved_user:
+      st.session_state[STATE_CURRENT_USER] = preserved_user
     st.info("セッションをリセットしました（ログインは維持されます）。")
