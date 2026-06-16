@@ -2,14 +2,14 @@
 
 The following are explicitly out of scope for the current v7 phases:
 
-- Final synthesis / integrated Deep Dive report
-- Automatic web search (Tavily API, etc.)
 - Monthly / biweekly evidence map update automation
+- Email delivery of reports
 - Cloud Run deployment
 - Cloud SQL integration
+- Cloud Scheduler jobs
 - v6 weekly-watch baseline bulk copy
 
-Current focus through Phase 10:
+Current focus through Phase 11:
 
 - Phase 1: Search Strategy Builder
 - Phase 2: BigQuery light metadata retrieval
@@ -21,5 +21,6 @@ Current focus through Phase 10:
 - Phase 8: Technical View Agent
 - Phase 9: Web / Company Signal Mapping (manual input)
 - Phase 10: Business View Agent
+- Phase 11: Synthesis Report
 
-Phase 10 integrates technical and web signal inputs into preliminary business intelligence but does **not** produce the final Synthesis Report, run automatic web search, or automate periodic updates yet.
+Phase 11 produces the integrated Carbon Fiber Evidence Map report but does **not** automate periodic updates, email delivery, or cloud deployment yet.

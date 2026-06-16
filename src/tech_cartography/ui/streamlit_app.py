@@ -34,6 +34,9 @@ from tech_cartography.reports.web_signal_report import build_web_signal_summary
 from tech_cartography.agents.business_view_agent import run_business_view_assessment
 from tech_cartography.reports.business_assessment_export import save_business_view_outputs
 from tech_cartography.reports.business_view_report import build_business_view_summary
+from tech_cartography.agents.synthesis_agent import run_synthesis_report
+from tech_cartography.reports.synthesis_export import save_synthesis_outputs
+from tech_cartography.reports.synthesis_report import build_synthesis_report_summary
 from tech_cartography.reports.fulltext_evidence_report import (
   build_fulltext_evidence_summary,
   render_fulltext_evidence_markdown,
@@ -63,7 +66,7 @@ def _split_csv(value: str) -> list[str]:
 
 def render_search_strategy_page() -> None:
   st.title("PatentScout AI v7 — Carbon Fiber Evidence Map")
-  st.caption("Phase 1-10: Strategy / BigQuery / Clustering / Full Text / Claims / OpenAlex / Evidence Map / Technical View / Web Signals / Business View")
+  st.caption("Phase 1-11: Strategy / BigQuery / Clustering / Full Text / Claims / OpenAlex / Evidence Map / Technical View / Web Signals / Business View / Synthesis Report")
 
   if st.button("Load carbon fiber demo profile"):
     demo = load_carbon_fiber_demo_profile()
@@ -805,6 +808,138 @@ def render_search_strategy_page() -> None:
       st.subheader("Business View Report")
       st.markdown(Path(report_path).read_text(encoding="utf-8"))
     st.write("保存先:", business_view["paths"])
+
+  st.subheader("Phase 11: Synthesis Report")
+  syn_cluster_json = st.text_input(
+    "cluster_summary.json path",
+    value="outputs/carbon_fiber_case_study/latest/cluster_summary.json",
+    key="phase11_cluster_json",
+  )
+  syn_top20_csv = st.text_input(
+    "top20_patents.csv path",
+    value="outputs/carbon_fiber_case_study/latest/top20_patents.csv",
+    key="phase11_top20_csv",
+  )
+  syn_top5_csv = st.text_input(
+    "top5_fulltext_candidates.csv path",
+    value="outputs/carbon_fiber_case_study/latest/top5_fulltext_candidates.csv",
+    key="phase11_top5_csv",
+  )
+  syn_tech_json = st.text_input(
+    "technical_assessments.json path",
+    value="outputs/technical_view_assessment/latest/technical_assessments.json",
+    key="phase11_tech_json",
+  )
+  syn_tech_csv = st.text_input(
+    "patent_technical_summary.csv path",
+    value="outputs/technical_view_assessment/latest/patent_technical_summary.csv",
+    key="phase11_tech_csv",
+  )
+  syn_biz_json = st.text_input(
+    "business_assessments.json path",
+    value="outputs/business_view_assessment/latest/business_assessments.json",
+    key="phase11_biz_json",
+  )
+  syn_biz_csv = st.text_input(
+    "patent_business_summary.csv path",
+    value="outputs/business_view_assessment/latest/patent_business_summary.csv",
+    key="phase11_biz_csv",
+  )
+  syn_theme = st.text_input("theme", value="PAN系炭素繊維の中温域炭化条件最適化", key="phase11_theme")
+  syn_claim_paper_json = st.text_input(
+    "claim_paper_evidence_map_summary.json (optional)",
+    value="outputs/claim_paper_evidence_map/latest/claim_paper_evidence_map_summary.json",
+    key="phase11_claim_paper_json",
+  )
+  syn_gaps_csv = st.text_input(
+    "evidence_gaps.csv (optional)",
+    value="outputs/claim_paper_evidence_map/latest/evidence_gaps.csv",
+    key="phase11_gaps_csv",
+  )
+  syn_company_csv = st.text_input(
+    "web_signals_by_company.csv (optional)",
+    value="outputs/web_signal_mapping/latest/web_signals_by_company.csv",
+    key="phase11_company_csv",
+  )
+
+  if st.button("Build Synthesis Report", key="phase11_run_button"):
+    def _resolve_syn(path: Path, pattern: str) -> Path:
+      if not path.exists() and "latest" in str(path):
+        parent = path.parent.parent
+        candidates = sorted(parent.glob(f"*/{pattern}"))
+        if candidates:
+          return candidates[-1]
+      return path
+
+    cluster_path = _resolve_syn(Path(syn_cluster_json), "cluster_summary.json")
+    top20_path = _resolve_syn(Path(syn_top20_csv), "top20_patents.csv")
+    top5_path = _resolve_syn(Path(syn_top5_csv), "top5_fulltext_candidates.csv")
+    tech_json_path = _resolve_syn(Path(syn_tech_json), "technical_assessments.json")
+    tech_csv_path = _resolve_syn(Path(syn_tech_csv), "patent_technical_summary.csv")
+    biz_json_path = _resolve_syn(Path(syn_biz_json), "business_assessments.json")
+    biz_csv_path = _resolve_syn(Path(syn_biz_csv), "patent_business_summary.csv")
+    claim_paper_path = _resolve_syn(Path(syn_claim_paper_json), "claim_paper_evidence_map_summary.json")
+    gaps_path = _resolve_syn(Path(syn_gaps_csv), "evidence_gaps.csv")
+    company_path = _resolve_syn(Path(syn_company_csv), "web_signals_by_company.csv")
+
+    cluster_data = json.loads(cluster_path.read_text(encoding="utf-8")) if cluster_path.exists() else {}
+    cluster_summary = cluster_data.get("clusters", []) if isinstance(cluster_data, dict) else []
+    top20_patents = load_records_csv(top20_path) if top20_path.exists() else []
+    top5_candidates = load_records_csv(top5_path) if top5_path.exists() else []
+    technical_assessments = json.loads(tech_json_path.read_text(encoding="utf-8")) if tech_json_path.exists() else []
+    if not isinstance(technical_assessments, list):
+      technical_assessments = []
+    patent_technical_summary = load_records_csv(tech_csv_path) if tech_csv_path.exists() else []
+    business_assessments = json.loads(biz_json_path.read_text(encoding="utf-8")) if biz_json_path.exists() else []
+    if not isinstance(business_assessments, list):
+      business_assessments = []
+    patent_business_summary = load_records_csv(biz_csv_path) if biz_csv_path.exists() else []
+    claim_paper_summary = json.loads(claim_paper_path.read_text(encoding="utf-8")) if claim_paper_path.exists() else None
+    evidence_gaps = load_records_csv(gaps_path) if gaps_path.exists() else None
+    web_signals_by_company = load_records_csv(company_path) if company_path.exists() else None
+
+    if not top20_patents:
+      st.error("top20_patents.csv が見つかりません")
+    else:
+      syn_result = run_synthesis_report(
+        cluster_summary,
+        top20_patents,
+        top5_candidates,
+        technical_assessments,
+        patent_technical_summary,
+        business_assessments,
+        patent_business_summary,
+        claim_paper_summary=claim_paper_summary,
+        evidence_gaps=evidence_gaps,
+        web_signals_by_company=web_signals_by_company,
+        theme=syn_theme,
+      )
+      syn_output_dir = build_output_directory("outputs/synthesis_report")
+      syn_paths = save_synthesis_outputs(syn_result, syn_output_dir)
+      syn_summary = build_synthesis_report_summary(syn_result)
+      st.session_state["synthesis_report"] = {
+        "result": syn_result,
+        "summary": syn_summary,
+        "paths": syn_paths,
+      }
+
+  synthesis_report = st.session_state.get("synthesis_report")
+  if synthesis_report:
+    st.subheader("Executive Summary")
+    st.write(synthesis_report["result"].get("executive_summary"))
+    st.subheader("Key Findings")
+    st.dataframe(synthesis_report["result"].get("key_findings", []))
+    st.subheader("Priority Patents")
+    st.dataframe(synthesis_report["result"].get("priority_patents", []))
+    st.subheader("SME Action Plan")
+    st.json(synthesis_report["result"].get("sme_action_plan", []))
+    st.subheader("Next Update Recommendations")
+    st.write(synthesis_report["result"].get("next_update_recommendations", []))
+    report_path = synthesis_report["paths"].get("carbon_fiber_evidence_map_md")
+    if report_path and Path(report_path).exists():
+      st.subheader("Carbon Fiber Evidence Map v1")
+      st.markdown(Path(report_path).read_text(encoding="utf-8"))
+    st.write("保存先:", synthesis_report["paths"])
 
   if strategy:
     with st.expander("Full strategy JSON"):

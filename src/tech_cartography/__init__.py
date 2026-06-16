@@ -1,4 +1,4 @@
 """PatentScout AI v7 — Carbon Fiber Evidence Map."""
 
 PROJECT_NAME = "PatentScout AI v7"
-PROJECT_VERSION = "1.1.0"
+PROJECT_VERSION = "1.2.0"

@@ -323,3 +323,35 @@ Outputs are saved under `outputs/business_view_assessment/{timestamp}/`:
 - `design_around_candidates.csv`
 - `common_business_risks.json`
 - `business_view_report.md`
+
+## v7 Phase 11: Synthesis Report
+
+Phase 11 integrates Phase 1–10 outputs into a single Carbon Fiber Evidence Map report for SMEs.
+
+- Input: cluster summary, top20/top5 patents, technical and business assessments
+- Optional: claim/paper evidence map summary, evidence gaps, web signals by company/cluster
+- Rule-based synthesis (no automatic updates, email, or cloud deployment)
+- Outputs executive summary, key findings, priority patents, SME action plan, and caveats
+
+### CLI example
+
+```bash
+python scripts/build_synthesis_report.py \
+  --cluster-summary-json outputs/carbon_fiber_case_study/latest/cluster_summary.json \
+  --top20-csv outputs/carbon_fiber_case_study/latest/top20_patents.csv \
+  --top5-csv outputs/carbon_fiber_case_study/latest/top5_fulltext_candidates.csv \
+  --technical-assessments-json outputs/technical_view_assessment/latest/technical_assessments.json \
+  --patent-technical-summary-csv outputs/technical_view_assessment/latest/patent_technical_summary.csv \
+  --business-assessments-json outputs/business_view_assessment/latest/business_assessments.json \
+  --patent-business-summary-csv outputs/business_view_assessment/latest/patent_business_summary.csv \
+  --theme "PAN系炭素繊維の中温域炭化条件最適化"
+```
+
+Outputs are saved under `outputs/synthesis_report/{timestamp}/`:
+
+- `synthesis_report.json`
+- `key_findings.csv`
+- `priority_patents.csv`
+- `sme_action_plan.csv`
+- `next_update_recommendations.json`
+- `carbon_fiber_evidence_map_v1.md`

@@ -93,6 +93,14 @@
 - Export `business_assessments.json`, `patent_business_summary.csv`, and `business_view_report.md`
 - No Synthesis Report, automatic Tavily/web search, or monthly update automation in this step
 
-### Step 11: Synthesis Report (future)
+### Step 11: Synthesis Report
 
-- Final synthesis report for Carbon Fiber Evidence Map review
+- Input: cluster summary, top20/top5 patents, technical and business assessments
+- Integrate patent ranking, claim/paper evidence, technical view, and business view
+- Export `carbon_fiber_evidence_map_v1.md`, `key_findings.csv`, `priority_patents.csv`, `sme_action_plan.csv`
+- No monthly/biweekly automation, email delivery, or cloud deployment in this step
+
+### Step 12: Periodic Update Automation (future)
+
+- Monthly / biweekly evidence map refresh
+- Optional email delivery and cloud scheduling
