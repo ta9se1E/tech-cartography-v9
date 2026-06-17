@@ -115,6 +115,8 @@ def build_evidence_validation_summary(result: dict[str, Any]) -> dict[str, Any]:
 
 def _next_action_for_record(record: dict[str, Any]) -> str:
   status = str(record.get("readiness_status") or record.get("retrieval_status") or "")
+  if str(record.get("retrieval_status")) in {"manual_claims_loaded", "manual_fulltext_loaded"}:
+    return "run-claim-element-extraction"
   if status == "dry_run_only" or str(record.get("retrieval_status")) == "dry_run_only":
     return "execute-fulltext"
   if status == "cost_guard_failed":
@@ -229,6 +231,17 @@ def render_evidence_validation_markdown(summary: dict[str, Any]) -> str:
       f"retrieval={row.get('retrieval_status')} | evidence={row.get('evidence_level')} | "
       f"next={row.get('next_action')}",
     )
+  manual_loaded = [
+    row
+    for row in summary.get("us_candidates", [])
+    if str(row.get("retrieval_status") or "") in {"manual_claims_loaded", "manual_fulltext_loaded"}
+  ]
+  if manual_loaded:
+    lines.extend(["", "### Manual Route（成功）", ""])
+    for row in manual_loaded:
+      lines.append(
+        f"- {row.get('publication_number')}: manual fulltext route loaded → claim extraction ready",
+      )
   if not summary.get("us_candidates"):
     lines.append("- (no US fulltext records)")
 

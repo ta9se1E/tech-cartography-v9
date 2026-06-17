@@ -52,6 +52,9 @@ class PipelineConfig:
   expose_cost_to_user: bool = False
   run_id: str | None = None
 
+  manual_fulltext_input_dir: str = "outputs/manual_fulltext_inputs"
+  enable_manual_fulltext_fallback: bool = True
+
   # CLI-only convenience overrides (optional)
   use_existing_light_csv: str | None = None
   use_existing_top5_csv: str | None = None
@@ -98,6 +101,10 @@ class PipelineConfig:
       enable_actual_cost_ledger=bool(data.get("enable_actual_cost_ledger", True)),
       expose_cost_to_user=bool(data.get("expose_cost_to_user", False)),
       run_id=data.get("run_id") or None,
+      manual_fulltext_input_dir=str(
+        data.get("manual_fulltext_input_dir", cls.manual_fulltext_input_dir),
+      ),
+      enable_manual_fulltext_fallback=bool(data.get("enable_manual_fulltext_fallback", True)),
       use_existing_light_csv=data.get("use_existing_light_csv") or None,
       use_existing_top5_csv=data.get("use_existing_top5_csv") or None,
     )

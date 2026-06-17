@@ -13,6 +13,7 @@ from tech_cartography.agents.synthesis_agent import run_synthesis_report
 from tech_cartography.agents.technical_view_agent import run_technical_view_assessment
 from tech_cartography.config import load_carbon_fiber_demo_profile
 from tech_cartography.evidence.claim_paper_evidence_map import build_claim_paper_evidence_map
+from tech_cartography.manual.manual_fulltext_loader import apply_manual_fulltext_fallback
 from tech_cartography.validation.evidence_validation import run_evidence_validation
 from tech_cartography.orchestration.latest_outputs import (
   build_artifact_index,
@@ -209,10 +210,15 @@ def run_clustering_ranking_stage(config: PipelineConfig, output_dir: str, previo
   }
 
 
-def _build_digest_artifacts_from_outputs(known_outputs: dict[str, Any]) -> dict[str, Any]:
+def _build_digest_artifacts_from_outputs(
+  known_outputs: dict[str, Any],
+  *,
+  manual_fulltext_input_dir: str = "outputs/manual_fulltext_inputs",
+) -> dict[str, Any]:
   top20: list[dict[str, Any]] = []
   strategic: list[dict[str, Any]] = []
   us_deep: list[dict[str, Any]] = []
+  fulltext_records: list[dict[str, Any]] = []
   if known_outputs.get("top20_patents_csv") and Path(str(known_outputs["top20_patents_csv"])).exists():
     top20 = load_records_csv(str(known_outputs["top20_patents_csv"]))
   if known_outputs.get("strategic_watch_candidates_csv") and Path(
@@ -223,10 +229,32 @@ def _build_digest_artifacts_from_outputs(known_outputs: dict[str, Any]) -> dict[
     str(known_outputs["top5_fulltext_candidates_csv"]),
   ).exists():
     us_deep = load_records_csv(str(known_outputs["top5_fulltext_candidates_csv"]))
+  if known_outputs.get("top5_fulltext_records_json") and Path(
+    str(known_outputs["top5_fulltext_records_json"]),
+  ).exists():
+    fulltext_data = _read_json(str(known_outputs["top5_fulltext_records_json"]))
+    fulltext_records = (
+      fulltext_data if isinstance(fulltext_data, list) else fulltext_data.get("retrieved_records", [])
+    )
+    ft_by_pub = {
+      str(row.get("publication_number") or "").strip(): row
+      for row in fulltext_records
+      if isinstance(row, dict) and str(row.get("publication_number") or "").strip()
+    }
+    merged_us_deep: list[dict[str, Any]] = []
+    for row in us_deep:
+      pub = str(row.get("publication_number") or "").strip()
+      if pub in ft_by_pub:
+        merged_us_deep.append({**row, **ft_by_pub[pub]})
+      else:
+        merged_us_deep.append(row)
+    us_deep = merged_us_deep
   return {
     "top20_patents": top20,
     "strategic_watch": strategic,
     "us_deep_dive_candidates": us_deep,
+    "fulltext_records": fulltext_records,
+    "manual_fulltext_input_dir": manual_fulltext_input_dir,
     "next_actions": [],
   }
 
@@ -272,7 +300,10 @@ def _save_run_cost_artifacts(
     adaptive_plan=adaptive_plan,
     ledger_entries=ledger_entries,
     public_cost_status=public_cost_status,
-    digest_artifacts=_build_digest_artifacts_from_outputs(known_outputs),
+    digest_artifacts=_build_digest_artifacts_from_outputs(
+      known_outputs,
+      manual_fulltext_input_dir=config.manual_fulltext_input_dir,
+    ),
   )
 
 
@@ -337,6 +368,15 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
     cfg,
     strategic_watch_candidates=strategic_watch,
   )
+  retrieved_records = list(result.get("retrieved_records", []))
+  updated_records, manual_applied = apply_manual_fulltext_fallback(
+    retrieved_records,
+    input_dir=config.manual_fulltext_input_dir,
+    enable=config.enable_manual_fulltext_fallback,
+  )
+  if manual_applied:
+    result["retrieved_records"] = updated_records
+    result["manual_fulltext_applied"] = manual_applied
   summary = build_fulltext_evidence_summary(result)
   summary["internal_cost_policy_name"] = policy.policy_name
   summary["internal_cost_policy_validation"] = policy_validation
@@ -360,7 +400,10 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
       ledger_entries=result.get("ledger_entries", []),
       public_cost_status=result.get("public_cost_status", {}),
       digest_artifacts={
-        **_build_digest_artifacts_from_outputs(previous_outputs),
+        **_build_digest_artifacts_from_outputs(
+          previous_outputs,
+          manual_fulltext_input_dir=config.manual_fulltext_input_dir,
+        ),
         "us_deep_dive_candidates": candidates[:5],
       },
     )
@@ -396,6 +439,11 @@ def run_evidence_validation_stage(
   fulltext_records = (
     fulltext_data if isinstance(fulltext_data, list) else fulltext_data.get("retrieved_records", [])
   )
+  fulltext_records, manual_applied = apply_manual_fulltext_fallback(
+    fulltext_records,
+    input_dir=config.manual_fulltext_input_dir,
+    enable=config.enable_manual_fulltext_fallback,
+  )
 
   manual_candidates: list[dict[str, Any]] = []
   manual_csv = previous_outputs.get("strategic_watch_manual_fulltext_required_csv")
@@ -430,6 +478,7 @@ def run_evidence_validation_stage(
       "limited_count": (result.get("fulltext_readiness") or {}).get("limited_count", 0),
       "dry_run_only_count": (result.get("fulltext_readiness") or {}).get("dry_run_only_count", 0),
       "manual_required_count": (result.get("fulltext_readiness") or {}).get("manual_required_count", 0),
+      "manual_fulltext_applied_count": len(manual_applied),
       "claim_elements": len((result.get("claim_element_result") or {}).get("elements", [])),
       "paper_queries": (result.get("paper_query_result") or {}).get("total_queries", 0),
       "openalex_mode": (result.get("openalex_result") or {}).get("mode", "plan_only"),

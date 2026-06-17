@@ -129,6 +129,8 @@ FULLTEXT_RETRIEVAL_STATUS_LABELS: dict[str, tuple[str, str]] = {
   ),
   "blocked_by_usd_guard": ("USD上限で停止", "maximum_fulltext_usdを超える見積もりのため実行を停止しました。"),
   "allowed_expensive_execute": ("高コスト承認で取得済み", "明示承認のうえ全文を取得しました。1件ずつ確認してください。"),
+  "manual_claims_loaded": ("手動claims読込済み", "Google Patents等から貼り付けた請求項を利用します。明細書がない場合は限定解析です。"),
+  "manual_fulltext_loaded": ("手動全文読込済み", "手動入力の請求項と明細書を利用します。"),
   "query_error": ("クエリエラー", "BigQueryクエリでエラーが発生しました。"),
   "unsupported_country": ("非対応国", "米国公報以外はBigQuery全文取得の対象外です。手動ルートを使います。"),
   "skipped_not_selected": ("実行対象外", "今回のexecute limit / 公報指定の対象外です。"),

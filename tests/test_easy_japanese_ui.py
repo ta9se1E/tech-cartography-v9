@@ -7,10 +7,12 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_acquisition_policy_summary,
   render_cost_ledger_debug,
   render_evidence_validation_summary,
+  render_fulltext_availability_notice,
   render_fulltext_execute_summary,
   render_fulltext_status_card,
   render_fulltext_vs_watch_notice,
   render_manual_checklist_notice,
+  render_manual_fulltext_route_card,
   render_patent_card,
   render_strategic_watch_card,
   render_user_badge,
@@ -255,4 +257,35 @@ def test_missing_internal_cost_policy_ui_does_not_crash() -> None:
   assert "まだありません" in html
   digest = render_weekly_digest_preview_block(None)
   assert "まだありません" in digest
+
+
+def test_manual_fulltext_route_card_shows_status_without_amounts() -> None:
+  html = render_manual_fulltext_route_card(
+    "US-12565719-B2",
+    {
+      "manual_input_exists": True,
+      "claims_present": True,
+      "description_present": False,
+      "ready_for_claim_extraction": True,
+      "route_label_japanese": "claims入力済み",
+    },
+    bigquery_not_found=True,
+  )
+  assert "Manual Route" in html
+  assert "BigQuery public dataでは本文が確認できなかったため" in html
+  assert "import_manual_fulltext.py" in html
+  assert "Claim Element抽出に進める" in html
+  assert "usd" not in html.lower()
+  assert "$" not in html
+
+
+def test_fulltext_availability_notice_bigquery_not_found() -> None:
+  html = render_fulltext_availability_notice(
+    {
+      "publication_number": "US-12565719-B2",
+      "retrieval_status": "not_found",
+    },
+  )
+  assert "BigQuery側では請求項が確認できませんでした" in html
+  assert "Google Patents" in html
 

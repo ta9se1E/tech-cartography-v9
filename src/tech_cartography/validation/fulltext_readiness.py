@@ -82,6 +82,11 @@ def classify_fulltext_record_status(
     return "manual_required"
 
   retrieval_status = str(record.get("retrieval_status") or "").strip().lower()
+  if retrieval_status in {"manual_claims_loaded", "manual_fulltext_loaded"}:
+    if _has_claims(record):
+      return "ready_for_claim_extraction"
+    return "metadata_only"
+
   if retrieval_status == "dry_run_only":
     return "dry_run_only"
   if retrieval_status == "skipped_not_selected":
@@ -183,6 +188,21 @@ def build_fulltext_next_actions(readiness: dict[str, Any]) -> list[dict[str, Any
         "reason": "CN/EP/JP strategic watch candidates require manual PDF or Google Patents review.",
       },
     )
+  manual_loaded = sum(
+    1
+    for row in readiness.get("classified_records", [])
+    if str(row.get("retrieval_status") or "") in {"manual_claims_loaded", "manual_fulltext_loaded"}
+  )
+  if manual_loaded > 0:
+    actions.append(
+      {
+        "action_id": "continue_manual_claim_extraction",
+        "priority": "high",
+        "reason": "Manual fulltext input loaded; continue claim element extraction on claims-only route.",
+      },
+    )
+
+  if readiness.get("manual_required_count", 0) > 0:
     actions.append(
       {
         "action_id": "review_manual_fulltext_checklist",

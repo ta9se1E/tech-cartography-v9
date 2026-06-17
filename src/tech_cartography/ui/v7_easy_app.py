@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from tech_cartography.manual.manual_fulltext_loader import get_manual_fulltext_status
 from tech_cartography.orchestration.latest_outputs import read_latest_run_pointer
 from tech_cartography.reports.project_export import load_records_csv
 from tech_cartography.ui.easy_japanese_ui import (
@@ -27,6 +28,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_info_box,
   render_main_title,
   render_manual_checklist_notice,
+  render_manual_fulltext_route_card,
   render_markdown_preview,
   render_metric_cards,
   render_next_action_box,
@@ -265,6 +267,20 @@ def _tab_fulltext(manifest: dict[str, Any], display_mode: str, *, debug_mode: bo
         row_dict = row.to_dict()
         st.markdown(render_fulltext_availability_notice(row_dict), unsafe_allow_html=True)
         st.markdown(render_fulltext_status_card(row_dict), unsafe_allow_html=True)
+        pub = str(row_dict.get("publication_number") or "")
+        bq_not_found = str(row_dict.get("retrieval_status") or "") in {
+          "not_found",
+          "manual_google_patents_recommended",
+          "bigquery_fulltext_not_available",
+          "skipped_known_not_found",
+          "manual_route_recommended",
+        }
+        if pub and (bq_not_found or str(row_dict.get("retrieval_status") or "") in {"manual_claims_loaded", "manual_fulltext_loaded"}):
+          manual_status = get_manual_fulltext_status(pub, "outputs/manual_fulltext_inputs")
+          st.markdown(
+            render_manual_fulltext_route_card(pub, manual_status, bigquery_not_found=bq_not_found),
+            unsafe_allow_html=True,
+          )
 
   if not execute_df.empty:
     with st.expander("fulltext_execute_results"):

@@ -61,3 +61,47 @@ def test_execute_openalex_false_does_not_call_api(tmp_path: Path) -> None:
   fetch_mock.assert_not_called()
   assert result["openalex_result"]["mode"] == "plan_only"
   assert result["openalex_result"]["executed_queries"] == 0
+
+
+def test_manual_claims_loaded_is_ready_for_claim_extraction(tmp_path: Path) -> None:
+  records = [
+    {
+      "publication_number": "US-12565719-B2",
+      "title": "Carbon fiber",
+      "country": "US",
+      "retrieval_status": "manual_claims_loaded",
+      "claims": "1. A carbon fiber comprising PAN precursor fibers with tensile strength above 5 GPa.",
+      "evidence_level": "low_fulltext_evidence",
+      "evidence_coverage": {
+        "description_support": "limited_no_description",
+        "examples_support": "not_available",
+      },
+    },
+  ]
+  result = run_evidence_validation(records, output_dir=str(tmp_path / "manual"))
+  readiness = result["fulltext_readiness"]
+  assert readiness["ready_count"] >= 1
+  assert len(result["claim_element_result"]["elements"]) > 0
+  assert Path(result["output_paths"]["claim_elements_from_manual_fulltext_csv"]).exists()
+
+
+def test_manual_claims_without_description_uses_limited_no_description(tmp_path: Path) -> None:
+  records = [
+    {
+      "publication_number": "US-4",
+      "country": "US",
+      "retrieval_status": "manual_claims_loaded",
+      "claims": "1. A carbon fiber bundle.",
+      "evidence_level": "low_fulltext_evidence",
+      "evidence_coverage": {
+        "description_support": "limited_no_description",
+        "examples_support": "not_available",
+      },
+    },
+  ]
+  result = run_evidence_validation(records, output_dir=str(tmp_path / "limited"))
+  classified = result["fulltext_readiness"]["classified_records"][0]
+  assert classified["readiness_status"] == "ready_for_claim_extraction"
+  coverage = records[0]["evidence_coverage"]
+  assert coverage["description_support"] == "limited_no_description"
+  assert coverage["examples_support"] == "not_available"

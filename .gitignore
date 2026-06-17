@@ -3,6 +3,8 @@
 **pycache**/
 *.pyc
 outputs/
+inputs/manual/*
+!inputs/manual/.gitkeep
 data/runtime/
 data/cache/
 .venv/

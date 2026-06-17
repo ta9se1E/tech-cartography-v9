@@ -629,6 +629,28 @@ python scripts/run_carbon_fiber_evidence_map.py \
   --confirm-fulltext-execute
 ```
 
+## v7 Phase 18B: Manual Fulltext Input Route
+
+When BigQuery public data has no claims/description (e.g. `US-12565719-B2`), paste text from Google Patents into local files and import via CLI. Patent body text is **not** committed to the repo — keep it under `inputs/manual/` locally.
+
+Example local file names (user-provided content only):
+
+- `inputs/manual/US-12565719-B2_claims.txt`
+- `inputs/manual/US-12565719-B2_description.txt`
+
+Import:
+
+```bash
+python scripts/import_manual_fulltext.py \
+  --publication-number US-12565719-B2 \
+  --source-url https://patents.google.com/patent/US12565719B2 \
+  --claims-file inputs/manual/US-12565719-B2_claims.txt \
+  --input-route manual_google_patents \
+  --entered-by local_user
+```
+
+Saved to `outputs/manual_fulltext_inputs/US-12565719-B2.json`. The pipeline picks this up when BigQuery fulltext is `not_found` / `manual_route_recommended` (`enable_manual_fulltext_fallback: true` by default).
+
 ## v7 Phase 17: Login + Tabbed Japanese UI
 
 Phase 17 adds **app2.py-style** Easy Japanese UI with local email login and tab navigation.

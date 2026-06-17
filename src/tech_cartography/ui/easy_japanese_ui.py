@@ -615,3 +615,49 @@ def render_fulltext_availability_notice(record: dict[str, Any] | None, markdown_
   if not msg:
     return ""
   return f'<div class="tc-caution-box">{msg}</div>'
+
+
+def render_manual_fulltext_route_card(
+  publication_number: str,
+  manual_status: dict[str, Any] | None = None,
+  *,
+  bigquery_not_found: bool = False,
+) -> str:
+  status = manual_status or {}
+  claims_present = bool(status.get("claims_present"))
+  description_present = bool(status.get("description_present"))
+  manual_exists = bool(status.get("manual_input_exists"))
+  ready = bool(status.get("ready_for_claim_extraction"))
+  route_label = _safe(status.get("route_label_japanese"), "claims入力待ち")
+
+  intro = (
+    "BigQuery public dataでは本文が確認できなかったため、"
+    "Google Patents等からclaimsを手動で貼り付けるルートを使用します。"
+  )
+  if not bigquery_not_found and not manual_exists:
+    intro = "Manual Fulltext Input Route（BigQueryで取れない公報向けの正式ルート）"
+
+  cli_example = (
+    "python scripts/import_manual_fulltext.py "
+    f"--publication-number {publication_number or 'US-12565719-B2'} "
+    "--source-url https://patents.google.com/patent/US12565719B2 "
+    f"--claims-file inputs/manual/{publication_number or 'US-12565719-B2'}_claims.txt "
+    "--input-route manual_google_patents "
+    "--entered-by local_user"
+  )
+
+  ready_text = "はい（請求項ベースの限定解析）" if ready else "いいえ（claimsの入力が必要）"
+  return (
+    f'<div class="tc-info-box">'
+    f"<strong>Manual Route</strong><br>"
+    f"{intro}<br><br>"
+    f"公報番号: {_safe(publication_number)}<br>"
+    f"Manual input JSON: {'あり' if manual_exists else 'なし'}<br>"
+    f"claims: {'あり' if claims_present else 'なし'}<br>"
+    f"description: {'あり' if description_present else 'なし'}<br>"
+    f"Claim Element抽出に進める: {ready_text}<br>"
+    f"Manual Route状態: {route_label}<br><br>"
+    f"<strong>CLI例</strong><br>"
+    f'<pre style="white-space:pre-wrap;font-size:0.85em;">{cli_example}</pre>'
+    f"</div>"
+  )

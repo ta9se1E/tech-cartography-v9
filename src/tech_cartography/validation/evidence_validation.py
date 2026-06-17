@@ -8,6 +8,7 @@ from typing import Any
 from tech_cartography.evidence.claim_paper_evidence_map import build_claim_paper_evidence_map
 from tech_cartography.reports.claim_element_pipeline import run_claim_element_pipeline
 from tech_cartography.reports.evidence_validation_export import save_evidence_validation_outputs
+from tech_cartography.reports.manual_fulltext_extraction_report import save_manual_fulltext_extraction_artifacts
 from tech_cartography.reports.evidence_validation_report import (
   build_evidence_validation_summary,
   render_evidence_validation_markdown,
@@ -170,6 +171,12 @@ def run_evidence_validation(
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     paths = save_evidence_validation_outputs(result, out)
+    manual_paths = save_manual_fulltext_extraction_artifacts(
+      fulltext_records,
+      claim_element_result,
+      out,
+    )
+    paths.update(manual_paths)
     markdown = render_evidence_validation_markdown(result["evidence_validation_summary"])
     paths["evidence_validation_report_md"] = save_evidence_validation_report(markdown, out)
     result["output_paths"] = paths
