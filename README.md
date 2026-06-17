@@ -592,6 +592,43 @@ If dry-run shows GB over limit but USD within budget, add:
   --maximum-fulltext-usd 10
 ```
 
+## v7 Phase 16.2: Internal Cost Policy + Adaptive Ledger
+
+Phase 16.2 adds **internal acquisition policies**, **actual cost ledger**, and **adaptive retrieval control** for future usage-based monetization — **without showing prices to users**.
+
+- Internal policies: `watch_run` | `claims_check` | `full_deep_dive` | `technical_review` | `deep_research` (`configs/internal_cost_policy.yaml`)
+- Safety margin 1.3, target cost ratio 50% (internal design only)
+- BigQuery dry-run estimates + job actual bytes billed → `outputs/cost_ledger/cost_ledger.jsonl` + per-run `cost_ledger.csv`
+- Adaptive controller stops when cumulative actual cost nears `raw_cost_cap_usd`
+- User-facing outputs (no USD): `acquisition_policy_summary.md`, `weekly_digest_preview.md`
+- CLI: `--internal-cost-policy watch_run` (etc.), `--disable-cost-ledger`
+
+### Watch Run (metadata monitoring only)
+
+```bash
+python scripts/run_carbon_fiber_evidence_map.py \
+  --config configs/carbon_fiber_pipeline.yaml \
+  --use-existing-light-csv outputs/pipeline_runs/<run_id>/stages/bigquery_light_retrieval/<ts>/bigquery_light_results_dedup.csv \
+  --start-stage technology_clustering_ranking \
+  --stop-stage evidence_validation \
+  --internal-cost-policy watch_run
+```
+
+### Claims Check (US Top1 claims_only)
+
+```bash
+python scripts/run_carbon_fiber_evidence_map.py \
+  --config configs/carbon_fiber_pipeline.yaml \
+  --use-existing-light-csv outputs/pipeline_runs/<run_id>/stages/bigquery_light_retrieval/<ts>/bigquery_light_results_dedup.csv \
+  --start-stage technology_clustering_ranking \
+  --stop-stage evidence_validation \
+  --internal-cost-policy claims_check \
+  --execute-fulltext \
+  --fulltext-publication-number US-12565719-B2 \
+  --fulltext-scope claims_only \
+  --confirm-fulltext-execute
+```
+
 ## v7 Phase 17: Login + Tabbed Japanese UI
 
 Phase 17 adds **app2.py-style** Easy Japanese UI with local email login and tab navigation.

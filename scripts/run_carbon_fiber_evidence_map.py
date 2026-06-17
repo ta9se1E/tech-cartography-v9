@@ -31,6 +31,24 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--allow-expensive-fulltext", action="store_true", default=False)
   parser.add_argument("--execute-openalex", action="store_true", default=False)
 
+  parser.add_argument(
+    "--internal-cost-policy",
+    default="",
+    choices=["", "watch_run", "claims_check", "full_deep_dive", "technical_review", "deep_research"],
+    help="Internal acquisition policy (no user-facing price display)",
+  )
+  parser.add_argument(
+    "--internal-cost-policy-path",
+    default="",
+    help="Path to internal_cost_policy.yaml",
+  )
+  parser.add_argument(
+    "--disable-cost-ledger",
+    action="store_true",
+    default=False,
+    help="Disable actual cost ledger recording",
+  )
+
   parser.add_argument("--use-existing-light-csv", default="")
   parser.add_argument("--use-existing-top5-csv", default="")
   parser.add_argument("--web-signal-file", default="")
@@ -65,6 +83,13 @@ def main() -> int:
     config.allow_expensive_fulltext = True
   if args.execute_openalex:
     config.execute_openalex = True
+
+  if args.internal_cost_policy:
+    config.internal_cost_policy_name = args.internal_cost_policy
+  if args.internal_cost_policy_path:
+    config.internal_cost_policy_path = args.internal_cost_policy_path
+  if args.disable_cost_ledger:
+    config.enable_actual_cost_ledger = False
 
   if args.use_existing_light_csv:
     config.use_existing_light_csv = args.use_existing_light_csv

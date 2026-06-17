@@ -166,6 +166,16 @@
 - `claims_only` → limited claim extraction without description
 - CN/EP/JP manual watch unchanged; do not auto-execute all Top5 or `claims_and_description` unconditionally
 
+### Step 16.2 (v7 Phase 16.2): Internal Cost Policy + Adaptive Ledger
+
+- Usage-based monetization prep: internal cost policies per execution type (`watch_run`, `claims_check`, …)
+- **No user-facing prices** — UI/reports show acquisition policy, scope, stop reasons only
+- Safety margin 1.3; `raw_cost_cap_usd` as internal stop line; `buffered_cost_cap_usd` for pricing design
+- Actual cost ledger from BigQuery job bytes billed (internal estimate, not final invoice)
+- Adaptive retrieval: skip candidates when next estimate exceeds remaining budget (`skipped_budget_guard`)
+- Weekly Digest Preview generated (no email sending yet)
+- CN/EP/JP remain Strategic Watch / manual route
+
 ### Step 17 (v7 Phase 17): Login + Tabbed Japanese UI
 
 - Local email login (no password, no OAuth, no production auth)

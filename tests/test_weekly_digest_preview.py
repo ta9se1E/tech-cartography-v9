@@ -1,0 +1,72 @@
+"""Tests for weekly digest preview (Phase 16.2)."""
+
+from __future__ import annotations
+
+from tech_cartography.costs.weekly_digest_preview import (
+  build_weekly_digest_preview,
+  render_weekly_digest_preview_markdown,
+  save_weekly_digest_preview,
+)
+
+
+def test_preview_markdown_builds() -> None:
+  acquisition = {
+    "user_facing_name_japanese": "標準監視モード",
+    "user_facing_description_japanese": "広く監視",
+    "included_items": ["特許候補の更新"],
+    "excluded_items": ["明細書全文"],
+    "manual_watch_count": 2,
+  }
+  preview = build_weekly_digest_preview(
+    {
+      "top20_patents": [{"publication_number": "US-1", "title": "Fiber", "assignee": "Toray"}],
+      "strategic_watch": [
+        {
+          "publication_number": "CN-1",
+          "country": "CN",
+          "assignee": "ZHONGFU",
+          "watch_reason_japanese": "中複神鷹系",
+        },
+      ],
+      "us_deep_dive_candidates": [{"publication_number": "US-1", "title": "Fiber"}],
+    },
+    acquisition,
+  )
+  md = render_weekly_digest_preview_markdown(preview)
+  assert "Weekly Digest Preview" in md
+  assert "標準監視モード" in md
+  assert "中国 Strategic Watch" in md
+  assert "ZHONGFU" in md or "中複" in md
+
+
+def test_china_strategic_watch_included() -> None:
+  preview = build_weekly_digest_preview(
+    {"strategic_watch": [{"publication_number": "CN-1", "country": "CN"}]},
+    {"user_facing_name_japanese": "標準監視モード", "included_items": [], "excluded_items": []},
+  )
+  assert len(preview["china_strategic_watch"]) == 1
+
+
+def test_no_email_sending_note() -> None:
+  preview = build_weekly_digest_preview({}, {"user_facing_name_japanese": "標準監視モード"})
+  md = render_weekly_digest_preview_markdown(preview)
+  assert "メール送信" in preview["note_japanese"] or "メール" in md
+  assert "未実装" in md or "まだ" in md
+
+
+def test_no_monetary_amounts_in_preview(tmp_path) -> None:
+  preview = build_weekly_digest_preview(
+    {},
+    {
+      "user_facing_name_japanese": "標準監視モード",
+      "included_items": ["監視"],
+      "excluded_items": ["全文"],
+    },
+  )
+  md = render_weekly_digest_preview_markdown(preview)
+  lower = md.lower()
+  assert "usd" not in lower
+  assert "$" not in md
+  assert "ドル" not in md
+  paths = save_weekly_digest_preview(preview, tmp_path)
+  assert paths["weekly_digest_preview_md"]

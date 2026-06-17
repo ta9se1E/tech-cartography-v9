@@ -41,6 +41,20 @@ from tech_cartography.retrieval.controlled_fulltext_plan import (
   render_manual_fulltext_checklist,
   select_fulltext_execute_targets,
 )
+from tech_cartography.costs.adaptive_retrieval_controller import (
+  build_adaptive_retrieval_plan,
+  should_execute_candidate,
+  update_remaining_budget,
+)
+from tech_cartography.costs.cost_ledger import (
+  append_cost_ledger_entry,
+  build_cost_ledger_entry_from_bigquery_job,
+  build_cost_ledger_entry_from_estimate,
+  build_public_cost_status,
+  cost_ledger_entry_to_dict,
+  summarize_cost_ledger,
+)
+from tech_cartography.costs.internal_cost_policy import CostVisibilityPolicy, InternalCostPolicy
 from tech_cartography.retrieval.fulltext_cache import (
   load_fulltext_from_cache,
   save_fulltext_to_cache,
@@ -68,6 +82,11 @@ class FullTextRetrievalConfig:
   fulltext_scope: str = "claims_only"
   maximum_fulltext_usd: float = 10.0
   allow_expensive_fulltext: bool = False
+  internal_cost_policy: InternalCostPolicy | None = None
+  enable_cost_ledger: bool = True
+  global_ledger_path: str = "outputs/cost_ledger/cost_ledger.jsonl"
+  run_id: str = ""
+  stage_id: str = "top5_fulltext_collection"
 
   def maximum_bytes_billed(self) -> int:
     return gb_to_bytes(self.maximum_bytes_billed_gb)
@@ -82,6 +101,19 @@ def _default_client_factory(project_id: str) -> Any:
   return bigquery.Client(project=project_id)
 
 
+def _append_ledger_row(
+  config: FullTextRetrievalConfig,
+  entry: Any,
+  ledger_entries: list[dict[str, Any]] | None,
+) -> None:
+  if not config.enable_cost_ledger:
+    return
+  row = cost_ledger_entry_to_dict(entry) if not isinstance(entry, dict) else entry
+  if ledger_entries is not None:
+    ledger_entries.append(row)
+  append_cost_ledger_entry(row, config.global_ledger_path)
+
+
 def evaluate_cost_guard(
   estimated_bytes: int,
   estimated_usd: float,
@@ -89,6 +121,8 @@ def evaluate_cost_guard(
 ) -> dict[str, Any]:
   max_gb = float(config.maximum_bytes_billed_gb)
   max_usd = float(config.maximum_fulltext_usd)
+  policy = config.internal_cost_policy
+  effective_max_usd = float(policy.raw_cost_cap_usd) if policy else max_usd
   est_gb = bytes_to_gb(int(estimated_bytes or 0))
   est_usd = float(estimated_usd or 0.0)
 
@@ -105,16 +139,16 @@ def evaluate_cost_guard(
       "allow_expensive_fulltext": bool(config.allow_expensive_fulltext),
     }
 
-  if est_usd > max_usd:
+  if est_usd > effective_max_usd:
     return {
       "cost_guard_status": "blocked_by_usd",
-      "cost_guard_reason": f"estimated_usd={est_usd:.4f} exceeds maximum_fulltext_usd={max_usd}",
+      "cost_guard_reason": f"estimated_usd={est_usd:.4f} exceeds internal cap={effective_max_usd}",
       "can_execute": False,
       "requires_expensive_confirmation": False,
       "estimated_gb": est_gb,
       "estimated_usd": est_usd,
       "maximum_fulltext_gb": max_gb,
-      "maximum_fulltext_usd": max_usd,
+      "maximum_fulltext_usd": effective_max_usd,
       "allow_expensive_fulltext": bool(config.allow_expensive_fulltext),
     }
 
@@ -127,8 +161,23 @@ def evaluate_cost_guard(
       "estimated_gb": est_gb,
       "estimated_usd": est_usd,
       "maximum_fulltext_gb": max_gb,
-      "maximum_fulltext_usd": max_usd,
+      "maximum_fulltext_usd": effective_max_usd,
       "allow_expensive_fulltext": bool(config.allow_expensive_fulltext),
+    }
+
+  if policy and est_usd <= effective_max_usd:
+    return {
+      "cost_guard_status": "allowed_expensive_fulltext",
+      "cost_guard_reason": (
+        f"estimated_gb={est_gb:.4f} exceeds {max_gb} GB but within internal acquisition policy USD cap"
+      ),
+      "can_execute": True,
+      "requires_expensive_confirmation": False,
+      "estimated_gb": est_gb,
+      "estimated_usd": est_usd,
+      "maximum_fulltext_gb": max_gb,
+      "maximum_fulltext_usd": effective_max_usd,
+      "allow_expensive_fulltext": True,
     }
 
   if config.allow_expensive_fulltext:
@@ -166,7 +215,7 @@ def evaluate_cost_guard(
 def _execution_bytes_cap(config: FullTextRetrievalConfig, estimated_bytes: int) -> int:
   gb_cap = config.maximum_bytes_billed()
   usd_cap = usd_to_bytes(config.maximum_fulltext_usd)
-  if config.allow_expensive_fulltext:
+  if config.allow_expensive_fulltext or config.internal_cost_policy:
     return max(gb_cap, int(estimated_bytes or 0), usd_cap)
   return gb_cap
 
@@ -437,8 +486,15 @@ def execute_fulltext_query(
       use_query_cache=config.use_cache,
       maximum_bytes_billed=bytes_cap,
     )
-    rows = [dict(row.items()) for row in client.query(sql, job_config=job_config).result()]
-    return {"execution_status": "executed", "rows": rows, "error": None, "fulltext_scope": fulltext_scope}
+    query_job = client.query(sql, job_config=job_config)
+    rows = [dict(row.items()) for row in query_job.result()]
+    return {
+      "execution_status": "executed",
+      "rows": rows,
+      "error": None,
+      "fulltext_scope": fulltext_scope,
+      "query_job": query_job,
+    }
   except Exception as exc:  # noqa: BLE001
     return {"execution_status": "error", "rows": [], "error": str(exc)}
 
@@ -502,6 +558,7 @@ def retrieve_fulltext_for_candidate(
   *,
   client_factory: ClientFactory | None = None,
   execute_selected: bool | None = None,
+  ledger_entries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
   route = route_fulltext_candidate(candidate)
   publication_number = _safe_str(candidate.get("publication_number"))
@@ -572,6 +629,45 @@ def retrieve_fulltext_for_candidate(
     config,
   )
   dry_run = {**dry_run, **guard}
+
+  policy = config.internal_cost_policy
+  if policy and ledger_entries is not None:
+    budget = update_remaining_budget(policy, ledger_entries)
+    estimate = {
+      "estimated_bytes": int(dry_run.get("estimated_bytes", 0) or 0),
+      "estimated_usd": float(dry_run.get("estimated_usd", 0.0) or 0.0),
+      "fulltext_scope": config.resolved_scope(),
+      "cache_hit": False,
+    }
+    estimate_status = "dry_run_only" if not config.execute else "estimate_before_execute"
+    _append_ledger_row(
+      config,
+      build_cost_ledger_entry_from_estimate(
+        run_id=config.run_id,
+        stage_id=config.stage_id,
+        policy_name=policy.policy_name,
+        execution_type=policy.internal_display_name,
+        publication_number=publication_number,
+        scope=config.resolved_scope(),
+        estimated_bytes=estimate["estimated_bytes"],
+        retrieval_status=estimate_status,
+        raw_cost_cap_usd=policy.raw_cost_cap_usd,
+        buffered_cost_cap_usd=policy.buffered_cost_cap_usd,
+        remaining_raw_budget_usd=float(budget.get("remaining_raw_budget_usd", 0) or 0),
+      ),
+      ledger_entries,
+    )
+    if config.execute and selected:
+      adaptive = should_execute_candidate(candidate, policy, budget, estimate)
+      if not adaptive.get("allowed"):
+        status = str(adaptive.get("retrieval_status") or "skipped_budget_guard")
+        record = _build_fulltext_record(
+          candidate,
+          route=route,
+          retrieval_status=status,
+          warnings=[adaptive.get("public_reason", "Blocked by internal acquisition policy")],
+        )
+        return _finalize(status, record.to_dict(), dry_run, True, guard)
 
   guard_status = str(guard.get("cost_guard_status") or "")
   if guard_status == "blocked_by_usd":
@@ -660,6 +756,27 @@ def retrieve_fulltext_for_candidate(
       errors=[execution.get("error")] if execution.get("error") else [],
     )
     return _finalize("query_error", record.to_dict(), dry_run, False)
+
+  if policy and ledger_entries is not None and execution.get("execution_status") == "executed":
+    budget = update_remaining_budget(policy, ledger_entries)
+    _append_ledger_row(
+      config,
+      build_cost_ledger_entry_from_bigquery_job(
+        run_id=config.run_id,
+        stage_id=config.stage_id,
+        policy_name=policy.policy_name,
+        execution_type=policy.internal_display_name,
+        publication_number=publication_number,
+        scope=config.resolved_scope(),
+        job=execution.get("query_job"),
+        estimated_bytes=int(dry_run.get("estimated_bytes", 0) or 0),
+        retrieval_status="actual_cost_recorded",
+        raw_cost_cap_usd=policy.raw_cost_cap_usd,
+        buffered_cost_cap_usd=policy.buffered_cost_cap_usd,
+        remaining_raw_budget_usd=float(budget.get("remaining_raw_budget_usd", 0) or 0),
+      ),
+      ledger_entries,
+    )
 
   row = execution["rows"][0] if execution.get("rows") else {}
   expensive = guard_status == "allowed_expensive_fulltext"
@@ -803,6 +920,7 @@ def retrieve_controlled_fulltext_run(
 
   dry_run_by_pub: dict[str, dict[str, Any]] = {}
   scope_estimates: list[dict[str, Any]] = []
+  estimates_by_pub: dict[str, dict[str, Any]] = {}
   for candidate in plan["fulltext_targets"]:
     pub_norm = _normalize_publication_number(str(candidate.get("publication_number", "")))
     dry_run_by_pub[pub_norm] = dry_run_fulltext_query(
@@ -811,9 +929,22 @@ def retrieve_controlled_fulltext_run(
       client_factory=client_factory,
       scope=config.resolved_scope(),
     )
+    estimates_by_pub[pub_norm] = {
+      "estimated_bytes": int(dry_run_by_pub[pub_norm].get("estimated_bytes", 0) or 0),
+      "estimated_usd": float(dry_run_by_pub[pub_norm].get("estimated_usd", 0.0) or 0.0),
+      "fulltext_scope": config.resolved_scope(),
+    }
     scope_estimates.extend(
       dry_run_scope_estimates_for_candidate(candidate, config, client_factory=client_factory),
     )
+
+  policy = config.internal_cost_policy
+  ledger_entries: list[dict[str, Any]] = []
+  adaptive_plan = build_adaptive_retrieval_plan(
+    plan["fulltext_targets"],
+    policy,
+    estimates=estimates_by_pub,
+  ) if policy else {}
 
   execute_preview = build_fulltext_execute_preview(
     plan,
@@ -864,6 +995,36 @@ def retrieve_controlled_fulltext_run(
       fulltext_scope=config.fulltext_scope,
       maximum_fulltext_usd=config.maximum_fulltext_usd,
       allow_expensive_fulltext=config.allow_expensive_fulltext,
+      internal_cost_policy=config.internal_cost_policy,
+      enable_cost_ledger=config.enable_cost_ledger,
+      global_ledger_path=config.global_ledger_path,
+      run_id=config.run_id,
+      stage_id=config.stage_id,
+    )
+  elif policy and not policy.fulltext_enabled:
+    effective_config = FullTextRetrievalConfig(
+      project_id=config.project_id,
+      dry_run=True,
+      execute=False,
+      maximum_bytes_billed_gb=config.maximum_bytes_billed_gb,
+      output_dir=config.output_dir,
+      cache_dir=config.cache_dir,
+      use_cache=config.use_cache,
+      allow_manual_fallback=config.allow_manual_fallback,
+      execute_limit=config.execute_limit,
+      publication_number=config.publication_number,
+      execute_top_n=config.execute_top_n,
+      confirm_fulltext_execute=config.confirm_fulltext_execute,
+      require_fulltext_execute_confirmation=config.require_fulltext_execute_confirmation,
+      preview_only=False,
+      fulltext_scope=config.fulltext_scope,
+      maximum_fulltext_usd=policy.raw_cost_cap_usd,
+      allow_expensive_fulltext=config.allow_expensive_fulltext,
+      internal_cost_policy=policy,
+      enable_cost_ledger=config.enable_cost_ledger,
+      global_ledger_path=config.global_ledger_path,
+      run_id=config.run_id,
+      stage_id=config.stage_id,
     )
 
   for candidate in plan["fulltext_targets"]:
@@ -871,6 +1032,7 @@ def retrieve_controlled_fulltext_run(
       candidate,
       effective_config,
       client_factory=client_factory,
+      ledger_entries=ledger_entries,
     )
     status = str(result.get("retrieval_status", ""))
     if status == "cache_hit":
@@ -892,6 +1054,8 @@ def retrieve_controlled_fulltext_run(
     elif status == "blocked_by_usd_guard":
       blocked_by_usd_count += 1
       blocked_by_cost_guard += 1
+    elif status in {"skipped_budget_guard", "skipped_internal_cost_policy", "skipped_policy_scope"}:
+      skipped_not_selected_count += 1
     if result.get("dry_run"):
       total_estimated_bytes += int(result["dry_run"].get("estimated_bytes", 0))
     retrieved_records.append(result["record"])
@@ -941,9 +1105,24 @@ def retrieve_controlled_fulltext_run(
     **evidence_counts,
   }
 
+  ledger_summary = summarize_cost_ledger(ledger_entries)
+  public_cost_status: dict[str, Any] = {}
+  if policy:
+    public_cost_status = build_public_cost_status(
+      ledger_summary,
+      CostVisibilityPolicy(),
+      policy_summary=adaptive_plan.get("public_policy_summary"),
+      stop_reason_internal=adaptive_plan.get("internal_stop_reason"),
+    )
+
   return {
     **summary,
     "plan": plan,
+    "adaptive_plan": adaptive_plan,
+    "ledger_entries": ledger_entries,
+    "ledger_summary": ledger_summary,
+    "public_cost_status": public_cost_status,
+    "internal_cost_policy_name": policy.policy_name if policy else None,
     "execute_preview": execute_preview,
     "execute_results": execute_results,
     "retrieved_records": retrieved_records,

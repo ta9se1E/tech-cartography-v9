@@ -14,6 +14,9 @@ from tech_cartography.reports.project_export import load_records_csv
 from tech_cartography.ui.easy_japanese_ui import (
   inject_easy_ui_css,
   prepare_patent_display_df,
+  render_acquisition_policy_summary,
+  render_cost_ledger_debug,
+  render_weekly_digest_preview_block,
   render_caveat_footer,
   render_caution_box,
   render_evidence_validation_summary,
@@ -137,7 +140,7 @@ def _resolve_manifest(
   return None
 
 
-def _tab_start(user: dict[str, Any], watch: dict[str, Any], manifest: dict[str, Any] | None) -> None:
+def _tab_start(user: dict[str, Any], watch: dict[str, Any], manifest: dict[str, Any] | None, *, debug_mode: bool = False) -> None:
   st.markdown(render_ok_box("このアプリでできること: 特許候補の整理、全文確認計画、技術の裏取り候補の確認"), unsafe_allow_html=True)
   st.markdown(
     render_caution_box(
@@ -158,6 +161,16 @@ def _tab_start(user: dict[str, Any], watch: dict[str, Any], manifest: dict[str, 
     unsafe_allow_html=True,
   )
   if manifest:
+    acquisition = _load_json_artifact(manifest, "acquisition_policy_summary_json")
+    weekly_md = _load_text_artifact(manifest, "weekly_digest_preview_md")
+    weekly_json = _load_json_artifact(manifest, "weekly_digest_preview_json")
+    st.markdown(render_acquisition_policy_summary(acquisition), unsafe_allow_html=True)
+    st.markdown(render_weekly_digest_preview_block(weekly_json, weekly_md), unsafe_allow_html=True)
+    if debug_mode:
+      internal_summary = _load_json_artifact(manifest, "internal_cost_summary_json")
+      ledger = (internal_summary or {}).get("ledger_summary")
+      if ledger:
+        st.markdown(render_cost_ledger_debug(ledger), unsafe_allow_html=True)
     with st.expander("実行状況の詳細"):
       stage_rows = summarize_stage_statuses(manifest)
       if stage_rows:
@@ -207,7 +220,10 @@ def _tab_patents(manifest: dict[str, Any], display_mode: str) -> None:
         st.markdown(render_strategic_watch_card(row.to_dict()), unsafe_allow_html=True)
 
 
-def _tab_fulltext(manifest: dict[str, Any], display_mode: str) -> None:
+def _tab_fulltext(manifest: dict[str, Any], display_mode: str, *, debug_mode: bool = False) -> None:
+  acquisition = _load_json_artifact(manifest, "acquisition_policy_summary_json")
+  if acquisition:
+    st.markdown(render_acquisition_policy_summary(acquisition), unsafe_allow_html=True)
   st.markdown(render_fulltext_vs_watch_notice(), unsafe_allow_html=True)
   st.markdown(render_info_box(explain_fulltext_scope("claims_only")), unsafe_allow_html=True)
   for scope in ("claims_only", "description_only", "claims_and_description"):
@@ -255,6 +271,16 @@ def _tab_fulltext(manifest: dict[str, Any], display_mode: str) -> None:
     render_small_table(prepare_patent_display_df(strategic_manual_df))
   elif not top5_df.empty:
     st.markdown(render_manual_checklist_notice(), unsafe_allow_html=True)
+
+  if debug_mode:
+    internal_summary = _load_json_artifact(manifest, "internal_cost_summary_json")
+    ledger = (internal_summary or {}).get("ledger_summary")
+    if ledger:
+      with st.expander("開発者向け cost ledger（デバッグ）"):
+        st.markdown(render_cost_ledger_debug(ledger), unsafe_allow_html=True)
+        ledger_path = _artifact_path(manifest, "cost_ledger_csv")
+        if ledger_path and ledger_path.exists():
+          st.caption(f"ledger: {ledger_path}")
 
 
 def _tab_evidence(manifest: dict[str, Any]) -> None:
@@ -347,6 +373,7 @@ def render_tabbed_easy_app(
 
   root = pipeline_root or default_pipeline_root()
   manifest = _resolve_manifest(user, root, run_id)
+  debug_mode = bool(st.session_state.get("tc_debug_mode", False))
   if manifest and manifest.get("run_id"):
     rid = str(manifest["run_id"])
     if st.session_state.get(STATE_SAVED_RUN_ID) != rid:
@@ -358,7 +385,7 @@ def render_tabbed_easy_app(
 
   if not manifest:
     st.markdown(render_info_box("実行結果を読み込んでください。sidebar で run_id を指定するか latest_run を読み込みます。"), unsafe_allow_html=True)
-    _tab_start(user, watch, None)
+    _tab_start(user, watch, None, debug_mode=debug_mode)
     st.markdown(render_caveat_footer(), unsafe_allow_html=True)
     return
 
@@ -374,11 +401,11 @@ def render_tabbed_easy_app(
     ],
   )
   with tabs[0]:
-    _tab_start(user, watch, manifest)
+    _tab_start(user, watch, manifest, debug_mode=debug_mode)
   with tabs[1]:
     _tab_patents(manifest, display_mode)
   with tabs[2]:
-    _tab_fulltext(manifest, display_mode)
+    _tab_fulltext(manifest, display_mode, debug_mode=debug_mode)
   with tabs[3]:
     _tab_evidence(manifest)
   with tabs[4]:
@@ -400,6 +427,7 @@ def render_easy_japanese_app() -> None:
   pipeline_root = st.session_state.get(STATE_PIPELINE_ROOT, default_pipeline_root())
   run_id = st.session_state.get(STATE_SELECTED_RUN_ID, "")
   display_mode = st.session_state.get(STATE_DISPLAY_MODE, DISPLAY_MODE_OPTIONS[0])
+  st.sidebar.checkbox("デバッグモード（開発者向け cost ledger）", key="tc_debug_mode", value=False)
   render_tabbed_easy_app(user, pipeline_root=pipeline_root, run_id=run_id, display_mode=display_mode)
 
 

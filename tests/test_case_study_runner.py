@@ -346,6 +346,7 @@ def test_fulltext_config_passed_to_retriever(tmp_path: Path, monkeypatch) -> Non
   )
   cfg = PipelineConfig(
     execute_fulltext=True,
+    internal_cost_policy_name="claims_check",
     fulltext_execute_limit=1,
     fulltext_publication_number="US-1",
     confirm_fulltext_execute=True,
@@ -359,8 +360,10 @@ def test_fulltext_config_passed_to_retriever(tmp_path: Path, monkeypatch) -> Non
   assert captured[0].publication_number == "US-1"
   assert captured[0].confirm_fulltext_execute is True
   assert captured[0].fulltext_scope == "claims_only"
-  assert captured[0].maximum_fulltext_usd == 15.0
+  assert captured[0].maximum_fulltext_usd == 2.5
   assert captured[0].allow_expensive_fulltext is True
+  assert captured[0].internal_cost_policy is not None
+  assert captured[0].internal_cost_policy.policy_name == "claims_check"
 
 
 def test_evidence_validation_ready_with_retrieved_record(tmp_path: Path, monkeypatch) -> None:

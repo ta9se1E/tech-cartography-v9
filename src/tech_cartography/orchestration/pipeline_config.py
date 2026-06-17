@@ -46,6 +46,12 @@ class PipelineConfig:
   start_stage: str | None = None
   stop_stage: str | None = None
 
+  internal_cost_policy_name: str = "watch_run"
+  internal_cost_policy_path: str = "configs/internal_cost_policy.yaml"
+  enable_actual_cost_ledger: bool = True
+  expose_cost_to_user: bool = False
+  run_id: str | None = None
+
   # CLI-only convenience overrides (optional)
   use_existing_light_csv: str | None = None
   use_existing_top5_csv: str | None = None
@@ -87,6 +93,11 @@ class PipelineConfig:
       skip_stages=list(data.get("skip_stages", []) or []),
       start_stage=data.get("start_stage") or None,
       stop_stage=data.get("stop_stage") or None,
+      internal_cost_policy_name=str(data.get("internal_cost_policy_name", cls.internal_cost_policy_name)),
+      internal_cost_policy_path=str(data.get("internal_cost_policy_path", cls.internal_cost_policy_path)),
+      enable_actual_cost_ledger=bool(data.get("enable_actual_cost_ledger", True)),
+      expose_cost_to_user=bool(data.get("expose_cost_to_user", False)),
+      run_id=data.get("run_id") or None,
       use_existing_light_csv=data.get("use_existing_light_csv") or None,
       use_existing_top5_csv=data.get("use_existing_top5_csv") or None,
     )

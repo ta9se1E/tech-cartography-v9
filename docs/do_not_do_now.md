@@ -75,6 +75,14 @@ Phase 16.1 adds scoped fulltext + GB/USD guards but still does **not** add:
 - Automatic fulltext for CN/EP/JP
 - Automatic web search (Tavily, etc.)
 
+Phase 16.2 adds internal cost policy + adaptive ledger but still does **not** add:
+
+- User-facing price / cost / USD display
+- User-entered arbitrary budget amounts
+- Email sending (weekly digest preview only)
+- Payment / billing (Stripe, etc.)
+- Automatic fulltext for CN/EP/JP
+
 Phase 17 adds login + tabbed UI but still does **not** add:
 
 - Production authentication (Google OAuth / Firebase Auth)

@@ -521,3 +521,66 @@ def serialize_list_field(value: Any) -> str:
     except json.JSONDecodeError:
       pass
   return str(value)
+
+
+_COST_TOKENS = ("usd", "$", "ドル", "原価", "課金", "price", "cost_cap", "budget")
+
+
+def _text_has_cost_amounts(text: str) -> bool:
+  lower = text.lower()
+  return any(token in lower for token in _COST_TOKENS)
+
+
+def render_acquisition_policy_summary(summary: dict[str, Any] | None) -> str:
+  if not summary:
+    return render_info_box("取得方針のサマリーはまだありません。パイプライン実行後に表示されます。")
+  included = summary.get("included_items") or []
+  excluded = summary.get("excluded_items") or []
+  included_html = "<br>".join(f"• {item}" for item in included) or "• 特許候補の定点観測"
+  excluded_html = "<br>".join(f"• {item}" for item in excluded) or "• （なし）"
+  stop = _safe(summary.get("skipped_reason_japanese") or summary.get("execution_status_japanese"), "今回の取得方針に沿って処理しました。")
+  return (
+    f'<div class="tc-info-box">'
+    f"<strong>今回の取得方針</strong><br>"
+    f"実行タイプ: {_safe(summary.get('user_facing_name_japanese'))}<br>"
+    f"{_safe(summary.get('user_facing_description_japanese'))}<br><br>"
+    f"<strong>取得する情報</strong><br>{included_html}<br><br>"
+    f"<strong>今回取得しない情報</strong><br>{excluded_html}<br><br>"
+    f"<strong>停止理由</strong><br>{stop}<br>"
+    f"手動確認候補: {int(summary.get('manual_watch_count', 0))} 件 / "
+    f"全文取得対象: {int(summary.get('selected_targets_count', 0))} 件"
+    f"</div>"
+  )
+
+
+def render_weekly_digest_preview_block(preview: dict[str, Any] | None, markdown_text: str = "") -> str:
+  if markdown_text and not _text_has_cost_amounts(markdown_text):
+    return (
+      f'<div class="tc-info-box"><strong>Weekly Digest Preview</strong>'
+      f'<pre style="white-space:pre-wrap">{markdown_text[:6000]}</pre></div>'
+    )
+  if not preview:
+    return render_info_box("Weekly Digest Preview はまだありません。")
+  policy = preview.get("acquisition_policy") or {}
+  note = _safe(preview.get("note_japanese"), "週次メールのプレビューです。実際の送信はまだ行いません。")
+  lines = [
+    "<strong>Weekly Digest Preview</strong>",
+    note,
+    f"取得方針: {_safe(policy.get('name_japanese'))}",
+    f"重要特許: {len(preview.get('important_patents', []))} 件",
+    f"中国 Strategic Watch: {len(preview.get('china_strategic_watch', []))} 件",
+    f"US Deep Dive候補: {len(preview.get('us_deep_dive_candidates', []))} 件",
+  ]
+  return f'<div class="tc-info-box">{"<br>".join(lines)}</div>'
+
+
+def render_cost_ledger_debug(ledger_summary: dict[str, Any] | None) -> str:
+  if not ledger_summary:
+    return ""
+  return (
+    f'<div class="tc-warning-box">'
+    f"<strong>開発者向け cost ledger</strong><br>"
+    f"entries: {ledger_summary.get('entry_count', 0)}<br>"
+    f"status counts: {ledger_summary.get('retrieval_status_counts', {})}"
+    f"</div>"
+  )

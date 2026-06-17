@@ -4,6 +4,8 @@ import pandas as pd
 
 from tech_cartography.ui.easy_japanese_ui import (
   prepare_patent_display_df,
+  render_acquisition_policy_summary,
+  render_cost_ledger_debug,
   render_evidence_validation_summary,
   render_fulltext_execute_summary,
   render_fulltext_status_card,
@@ -13,6 +15,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_strategic_watch_card,
   render_user_badge,
   render_watch_profile_card,
+  render_weekly_digest_preview_block,
   summarize_stage_statuses,
 )
 from tech_cartography.ui.japanese_labels import (
@@ -206,4 +209,50 @@ def test_streamlit_state_keys_are_separated() -> None:
   assert_no_widget_internal_key_collision()
   assert WIDGET_PIPELINE_ROOT != STATE_PIPELINE_ROOT
   assert WIDGET_SELECTED_RUN_ID != STATE_SELECTED_RUN_ID
+
+
+def test_acquisition_policy_summary_ui_no_amounts() -> None:
+  html = render_acquisition_policy_summary(
+    {
+      "user_facing_name_japanese": "標準監視モード",
+      "user_facing_description_japanese": "広く監視します",
+      "included_items": ["特許候補の更新"],
+      "excluded_items": ["明細書全文"],
+      "skipped_reason_japanese": "今回は標準監視のため全文取得は行いません",
+      "manual_watch_count": 3,
+      "selected_targets_count": 0,
+    },
+  )
+  assert "標準監視モード" in html
+  assert "usd" not in html.lower()
+  assert "$" not in html
+  assert "ドル" not in html
+
+
+def test_weekly_digest_preview_ui() -> None:
+  html = render_weekly_digest_preview_block(
+    {
+      "note_japanese": "プレビューです。メール送信はまだ行いません。",
+      "acquisition_policy": {"name_japanese": "標準監視モード"},
+      "important_patents": [],
+      "china_strategic_watch": [{"publication_number": "CN-1"}],
+      "us_deep_dive_candidates": [],
+    },
+  )
+  assert "Weekly Digest Preview" in html
+  assert "usd" not in html.lower()
+
+
+def test_cost_ledger_debug_hidden_by_default() -> None:
+  assert render_cost_ledger_debug(None) == ""
+  html = render_cost_ledger_debug({"entry_count": 2, "retrieval_status_counts": {"dry_run_only": 2}})
+  assert "開発者向け" in html
+  assert "actual_total" not in html.lower()
+
+
+def test_missing_internal_cost_policy_ui_does_not_crash() -> None:
+  html = render_acquisition_policy_summary(None)
+  assert "まだありません" in html
+  digest = render_weekly_digest_preview_block(None)
+  assert "まだありません" in digest
 

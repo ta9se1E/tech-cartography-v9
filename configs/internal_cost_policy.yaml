@@ -1,0 +1,120 @@
+cost_policies:
+  watch_run:
+    internal_display_name: "標準監視"
+    user_facing_name_japanese: "標準監視モード"
+    user_facing_description_japanese: "技術テーマの新着特許を広く監視し、読むべき候補と中国Strategic Watchを整理します。"
+    raw_cost_cap_usd: 1.5
+    safety_margin: 1.3
+    buffered_cost_cap_usd: 1.95
+    target_cost_ratio: 0.5
+    default_scope: metadata_only
+    allowed_scopes:
+      - metadata_only
+    max_fulltext_targets: 0
+    fulltext_enabled: false
+    include_metadata_retrieval: true
+    include_ranking: true
+    include_strategic_watch_alerts: true
+    include_weekly_digest_preview: true
+    non_us_handling: strategic_watch_manual
+    expose_cost_to_user: false
+
+  claims_check:
+    internal_display_name: "請求項チェック"
+    user_facing_name_japanese: "請求項チェックモード"
+    user_facing_description_japanese: "US重要候補1件の請求項を取得し、権利範囲の中心を確認します。"
+    raw_cost_cap_usd: 2.5
+    safety_margin: 1.3
+    buffered_cost_cap_usd: 3.25
+    target_cost_ratio: 0.5
+    default_scope: claims_only
+    allowed_scopes:
+      - claims_only
+    max_fulltext_targets: 1
+    fulltext_enabled: true
+    include_claim_element_extraction: true
+    include_metadata_based_paper_query_plan: true
+    non_us_handling: strategic_watch_manual
+    expose_cost_to_user: false
+
+  full_deep_dive:
+    internal_display_name: "全文Deep Dive"
+    user_facing_name_japanese: "全文深掘りモード"
+    user_facing_description_japanese: "US重要候補1件について、請求項と明細書を取得し、実施例・数値条件・物性値の確認に進みます。"
+    raw_cost_cap_usd: 10.0
+    safety_margin: 1.3
+    buffered_cost_cap_usd: 13.0
+    target_cost_ratio: 0.5
+    default_scope: claims_and_description
+    allowed_scopes:
+      - claims_only
+      - description_only
+      - claims_and_description
+    max_fulltext_targets: 1
+    fulltext_enabled: true
+    include_examples_extraction: true
+    include_measured_properties_extraction: true
+    include_evidence_validation_report: true
+    non_us_handling: strategic_watch_manual
+    expose_cost_to_user: false
+
+  technical_review:
+    internal_display_name: "技術レビュー"
+    user_facing_name_japanese: "技術レビューモード"
+    user_facing_description_japanese: "複数候補の請求項を比較し、最重要候補は明細書まで確認します。"
+    raw_cost_cap_usd: 20.0
+    safety_margin: 1.3
+    buffered_cost_cap_usd: 26.0
+    target_cost_ratio: 0.5
+    default_scope: claims_only
+    allowed_scopes:
+      - claims_only
+      - description_only
+      - claims_and_description
+    max_fulltext_targets: 3
+    max_description_targets: 1
+    fulltext_enabled: true
+    include_paper_query_candidates: true
+    include_technical_view_report: true
+    non_us_handling: strategic_watch_manual
+    expose_cost_to_user: false
+
+  deep_research:
+    internal_display_name: "本格調査"
+    user_facing_name_japanese: "本格調査モード"
+    user_facing_description_japanese: "Top5候補を対象に、請求項・明細書・Evidence Map・統合レポートまで進めます。"
+    raw_cost_cap_usd: 40.0
+    safety_margin: 1.3
+    buffered_cost_cap_usd: 52.0
+    target_cost_ratio: 0.5
+    default_scope: claims_only
+    allowed_scopes:
+      - claims_only
+      - description_only
+      - claims_and_description
+    max_fulltext_targets: 5
+    max_description_targets: 3
+    fulltext_enabled: true
+    include_evidence_map: true
+    include_synthesis_report: true
+    non_us_handling: strategic_watch_manual
+    expose_cost_to_user: false
+
+default_policy: watch_run
+default_deep_dive_policy: claims_check
+demo_policy: full_deep_dive
+
+global_hard_stop:
+  max_raw_cost_usd_per_run: 40.0
+  max_buffered_cost_usd_per_run: 52.0
+  behavior: block
+
+ui_visibility:
+  show_cost_to_user: false
+  show_price_to_user: false
+  show_internal_budget_to_user: false
+  show_estimated_usd_to_user: false
+  show_actual_usd_to_user: false
+  show_acquisition_policy_name: true
+  show_acquisition_scope: true
+  show_stop_reason_without_cost: true

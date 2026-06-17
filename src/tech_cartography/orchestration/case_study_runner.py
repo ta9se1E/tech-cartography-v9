@@ -63,6 +63,16 @@ from tech_cartography.reports.fulltext_evidence_report import (
   build_fulltext_evidence_summary,
   render_fulltext_evidence_markdown,
 )
+from tech_cartography.costs.cost_artifacts import save_cost_run_artifacts
+from tech_cartography.costs.adaptive_retrieval_controller import build_adaptive_retrieval_plan
+from tech_cartography.costs.cost_ledger import build_public_cost_status, summarize_cost_ledger
+from tech_cartography.costs.internal_cost_policy import (
+  CostVisibilityPolicy,
+  get_internal_cost_policy,
+  get_internal_cost_policy_set,
+  public_policy_summary,
+  validate_internal_cost_policy,
+)
 from tech_cartography.retrieval.patent_fulltext_retriever import (
   FullTextRetrievalConfig,
   retrieve_controlled_fulltext_run,
@@ -199,6 +209,73 @@ def run_clustering_ranking_stage(config: PipelineConfig, output_dir: str, previo
   }
 
 
+def _build_digest_artifacts_from_outputs(known_outputs: dict[str, Any]) -> dict[str, Any]:
+  top20: list[dict[str, Any]] = []
+  strategic: list[dict[str, Any]] = []
+  us_deep: list[dict[str, Any]] = []
+  if known_outputs.get("top20_patents_csv") and Path(str(known_outputs["top20_patents_csv"])).exists():
+    top20 = load_records_csv(str(known_outputs["top20_patents_csv"]))
+  if known_outputs.get("strategic_watch_candidates_csv") and Path(
+    str(known_outputs["strategic_watch_candidates_csv"]),
+  ).exists():
+    strategic = load_records_csv(str(known_outputs["strategic_watch_candidates_csv"]))
+  if known_outputs.get("top5_fulltext_candidates_csv") and Path(
+    str(known_outputs["top5_fulltext_candidates_csv"]),
+  ).exists():
+    us_deep = load_records_csv(str(known_outputs["top5_fulltext_candidates_csv"]))
+  return {
+    "top20_patents": top20,
+    "strategic_watch": strategic,
+    "us_deep_dive_candidates": us_deep,
+    "next_actions": [],
+  }
+
+
+def _save_run_cost_artifacts(
+  config: PipelineConfig,
+  run_output_dir: str,
+  known_outputs: dict[str, Any],
+  fulltext_result: dict[str, Any] | None = None,
+) -> dict[str, str]:
+  policy_set = get_internal_cost_policy_set(config.internal_cost_policy_path)
+  policy = get_internal_cost_policy(config.internal_cost_policy_name, path=config.internal_cost_policy_path)
+  validate_internal_cost_policy(policy, policy_set.global_hard_stop)
+
+  ledger_entries: list[dict[str, Any]] = []
+  adaptive_plan: dict[str, Any] = {}
+  public_cost_status: dict[str, Any] = {}
+  if fulltext_result:
+    ledger_entries = list(fulltext_result.get("ledger_entries") or [])
+    adaptive_plan = dict(fulltext_result.get("adaptive_plan") or {})
+    public_cost_status = dict(fulltext_result.get("public_cost_status") or {})
+  else:
+    candidates: list[dict[str, Any]] = []
+    if known_outputs.get("top5_fulltext_candidates_csv") and Path(
+      str(known_outputs["top5_fulltext_candidates_csv"]),
+    ).exists():
+      candidates = load_records_csv(str(known_outputs["top5_fulltext_candidates_csv"]))
+    adaptive_plan = build_adaptive_retrieval_plan(candidates, policy)
+    ledger_summary = summarize_cost_ledger(ledger_entries)
+    public_cost_status = build_public_cost_status(
+      ledger_summary,
+      policy_set.ui_visibility if not config.expose_cost_to_user else CostVisibilityPolicy(),
+      policy_summary=public_policy_summary(policy),
+      stop_reason_internal=adaptive_plan.get("internal_stop_reason"),
+    )
+
+  if not config.enable_actual_cost_ledger:
+    return {}
+
+  return save_cost_run_artifacts(
+    run_output_dir,
+    policy=policy,
+    adaptive_plan=adaptive_plan,
+    ledger_entries=ledger_entries,
+    public_cost_status=public_cost_status,
+    digest_artifacts=_build_digest_artifacts_from_outputs(known_outputs),
+  )
+
+
 def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
   _safe_mkdir(output_dir)
   candidates_csv = previous_outputs.get("top5_fulltext_candidates_csv") or config.use_existing_top5_csv
@@ -211,22 +288,46 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
   if strategic_watch_csv and Path(strategic_watch_csv).exists():
     strategic_watch = load_records_csv(strategic_watch_csv)
 
+  policy_set = get_internal_cost_policy_set(config.internal_cost_policy_path)
+  policy = get_internal_cost_policy(config.internal_cost_policy_name, path=config.internal_cost_policy_path)
+  policy_validation = validate_internal_cost_policy(policy, policy_set.global_hard_stop)
+
+  effective_execute = bool(config.execute_fulltext) and policy.fulltext_enabled
+  effective_scope = config.fulltext_scope
+  if (
+    policy.fulltext_enabled
+    and policy.default_scope not in {"metadata_only"}
+    and config.fulltext_scope == "claims_only"
+    and policy.default_scope != "claims_only"
+  ):
+    effective_scope = policy.default_scope
+
+  execute_limit = int(config.fulltext_execute_limit or 1)
+  if policy.fulltext_enabled:
+    execute_limit = min(execute_limit, int(policy.max_fulltext_targets or 0)) or 1
+  else:
+    execute_limit = 1
+
   cfg = FullTextRetrievalConfig(
     project_id=None,
-    dry_run=not config.execute_fulltext,
-    execute=bool(config.execute_fulltext),
+    dry_run=not effective_execute,
+    execute=effective_execute,
     maximum_bytes_billed_gb=config.maximum_fulltext_gb,
     output_dir=str(Path(output_dir)),
     cache_dir="data/runtime/fulltext_cache",
     use_cache=bool(config.use_cache),
-    execute_limit=int(config.fulltext_execute_limit or 1),
+    execute_limit=execute_limit,
     publication_number=config.fulltext_publication_number,
     execute_top_n=config.fulltext_execute_top_n,
     confirm_fulltext_execute=bool(config.confirm_fulltext_execute),
     require_fulltext_execute_confirmation=bool(config.require_fulltext_execute_confirmation),
-    fulltext_scope=config.fulltext_scope,
-    maximum_fulltext_usd=config.maximum_fulltext_usd,
+    fulltext_scope=effective_scope,
+    maximum_fulltext_usd=policy.raw_cost_cap_usd,
     allow_expensive_fulltext=bool(config.allow_expensive_fulltext),
+    internal_cost_policy=policy,
+    enable_cost_ledger=bool(config.enable_actual_cost_ledger),
+    run_id=config.run_id or "",
+    stage_id="top5_fulltext_collection",
   )
   result = retrieve_controlled_fulltext_run(
     candidates,
@@ -234,6 +335,8 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
     strategic_watch_candidates=strategic_watch,
   )
   summary = build_fulltext_evidence_summary(result)
+  summary["internal_cost_policy_name"] = policy.policy_name
+  summary["internal_cost_policy_validation"] = policy_validation
   markdown = render_fulltext_evidence_markdown(summary)
   paths = normalize_stage_outputs(
     "top5_fulltext_collection",
@@ -246,6 +349,19 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
       use_timestamp_subdir=False,
     ),
   )
+  if config.enable_actual_cost_ledger:
+    cost_paths = save_cost_run_artifacts(
+      output_dir,
+      policy=policy,
+      adaptive_plan=result.get("adaptive_plan", {}),
+      ledger_entries=result.get("ledger_entries", []),
+      public_cost_status=result.get("public_cost_status", {}),
+      digest_artifacts={
+        **_build_digest_artifacts_from_outputs(previous_outputs),
+        "us_deep_dive_candidates": candidates[:5],
+      },
+    )
+    paths.update(normalize_stage_outputs("top5_fulltext_collection", cost_paths))
   return {
     "status": result.get("status", "ok"),
     "paths": paths,
@@ -256,6 +372,9 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
       "record_count": len(result.get("retrieved_records", [])),
       "execute_fulltext": bool(config.execute_fulltext),
       "mode": "execute" if config.execute_fulltext else "dry_run",
+      "adaptive_plan": result.get("adaptive_plan", {}),
+      "ledger_entries": result.get("ledger_entries", []),
+      "public_cost_status": result.get("public_cost_status", {}),
     },
   }
 
@@ -761,6 +880,7 @@ def run_carbon_fiber_evidence_map_pipeline(config: PipelineConfig) -> dict[str, 
   run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
   run_output_dir = str(Path(config.output_root) / run_id)
   _safe_mkdir(run_output_dir)
+  config.run_id = run_id
 
   manifest = create_manifest(config, run_id=run_id, run_output_dir=run_output_dir)
   manifest_dir = str(Path(run_output_dir))
@@ -810,6 +930,18 @@ def run_carbon_fiber_evidence_map_pipeline(config: PipelineConfig) -> dict[str, 
 
   latest_pointer = write_latest_run_pointer(run_id, manifest_path, config.output_root)
   manifest.final_outputs["latest_run_pointer_json"] = latest_pointer
+
+  fulltext_result: dict[str, Any] | None = None
+  for stage in manifest.stage_results:
+    if stage.stage_id == "top5_fulltext_collection" and isinstance(stage.summary, dict):
+      fulltext_result = stage.summary
+      break
+
+  cost_paths = _save_run_cost_artifacts(config, run_output_dir, known_outputs, fulltext_result)
+  if cost_paths:
+    manifest.final_outputs.update(cost_paths)
+    known_outputs.update(cost_paths)
+
   save_manifest(manifest, manifest_dir)
 
   return {
