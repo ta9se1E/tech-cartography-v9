@@ -16,6 +16,26 @@ def build_weekly_digest_preview(
   cn_watch = artifacts.get("strategic_watch") or []
   next_actions = artifacts.get("next_actions") or []
 
+  def _bq_status(row: dict[str, Any]) -> str:
+    if not isinstance(row, dict):
+      return "BigQuery未確認"
+    probe = row.get("availability_probe") or {}
+    status = str(row.get("retrieval_status") or probe.get("probe_status") or "")
+    if status in {"retrieved", "cache_hit", "fulltext_probe_found_claims", "allowed_expensive_execute"}:
+      return "BigQuery取得可"
+    if status in {"skipped_known_not_found", "manual_google_patents_recommended", "bigquery_fulltext_not_available", "fulltext_probe_not_found", "not_found"}:
+      return "BigQueryでは未確認のためManual Route推奨"
+    return "BigQuery未確認"
+
+  us_deep_dive_enriched = []
+  for row in us_deep_dive[:5]:
+    if isinstance(row, dict):
+      enriched = dict(row)
+      enriched["bigquery_availability_status_japanese"] = _bq_status(row)
+      us_deep_dive_enriched.append(enriched)
+    else:
+      us_deep_dive_enriched.append(row)
+
   return {
     "title": "Weekly Digest Preview",
     "note_japanese": (
@@ -29,7 +49,7 @@ def build_weekly_digest_preview(
       "excluded_items": acquisition_policy_summary.get("excluded_items", []),
     },
     "important_patents": top20[:10],
-    "us_deep_dive_candidates": us_deep_dive[:5],
+    "us_deep_dive_candidates": us_deep_dive_enriched,
     "china_strategic_watch": cn_watch[:10],
     "next_actions": next_actions[:8],
     "manual_watch_count": acquisition_policy_summary.get("manual_watch_count", len(cn_watch)),
@@ -78,7 +98,9 @@ def render_weekly_digest_preview_markdown(preview: dict[str, Any]) -> str:
   lines.extend(["", "## US Deep Dive候補", ""])
   for row in preview.get("us_deep_dive_candidates", [])[:5]:
     if isinstance(row, dict):
-      lines.append(f"- {row.get('publication_number', '')} | {row.get('title', '')}")
+      bq = row.get("bigquery_availability_status_japanese", "")
+      suffix = f" | {bq}" if bq else ""
+      lines.append(f"- {row.get('publication_number', '')} | {row.get('title', '')}{suffix}")
 
   lines.extend(["", "## 今週の次アクション", ""])
   for action in preview.get("next_actions", []):

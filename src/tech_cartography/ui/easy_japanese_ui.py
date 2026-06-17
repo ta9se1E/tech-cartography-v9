@@ -584,3 +584,34 @@ def render_cost_ledger_debug(ledger_summary: dict[str, Any] | None) -> str:
     f"status counts: {ledger_summary.get('retrieval_status_counts', {})}"
     f"</div>"
   )
+
+
+def render_fulltext_availability_notice(record: dict[str, Any] | None, markdown_text: str = "") -> str:
+  if markdown_text and not _text_has_cost_amounts(markdown_text):
+    return (
+      f'<div class="tc-info-box"><strong>Fulltext Availability Probe</strong>'
+      f'<pre style="white-space:pre-wrap">{markdown_text[:5000]}</pre></div>'
+    )
+  if not record:
+    return ""
+  status = str(record.get("retrieval_status") or "")
+  probe = record.get("availability_probe") or {}
+  probe_status = str(probe.get("probe_status") or "")
+  if status == "skipped_known_not_found":
+    msg = "前回確認済みのため、今回は手動確認候補として扱います。"
+  elif status in {"not_found", "bigquery_fulltext_not_available", "manual_google_patents_recommended", "fulltext_probe_not_found"} or probe_status in {
+    "not_found_in_bigquery",
+    "manual_route_recommended",
+    "found_metadata_only",
+  }:
+    msg = (
+      "BigQuery側では請求項が確認できませんでした。"
+      "Google Patents / PDF / 手動貼り付けルートで確認してください。"
+    )
+  elif probe_status == "found_claims" or status == "fulltext_probe_found_claims":
+    msg = "BigQueryで請求項の存在を確認しました。fulltext取得に進めます。"
+  else:
+    msg = probe.get("user_status_japanese") or ""
+  if not msg:
+    return ""
+  return f'<div class="tc-caution-box">{msg}</div>'

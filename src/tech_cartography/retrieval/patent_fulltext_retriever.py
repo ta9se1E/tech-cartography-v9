@@ -55,6 +55,19 @@ from tech_cartography.costs.cost_ledger import (
   summarize_cost_ledger,
 )
 from tech_cartography.costs.internal_cost_policy import CostVisibilityPolicy, InternalCostPolicy
+from tech_cartography.retrieval.bigquery_fulltext_availability_probe import (
+  QUERY_STRATEGY,
+  FulltextAvailabilityProbeResult,
+  execute_availability_probe,
+  probe_result_to_public_dict,
+  save_availability_probe_result,
+)
+from tech_cartography.retrieval.fulltext_not_found_cache import (
+  get_not_found_entry,
+  is_known_not_found,
+  mark_not_found,
+)
+from tech_cartography.retrieval.publication_number_variants import build_publication_number_variants
 from tech_cartography.retrieval.fulltext_cache import (
   load_fulltext_from_cache,
   save_fulltext_to_cache,
@@ -87,6 +100,11 @@ class FullTextRetrievalConfig:
   global_ledger_path: str = "outputs/cost_ledger/cost_ledger.jsonl"
   run_id: str = ""
   stage_id: str = "top5_fulltext_collection"
+  enable_availability_probe: bool = False
+  use_not_found_cache: bool = False
+  not_found_cache_path: str = "outputs/fulltext_cache/not_found_cache.json"
+  max_probe_estimated_usd: float = 0.5
+  availability_probe_output_dir: str | None = None
 
   def maximum_bytes_billed(self) -> int:
     return gb_to_bytes(self.maximum_bytes_billed_gb)
@@ -307,6 +325,66 @@ def _safe_str(value: Any) -> str:
   return str(value).strip()
 
 
+def _candidate_metadata(candidate: dict[str, Any]) -> dict[str, Any]:
+  meta: dict[str, Any] = {}
+  for key in (
+    "application_publication_number",
+    "application_number",
+    "related_publication_number",
+    "grant_publication_number",
+    "priority_publication_number",
+    "family_publication_number",
+  ):
+    if candidate.get(key):
+      meta[key] = candidate[key]
+  nested = candidate.get("metadata")
+  if isinstance(nested, dict):
+    meta.update({k: v for k, v in nested.items() if v})
+  return meta
+
+
+def _save_probe_artifact(probe: Any, config: FullTextRetrievalConfig) -> None:
+  if not config.availability_probe_output_dir:
+    return
+  try:
+    save_availability_probe_result(probe, config.availability_probe_output_dir)
+  except Exception:  # noqa: BLE001
+    return
+
+
+def _probe_blocks_fulltext(probe_status: str, scope: str) -> bool:
+  if probe_status in {"query_error", "skipped_due_to_probe_cost"}:
+    return probe_status == "query_error"
+  if probe_status == "found_claims" and scope in {"claims_only", "claims_and_description"}:
+    return False
+  if probe_status == "found_description_only" and scope == "description_only":
+    return False
+  if probe_status in {
+    "not_found_in_bigquery",
+    "found_metadata_only",
+    "manual_route_recommended",
+    "publication_number_format_mismatch",
+  }:
+    return True
+  if probe_status == "found_description_only" and scope in {"claims_only", "claims_and_description"}:
+    return True
+  return False
+
+
+def _retrieval_status_from_probe(probe_status: str, known_cache: bool = False) -> str:
+  if known_cache:
+    return "skipped_known_not_found"
+  mapping = {
+    "not_found_in_bigquery": "manual_google_patents_recommended",
+    "found_metadata_only": "bigquery_fulltext_not_available",
+    "manual_route_recommended": "manual_google_patents_recommended",
+    "publication_number_format_mismatch": "publication_number_variant_mismatch",
+    "found_claims": "fulltext_probe_found_claims",
+    "query_error": "query_error",
+  }
+  return mapping.get(probe_status, "fulltext_probe_not_found")
+
+
 def route_fulltext_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
   publication_number = _safe_str(candidate.get("publication_number"))
   country = _safe_str(candidate.get("country"))
@@ -337,7 +415,8 @@ def dry_run_fulltext_query(
   publication_number = _safe_str(candidate.get("publication_number"))
   country = _safe_str(candidate.get("country"))
   fulltext_scope = validate_fulltext_scope(scope or config.fulltext_scope)
-  validation = validate_us_fulltext_request(publication_number, country or None)
+  metadata = _candidate_metadata(candidate)
+  validation = validate_us_fulltext_request(publication_number, country or None, metadata=metadata)
   if not validation["ok"]:
     return {
       "dry_run_status": "error",
@@ -353,7 +432,12 @@ def dry_run_fulltext_query(
       "cost_guard_reason": validation["error"],
     }
   try:
-    sql = build_us_fulltext_query(publication_number, fulltext_scope, country=country or None)
+    sql = build_us_fulltext_query(
+      publication_number,
+      fulltext_scope,
+      country=country or None,
+      metadata=metadata,
+    )
   except ValueError as exc:
     return {
       "dry_run_status": "error",
@@ -460,6 +544,7 @@ def execute_fulltext_query(
   publication_number = _safe_str(candidate.get("publication_number"))
   country = _safe_str(candidate.get("country"))
   fulltext_scope = config.resolved_scope()
+  metadata = _candidate_metadata(candidate)
   if not is_us_publication(publication_number, country):
     return {
       "execution_status": "unsupported_country",
@@ -467,7 +552,12 @@ def execute_fulltext_query(
       "error": f"Non-US publication ({country or publication_number})",
     }
   try:
-    sql = build_us_fulltext_query(publication_number, fulltext_scope, country=country or None)
+    sql = build_us_fulltext_query(
+      publication_number,
+      fulltext_scope,
+      country=country or None,
+      metadata=metadata,
+    )
   except ValueError as exc:
     return {"execution_status": "query_error", "rows": [], "error": str(exc)}
   resolved = resolve_project_id(config.project_id)
@@ -497,6 +587,28 @@ def execute_fulltext_query(
     }
   except Exception as exc:  # noqa: BLE001
     return {"execution_status": "error", "rows": [], "error": str(exc)}
+
+
+def _mark_not_found_and_cache(
+  config: FullTextRetrievalConfig,
+  publication_number: str,
+  scope: str,
+  *,
+  probe_status: str,
+  matched_variant: str = "",
+  notes: str = "",
+) -> None:
+  if not config.use_not_found_cache:
+    return
+  mark_not_found(
+    publication_number,
+    scope,
+    query_strategy=QUERY_STRATEGY,
+    probe_status=probe_status,
+    matched_variant=matched_variant,
+    notes=notes,
+    path=config.not_found_cache_path,
+  )
 
 
 def _build_fulltext_record(
@@ -622,6 +734,90 @@ def retrieve_fulltext_for_candidate(
     )
     return _finalize("skipped_not_selected", record.to_dict(), None, False)
 
+  scope = config.resolved_scope()
+  metadata = _candidate_metadata(candidate)
+
+  if config.use_not_found_cache and is_known_not_found(
+    publication_number,
+    scope,
+    QUERY_STRATEGY,
+    path=config.not_found_cache_path,
+  ):
+    cache_entry = get_not_found_entry(
+      publication_number,
+      scope,
+      QUERY_STRATEGY,
+      path=config.not_found_cache_path,
+    )
+    record = _build_fulltext_record(
+      candidate,
+      route=route,
+      retrieval_status="skipped_known_not_found",
+      warnings=[
+        "前回確認済みのため、今回は手動確認候補として扱います。",
+        str((cache_entry or {}).get("notes", "")),
+      ],
+    )
+    record_dict = record.to_dict()
+    record_dict["availability_probe"] = probe_result_to_public_dict(
+      FulltextAvailabilityProbeResult(
+        publication_number=publication_number,
+        variants_checked=build_publication_number_variants(publication_number, metadata=metadata),
+        matched_variant=str((cache_entry or {}).get("matched_variant", "")),
+        probe_status=str((cache_entry or {}).get("probe_status", "not_found_in_bigquery")),
+        user_status_japanese="前回確認済みのため、今回は手動確認候補として扱います。",
+        next_action_japanese="Google Patents / 手動貼り付けルートで確認してください。",
+        scope=scope,
+      ),
+    )
+    return _finalize("skipped_known_not_found", record_dict, None, False)
+
+  probe_result = None
+  if config.enable_availability_probe:
+    probe_result = execute_availability_probe(
+      publication_number,
+      scope=scope,
+      metadata=metadata,
+      project_id=config.project_id,
+      client_factory=client_factory,
+      use_cache=config.use_cache,
+      execute=bool(config.execute and selected),
+      max_probe_usd=config.max_probe_estimated_usd,
+    )
+    _save_probe_artifact(probe_result, config)
+
+    if probe_result.probe_status == "query_error" and config.execute and selected:
+      record = _build_fulltext_record(
+        candidate,
+        route=route,
+        retrieval_status="query_error",
+        warnings=["Availability probe failed"],
+        errors=[probe_result.query_error],
+      )
+      record_dict = record.to_dict()
+      record_dict["availability_probe"] = probe_result_to_public_dict(probe_result)
+      return _finalize("query_error", record_dict, None, False)
+
+    if config.execute and selected and _probe_blocks_fulltext(probe_result.probe_status, scope):
+      status = _retrieval_status_from_probe(probe_result.probe_status)
+      _mark_not_found_and_cache(
+        config,
+        publication_number,
+        scope,
+        probe_status=probe_result.probe_status,
+        matched_variant=probe_result.matched_variant,
+        notes="; ".join(probe_result.internal_notes),
+      )
+      record = _build_fulltext_record(
+        candidate,
+        route=route,
+        retrieval_status=status,
+        warnings=[probe_result.user_status_japanese, probe_result.next_action_japanese],
+      )
+      record_dict = record.to_dict()
+      record_dict["availability_probe"] = probe_result_to_public_dict(probe_result)
+      return _finalize(status, record_dict, None, False)
+
   dry_run = dry_run_fulltext_query(candidate, config, client_factory=client_factory)
   guard = evaluate_cost_guard(
     int(dry_run.get("estimated_bytes", 0) or 0),
@@ -717,7 +913,10 @@ def retrieve_fulltext_for_candidate(
       retrieval_status="dry_run_only",
       warnings=["execute=False or preview_only; dry run completed without BigQuery execution"],
     )
-    return _finalize("dry_run_only", record.to_dict(), dry_run, False)
+    record_dict = record.to_dict()
+    if probe_result is not None:
+      record_dict["availability_probe"] = probe_result_to_public_dict(probe_result)
+    return _finalize("dry_run_only", record_dict, dry_run, False)
 
   if (
     config.require_fulltext_execute_confirmation
@@ -779,22 +978,52 @@ def retrieve_fulltext_for_candidate(
     )
 
   row = execution["rows"][0] if execution.get("rows") else {}
+  claims_text = _safe_str(row.get("claims"))
+  description_text = _safe_str(row.get("description"))
   expensive = guard_status == "allowed_expensive_fulltext"
   retrieval_status = "retrieved" if row else "not_found"
   if row and expensive:
     retrieval_status = "allowed_expensive_execute"
+  if row and scope == "claims_only" and not claims_text:
+    retrieval_status = "bigquery_fulltext_not_available"
+  elif row and scope == "description_only" and not description_text:
+    retrieval_status = "bigquery_fulltext_not_available"
+  elif not row:
+    retrieval_status = "not_found"
+
+  if retrieval_status in {"not_found", "bigquery_fulltext_not_available"}:
+    _mark_not_found_and_cache(
+      config,
+      publication_number,
+      scope,
+      probe_status="not_found_in_bigquery",
+      matched_variant=str(row.get("publication_number") or ""),
+      notes="Fulltext query returned no usable text",
+    )
+
   record = _build_fulltext_record(
     candidate,
     route=route,
     row=row,
     retrieval_status=retrieval_status,
-    warnings=[] if row else ["No full text rows returned from BigQuery"],
+    warnings=(
+      []
+      if retrieval_status in {"retrieved", "allowed_expensive_execute"}
+      else [
+        probe_result.user_status_japanese if probe_result else "",
+        "BigQuery側では請求項が確認できませんでした。Google Patents / PDF / 手動貼り付けルートで確認してください。",
+      ]
+    ),
     errors=[],
   )
   record_dict = record.to_dict()
-  record_dict["fulltext_scope"] = config.resolved_scope()
+  record_dict["fulltext_scope"] = scope
+  if probe_result is not None:
+    record_dict["availability_probe"] = probe_result_to_public_dict(probe_result)
   if retrieval_status in {"retrieved", "allowed_expensive_execute"}:
-    save_fulltext_to_cache(record_dict, config.cache_dir, config.resolved_scope())
+    save_fulltext_to_cache(record_dict, config.cache_dir, scope)
+  elif retrieval_status in {"not_found", "bigquery_fulltext_not_available"}:
+    record_dict["manual_route_recommended"] = True
   return _finalize(retrieval_status, record_dict, dry_run, False, guard)
 
 

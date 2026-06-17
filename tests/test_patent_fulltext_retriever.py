@@ -423,3 +423,102 @@ def test_retrieved_record_includes_claim_lengths() -> None:
   assert record["retrieval_status"] == "retrieved"
   assert record.get("claims_length", 0) > 0
   assert record.get("description_length", 0) > 0
+
+
+def test_probe_not_found_recommends_manual_route() -> None:
+  from tech_cartography.retrieval.bigquery_fulltext_availability_probe import FulltextAvailabilityProbeResult
+
+  config = FullTextRetrievalConfig(
+    execute=True,
+    confirm_fulltext_execute=True,
+    use_cache=False,
+    use_not_found_cache=False,
+    enable_availability_probe=True,
+  )
+  probe = FulltextAvailabilityProbeResult(
+    publication_number="US2024000001A1",
+    probe_status="not_found_in_bigquery",
+    user_status_japanese="BigQuery側では見つかりませんでした。",
+    next_action_japanese="Google Patentsで確認してください。",
+    scope="claims_only",
+  )
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_availability_probe",
+    return_value=probe,
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_fulltext_query",
+  ) as execute_mock:
+    result = retrieve_fulltext_for_candidate(_us_candidate(), config, execute_selected=True)
+  execute_mock.assert_not_called()
+  assert result["retrieval_status"] == "manual_google_patents_recommended"
+
+
+def test_probe_found_claims_proceeds_to_execute() -> None:
+  from tech_cartography.retrieval.bigquery_fulltext_availability_probe import FulltextAvailabilityProbeResult
+
+  config = FullTextRetrievalConfig(
+    execute=True,
+    confirm_fulltext_execute=True,
+    use_cache=False,
+    use_not_found_cache=False,
+    enable_availability_probe=True,
+  )
+  probe = FulltextAvailabilityProbeResult(
+    publication_number="US2024000001A1",
+    probe_status="found_claims",
+    has_claims=True,
+    matched_variant="US2024000001A1",
+    scope="claims_only",
+  )
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_availability_probe",
+    return_value=probe,
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+    return_value={
+      "dry_run_status": "ok",
+      "estimated_bytes": 1000,
+      "estimated_usd": 0.001,
+      "cost_guard_status": "pass",
+      "error": None,
+    },
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.evaluate_cost_guard",
+    return_value={"cost_guard_status": "pass"},
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_fulltext_query",
+    return_value={
+      "execution_status": "executed",
+      "rows": [{"publication_number": "US2024000001A1", "claims": "1. A method", "country_code": "US"}],
+      "error": None,
+    },
+  ) as execute_mock:
+    result = retrieve_fulltext_for_candidate(_us_candidate(), config, execute_selected=True)
+  execute_mock.assert_called_once()
+  assert result["retrieval_status"] == "retrieved"
+
+
+def test_user_facing_record_has_no_usd_amounts() -> None:
+  from tech_cartography.retrieval.bigquery_fulltext_availability_probe import FulltextAvailabilityProbeResult
+
+  config = FullTextRetrievalConfig(execute=False, use_cache=False, enable_availability_probe=True)
+  probe = FulltextAvailabilityProbeResult(
+    publication_number="US2024000001A1",
+    probe_status="not_found_in_bigquery",
+    estimated_usd=9.99,
+    scope="claims_only",
+  )
+  with patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.execute_availability_probe",
+    return_value=probe,
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+    return_value={"dry_run_status": "ok", "estimated_bytes": 1000, "estimated_usd": 9.99, "cost_guard_status": "pass"},
+  ), patch(
+    "tech_cartography.retrieval.patent_fulltext_retriever.evaluate_cost_guard",
+    return_value={"cost_guard_status": "pass"},
+  ):
+    result = retrieve_fulltext_for_candidate(_us_candidate(), config)
+  blob = str(result["record"].get("availability_probe", {})).lower()
+  assert "9.99" not in blob
+  assert "usd" not in blob

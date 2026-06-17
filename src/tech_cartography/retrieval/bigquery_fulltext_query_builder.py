@@ -5,6 +5,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from tech_cartography.retrieval.publication_number_variants import (
+  build_publication_number_variants as _build_variants,
+  normalize_publication_number as normalize_us_publication_number,
+)
+
 PUBLICATIONS_TABLE = "`patents-public-data.patents.publications`"
 US_PUB_PATTERN = re.compile(r"^US[\dA-Z\-]+$", re.IGNORECASE)
 
@@ -17,13 +22,6 @@ def escape_sql_string(value: str) -> str:
   return "'" + str(value).replace("'", "''") + "'"
 
 
-def normalize_us_publication_number(publication_number: str) -> str:
-  compact = re.sub(r"[\s\-]+", "", str(publication_number or "").upper())
-  if compact.startswith("US"):
-    return compact
-  return compact
-
-
 def validate_fulltext_scope(scope: str) -> str:
   normalized = str(scope or "").strip().lower()
   if normalized not in VALID_FULLTEXT_SCOPES:
@@ -34,44 +32,20 @@ def validate_fulltext_scope(scope: str) -> str:
   return normalized
 
 
-def _kind_suffix_variants(core: str) -> list[str]:
-  """Generate common US publication number shapes from normalized core."""
-  variants: list[str] = []
-  if not core.startswith("US"):
-    return variants
-  body = core[2:]
-  variants.append(core)
-  variants.append(f"US-{body}")
-  if len(body) > 2 and body[-2] in {"A1", "A2", "B1", "B2"}:
-    kind = body[-2:]
-    digits = body[:-2]
-    variants.append(f"US{digits}{kind}")
-    variants.append(f"US-{digits}{kind}")
-    variants.append(f"US{digits}-{kind}")
-  return variants
+def build_publication_number_variants(
+  publication_number: str,
+  *,
+  metadata: dict[str, Any] | None = None,
+) -> list[str]:
+  return _build_variants(publication_number, metadata=metadata)
 
 
-def build_publication_number_variants(publication_number: str) -> list[str]:
-  normalized = normalize_us_publication_number(publication_number)
-  if not normalized.startswith("US"):
-    return []
-
-  variants: list[str] = []
-  variants.extend(_kind_suffix_variants(normalized))
-  variants.extend(_kind_suffix_variants(normalized.replace("-", "")))
-
-  deduped: list[str] = []
-  seen: set[str] = set()
-  for item in variants:
-    key = item.upper()
-    if key in seen:
-      continue
-    seen.add(key)
-    deduped.append(item)
-  return deduped
-
-
-def validate_us_fulltext_request(publication_number: str, country: str | None = None) -> dict[str, Any]:
+def validate_us_fulltext_request(
+  publication_number: str,
+  country: str | None = None,
+  *,
+  metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
   if country and str(country).strip().upper() not in {"", "US"}:
     return {
       "ok": False,
@@ -85,7 +59,7 @@ def validate_us_fulltext_request(publication_number: str, country: str | None = 
       "error": f"Publication number '{publication_number}' is not a US publication",
       "variants": [],
     }
-  variants = build_publication_number_variants(publication_number)
+  variants = build_publication_number_variants(publication_number, metadata=metadata)
   if not variants:
     return {
       "ok": False,
@@ -103,10 +77,11 @@ def is_us_publication(publication_number: str | None, country: str | None = None
 
 
 def _localized_text_expr(field_name: str) -> str:
+  """Aggregate all localized segments without language filter (avoid dropping claims)."""
   return (
     f"(SELECT STRING_AGG(loc.text, '\\n' ORDER BY loc.language) "
     f"FROM UNNEST({field_name}) AS loc "
-    "WHERE loc.text IS NOT NULL AND loc.text != '')"
+    "WHERE loc.text IS NOT NULL AND TRIM(loc.text) != '')"
   )
 
 
@@ -118,8 +93,13 @@ LIMIT 1
 """.strip()
 
 
-def build_us_claims_query(publication_number: str, *, country: str | None = None) -> str:
-  validation = validate_us_fulltext_request(publication_number, country)
+def build_us_claims_query(
+  publication_number: str,
+  *,
+  country: str | None = None,
+  metadata: dict[str, Any] | None = None,
+) -> str:
+  validation = validate_us_fulltext_request(publication_number, country, metadata=metadata)
   if not validation["ok"]:
     raise ValueError(validation["error"])
   literals = ", ".join(escape_sql_string(item) for item in validation["variants"])
@@ -142,8 +122,13 @@ FROM {PUBLICATIONS_TABLE}
 """.strip()
 
 
-def build_us_description_query(publication_number: str, *, country: str | None = None) -> str:
-  validation = validate_us_fulltext_request(publication_number, country)
+def build_us_description_query(
+  publication_number: str,
+  *,
+  country: str | None = None,
+  metadata: dict[str, Any] | None = None,
+) -> str:
+  validation = validate_us_fulltext_request(publication_number, country, metadata=metadata)
   if not validation["ok"]:
     raise ValueError(validation["error"])
   literals = ", ".join(escape_sql_string(item) for item in validation["variants"])
@@ -170,8 +155,9 @@ def build_us_claims_and_description_query(
   publication_number: str,
   *,
   country: str | None = None,
+  metadata: dict[str, Any] | None = None,
 ) -> str:
-  validation = validate_us_fulltext_request(publication_number, country)
+  validation = validate_us_fulltext_request(publication_number, country, metadata=metadata)
   if not validation["ok"]:
     raise ValueError(validation["error"])
   literals = ", ".join(escape_sql_string(item) for item in validation["variants"])
@@ -205,11 +191,12 @@ def build_us_fulltext_query(
   scope: str = "claims_only",
   *,
   country: str | None = None,
+  metadata: dict[str, Any] | None = None,
 ) -> str:
   """Build BigQuery SQL to fetch US full text fields for one publication."""
   normalized_scope = validate_fulltext_scope(scope)
   if normalized_scope == "claims_only":
-    return build_us_claims_query(publication_number, country=country)
+    return build_us_claims_query(publication_number, country=country, metadata=metadata)
   if normalized_scope == "description_only":
-    return build_us_description_query(publication_number, country=country)
-  return build_us_claims_and_description_query(publication_number, country=country)
+    return build_us_description_query(publication_number, country=country, metadata=metadata)
+  return build_us_claims_and_description_query(publication_number, country=country, metadata=metadata)

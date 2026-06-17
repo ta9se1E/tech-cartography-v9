@@ -328,6 +328,9 @@ def run_fulltext_collection_stage(config: PipelineConfig, output_dir: str, previ
     enable_cost_ledger=bool(config.enable_actual_cost_ledger),
     run_id=config.run_id or "",
     stage_id="top5_fulltext_collection",
+    availability_probe_output_dir=str(Path(output_dir)),
+    enable_availability_probe=True,
+    use_not_found_cache=True,
   )
   result = retrieve_controlled_fulltext_run(
     candidates,

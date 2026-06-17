@@ -15,6 +15,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   inject_easy_ui_css,
   prepare_patent_display_df,
   render_acquisition_policy_summary,
+  render_fulltext_availability_notice,
   render_cost_ledger_debug,
   render_weekly_digest_preview_block,
   render_caveat_footer,
@@ -233,6 +234,7 @@ def _tab_fulltext(manifest: dict[str, Any], display_mode: str, *, debug_mode: bo
   records_df = _load_csv_artifact(manifest, "top5_fulltext_records_csv")
   ft_preview = _load_json_artifact(manifest, "fulltext_execute_preview_json")
   ft_summary = _load_json_artifact(manifest, "fulltext_retrieval_summary_json")
+  probe_md = _load_text_artifact(manifest, "fulltext_availability_probe_md")
   execute_df = _load_csv_artifact(manifest, "fulltext_execute_results_csv")
   checklist_md = _load_text_artifact(manifest, "manual_fulltext_checklist_md")
   strategic_manual_df = _load_csv_artifact(manifest, "strategic_watch_manual_fulltext_required_csv")
@@ -253,10 +255,16 @@ def _tab_fulltext(manifest: dict[str, Any], display_mode: str, *, debug_mode: bo
   else:
     st.info("Top5 全文候補がまだありません。")
 
+  if probe_md:
+    with st.expander("Fulltext Availability Probe", expanded=True):
+      st.markdown(probe_md)
+
   if not records_df.empty:
     with st.expander("全文取得の実行状態"):
       for _, row in records_df.iterrows():
-        st.markdown(render_fulltext_status_card(row.to_dict()), unsafe_allow_html=True)
+        row_dict = row.to_dict()
+        st.markdown(render_fulltext_availability_notice(row_dict), unsafe_allow_html=True)
+        st.markdown(render_fulltext_status_card(row_dict), unsafe_allow_html=True)
 
   if not execute_df.empty:
     with st.expander("fulltext_execute_results"):
