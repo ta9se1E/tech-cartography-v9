@@ -70,3 +70,21 @@ def test_no_monetary_amounts_in_preview(tmp_path) -> None:
   assert "ドル" not in md
   paths = save_weekly_digest_preview(preview, tmp_path)
   assert paths["weekly_digest_preview_md"]
+
+
+def test_weekly_digest_includes_claims_paper_query_section() -> None:
+  preview = build_weekly_digest_preview(
+    {
+      "claims_paper_query_plan": {
+        "total_queries": 2,
+        "openalex_mode": "plan_only",
+        "query_examples": ["PAN carbon fiber carbonization tensile strength"],
+        "next_actions_japanese": ["descriptionを追加する"],
+      },
+    },
+    {"user_facing_name_japanese": "標準監視モード", "included_items": [], "excluded_items": []},
+  )
+  md = render_weekly_digest_preview_markdown(preview)
+  assert "技術の裏取り候補" in md
+  assert "plan_only" in md
+  assert "supporting evidence candidate" in md

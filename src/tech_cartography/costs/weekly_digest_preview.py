@@ -56,6 +56,7 @@ def build_weekly_digest_preview(
   cn_watch = artifacts.get("strategic_watch") or []
   next_actions = artifacts.get("next_actions") or []
   manual_input_dir = str(artifacts.get("manual_fulltext_input_dir") or "outputs/manual_fulltext_inputs")
+  claims_paper_query_plan = artifacts.get("claims_paper_query_plan") or {}
 
   def _bq_status(row: dict[str, Any]) -> str:
     if not isinstance(row, dict):
@@ -110,6 +111,7 @@ def build_weekly_digest_preview(
     "important_patents": top20[:10],
     "us_deep_dive_candidates": us_deep_dive_enriched,
     "us_deep_dive_status": us_deep_dive_status_lines,
+    "claims_paper_query_plan": claims_paper_query_plan,
     "china_strategic_watch": cn_watch[:10],
     "next_actions": next_actions[:8],
     "manual_watch_count": acquisition_policy_summary.get("manual_watch_count", len(cn_watch)),
@@ -183,6 +185,27 @@ def render_weekly_digest_preview_markdown(preview: dict[str, Any]) -> str:
     if analysis:
       lines.append(f"- {analysis}")
     lines.append("")
+
+  claims_plan = preview.get("claims_paper_query_plan") or {}
+  lines.extend(["", "## 技術の裏取り候補", ""])
+  if claims_plan.get("queries") or claims_plan.get("total_queries", 0) > 0:
+    lines.append(f"- manual claimsから生成されたpaper query候補: {claims_plan.get('total_queries', 0)} 件")
+    lines.append(f"- OpenAlex実行: {claims_plan.get('openalex_mode', 'plan_only')}（本実行はまだ任意）")
+    for example in (claims_plan.get("query_examples") or [])[:3]:
+      lines.append(f"  - 例: {example}")
+    lines.append("- 次アクション:")
+    for action in claims_plan.get("next_actions_japanese") or [
+      "descriptionを追加する",
+      "OpenAlexを限定実行する",
+      "技術者がquery妥当性を確認する",
+    ]:
+      lines.append(f"  - {action}")
+    lines.append(
+      "- 請求項ベースのため、論文は証明ではなく supporting evidence candidate として扱います。",
+    )
+  else:
+    lines.append("- manual claimsからのpaper query候補はまだありません。")
+    lines.append("- 次アクション: Google Patentsからclaimsを貼り付け、Evidence Validationを実行")
 
   lines.extend(["", "## 今週の次アクション", ""])
   for action in preview.get("next_actions", []):

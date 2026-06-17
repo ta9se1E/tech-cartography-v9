@@ -105,3 +105,42 @@ def test_manual_claims_without_description_uses_limited_no_description(tmp_path:
   coverage = records[0]["evidence_coverage"]
   assert coverage["description_support"] == "limited_no_description"
   assert coverage["examples_support"] == "not_available"
+
+
+def test_manual_claims_loaded_emits_claims_paper_query_candidates(tmp_path: Path) -> None:
+  records = [
+    {
+      "publication_number": "US-12565719-B2",
+      "title": "Carbon fiber",
+      "country": "US",
+      "retrieval_status": "manual_claims_loaded",
+      "claims": (
+        "1. A carbon fiber comprising PAN precursor fibers subjected to oxidation and carbonization, "
+        "wherein the carbon fiber has a tensile strength and elastic modulus."
+      ),
+      "evidence_level": "low_fulltext_evidence",
+      "manual_route": True,
+    },
+  ]
+  result = run_evidence_validation(records, output_dir=str(tmp_path / "claims_queries"))
+  plan = result.get("claims_paper_query_plan") or {}
+  assert plan.get("total_queries", 0) > 0
+  assert Path(result["output_paths"]["paper_query_candidates_from_claims_csv"]).exists()
+  joined = " ".join(plan.get("query_examples", [])).lower()
+  assert "carbon" in joined or "pan" in joined
+
+
+def test_metadata_only_claims_plan_uses_low_confidence_fallback(tmp_path: Path) -> None:
+  records = [
+    {
+      "publication_number": "US-9",
+      "title": "PAN carbon fiber manufacturing",
+      "abstract": "oxidation carbonization tensile strength",
+      "country": "US",
+      "retrieval_status": "dry_run_only",
+      "evidence_level": "metadata_only",
+    },
+  ]
+  plan = run_evidence_validation(records, output_dir=str(tmp_path / "meta"))["claims_paper_query_plan"]
+  if plan.get("queries"):
+    assert all(row.get("confidence") == "low" for row in plan["queries"])

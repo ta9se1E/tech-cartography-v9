@@ -31,6 +31,8 @@ PRIMARY_ARTIFACT_KEYS = [
   "manual_fulltext_watch_csv",
   "evidence_validation_summary_json",
   "evidence_validation_report_md",
+  "paper_query_candidates_from_claims_csv",
+  "claims_paper_query_plan_md",
   "final_report_md",
 ]
 

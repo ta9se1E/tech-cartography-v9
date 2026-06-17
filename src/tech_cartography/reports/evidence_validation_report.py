@@ -62,6 +62,7 @@ def build_evidence_validation_summary(result: dict[str, Any]) -> dict[str, Any]:
 
   evidence_gaps = _build_evidence_gaps(readiness, claim_result, openalex, paper_evidence, claim_map)
   recommended_actions = _build_recommended_actions(readiness, openalex, result.get("status"))
+  claims_plan = result.get("claims_paper_query_plan") or {}
 
   return {
     "pipeline_status": result.get("status"),
@@ -73,6 +74,7 @@ def build_evidence_validation_summary(result: dict[str, Any]) -> dict[str, Any]:
       "manual_required": readiness.get("manual_required_count", 0),
       "generated_claim_elements": len(claim_result.get("elements", [])),
       "generated_paper_queries": result.get("paper_query_result", {}).get("total_queries", 0),
+      "claims_based_paper_queries": claims_plan.get("total_queries", 0),
       "openalex_mode": openalex.get("mode", "plan_only"),
       "paper_evidence_links": len(paper_evidence.get("evidence_links", [])),
       "claim_paper_evidence_map_items": len(claim_map.get("evidence_items", [])),
@@ -95,6 +97,7 @@ def build_evidence_validation_summary(result: dict[str, Any]) -> dict[str, Any]:
       "query_plan": openalex.get("query_plan", []),
       "source_quality_count": len(paper_evidence.get("source_quality_results", [])),
     },
+    "claims_paper_query_plan": claims_plan,
     "manual_watch": {
       "candidates": manual_candidates,
       "count": len(manual_candidates),
@@ -281,8 +284,31 @@ def render_evidence_validation_markdown(summary: dict[str, Any]) -> str:
       f"- paper records: {openalex.get('paper_records', 0)}",
       f"- source quality evaluations: {openalex.get('source_quality_count', 0)}",
       "",
+      "## Claims-based Paper Query Plan",
+      "",
     ],
   )
+  claims_plan = summary.get("claims_paper_query_plan") or {}
+  lines.extend(
+    [
+      f"- manual claimsから生成したquery数: {claims_plan.get('total_queries', 0)}",
+      f"- OpenAlex mode: {claims_plan.get('openalex_mode', 'plan_only')}",
+      f"- confidence: {', '.join(claims_plan.get('confidence_levels', [])) or 'n/a'}",
+      "",
+      "この論文クエリは請求項ベースの限定的な裏取り候補です。明細書・実施例が未入力の場合、技術的妥当性の確認には限界があります。",
+      "",
+      "### query examples",
+      "",
+    ],
+  )
+  for example in claims_plan.get("query_examples", []):
+    lines.append(f"- {example}")
+  if not claims_plan.get("query_examples"):
+    for row in (claims_plan.get("queries") or [])[:5]:
+      lines.append(f"- {row.get('query')}")
+  if not claims_plan.get("queries"):
+    lines.append("- (no claims-based queries)")
+  lines.extend(["", "### caveat", "", claims_plan.get("caveat_japanese") or "", ""])
 
   lines.extend(["## 5. China / Non-US Manual Watch", ""])
   manual = summary.get("manual_watch") or {}

@@ -651,6 +651,21 @@ python scripts/import_manual_fulltext.py \
 
 Saved to `outputs/manual_fulltext_inputs/US-12565719-B2.json`. The pipeline picks this up when BigQuery fulltext is `not_found` / `manual_route_recommended` (`enable_manual_fulltext_fallback: true` by default).
 
+## v7 Phase 18C: Claims-based Paper Query Plan
+
+Generate OpenAlex search query candidates from manual claims (plan_only; API execution optional).
+
+```bash
+python scripts/build_claims_paper_query_plan.py \
+  --manual-input outputs/manual_fulltext_inputs/US-12565719-B2.json
+
+python scripts/build_claims_paper_query_plan.py \
+  --run-dir outputs/pipeline_runs/<run_id> \
+  --publication-number US-12565719-B2
+```
+
+Outputs: `paper_query_candidates_from_claims.csv/json`, `claims_paper_query_plan.md`. Confidence is `medium` or `low` for claims-only input; papers are supporting evidence candidates, not proof.
+
 ## v7 Phase 17: Login + Tabbed Japanese UI
 
 Phase 17 adds **app2.py-style** Easy Japanese UI with local email login and tab navigation.

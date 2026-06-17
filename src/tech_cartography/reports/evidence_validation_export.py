@@ -54,6 +54,8 @@ def save_evidence_validation_outputs(result: dict[str, Any], output_dir: str | P
   manual_rows = readiness.get("manual_required_records") or result.get("manual_candidates") or []
   element_rows = _element_rows(claim_result)
   query_rows = claim_result.get("paper_queries", [])
+  claims_plan = result.get("claims_paper_query_plan") or {}
+  claims_query_rows = claims_plan.get("queries", [])
   paper_links = paper_evidence.get("evidence_links", [])
   evidence_items = claim_map.get("evidence_items", [])
 

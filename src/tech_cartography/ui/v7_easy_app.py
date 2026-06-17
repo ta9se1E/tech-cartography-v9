@@ -21,6 +21,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_weekly_digest_preview_block,
   render_caveat_footer,
   render_caution_box,
+  render_claims_paper_query_plan_card,
   render_evidence_validation_summary,
   render_fulltext_execute_summary,
   render_fulltext_status_card,
@@ -312,19 +313,60 @@ def _tab_evidence(manifest: dict[str, Any]) -> None:
   ev_summary = _load_json_artifact(manifest, "evidence_validation_summary_json")
   st.markdown(render_evidence_validation_summary(ev_summary), unsafe_allow_html=True)
 
+  claims_plan_path = _artifact_path(manifest, "claims_paper_query_plan_md")
+  claims_queries_df = _load_csv_artifact(manifest, "paper_query_candidates_from_claims_csv")
+  records_df = _load_csv_artifact(manifest, "top5_fulltext_records_csv")
+  manual_loaded = False
+  if not records_df.empty and "retrieval_status" in records_df.columns:
+    manual_loaded = records_df["retrieval_status"].astype(str).isin(
+      {"manual_claims_loaded", "manual_fulltext_loaded"},
+    ).any()
+
+  claims_plan: dict[str, Any] = {}
+  if ev_summary and isinstance(ev_summary.get("claims_paper_query_plan"), dict):
+    claims_plan = ev_summary["claims_paper_query_plan"]
+  elif not claims_queries_df.empty:
+    claims_plan = {
+      "total_queries": len(claims_queries_df),
+      "openalex_mode": "plan_only",
+      "confidence_levels": sorted(claims_queries_df["confidence"].dropna().unique().tolist())
+      if "confidence" in claims_queries_df.columns
+      else ["medium", "low"],
+      "query_examples": claims_queries_df["query"].head(5).tolist() if "query" in claims_queries_df.columns else [],
+      "queries": claims_queries_df.to_dict(orient="records"),
+      "caveat_japanese": (
+        claims_queries_df["caveat_japanese"].iloc[0]
+        if "caveat_japanese" in claims_queries_df.columns and not claims_queries_df.empty
+        else ""
+      ),
+    }
+
+  claims_card = render_claims_paper_query_plan_card(claims_plan, manual_claims_loaded=manual_loaded)
+  if claims_card:
+    st.markdown(claims_card, unsafe_allow_html=True)
+
   claim_df = _load_csv_artifact(manifest, "claim_elements_csv")
   paper_df = _load_csv_artifact(manifest, "paper_query_candidates_csv")
   if not claim_df.empty:
     with st.expander("Claim Elements"):
       render_small_table(claim_df.head(50))
-  if not paper_df.empty:
+  if not claims_queries_df.empty:
+    with st.expander("Claims-based Paper Query Candidates"):
+      render_small_table(claims_queries_df.head(50))
+  elif not paper_df.empty:
     with st.expander("Paper Query Candidates"):
       render_small_table(paper_df.head(50))
 
   openalex_plan = _load_json_artifact(manifest, "openalex_query_plan_json")
   if openalex_plan:
-    mode = openalex_plan.get("mode", "plan_only")
-    st.markdown(render_info_box(f"OpenAlex: {mode}"), unsafe_allow_html=True)
+    mode = openalex_plan.get("mode", "plan_only") if isinstance(openalex_plan, dict) else "plan_only"
+    st.markdown(render_info_box(f"OpenAlex: {mode}（plan_only — 本実行はまだ任意）"), unsafe_allow_html=True)
+  elif claims_plan:
+    st.markdown(render_info_box("OpenAlex: plan_only（本実行はまだ任意）"), unsafe_allow_html=True)
+
+  if claims_plan_path and claims_plan_path.exists():
+    with st.expander("Claims Paper Query Plan"):
+      st.markdown(claims_plan_path.read_text(encoding="utf-8"))
 
 
 def _tab_market(manifest: dict[str, Any]) -> None:

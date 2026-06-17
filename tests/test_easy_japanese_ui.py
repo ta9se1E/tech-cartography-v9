@@ -5,6 +5,7 @@ import pandas as pd
 from tech_cartography.ui.easy_japanese_ui import (
   prepare_patent_display_df,
   render_acquisition_policy_summary,
+  render_claims_paper_query_plan_card,
   render_cost_ledger_debug,
   render_evidence_validation_summary,
   render_fulltext_availability_notice,
@@ -288,4 +289,25 @@ def test_fulltext_availability_notice_bigquery_not_found() -> None:
   )
   assert "BigQuery側では請求項が確認できませんでした" in html
   assert "Google Patents" in html
+
+
+def test_claims_paper_query_plan_card_shows_plan_only_caveat() -> None:
+  html = render_claims_paper_query_plan_card(
+    {
+      "total_queries": 3,
+      "openalex_mode": "plan_only",
+      "confidence_levels": ["medium", "low"],
+      "query_examples": [
+        "polyacrylonitrile carbon fiber carbonization tensile strength modulus",
+      ],
+      "caveat_japanese": "請求項ベースの限定的な裏取り候補です。",
+    },
+    manual_claims_loaded=True,
+  )
+  assert "Claims-based Paper Query Plan" in html
+  assert "plan_only" in html
+  assert "supporting evidence candidate" in html
+  assert "manual claims loaded" in html
+  assert "usd" not in html.lower()
+  assert "$" not in html
 

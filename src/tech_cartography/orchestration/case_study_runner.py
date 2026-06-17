@@ -460,11 +460,30 @@ def run_evidence_validation_stage(
     output_dir=output_dir,
   )
 
+  claims_plan = result.get("claims_paper_query_plan") or {}
+  if claims_plan.get("queries"):
+    from tech_cartography.costs.weekly_digest_preview import build_weekly_digest_preview, save_weekly_digest_preview
+
+    digest_artifacts = _build_digest_artifacts_from_outputs(
+      previous_outputs,
+      manual_fulltext_input_dir=config.manual_fulltext_input_dir,
+    )
+    digest_artifacts["claims_paper_query_plan"] = claims_plan
+    acquisition_path = previous_outputs.get("acquisition_policy_summary_json")
+    acquisition: dict[str, Any] = {}
+    if acquisition_path and Path(str(acquisition_path)).exists():
+      acquisition = _read_json(str(acquisition_path))
+    if not acquisition:
+      acquisition = {"user_facing_name_japanese": "標準監視モード", "included_items": [], "excluded_items": []}
+    preview = build_weekly_digest_preview(digest_artifacts, acquisition)
+    digest_paths = save_weekly_digest_preview(preview, output_dir)
+    result.setdefault("output_paths", {}).update(digest_paths)
+
   summary = result.get("evidence_validation_summary") or build_evidence_validation_summary(result)
   markdown = render_evidence_validation_markdown(summary)
   paths = normalize_stage_outputs(
     "evidence_validation",
-    save_evidence_validation_outputs(result, output_dir),
+    {**save_evidence_validation_outputs(result, output_dir), **(result.get("output_paths") or {})},
   )
   paths["evidence_validation_report_md"] = save_evidence_validation_report(markdown, output_dir)
 

@@ -661,3 +661,46 @@ def render_manual_fulltext_route_card(
     f'<pre style="white-space:pre-wrap;font-size:0.85em;">{cli_example}</pre>'
     f"</div>"
   )
+
+
+def render_claims_paper_query_plan_card(
+  plan: dict[str, Any] | None,
+  *,
+  manual_claims_loaded: bool = False,
+) -> str:
+  if not plan or (not plan.get("queries") and not plan.get("query_examples") and not plan.get("total_queries")):
+    if manual_claims_loaded:
+      return render_info_box(
+        "manual claimsは読み込まれていますが、paper query候補はまだ生成されていません。"
+        "Evidence Validationを実行するか、build_claims_paper_query_plan.py を実行してください。",
+      )
+    return ""
+
+  total = int(plan.get("total_queries", 0))
+  mode = str(plan.get("openalex_mode", "plan_only"))
+  confidences = ", ".join(plan.get("confidence_levels", [])) or "medium/low"
+  examples_html = "".join(
+    f"<li>{_safe(example)}</li>"
+    for example in (plan.get("query_examples") or [])[:5]
+  )
+  caveat = _safe(
+    plan.get("caveat_japanese")
+    or "請求項から論文検索候補を作成しました。ただし、請求項は権利範囲を広く書くため、明細書・実施例ベースの裏取りより精度は限定的です。",
+  )
+  manual_note = (
+    "<br>manual claims loaded: はい"
+    if manual_claims_loaded
+    else ""
+  )
+  return (
+    f'<div class="tc-info-box">'
+    f"<strong>Claims-based Paper Query Plan</strong>{manual_note}<br>"
+    f"請求項から論文検索候補を作成しました。ただし、請求項は権利範囲を広く書くため、"
+    f"明細書・実施例ベースの裏取りより精度は限定的です。<br><br>"
+    f"候補数: {total} / confidence: {confidences}<br>"
+    f"OpenAlex: {mode}（本実行はまだ任意）<br>"
+    f"論文の位置づけ: supporting evidence candidate（証明ではありません）<br><br>"
+    f"<strong>Query examples</strong><ul>{examples_html}</ul>"
+    f"<strong>Caveat</strong><br>{caveat}"
+    f"</div>"
+  )
