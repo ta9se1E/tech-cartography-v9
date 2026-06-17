@@ -57,6 +57,8 @@ def build_weekly_digest_preview(
   next_actions = artifacts.get("next_actions") or []
   manual_input_dir = str(artifacts.get("manual_fulltext_input_dir") or "outputs/manual_fulltext_inputs")
   claims_paper_query_plan = artifacts.get("claims_paper_query_plan") or {}
+  openalex_limited = artifacts.get("openalex_limited_execution") or {}
+  claim_paper_links = artifacts.get("claim_paper_candidate_links") or []
 
   def _bq_status(row: dict[str, Any]) -> str:
     if not isinstance(row, dict):
@@ -112,6 +114,8 @@ def build_weekly_digest_preview(
     "us_deep_dive_candidates": us_deep_dive_enriched,
     "us_deep_dive_status": us_deep_dive_status_lines,
     "claims_paper_query_plan": claims_paper_query_plan,
+    "openalex_limited_execution": openalex_limited,
+    "claim_paper_candidate_links": claim_paper_links,
     "china_strategic_watch": cn_watch[:10],
     "next_actions": next_actions[:8],
     "manual_watch_count": acquisition_policy_summary.get("manual_watch_count", len(cn_watch)),
@@ -213,6 +217,46 @@ def render_weekly_digest_preview_markdown(preview: dict[str, Any]) -> str:
   else:
     lines.append("- manual claimsからのpaper query候補はまだありません。")
     lines.append("- 次アクション: Google Patentsからclaimsを貼り付け、Evidence Validationを実行")
+
+  openalex_limited = preview.get("openalex_limited_execution") or {}
+  claim_links = preview.get("claim_paper_candidate_links") or []
+  if openalex_limited or claim_links:
+    lines.extend(["", "## 論文裏取り候補", ""])
+    lines.append(f"- 実行モード: {openalex_limited.get('mode', 'plan_only')}")
+    selected = openalex_limited.get("selected_queries") or []
+    lines.append(f"- 実行query: {len(selected)} 件")
+    for row in selected[:3]:
+      lines.append(f"  - [{row.get('query_type')}] {row.get('query')}")
+    papers = openalex_limited.get("paper_records") or []
+    lines.append("- 取得された代表論文候補:")
+    if papers:
+      for paper in papers[:3]:
+        lines.append(f"  - {paper.get('title', '(no title)')}")
+    else:
+      lines.append("  - (まだ取得なし / plan_only)")
+    quality = openalex_limited.get("source_quality_summary") or {}
+    if quality:
+      lines.append("- Source quality:")
+      for level, count in sorted(quality.items()):
+        lines.append(f"  - {level}: {count}")
+    if claim_links:
+      lines.append("- Claimとの関係:")
+      for link in claim_links[:3]:
+        if isinstance(link, dict):
+          lines.append(
+            f"  - {link.get('element_type')} ↔ {link.get('paper_title')} "
+            f"({link.get('link_type')}, {link.get('confidence')})",
+          )
+    lines.append("- 次アクション:")
+    for action in [
+      "descriptionを追加する",
+      "論文候補を技術者が確認する",
+      "OpenAlex queryを調整する",
+    ]:
+      lines.append(f"  - {action}")
+    lines.append(
+      "- 論文候補は技術背景の裏取り候補です。特許の有効性、実施可能性、侵害性を判断するものではありません。",
+    )
 
   lines.extend(["", "## 今週の次アクション", ""])
   for action in preview.get("next_actions", []):

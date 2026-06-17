@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,8 @@ def build_evidence_validation_summary(result: dict[str, Any]) -> dict[str, Any]:
   recommended_actions = _build_recommended_actions(readiness, openalex, result.get("status"))
   claims_plan = result.get("claims_paper_query_plan") or {}
   quality_summary = claims_plan.get("quality_summary") or {}
+  openalex_limited = result.get("openalex_limited_execution") or {}
+  claim_paper_links = result.get("claim_paper_candidate_links") or {}
 
   return {
     "pipeline_status": result.get("status"),
@@ -77,9 +80,11 @@ def build_evidence_validation_summary(result: dict[str, Any]) -> dict[str, Any]:
       "generated_paper_queries": result.get("paper_query_result", {}).get("total_queries", 0),
       "claims_based_paper_queries": claims_plan.get("total_queries", 0),
       "plan_ready_for_openalex": claims_plan.get("plan_ready_for_openalex", False),
-      "openalex_mode": openalex.get("mode", "plan_only"),
+      "openalex_mode": openalex_limited.get("mode") or openalex.get("mode", "plan_only"),
       "paper_evidence_links": len(paper_evidence.get("evidence_links", [])),
       "claim_paper_evidence_map_items": len(claim_map.get("evidence_items", [])),
+      "openalex_paper_records": openalex_limited.get("total_paper_records", 0),
+      "claim_paper_candidate_links": claim_paper_links.get("total_links", 0),
     },
     "fulltext_readiness": readiness,
     "us_candidates": us_candidates,
@@ -105,6 +110,8 @@ def build_evidence_validation_summary(result: dict[str, Any]) -> dict[str, Any]:
       "candidates": manual_candidates,
       "count": len(manual_candidates),
     },
+    "openalex_limited_execution": openalex_limited,
+    "claim_paper_candidate_links": claim_paper_links,
     "evidence_gaps": evidence_gaps,
     "recommended_actions": recommended_actions,
     "warnings": result.get("warnings", []),
@@ -201,6 +208,160 @@ def _build_recommended_actions(
   if readiness.get("ready_count", 0) > 0 or readiness.get("limited_count", 0) > 0:
     actions.append("Claim Element 抽出結果を人間確認する")
   return actions
+
+
+def merge_openalex_limited_into_summary(
+  summary: dict[str, Any],
+  limited: dict[str, Any],
+  links: list[dict[str, Any]],
+) -> dict[str, Any]:
+  merged = dict(summary)
+  type_counts: dict[str, int] = {}
+  conf_counts: dict[str, int] = {}
+  for link in links:
+    type_counts[str(link.get("link_type"))] = type_counts.get(str(link.get("link_type")), 0) + 1
+    conf_counts[str(link.get("confidence"))] = conf_counts.get(str(link.get("confidence")), 0) + 1
+
+  quality_levels: dict[str, int] = {}
+  for row in limited.get("source_quality_results") or []:
+    level = str(row.get("quality_level") or "unknown")
+    quality_levels[level] = quality_levels.get(level, 0) + 1
+
+  merged["openalex_limited_execution"] = {
+    "mode": limited.get("mode", "plan_only"),
+    "execution_status": limited.get("execution_status"),
+    "executed_queries_count": limited.get("executed_queries_count", 0),
+    "skipped_queries_count": limited.get("skipped_queries_count", 0),
+    "total_paper_records": limited.get("total_paper_records", 0),
+    "cache_hits": limited.get("cache_hits", 0),
+    "api_errors": limited.get("api_errors") or [],
+    "source_quality_summary": quality_levels,
+    "caveat_japanese": limited.get("caveat_japanese"),
+    "selected_queries": limited.get("selected_queries") or [],
+  }
+  merged["claim_paper_candidate_links"] = {
+    "total_links": len(links),
+    "link_type_distribution": type_counts,
+    "confidence_distribution": conf_counts,
+    "representative_links": links[:10],
+    "caveat_japanese": (
+      "これらの論文は、特許請求項を証明するものではなく、"
+      "技術背景・材料プロセス・物性関係を確認するための supporting evidence candidate です。"
+    ),
+  }
+  top_summary = dict(merged.get("summary") or {})
+  top_summary["openalex_mode"] = limited.get("mode", top_summary.get("openalex_mode", "plan_only"))
+  top_summary["openalex_paper_records"] = limited.get("total_paper_records", 0)
+  top_summary["claim_paper_candidate_links"] = len(links)
+  merged["summary"] = top_summary
+  openalex_block = dict(merged.get("openalex") or {})
+  openalex_block["mode"] = limited.get("mode", openalex_block.get("mode", "plan_only"))
+  openalex_block["executed_queries"] = limited.get("executed_queries_count", 0)
+  openalex_block["cache_hits"] = limited.get("cache_hits", 0)
+  openalex_block["paper_records"] = limited.get("total_paper_records", 0)
+  openalex_block["source_quality_count"] = len(limited.get("source_quality_results") or [])
+  merged["openalex"] = openalex_block
+  return merged
+
+
+def patch_evidence_validation_with_openalex_limited(
+  evidence_dir: str | Path,
+  limited: dict[str, Any],
+  links: list[dict[str, Any]],
+) -> dict[str, str]:
+  out = Path(evidence_dir)
+  summary_path = out / "evidence_validation_summary.json"
+  report_path = out / "evidence_validation_report.md"
+  if not summary_path.exists():
+    return {}
+  summary = json.loads(summary_path.read_text(encoding="utf-8"))
+  merged = merge_openalex_limited_into_summary(summary, limited, links)
+  summary_path.write_text(json.dumps(merged, indent=2, ensure_ascii=False), encoding="utf-8")
+  report_path.write_text(render_evidence_validation_markdown(merged), encoding="utf-8")
+  return {
+    "evidence_validation_summary_json": str(summary_path),
+    "evidence_validation_report_md": str(report_path),
+  }
+
+
+def _render_openalex_limited_sections(summary: dict[str, Any]) -> list[str]:
+  limited = summary.get("openalex_limited_execution") or {}
+  if not limited:
+    return []
+  lines = [
+    "## OpenAlex Limited Execution",
+    "",
+    f"- 実行モード: {limited.get('mode', 'plan_only')}",
+    f"- execution status: {limited.get('execution_status', 'plan_only')}",
+    f"- 実行query数: {limited.get('executed_queries_count', 0)}",
+    f"- skipped queries: {limited.get('skipped_queries_count', 0)}",
+    f"- 取得paper数: {limited.get('total_paper_records', 0)}",
+    f"- cache hits: {limited.get('cache_hits', 0)}",
+  ]
+  errors = limited.get("api_errors") or []
+  if errors:
+    lines.append(f"- API errors: {len(errors)}")
+    for err in errors[:5]:
+      lines.append(f"  - {err}")
+  else:
+    lines.append("- API errors: 0")
+
+  quality = limited.get("source_quality_summary") or {}
+  lines.extend(["", "### source quality summary", ""])
+  if quality:
+    for level, count in sorted(quality.items()):
+      lines.append(f"- {level}: {count}")
+  else:
+    lines.append("- (no source quality evaluations)")
+
+  lines.extend(["", "### selected queries", ""])
+  for row in limited.get("selected_queries") or []:
+    lines.append(f"- [{row.get('query_type')}] ({row.get('confidence')}) {row.get('query')}")
+  if not limited.get("selected_queries"):
+    lines.append("- (none)")
+
+  lines.extend(
+    [
+      "",
+      "### caveat",
+      "",
+      limited.get("caveat_japanese")
+      or "これらの論文は、特許請求項を証明するものではなく、技術背景・材料プロセス・物性関係を確認するための supporting evidence candidate です。",
+      "",
+      "これらの論文は、特許請求項を証明するものではなく、技術背景・材料プロセス・物性関係を確認するための supporting evidence candidate です。",
+      "",
+    ],
+  )
+  return lines
+
+
+def _render_claim_paper_candidate_sections(summary: dict[str, Any]) -> list[str]:
+  block = summary.get("claim_paper_candidate_links") or {}
+  if not block.get("total_links") and not block.get("representative_links"):
+    return []
+  lines = [
+    "## Claim × Paper Candidate Links",
+    "",
+    f"- link数: {block.get('total_links', 0)}",
+    "",
+    "### link_type分布",
+    "",
+  ]
+  for key, count in sorted((block.get("link_type_distribution") or {}).items()):
+    lines.append(f"- {key}: {count}")
+  lines.extend(["", "### confidence分布", ""])
+  for key, count in sorted((block.get("confidence_distribution") or {}).items()):
+    lines.append(f"- {key}: {count}")
+  lines.extend(["", "### 代表リンク", ""])
+  for link in block.get("representative_links") or []:
+    lines.append(
+      f"- {link.get('element_type')} ↔ {link.get('paper_title')} "
+      f"({link.get('link_type')}, {link.get('confidence')})",
+    )
+  if not block.get("representative_links"):
+    lines.append("- (no links)")
+  lines.extend(["", block.get("caveat_japanese", ""), ""])
+  return lines
 
 
 def render_evidence_validation_markdown(summary: dict[str, Any]) -> str:
@@ -320,6 +481,13 @@ def render_evidence_validation_markdown(summary: dict[str, Any]) -> str:
   if not claims_plan.get("queries"):
     lines.append("- (no claims-based queries)")
   lines.extend(["", "### caveat", "", claims_plan.get("caveat_japanese") or "", ""])
+
+  openalex_sections = _render_openalex_limited_sections(summary)
+  if openalex_sections:
+    lines.extend(openalex_sections)
+  claim_link_sections = _render_claim_paper_candidate_sections(summary)
+  if claim_link_sections:
+    lines.extend(claim_link_sections)
 
   lines.extend(["## 5. China / Non-US Manual Watch", ""])
   manual = summary.get("manual_watch") or {}

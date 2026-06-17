@@ -88,3 +88,29 @@ def test_weekly_digest_includes_claims_paper_query_section() -> None:
   assert "技術の裏取り候補" in md
   assert "plan_only" in md or "OpenAlex実行準備" in md
   assert "supporting evidence candidate" in md
+
+
+def test_weekly_digest_includes_paper_evidence_section() -> None:
+  preview = build_weekly_digest_preview(
+    {
+      "openalex_limited_execution": {
+        "mode": "execute",
+        "selected_queries": [{"query_type": "material_process", "query": "PAN carbon fiber"}],
+        "paper_records": [{"title": "Carbon fiber study"}],
+        "source_quality_summary": {"background": 1},
+      },
+      "claim_paper_candidate_links": [
+        {
+          "element_type": "material",
+          "paper_title": "Carbon fiber study",
+          "link_type": "material_process_background",
+          "confidence": "low",
+        },
+      ],
+    },
+    {"user_facing_name_japanese": "標準監視モード", "included_items": [], "excluded_items": []},
+  )
+  md = render_weekly_digest_preview_markdown(preview)
+  assert "論文裏取り候補" in md
+  assert "supporting" in md.lower() or "裏取り候補" in md
+  assert "$" not in md

@@ -154,7 +154,15 @@ def resolve_required_inputs(
     out["paper_query_candidates_csv"] = known_outputs.get("paper_query_candidates_csv") or find_latest_output(
       "paper_query_candidates.csv",
     )
+    out["paper_query_candidates_from_claims_csv"] = (
+      known_outputs.get("paper_query_candidates_from_claims_csv")
+      or find_latest_output("paper_query_candidates_from_claims.csv")
+    )
     out["claim_elements_csv"] = known_outputs.get("claim_elements_csv") or find_latest_output("claim_elements.csv")
+    out["claim_elements_from_manual_fulltext_csv"] = (
+      known_outputs.get("claim_elements_from_manual_fulltext_csv")
+      or find_latest_output("claim_elements_from_manual_fulltext.csv")
+    )
     out["execute"] = config.execute_openalex
     out["max_queries"] = config.openalex_max_queries
     out["max_results_per_query"] = config.openalex_max_results_per_query
@@ -257,7 +265,7 @@ def validate_stage_inputs(stage_id: str, input_paths: dict[str, Any]) -> dict[st
   elif stage_id == "claim_element_extraction":
     required = ["top20_patents_csv"]
   elif stage_id == "openalex_paper_evidence":
-    required = ["paper_query_candidates_csv", "claim_elements_csv"]
+    required = ["claim_elements_csv"]
   elif stage_id == "claim_paper_evidence_map":
     required = ["claim_elements_csv", "paper_evidence_links_csv"]
   elif stage_id == "technical_view_agent":
@@ -280,8 +288,21 @@ def validate_stage_inputs(stage_id: str, input_paths: dict[str, Any]) -> dict[st
   missing: list[str] = []
   for key in required:
     path = input_paths.get(key)
+    if key == "claim_elements_csv" and stage_id == "openalex_paper_evidence":
+      alt = input_paths.get("claim_elements_from_manual_fulltext_csv")
+      if alt and Path(str(alt)).exists():
+        continue
     if not path or not Path(str(path)).exists():
       missing.append(key)
+
+  if stage_id == "openalex_paper_evidence":
+    claims_q = input_paths.get("paper_query_candidates_from_claims_csv")
+    regular_q = input_paths.get("paper_query_candidates_csv")
+    if not (
+      (claims_q and Path(str(claims_q)).exists())
+      or (regular_q and Path(str(regular_q)).exists())
+    ):
+      missing.append("paper_query_candidates_csv")
 
   return {
     "ok": not missing,

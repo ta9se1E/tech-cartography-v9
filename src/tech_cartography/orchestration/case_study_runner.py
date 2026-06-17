@@ -259,6 +259,35 @@ def _build_digest_artifacts_from_outputs(
   }
 
 
+def _patch_weekly_digest_with_openalex(
+  digest_dir: str | Path,
+  limited: dict[str, Any],
+  links: list[dict[str, Any]],
+) -> None:
+  from tech_cartography.costs.weekly_digest_preview import save_weekly_digest_preview
+
+  digest_path = Path(digest_dir) / "weekly_digest_preview.json"
+  if not digest_path.exists():
+    return
+  preview = _read_json(str(digest_path))
+  quality_levels: dict[str, int] = {}
+  for row in limited.get("source_quality_results") or []:
+    level = str(row.get("quality_level") or "unknown")
+    quality_levels[level] = quality_levels.get(level, 0) + 1
+  preview["openalex_limited_execution"] = {
+    "mode": limited.get("mode", "plan_only"),
+    "executed_queries": limited.get("executed_queries_count", 0),
+    "selected_queries": limited.get("selected_queries") or [],
+    "paper_records": limited.get("paper_records") or [],
+    "source_quality_summary": quality_levels,
+    "cache_hits": limited.get("cache_hits", 0),
+    "api_errors": limited.get("api_errors") or [],
+    "caveat_japanese": limited.get("caveat_japanese"),
+  }
+  preview["claim_paper_candidate_links"] = links[:10]
+  save_weekly_digest_preview(preview, digest_dir)
+
+
 def _save_run_cost_artifacts(
   config: PipelineConfig,
   run_output_dir: str,
@@ -552,13 +581,82 @@ def run_claim_element_stage(config: PipelineConfig, output_dir: str, previous_ou
 
 def run_openalex_stage(config: PipelineConfig, output_dir: str, previous_outputs: dict[str, Any]) -> dict[str, Any]:
   _safe_mkdir(output_dir)
-  query_csv = previous_outputs.get("paper_query_candidates_csv")
   elements_csv = previous_outputs.get("claim_elements_csv")
-  if not query_csv or not elements_csv:
-    raise FileNotFoundError("paper_query_candidates_csv / claim_elements_csv is missing")
+  claim_elements = load_records_csv(elements_csv) if elements_csv and Path(str(elements_csv)).exists() else []
 
-  query_rows = load_records_csv(query_csv)
-  claim_elements = load_records_csv(elements_csv)
+  use_limited = bool(config.execute_openalex_limited) or bool(config.openalex_use_claims_based_queries)
+  claims_query_csv = previous_outputs.get("paper_query_candidates_from_claims_csv")
+  query_csv = claims_query_csv if use_limited and claims_query_csv and Path(str(claims_query_csv)).exists() else previous_outputs.get("paper_query_candidates_csv")
+
+  if not query_csv or not Path(str(query_csv)).exists():
+    raise FileNotFoundError("paper_query_candidates_from_claims.csv / paper_query_candidates_csv is missing")
+  if not elements_csv:
+    manual_elements_csv = previous_outputs.get("claim_elements_from_manual_fulltext_csv")
+    if manual_elements_csv and Path(str(manual_elements_csv)).exists():
+      claim_elements = load_records_csv(str(manual_elements_csv))
+    if not claim_elements:
+      raise FileNotFoundError("claim_elements_csv is missing")
+
+  query_rows = load_records_csv(str(query_csv))
+
+  if config.execute_openalex_limited or (use_limited and claims_query_csv):
+    from tech_cartography.evidence.claims_paper_candidate_mapper import (
+      map_claim_elements_to_paper_candidates,
+      save_claim_paper_candidate_map_artifacts,
+    )
+    from tech_cartography.evidence.openalex_limited_executor import (
+      OpenAlexExecutionConfig,
+      execute_openalex_limited,
+      save_openalex_limited_artifacts,
+    )
+
+    pub = str(config.fulltext_publication_number or (query_rows[0].get("publication_number") if query_rows else ""))
+    has_description = False
+    oa_cfg = OpenAlexExecutionConfig(
+      max_queries=min(int(config.openalex_max_queries), 3),
+      max_results_per_query=int(config.openalex_max_results_per_query),
+      cache_first=bool(config.use_cache),
+      execute_openalex=bool(config.execute_openalex_limited or config.execute_openalex),
+      allow_low_confidence_queries=bool(config.execute_openalex_limited),
+      output_dir=str(Path(output_dir)),
+    )
+
+    limited = execute_openalex_limited(query_rows, oa_cfg, publication_number=pub)
+    links = map_claim_elements_to_paper_candidates(
+      claim_elements,
+      limited.get("paper_records", []),
+      has_description=has_description,
+    )
+    limited["claim_paper_candidate_links"] = links
+    paths = normalize_stage_outputs(
+      "openalex_paper_evidence",
+      {
+        **save_openalex_limited_artifacts(limited, output_dir),
+        **save_claim_paper_candidate_map_artifacts(links, output_dir),
+      },
+    )
+    ev_summary = previous_outputs.get("evidence_validation_summary_json")
+    if ev_summary and Path(str(ev_summary)).exists():
+      from tech_cartography.reports.evidence_validation_report import patch_evidence_validation_with_openalex_limited
+
+      ev_dir = Path(str(ev_summary)).parent
+      patched = patch_evidence_validation_with_openalex_limited(ev_dir, limited, links)
+      paths.update(patched)
+      _patch_weekly_digest_with_openalex(ev_dir, limited, links)
+    return {
+      "status": limited.get("execution_status", "ok"),
+      "paths": paths,
+      "summary": {
+        "papers": limited.get("total_paper_records", 0),
+        "executed_queries": limited.get("executed_queries_count", 0),
+        "mode": limited.get("mode", "plan_only"),
+        "claim_paper_links": len(links),
+        "output_dir": output_dir,
+        "produced_outputs": paths,
+        "openalex_limited_result": limited,
+      },
+    }
+
   cfg = OpenAlexRetrievalConfig(
     execute=bool(config.execute_openalex),
     max_queries=int(config.openalex_max_queries),
@@ -872,7 +970,7 @@ def run_pipeline_stage(
 
   # top5_fulltext_collection runs in dry-run mode when execute_fulltext is false
 
-  if stage_id == "openalex_paper_evidence" and not config.execute_openalex and not config.use_cache:
+  if stage_id == "openalex_paper_evidence" and not config.execute_openalex and not config.execute_openalex_limited and not config.use_cache and not config.openalex_use_claims_based_queries:
     result.status = "skipped"
     result.skipped_reason = "execute_openalex is false and use_cache is false; enable cache or execute explicitly"
     result.finished_at = _now_iso()

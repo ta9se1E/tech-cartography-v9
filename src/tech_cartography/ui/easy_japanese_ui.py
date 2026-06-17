@@ -409,6 +409,7 @@ def render_evidence_validation_summary(summary: dict[str, Any] | None) -> str:
 
   s = summary.get("summary") if isinstance(summary.get("summary"), dict) else summary
   openalex_mode = str(s.get("openalex_mode") or summary.get("openalex_mode") or "plan_only")
+  openalex_limited = summary.get("openalex_limited_execution") if isinstance(summary, dict) else {}
   metrics = [
     {"label": "全文レコード", "value": s.get("fulltext_records", 0)},
     {"label": "請求項分解可能", "value": s.get("ready_for_claim_extraction", 0)},
@@ -416,9 +417,17 @@ def render_evidence_validation_summary(summary: dict[str, Any] | None) -> str:
     {"label": "手動確認", "value": s.get("manual_required", 0)},
     {"label": "Claim Element", "value": s.get("generated_claim_elements", 0)},
     {"label": "論文クエリ候補", "value": s.get("generated_paper_queries", 0)},
+    {"label": "OpenAlex paper", "value": s.get("openalex_paper_records", 0)},
+    {"label": "Claim×Paper link", "value": s.get("claim_paper_candidate_links", 0)},
   ]
   next_actions = summary.get("recommended_actions") or []
   action_html = "".join(f"<li>{_safe(action)}</li>" for action in next_actions[:5])
+  limited_html = ""
+  if openalex_limited:
+    limited_html = render_openalex_limited_execution_card(openalex_limited)
+  link_block = summary.get("claim_paper_candidate_links") if isinstance(summary, dict) else {}
+  links = link_block.get("representative_links") if isinstance(link_block, dict) else []
+  link_html = render_claim_paper_candidate_map_card(links) if links else ""
   return (
     f"{render_info_box(explain_evidence_validation_readiness())}"
     f"{render_metric_cards(metrics)}"
@@ -426,8 +435,11 @@ def render_evidence_validation_summary(summary: dict[str, Any] | None) -> str:
     f'<div class="tc-patent-title">OpenAlex: {openalex_mode}</div>'
     f'<div class="tc-patent-meta">{explain_evidence_validation_mode(openalex_mode)}</div>'
     f"</div>"
+    f"{limited_html}"
+    f"{link_html}"
     f'<div class="tc-patent-card"><div class="tc-patent-title">次にやるべきこと</div>'
     f"<ul>{action_html or '<li>全文取得または手動確認リストを確認してください。</li>'}</ul></div>"
+    f'<div class="tc-patent-meta">論文候補は技術背景の裏取り候補です。特許の有効性、実施可能性、侵害性を判断するものではありません。</div>'
   )
 
 
@@ -711,5 +723,78 @@ def render_claims_paper_query_plan_card(
     f"論文の位置づけ: supporting evidence candidate（証明ではありません）<br><br>"
     f"<strong>代表query</strong><ul>{examples_html}</ul>"
     f"<strong>Caveat</strong><br>{caveat}"
+    f"</div>"
+  )
+
+
+def render_openalex_limited_execution_card(
+  limited: dict[str, Any] | None,
+  *,
+  source_quality: list[dict[str, Any]] | None = None,
+) -> str:
+  if not limited:
+    return ""
+  mode = str(limited.get("mode") or "plan_only")
+  status = str(limited.get("execution_status") or mode)
+  selected = limited.get("selected_queries") or []
+  papers = limited.get("paper_records") or []
+  queries_html = "".join(
+    f"<li>[{_safe(row.get('query_type'))}] ({_safe(row.get('confidence'))}) {_safe(row.get('query'))}</li>"
+    for row in selected[:5]
+  )
+  papers_html = "".join(
+    f"<li>{_safe(p.get('title', '(no title)'))}</li>"
+    for p in papers[:5]
+  )
+  quality_rows = source_quality or limited.get("source_quality_results") or []
+  quality_html = "".join(
+    f"<li>{_safe(row.get('quality_level', 'unknown'))}: {_safe(row.get('source_name') or row.get('source_id', ''))}</li>"
+    for row in quality_rows[:5]
+  )
+  errors = limited.get("api_errors") or []
+  error_html = "".join(f"<li>{_safe(err)}</li>" for err in errors[:3])
+  caveat = _safe(
+    limited.get("caveat_japanese")
+    or "論文候補は技術背景の裏取り候補です。特許の有効性、実施可能性、侵害性を判断するものではありません。",
+  )
+  return (
+    f'<div class="tc-info-box">'
+    f"<strong>OpenAlex Limited Execution</strong><br>"
+    f"実行状態: {_safe(status)} / モード: {_safe(mode)}<br>"
+    f"実行query: {limited.get('executed_queries_count', 0)} / "
+    f"取得paper: {limited.get('total_paper_records', len(papers))} / "
+    f"cache hits: {limited.get('cache_hits', 0)}<br><br>"
+    f"<strong>Selected queries</strong><ul>{queries_html or '<li>(none)</li>'}</ul>"
+    f"<strong>Paper records</strong><ul>{papers_html or '<li>(none)</li>'}</ul>"
+    f"<strong>Source quality</strong><ul>{quality_html or '<li>(none)</li>'}</ul>"
+    f"{f'<strong>API errors</strong><ul>{error_html}</ul>' if errors else ''}"
+    f"<strong>Caveat</strong><br>{caveat}"
+    f"</div>"
+  )
+
+
+def render_claim_paper_candidate_map_card(links: list[dict[str, Any]] | None) -> str:
+  if not links:
+    return ""
+  type_counts: dict[str, int] = {}
+  conf_counts: dict[str, int] = {}
+  for link in links:
+    type_counts[str(link.get("link_type"))] = type_counts.get(str(link.get("link_type")), 0) + 1
+    conf_counts[str(link.get("confidence"))] = conf_counts.get(str(link.get("confidence")), 0) + 1
+  type_html = ", ".join(f"{k}={v}" for k, v in sorted(type_counts.items()))
+  conf_html = ", ".join(f"{k}={v}" for k, v in sorted(conf_counts.items()))
+  rep_html = "".join(
+    f"<li>{_safe(link.get('element_type'))} ↔ {_safe(link.get('paper_title'))} "
+    f"({_safe(link.get('link_type'))}, {_safe(link.get('confidence'))})</li>"
+    for link in links[:5]
+  )
+  return (
+    f'<div class="tc-info-box">'
+    f"<strong>Claim × Paper Candidate Map</strong><br>"
+    f"link数: {len(links)}<br>"
+    f"link_type分布: {_safe(type_html)}<br>"
+    f"confidence分布: {_safe(conf_html)}<br><br>"
+    f"<strong>代表リンク</strong><ul>{rep_html}</ul>"
+    f"論文候補は技術背景の裏取り候補です。特許の有効性、実施可能性、侵害性を判断するものではありません。"
     f"</div>"
   )

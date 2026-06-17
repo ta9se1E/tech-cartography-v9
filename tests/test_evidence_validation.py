@@ -146,3 +146,53 @@ def test_metadata_only_claims_plan_uses_low_confidence_fallback(tmp_path: Path) 
   plan = run_evidence_validation(records, output_dir=str(tmp_path / "meta"))["claims_paper_query_plan"]
   if plan.get("queries"):
     assert all(row.get("confidence") == "low" for row in plan["queries"])
+
+
+def test_openalex_limited_execution_reflected_in_report(tmp_path: Path) -> None:
+  from tech_cartography.reports.evidence_validation_report import (
+    merge_openalex_limited_into_summary,
+    patch_evidence_validation_with_openalex_limited,
+    render_evidence_validation_markdown,
+  )
+
+  records = [
+    {
+      "publication_number": "US-12565719-B2",
+      "title": "Carbon fiber",
+      "country": "US",
+      "retrieval_status": "manual_claims_loaded",
+      "claims": "1. A carbon fiber comprising PAN precursor fibers with tensile strength.",
+      "evidence_level": "low_fulltext_evidence",
+    },
+  ]
+  result = run_evidence_validation(records, output_dir=str(tmp_path / "ev"))
+  limited = {
+    "mode": "execute",
+    "execution_status": "success",
+    "executed_queries_count": 2,
+    "skipped_queries_count": 8,
+    "total_paper_records": 1,
+    "cache_hits": 1,
+    "api_errors": [],
+    "caveat_japanese": "supporting evidence candidate",
+    "selected_queries": [{"query_type": "material_process", "confidence": "medium", "query": "PAN carbon fiber"}],
+    "source_quality_results": [{"quality_level": "background", "source_id": "W1"}],
+    "paper_records": [{"title": "Carbon fiber paper", "paper_id": "W1"}],
+  }
+  links = [
+    {
+      "element_type": "material",
+      "paper_title": "Carbon fiber paper",
+      "link_type": "material_process_background",
+      "confidence": "low",
+    },
+  ]
+  merged = merge_openalex_limited_into_summary(result["evidence_validation_summary"], limited, links)
+  md = render_evidence_validation_markdown(merged)
+  assert "## OpenAlex Limited Execution" in md
+  assert "## Claim × Paper Candidate Links" in md
+  assert "supporting evidence candidate" in md
+  assert "$" not in md
+  patch_evidence_validation_with_openalex_limited(tmp_path / "ev", limited, links)
+  patched_md = (tmp_path / "ev" / "evidence_validation_report.md").read_text(encoding="utf-8")
+  assert "OpenAlex Limited Execution" in patched_md

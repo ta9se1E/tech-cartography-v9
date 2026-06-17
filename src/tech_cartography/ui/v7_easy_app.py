@@ -22,7 +22,9 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_caveat_footer,
   render_caution_box,
   render_claims_paper_query_plan_card,
+  render_claim_paper_candidate_map_card,
   render_evidence_validation_summary,
+  render_openalex_limited_execution_card,
   render_fulltext_execute_summary,
   render_fulltext_status_card,
   render_fulltext_vs_watch_notice,
@@ -344,6 +346,38 @@ def _tab_evidence(manifest: dict[str, Any]) -> None:
   claims_card = render_claims_paper_query_plan_card(claims_plan, manual_claims_loaded=manual_loaded)
   if claims_card:
     st.markdown(claims_card, unsafe_allow_html=True)
+
+  openalex_summary = _load_json_artifact(manifest, "openalex_execution_summary_json")
+  if openalex_summary:
+    st.markdown(render_openalex_limited_execution_card(openalex_summary), unsafe_allow_html=True)
+  elif ev_summary and isinstance(ev_summary.get("openalex_limited_execution"), dict):
+    st.markdown(
+      render_openalex_limited_execution_card(ev_summary["openalex_limited_execution"]),
+      unsafe_allow_html=True,
+    )
+
+  claim_links_df = _load_csv_artifact(manifest, "claim_paper_candidate_links_csv")
+  if not claim_links_df.empty:
+    st.markdown(
+      render_claim_paper_candidate_map_card(claim_links_df.to_dict(orient="records")),
+      unsafe_allow_html=True,
+    )
+    with st.expander("Claim × Paper Candidate Links"):
+      render_small_table(claim_links_df.head(50))
+  elif ev_summary and isinstance(ev_summary.get("claim_paper_candidate_links"), dict):
+    rep = ev_summary["claim_paper_candidate_links"].get("representative_links") or []
+    if rep:
+      st.markdown(render_claim_paper_candidate_map_card(rep), unsafe_allow_html=True)
+
+  openalex_papers_df = _load_csv_artifact(manifest, "openalex_paper_records_csv")
+  if not openalex_papers_df.empty:
+    with st.expander("OpenAlex Paper Records"):
+      render_small_table(openalex_papers_df.head(50))
+
+  openalex_selected_df = _load_csv_artifact(manifest, "openalex_selected_queries_csv")
+  if not openalex_selected_df.empty:
+    with st.expander("OpenAlex Selected Queries"):
+      render_small_table(openalex_selected_df.head(20))
 
   claim_df = _load_csv_artifact(manifest, "claim_elements_csv")
   paper_df = _load_csv_artifact(manifest, "paper_query_candidates_csv")

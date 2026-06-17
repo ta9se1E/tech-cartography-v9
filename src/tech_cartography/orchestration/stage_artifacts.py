@@ -35,6 +35,11 @@ PRIMARY_ARTIFACT_KEYS = [
   "claims_paper_query_plan_md",
   "paper_query_quality_report_md",
   "paper_query_quality_summary_json",
+  "openalex_execution_summary_json",
+  "openalex_execution_summary_md",
+  "openalex_paper_records_csv",
+  "claim_paper_candidate_links_csv",
+  "claim_paper_candidate_map_md",
   "final_report_md",
 ]
 

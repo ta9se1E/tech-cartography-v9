@@ -30,6 +30,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--maximum-fulltext-usd", type=float, default=None)
   parser.add_argument("--allow-expensive-fulltext", action="store_true", default=False)
   parser.add_argument("--execute-openalex", action="store_true", default=False)
+  parser.add_argument("--execute-openalex-limited", action="store_true", default=False)
+  parser.add_argument("--openalex-max-queries", type=int, default=None)
+  parser.add_argument("--openalex-max-results-per-query", type=int, default=None)
+  parser.add_argument("--openalex-use-claims-based-queries", action="store_true", default=False)
 
   parser.add_argument(
     "--internal-cost-policy",
@@ -83,6 +87,15 @@ def main() -> int:
     config.allow_expensive_fulltext = True
   if args.execute_openalex:
     config.execute_openalex = True
+  if args.execute_openalex_limited:
+    config.execute_openalex_limited = True
+    config.execute_openalex = True
+  if args.openalex_max_queries is not None:
+    config.openalex_max_queries = int(args.openalex_max_queries)
+  if args.openalex_max_results_per_query is not None:
+    config.openalex_max_results_per_query = int(args.openalex_max_results_per_query)
+  if args.openalex_use_claims_based_queries:
+    config.openalex_use_claims_based_queries = True
 
   if args.internal_cost_policy:
     config.internal_cost_policy_name = args.internal_cost_policy

@@ -41,6 +41,8 @@ class PipelineConfig:
   fulltext_top_n: int = 5
   openalex_max_queries: int = 20
   openalex_max_results_per_query: int = 10
+  execute_openalex_limited: bool = False
+  openalex_use_claims_based_queries: bool = True
 
   skip_stages: list[str] = field(default_factory=list)
   start_stage: str | None = None
@@ -93,6 +95,8 @@ class PipelineConfig:
       openalex_max_results_per_query=int(
         data.get("openalex_max_results_per_query", cls.openalex_max_results_per_query),
       ),
+      execute_openalex_limited=bool(data.get("execute_openalex_limited", False)),
+      openalex_use_claims_based_queries=bool(data.get("openalex_use_claims_based_queries", True)),
       skip_stages=list(data.get("skip_stages", []) or []),
       start_stage=data.get("start_stage") or None,
       stop_stage=data.get("stop_stage") or None,

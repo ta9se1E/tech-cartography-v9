@@ -6,8 +6,10 @@ from tech_cartography.ui.easy_japanese_ui import (
   prepare_patent_display_df,
   render_acquisition_policy_summary,
   render_claims_paper_query_plan_card,
+  render_claim_paper_candidate_map_card,
   render_cost_ledger_debug,
   render_evidence_validation_summary,
+  render_openalex_limited_execution_card,
   render_fulltext_availability_notice,
   render_fulltext_execute_summary,
   render_fulltext_status_card,
@@ -332,4 +334,74 @@ def test_claims_paper_query_quality_card_no_amounts() -> None:
   )
   assert "OpenAlex実行準備OK" in html
   assert "usd" not in html.lower()
+
+
+def test_openalex_limited_execution_card_renders_without_amounts() -> None:
+  html = render_openalex_limited_execution_card(
+    {
+      "mode": "execute",
+      "execution_status": "success",
+      "executed_queries_count": 2,
+      "total_paper_records": 1,
+      "cache_hits": 1,
+      "selected_queries": [
+        {"query_type": "material_process", "confidence": "medium", "query": "PAN carbon fiber"},
+      ],
+      "paper_records": [{"title": "Carbon fiber tensile strength study"}],
+      "source_quality_results": [{"quality_level": "background", "source_id": "W1", "source_name": "Journal"}],
+      "caveat_japanese": "論文候補は技術背景の裏取り候補です。",
+    },
+  )
+  assert "OpenAlex Limited Execution" in html
+  assert "supporting" in html.lower() or "裏取り候補" in html
+  assert "$" not in html
+  assert "usd" not in html.lower()
+
+
+def test_claim_paper_candidate_map_card_renders_caveat() -> None:
+  html = render_claim_paper_candidate_map_card(
+    [
+      {
+        "element_type": "material",
+        "paper_title": "PAN carbonization study",
+        "link_type": "material_process_background",
+        "confidence": "low",
+      },
+    ],
+  )
+  assert "Claim × Paper Candidate Map" in html
+  assert "侵害性" in html or "裏取り候補" in html
+  assert "$" not in html
+
+
+def test_evidence_validation_summary_shows_openalex_limited() -> None:
+  summary = {
+    "summary": {
+      "fulltext_records": 1,
+      "openalex_mode": "execute",
+      "openalex_paper_records": 2,
+      "claim_paper_candidate_links": 3,
+    },
+    "openalex_limited_execution": {
+      "mode": "execute",
+      "executed_queries_count": 2,
+      "total_paper_records": 2,
+      "selected_queries": [{"query": "PAN carbon fiber", "query_type": "material_process", "confidence": "medium"}],
+    },
+    "claim_paper_candidate_links": {
+      "representative_links": [
+        {
+          "element_type": "material",
+          "paper_title": "Carbon fiber paper",
+          "link_type": "material_process_background",
+          "confidence": "low",
+        },
+      ],
+    },
+    "recommended_actions": [],
+  }
+  html = render_evidence_validation_summary(summary)
+  assert "OpenAlex" in html
+  assert "Claim × Paper" in html or "Claim×Paper" in html
+  assert "$" not in html
 
