@@ -187,7 +187,13 @@ def run_evidence_validation(
     )
     paths.update(manual_paths)
     if claims_paper_query_plan.get("queries"):
-      paths.update(save_claims_paper_query_artifacts(claims_paper_query_plan, out))
+      paths.update(
+        save_claims_paper_query_artifacts(
+          claims_paper_query_plan,
+          out,
+          include_quality_report=True,
+        ),
+      )
     markdown = render_evidence_validation_markdown(result["evidence_validation_summary"])
     paths["evidence_validation_report_md"] = save_evidence_validation_report(markdown, out)
     result["output_paths"] = paths

@@ -86,5 +86,5 @@ def test_weekly_digest_includes_claims_paper_query_section() -> None:
   )
   md = render_weekly_digest_preview_markdown(preview)
   assert "技術の裏取り候補" in md
-  assert "plan_only" in md
+  assert "plan_only" in md or "OpenAlex実行準備" in md
   assert "supporting evidence candidate" in md

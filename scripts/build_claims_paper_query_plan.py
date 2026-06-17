@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build claims-based OpenAlex paper query plan (Phase 18C)."""
+"""Build claims-based OpenAlex paper query plan (Phase 18C/18D)."""
 
 from __future__ import annotations
 
@@ -28,6 +28,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--publication-number", default="")
   parser.add_argument("--manual-input", default="")
   parser.add_argument("--output-dir", default="")
+  parser.add_argument("--min-queries", type=int, default=5)
+  parser.add_argument("--max-queries", type=int, default=10)
+  parser.add_argument("--quality-report", action="store_true", default=False)
+  parser.add_argument("--fail-if-not-ready", action="store_true", default=False)
   return parser.parse_args()
 
 
@@ -61,7 +65,6 @@ def _load_fulltext_record(stage_dir: Path, publication_number: str) -> dict | No
 
 def main() -> int:
   args = parse_args()
-  records: list[dict] = []
   claim_elements: list[dict] = []
   output_dir = Path(args.output_dir) if args.output_dir else None
 
@@ -72,7 +75,6 @@ def main() -> int:
       from tech_cartography.manual.manual_fulltext_input_schema import manual_fulltext_input_from_dict
 
       manual = manual_fulltext_input_from_dict(manual_data)
-      pub = args.publication_number or str(manual_data.get("publication_number") or manual_path.stem)
     else:
       pub = args.publication_number or manual_path.stem
       manual = load_manual_fulltext_input(pub, manual_path.parent)
@@ -108,20 +110,29 @@ def main() -> int:
     raise ValueError("Provide --manual-input or --run-dir")
 
   claim_element_result = {"elements": claim_elements}
-  plan = build_claims_paper_query_plan(records, claim_element_result)
-  paths = save_claims_paper_query_artifacts(plan, output_dir or Path("."))
-  print(
-    json.dumps(
-      {
-        "total_queries": plan.get("total_queries", 0),
-        "openalex_mode": plan.get("openalex_mode", "plan_only"),
-        "confidence_levels": plan.get("confidence_levels", []),
-        "paths": paths,
-      },
-      indent=2,
-      ensure_ascii=False,
-    ),
+  plan = build_claims_paper_query_plan(
+    records,
+    claim_element_result,
+    min_queries=int(args.min_queries),
+    max_queries=int(args.max_queries),
   )
+  paths = save_claims_paper_query_artifacts(
+    plan,
+    output_dir or Path("."),
+    include_quality_report=bool(args.quality_report or True),
+  )
+  payload = {
+    "total_queries": plan.get("total_queries", 0),
+    "openalex_mode": plan.get("openalex_mode", "plan_only"),
+    "confidence_levels": plan.get("confidence_levels", []),
+    "plan_ready_for_openalex": plan.get("plan_ready_for_openalex", False),
+    "quality_summary": plan.get("quality_summary", {}),
+    "paths": paths,
+  }
+  print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+  if args.fail_if_not_ready and not plan.get("plan_ready_for_openalex"):
+    return 2
   return 0
 
 

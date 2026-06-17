@@ -678,7 +678,14 @@ def render_claims_paper_query_plan_card(
 
   total = int(plan.get("total_queries", 0))
   mode = str(plan.get("openalex_mode", "plan_only"))
+  quality = plan.get("quality_summary") or {}
+  ready = bool(plan.get("plan_ready_for_openalex", quality.get("plan_ready_for_openalex", False)))
+  ready_label = "OpenAlex実行準備OK" if ready else "OpenAlex実行準備: 要改善"
   confidences = ", ".join(plan.get("confidence_levels", [])) or "medium/low"
+  type_dist = plan.get("query_type_distribution") or quality.get("query_type_distribution") or {}
+  type_html = "<br>".join(f"• {k}: {v}" for k, v in sorted(type_dist.items())) or "• n/a"
+  conf_dist = plan.get("confidence_distribution") or quality.get("confidence_distribution") or {}
+  conf_html = ", ".join(f"{k}={v}" for k, v in sorted(conf_dist.items())) or confidences
   examples_html = "".join(
     f"<li>{_safe(example)}</li>"
     for example in (plan.get("query_examples") or [])[:5]
@@ -697,10 +704,12 @@ def render_claims_paper_query_plan_card(
     f"<strong>Claims-based Paper Query Plan</strong>{manual_note}<br>"
     f"請求項から論文検索候補を作成しました。ただし、請求項は権利範囲を広く書くため、"
     f"明細書・実施例ベースの裏取りより精度は限定的です。<br><br>"
-    f"候補数: {total} / confidence: {confidences}<br>"
+    f"候補数: {total} / {ready_label}<br>"
+    f"query type分布:<br>{type_html}<br>"
+    f"confidence分布: {conf_html}<br>"
     f"OpenAlex: {mode}（本実行はまだ任意）<br>"
     f"論文の位置づけ: supporting evidence candidate（証明ではありません）<br><br>"
-    f"<strong>Query examples</strong><ul>{examples_html}</ul>"
+    f"<strong>代表query</strong><ul>{examples_html}</ul>"
     f"<strong>Caveat</strong><br>{caveat}"
     f"</div>"
   )

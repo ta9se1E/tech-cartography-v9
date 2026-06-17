@@ -63,6 +63,7 @@ def build_evidence_validation_summary(result: dict[str, Any]) -> dict[str, Any]:
   evidence_gaps = _build_evidence_gaps(readiness, claim_result, openalex, paper_evidence, claim_map)
   recommended_actions = _build_recommended_actions(readiness, openalex, result.get("status"))
   claims_plan = result.get("claims_paper_query_plan") or {}
+  quality_summary = claims_plan.get("quality_summary") or {}
 
   return {
     "pipeline_status": result.get("status"),
@@ -75,6 +76,7 @@ def build_evidence_validation_summary(result: dict[str, Any]) -> dict[str, Any]:
       "generated_claim_elements": len(claim_result.get("elements", [])),
       "generated_paper_queries": result.get("paper_query_result", {}).get("total_queries", 0),
       "claims_based_paper_queries": claims_plan.get("total_queries", 0),
+      "plan_ready_for_openalex": claims_plan.get("plan_ready_for_openalex", False),
       "openalex_mode": openalex.get("mode", "plan_only"),
       "paper_evidence_links": len(paper_evidence.get("evidence_links", [])),
       "claim_paper_evidence_map_items": len(claim_map.get("evidence_items", [])),
@@ -98,6 +100,7 @@ def build_evidence_validation_summary(result: dict[str, Any]) -> dict[str, Any]:
       "source_quality_count": len(paper_evidence.get("source_quality_results", [])),
     },
     "claims_paper_query_plan": claims_plan,
+    "paper_query_quality": quality_summary,
     "manual_watch": {
       "candidates": manual_candidates,
       "count": len(manual_candidates),
@@ -289,18 +292,26 @@ def render_evidence_validation_markdown(summary: dict[str, Any]) -> str:
     ],
   )
   claims_plan = summary.get("claims_paper_query_plan") or {}
+  quality = summary.get("paper_query_quality") or claims_plan.get("quality_summary") or {}
   lines.extend(
     [
       f"- manual claimsから生成したquery数: {claims_plan.get('total_queries', 0)}",
       f"- OpenAlex mode: {claims_plan.get('openalex_mode', 'plan_only')}",
       f"- confidence: {', '.join(claims_plan.get('confidence_levels', [])) or 'n/a'}",
+      f"- plan ready for OpenAlex: {claims_plan.get('plan_ready_for_openalex', quality.get('plan_ready_for_openalex', False))}",
       "",
-      "この論文クエリは請求項ベースの限定的な裏取り候補です。明細書・実施例が未入力の場合、技術的妥当性の確認には限界があります。",
+      "この段階では、請求項とメタデータから生成した論文検索候補です。明細書・実施例が未入力のため、数値条件や測定方法の裏取りは限定的です。",
       "",
-      "### query examples",
+      "### query_type distribution",
       "",
     ],
   )
+  for qtype, count in sorted((claims_plan.get("query_type_distribution") or quality.get("query_type_distribution") or {}).items()):
+    lines.append(f"- {qtype}: {count}")
+  lines.extend(["", "### confidence distribution", ""])
+  for conf, count in sorted((claims_plan.get("confidence_distribution") or quality.get("confidence_distribution") or {}).items()):
+    lines.append(f"- {conf}: {count}")
+  lines.extend(["", "### query examples", ""])
   for example in claims_plan.get("query_examples", []):
     lines.append(f"- {example}")
   if not claims_plan.get("query_examples"):

@@ -368,6 +368,11 @@ def _tab_evidence(manifest: dict[str, Any]) -> None:
     with st.expander("Claims Paper Query Plan"):
       st.markdown(claims_plan_path.read_text(encoding="utf-8"))
 
+  quality_md = _artifact_path(manifest, "paper_query_quality_report_md")
+  if quality_md and quality_md.exists():
+    with st.expander("Paper Query Quality"):
+      st.markdown(quality_md.read_text(encoding="utf-8"))
+
 
 def _tab_market(manifest: dict[str, Any]) -> None:
   st.markdown(

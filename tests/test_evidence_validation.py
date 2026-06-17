@@ -126,6 +126,8 @@ def test_manual_claims_loaded_emits_claims_paper_query_candidates(tmp_path: Path
   plan = result.get("claims_paper_query_plan") or {}
   assert plan.get("total_queries", 0) > 0
   assert Path(result["output_paths"]["paper_query_candidates_from_claims_csv"]).exists()
+  assert Path(result["output_paths"]["paper_query_quality_report_md"]).exists()
+  assert result["claims_paper_query_plan"].get("plan_ready_for_openalex") is True
   joined = " ".join(plan.get("query_examples", [])).lower()
   assert "carbon" in joined or "pan" in joined
 

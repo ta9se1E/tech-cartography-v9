@@ -307,7 +307,29 @@ def test_claims_paper_query_plan_card_shows_plan_only_caveat() -> None:
   assert "Claims-based Paper Query Plan" in html
   assert "plan_only" in html
   assert "supporting evidence candidate" in html
+  assert "OpenAlex実行準備OK" in html or "要改善" in html
+  assert "query type分布" in html
   assert "manual claims loaded" in html
   assert "usd" not in html.lower()
   assert "$" not in html
+
+
+def test_claims_paper_query_quality_card_no_amounts() -> None:
+  html = render_claims_paper_query_plan_card(
+    {
+      "total_queries": 6,
+      "openalex_mode": "plan_only",
+      "plan_ready_for_openalex": True,
+      "quality_summary": {
+        "plan_ready_for_openalex": True,
+        "query_type_distribution": {"material_process": 2, "property_condition": 2},
+        "confidence_distribution": {"medium": 4, "low": 2},
+      },
+      "query_type_distribution": {"material_process": 2, "property_condition": 2},
+      "confidence_distribution": {"medium": 4, "low": 2},
+      "query_examples": ["PAN carbon fiber carbonization"],
+    },
+  )
+  assert "OpenAlex実行準備OK" in html
+  assert "usd" not in html.lower()
 

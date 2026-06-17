@@ -664,7 +664,13 @@ python scripts/build_claims_paper_query_plan.py \
   --publication-number US-12565719-B2
 ```
 
-Outputs: `paper_query_candidates_from_claims.csv/json`, `claims_paper_query_plan.md`. Confidence is `medium` or `low` for claims-only input; papers are supporting evidence candidates, not proof.
+Outputs: `paper_query_candidates_from_claims.csv/json`, `claims_paper_query_plan.md`, `paper_query_quality_report.md`. Confidence is `medium` or `low` for claims-only input; target 5–10 query candidates with quality gate (`plan_ready_for_openalex`). Papers are supporting evidence candidates, not proof.
+
+```bash
+python scripts/build_claims_paper_query_plan.py \
+  --manual-input outputs/manual_fulltext_inputs/US-12565719-B2.json \
+  --min-queries 5 --max-queries 10 --quality-report
+```
 
 ## v7 Phase 17: Login + Tabbed Japanese UI
 

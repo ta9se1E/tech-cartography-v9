@@ -1,7 +1,8 @@
-"""Tests for build_claims_paper_query_plan CLI (Phase 18C)."""
+"""Tests for build_claims_paper_query_plan CLI (Phase 18C/18D)."""
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -18,7 +19,7 @@ def test_build_plan_from_manual_input(tmp_path) -> None:
       publication_number="US-12565719-B2",
       claims_text=(
         "1. A carbon fiber comprising a PAN precursor subjected to oxidation and carbonization, "
-        "wherein the carbon fiber has tensile strength and elastic modulus."
+        "wherein the carbon fiber has tensile strength of at least 5 GPa and elastic modulus."
       ),
       input_route="manual_google_patents",
     ),
@@ -32,13 +33,19 @@ def test_build_plan_from_manual_input(tmp_path) -> None:
     str(manual_json),
     "--output-dir",
     str(out_dir),
+    "--min-queries",
+    "5",
+    "--max-queries",
+    "10",
+    "--quality-report",
   ]
   result = subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=Path.cwd())
   payload = json.loads(result.stdout)
-  assert payload["total_queries"] > 0
+  assert payload["total_queries"] >= 5
+  assert payload["plan_ready_for_openalex"] is True
   assert (out_dir / "paper_query_candidates_from_claims.csv").exists()
-  assert (out_dir / "paper_query_candidates_from_claims.json").exists()
-  assert (out_dir / "claims_paper_query_plan.md").exists()
+  assert (out_dir / "paper_query_quality_report.md").exists()
+  assert (out_dir / "paper_query_quality_summary.json").exists()
 
 
 def test_build_plan_from_run_dir(tmp_path) -> None:
@@ -65,6 +72,51 @@ def test_build_plan_from_run_dir(tmp_path) -> None:
     "US-12565719-B2",
     "--output-dir",
     str(out_override),
+    "--min-queries",
+    "5",
+    "--max-queries",
+    "10",
   ]
   subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=Path.cwd())
   assert (out_override / "claims_paper_query_plan.md").exists()
+
+
+def test_fail_if_not_ready_exits_nonzero(tmp_path, monkeypatch) -> None:
+  script_path = Path.cwd() / "scripts" / "build_claims_paper_query_plan.py"
+  spec = importlib.util.spec_from_file_location("build_claims_paper_query_plan", script_path)
+  cli = importlib.util.module_from_spec(spec)
+  assert spec.loader is not None
+  spec.loader.exec_module(cli)
+
+  dummy = tmp_path / "US-X.json"
+  dummy.write_text(
+    json.dumps({"publication_number": "US-X", "claims_text": "1. A carbon fiber with PAN."}),
+    encoding="utf-8",
+  )
+
+  monkeypatch.setattr(
+    cli,
+    "build_claims_paper_query_plan",
+    lambda *args, **kwargs: {
+      "total_queries": 1,
+      "plan_ready_for_openalex": False,
+      "openalex_mode": "plan_only",
+      "confidence_levels": ["low"],
+      "quality_summary": {"plan_ready_for_openalex": False},
+      "queries": [],
+    },
+  )
+  monkeypatch.setattr(cli, "save_claims_paper_query_artifacts", lambda *args, **kwargs: {})
+  monkeypatch.setattr(
+    sys,
+    "argv",
+    [
+      "build_claims_paper_query_plan.py",
+      "--manual-input",
+      str(dummy),
+      "--output-dir",
+      str(tmp_path / "out"),
+      "--fail-if-not-ready",
+    ],
+  )
+  assert cli.main() == 2

@@ -187,14 +187,21 @@ def render_weekly_digest_preview_markdown(preview: dict[str, Any]) -> str:
     lines.append("")
 
   claims_plan = preview.get("claims_paper_query_plan") or {}
+  quality = claims_plan.get("quality_summary") or {}
   lines.extend(["", "## 技術の裏取り候補", ""])
   if claims_plan.get("queries") or claims_plan.get("total_queries", 0) > 0:
     lines.append(f"- manual claimsから生成されたpaper query候補: {claims_plan.get('total_queries', 0)} 件")
-    lines.append(f"- OpenAlex実行: {claims_plan.get('openalex_mode', 'plan_only')}（本実行はまだ任意）")
+    ready = claims_plan.get("plan_ready_for_openalex", quality.get("plan_ready_for_openalex", False))
+    lines.append(
+      f"- OpenAlex実行準備: {'OK（plan_only）' if ready else '要改善（query候補を追加）'}",
+    )
+    lines.append(f"- 現在のモード: {claims_plan.get('openalex_mode', 'plan_only')}（本実行はまだ任意）")
+    lines.append("- 現在の制約: 明細書・実施例未入力のため数値条件・測定方法の裏取りは限定的")
+    lines.append("- 代表query:")
     for example in (claims_plan.get("query_examples") or [])[:3]:
-      lines.append(f"  - 例: {example}")
+      lines.append(f"  - {example}")
     lines.append("- 次アクション:")
-    for action in claims_plan.get("next_actions_japanese") or [
+    for action in claims_plan.get("next_actions_japanese") or quality.get("next_actions_japanese") or [
       "descriptionを追加する",
       "OpenAlexを限定実行する",
       "技術者がquery妥当性を確認する",
