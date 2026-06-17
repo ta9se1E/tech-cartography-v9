@@ -9,6 +9,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_claim_paper_candidate_map_card,
   render_cost_ledger_debug,
   render_evidence_validation_summary,
+  render_evidence_map_synthesis_card,
   render_openalex_limited_execution_card,
   render_paper_candidate_relevance_card,
   render_fulltext_availability_notice,
@@ -450,4 +451,53 @@ def test_evidence_summary_includes_relevance_filter() -> None:
   }
   html = render_evidence_validation_summary(summary)
   assert "Paper Candidate Relevance Filter" in html
+  assert "$" not in html
+
+
+def test_evidence_map_synthesis_card_renders() -> None:
+  html = render_evidence_map_synthesis_card(
+    {
+      "publication_number": "US-12565719-B2",
+      "title": "Carbon fiber",
+      "synthesis_status": "ready_with_selected_papers",
+      "claim_element_count": 2,
+      "selected_evidence_paper_count": 3,
+      "claim_paper_link_count": 2,
+      "key_findings_japanese": ["PAN系炭素繊維の論文候補を選定"],
+      "evidence_gaps_japanese": ["明細書未入力"],
+      "next_actions_japanese": ["descriptionを追加"],
+      "selected_evidence_papers": [
+        {"title": "PAN carbon fiber carbonization", "relevance_bucket": "strong_material_process_background"},
+      ],
+      "evidence_map_items": [
+        {
+          "element_type": "material",
+          "element_text": "PAN precursor",
+          "best_paper_title": "PAN carbon fiber",
+          "confidence": "low",
+        },
+      ],
+      "caveats_japanese": ["supporting evidence candidate"],
+    },
+  )
+  assert "Evidence Map Synthesis" in html
+  assert "supporting evidence candidate" in html.lower()
+  assert "PAN carbon fiber" in html
+  assert "$" not in html
+
+
+def test_evidence_summary_includes_synthesis_card() -> None:
+  summary = {
+    "summary": {"openalex_mode": "execute"},
+    "evidence_map_synthesis": {
+      "publication_number": "US-12565719-B2",
+      "synthesis_status": "ready_with_selected_papers",
+      "claim_element_count": 1,
+      "selected_evidence_paper_count": 2,
+      "key_findings_japanese": ["finding"],
+    },
+    "recommended_actions": [],
+  }
+  html = render_evidence_validation_summary(summary)
+  assert "Evidence Map Synthesis" in html
   assert "$" not in html

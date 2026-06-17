@@ -60,6 +60,7 @@ def build_weekly_digest_preview(
   openalex_limited = artifacts.get("openalex_limited_execution") or {}
   claim_paper_links = artifacts.get("claim_paper_candidate_links") or []
   paper_candidate_relevance = artifacts.get("paper_candidate_relevance") or {}
+  evidence_map_synthesis = artifacts.get("evidence_map_synthesis") or {}
 
   def _bq_status(row: dict[str, Any]) -> str:
     if not isinstance(row, dict):
@@ -118,6 +119,7 @@ def build_weekly_digest_preview(
     "openalex_limited_execution": openalex_limited,
     "claim_paper_candidate_links": claim_paper_links,
     "paper_candidate_relevance": paper_candidate_relevance,
+    "evidence_map_synthesis": evidence_map_synthesis,
     "china_strategic_watch": cn_watch[:10],
     "next_actions": next_actions[:8],
     "manual_watch_count": acquisition_policy_summary.get("manual_watch_count", len(cn_watch)),
@@ -281,6 +283,23 @@ def render_weekly_digest_preview_markdown(preview: dict[str, Any]) -> str:
       "descriptionを追加して裏取り精度を上げる",
       "broad reviewは背景参照のみとする",
     ]:
+      lines.append(f"  - {action}")
+
+  ev_map = preview.get("evidence_map_synthesis") or {}
+  if ev_map:
+    lines.extend(["", "## Evidence Map Summary", ""])
+    lines.append(f"- 今週のDeep Dive対象: {ev_map.get('publication_number', '')} / {ev_map.get('title', '')}")
+    lines.append(f"- synthesis status: {ev_map.get('synthesis_status', '')}")
+    lines.append(f"- Claim Element数: {ev_map.get('claim_element_count', 0)}")
+    lines.append(f"- selected evidence papers: {ev_map.get('selected_evidence_paper_count', 0)}")
+    lines.append("- claimsから見えた技術要素:")
+    for finding in (ev_map.get("key_findings_japanese") or [])[:4]:
+      lines.append(f"  - {finding}")
+    lines.append("- Evidence Gaps:")
+    for gap in (ev_map.get("evidence_gaps_japanese") or [])[:4]:
+      lines.append(f"  - {gap}")
+    lines.append("- 次に読むべき情報:")
+    for action in (ev_map.get("next_actions_japanese") or [])[:4]:
       lines.append(f"  - {action}")
 
   lines.extend(["", "## 今週の次アクション", ""])

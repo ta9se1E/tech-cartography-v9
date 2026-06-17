@@ -293,6 +293,53 @@ def merge_openalex_limited_into_summary(
   return merged
 
 
+def merge_evidence_map_synthesis_into_summary(
+  summary: dict[str, Any],
+  synthesis: dict[str, Any],
+) -> dict[str, Any]:
+  merged = dict(summary)
+  merged["evidence_map_synthesis"] = {
+    "publication_number": synthesis.get("publication_number"),
+    "title": synthesis.get("title"),
+    "synthesis_status": synthesis.get("synthesis_status"),
+    "claim_element_count": synthesis.get("claim_element_count", 0),
+    "selected_evidence_paper_count": synthesis.get("selected_evidence_paper_count", 0),
+    "claim_paper_link_count": synthesis.get("claim_paper_link_count", 0),
+    "key_findings_japanese": synthesis.get("key_findings_japanese", []),
+    "evidence_gaps_japanese": synthesis.get("evidence_gaps_japanese", []),
+    "next_actions_japanese": synthesis.get("next_actions_japanese", []),
+    "caveats_japanese": synthesis.get("caveats_japanese", []),
+    "intro_japanese": (
+      "このEvidence Mapは、請求項と論文候補の対応を整理したものです。"
+      "論文候補は技術背景の裏取り候補であり、特許主張を証明するものではありません。"
+    ),
+  }
+  top = dict(merged.get("summary") or {})
+  top["evidence_map_synthesis_status"] = synthesis.get("synthesis_status")
+  top["selected_evidence_papers"] = synthesis.get("selected_evidence_paper_count", 0)
+  merged["summary"] = top
+  return merged
+
+
+def patch_evidence_validation_with_evidence_map_synthesis(
+  evidence_dir: str | Path,
+  synthesis: dict[str, Any],
+) -> dict[str, str]:
+  out = Path(evidence_dir)
+  summary_path = out / "evidence_validation_summary.json"
+  report_path = out / "evidence_validation_report.md"
+  if not summary_path.exists():
+    return {}
+  summary = json.loads(summary_path.read_text(encoding="utf-8"))
+  merged = merge_evidence_map_synthesis_into_summary(summary, synthesis)
+  summary_path.write_text(json.dumps(merged, indent=2, ensure_ascii=False), encoding="utf-8")
+  report_path.write_text(render_evidence_validation_markdown(merged), encoding="utf-8")
+  return {
+    "evidence_validation_summary_json": str(summary_path),
+    "evidence_validation_report_md": str(report_path),
+  }
+
+
 def patch_evidence_validation_with_openalex_limited(
   evidence_dir: str | Path,
   limited: dict[str, Any],
@@ -429,6 +476,37 @@ def _render_paper_candidate_relevance_sections(summary: dict[str, Any]) -> list[
   return lines
 
 
+def _render_evidence_map_synthesis_sections(summary: dict[str, Any]) -> list[str]:
+  block = summary.get("evidence_map_synthesis") or {}
+  if not block:
+    return []
+  lines = [
+    "## Evidence Map Synthesis",
+    "",
+    block.get("intro_japanese")
+    or "このEvidence Mapは、請求項と論文候補の対応を整理したものです。論文候補は技術背景の裏取り候補であり、特許主張を証明するものではありません。",
+    "",
+    f"- synthesis status: {block.get('synthesis_status', '')}",
+    f"- claim element count: {block.get('claim_element_count', 0)}",
+    f"- selected evidence paper count: {block.get('selected_evidence_paper_count', 0)}",
+    f"- claim-paper link count: {block.get('claim_paper_link_count', 0)}",
+    "",
+    "### key findings",
+    "",
+  ]
+  for finding in block.get("key_findings_japanese") or []:
+    lines.append(f"- {finding}")
+  if not block.get("key_findings_japanese"):
+    lines.append("- (none)")
+  lines.extend(["", "### evidence gaps", ""])
+  for gap in block.get("evidence_gaps_japanese") or []:
+    lines.append(f"- {gap}")
+  lines.extend(["", "### next actions", ""])
+  for action in block.get("next_actions_japanese") or []:
+    lines.append(f"- {action}")
+  return lines
+
+
 def render_evidence_validation_markdown(summary: dict[str, Any]) -> str:
   s = summary.get("summary") or {}
   lines = [
@@ -556,6 +634,9 @@ def render_evidence_validation_markdown(summary: dict[str, Any]) -> str:
   relevance_sections = _render_paper_candidate_relevance_sections(summary)
   if relevance_sections:
     lines.extend(relevance_sections)
+  synthesis_sections = _render_evidence_map_synthesis_sections(summary)
+  if synthesis_sections:
+    lines.extend(synthesis_sections)
 
   lines.extend(["## 5. China / Non-US Manual Watch", ""])
   manual = summary.get("manual_watch") or {}

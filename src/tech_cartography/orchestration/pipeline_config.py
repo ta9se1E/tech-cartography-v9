@@ -44,6 +44,9 @@ class PipelineConfig:
   execute_openalex_limited: bool = False
   openalex_use_claims_based_queries: bool = True
 
+  build_evidence_map_synthesis: bool = True
+  evidence_map_output_dir: str = "outputs/evidence_map_synthesis"
+
   skip_stages: list[str] = field(default_factory=list)
   start_stage: str | None = None
   stop_stage: str | None = None
@@ -97,6 +100,8 @@ class PipelineConfig:
       ),
       execute_openalex_limited=bool(data.get("execute_openalex_limited", False)),
       openalex_use_claims_based_queries=bool(data.get("openalex_use_claims_based_queries", True)),
+      build_evidence_map_synthesis=bool(data.get("build_evidence_map_synthesis", True)),
+      evidence_map_output_dir=str(data.get("evidence_map_output_dir", cls.evidence_map_output_dir)),
       skip_stages=list(data.get("skip_stages", []) or []),
       start_stage=data.get("start_stage") or None,
       stop_stage=data.get("stop_stage") or None,

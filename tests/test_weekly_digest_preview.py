@@ -133,3 +133,25 @@ def test_weekly_digest_includes_relevance_filter_section() -> None:
   assert "論文裏取り候補の絞り込み" in md
   assert "PAN carbon fiber" in md
   assert "$" not in md
+
+
+def test_weekly_digest_includes_evidence_map_summary() -> None:
+  preview = build_weekly_digest_preview(
+    {
+      "evidence_map_synthesis": {
+        "publication_number": "US-12565719-B2",
+        "title": "Carbon fiber",
+        "synthesis_status": "ready_with_selected_papers",
+        "claim_element_count": 2,
+        "selected_evidence_paper_count": 3,
+        "key_findings_japanese": ["PAN carbon fiber paper selected"],
+        "evidence_gaps_japanese": ["description未入力"],
+        "next_actions_japanese": ["descriptionを追加"],
+      },
+    },
+    {"user_facing_name_japanese": "標準監視モード", "included_items": [], "excluded_items": []},
+  )
+  md = render_weekly_digest_preview_markdown(preview)
+  assert "Evidence Map Summary" in md
+  assert "US-12565719-B2" in md
+  assert "$" not in md

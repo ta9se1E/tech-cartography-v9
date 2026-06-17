@@ -24,6 +24,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_claims_paper_query_plan_card,
   render_claim_paper_candidate_map_card,
   render_evidence_validation_summary,
+  render_evidence_map_synthesis_card,
   render_openalex_limited_execution_card,
   render_paper_candidate_relevance_card,
   render_fulltext_execute_summary,
@@ -376,6 +377,12 @@ def _tab_evidence(manifest: dict[str, Any]) -> None:
   if relevance_summary:
     st.markdown(render_paper_candidate_relevance_card(relevance_summary), unsafe_allow_html=True)
 
+  ev_map = _load_json_artifact(manifest, "evidence_map_synthesis_json")
+  if not ev_map and ev_summary and isinstance(ev_summary.get("evidence_map_synthesis"), dict):
+    ev_map = ev_summary["evidence_map_synthesis"]
+  if ev_map:
+    st.markdown(render_evidence_map_synthesis_card(ev_map), unsafe_allow_html=True)
+
   selected_df = _load_csv_artifact(manifest, "selected_evidence_papers_csv")
   if not selected_df.empty:
     with st.expander("Selected Evidence Papers"):
@@ -424,6 +431,16 @@ def _tab_evidence(manifest: dict[str, Any]) -> None:
     with st.expander("Paper Query Quality"):
       st.markdown(quality_md.read_text(encoding="utf-8"))
 
+  ev_map_md = _artifact_path(manifest, "evidence_map_synthesis_md")
+  if ev_map_md and ev_map_md.exists():
+    with st.expander("Evidence Map Synthesis Report"):
+      st.markdown(ev_map_md.read_text(encoding="utf-8"))
+
+  ev_map_items_df = _load_csv_artifact(manifest, "evidence_map_items_csv")
+  if not ev_map_items_df.empty:
+    with st.expander("Evidence Map Items"):
+      render_small_table(ev_map_items_df.head(50))
+
 
 def _tab_market(manifest: dict[str, Any]) -> None:
   st.markdown(
@@ -457,6 +474,7 @@ def _tab_reports(manifest: dict[str, Any]) -> None:
     ("carbon_fiber_evidence_map_report_md", "Carbon Fiber Evidence Map"),
     ("fulltext_evidence_report_md", "Full Text Evidence"),
     ("evidence_validation_report_md", "Evidence Validation"),
+    ("evidence_map_synthesis_md", "Evidence Map Synthesis"),
     ("final_report_md", "Synthesis Report"),
     ("carbon_fiber_evidence_map_v1_md", "Evidence Map v1"),
   ]

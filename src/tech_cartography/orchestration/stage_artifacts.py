@@ -43,6 +43,9 @@ PRIMARY_ARTIFACT_KEYS = [
   "paper_candidate_relevance_csv",
   "paper_candidate_relevance_report_md",
   "selected_evidence_papers_csv",
+  "evidence_map_synthesis_json",
+  "evidence_map_synthesis_md",
+  "evidence_map_items_csv",
   "final_report_md",
 ]
 

@@ -297,6 +297,66 @@ def _patch_weekly_digest_with_openalex(
   save_weekly_digest_preview(preview, digest_dir)
 
 
+def _run_evidence_map_synthesis_if_enabled(
+  config: PipelineConfig,
+  publication_number: str,
+  run_output_dir: str,
+  openalex_dir: str | Path | None = None,
+) -> dict[str, str]:
+  if not config.build_evidence_map_synthesis:
+    return {}
+  from tech_cartography.evidence.evidence_map_synthesizer import build_evidence_map_synthesis
+  from tech_cartography.reports.evidence_map_synthesis_report import save_evidence_map_synthesis_artifacts
+  from tech_cartography.reports.evidence_validation_report import patch_evidence_validation_with_evidence_map_synthesis
+
+  pub = publication_number or config.fulltext_publication_number or "US-12565719-B2"
+  out_dir = Path(config.evidence_map_output_dir) / pub
+  synthesis = build_evidence_map_synthesis(
+    run_output_dir,
+    pub,
+    openalex_dir,
+    allow_weak_no_papers=True,
+  )
+  paths = save_evidence_map_synthesis_artifacts(synthesis, out_dir)
+
+  ev_dirs = list((Path(run_output_dir) / "stages" / "evidence_validation").glob("*"))
+  if ev_dirs:
+    latest_ev = sorted(ev_dirs, key=lambda p: p.stat().st_mtime, reverse=True)[0]
+    patched = patch_evidence_validation_with_evidence_map_synthesis(latest_ev, synthesis.to_dict())
+    paths.update(patched)
+    _patch_weekly_digest_with_evidence_map(latest_ev, synthesis.to_dict())
+  return paths
+
+
+def _patch_weekly_digest_with_evidence_map(digest_dir: str | Path, synthesis: dict[str, Any]) -> None:
+  from tech_cartography.costs.weekly_digest_preview import save_weekly_digest_preview
+
+  digest_path = Path(digest_dir) / "weekly_digest_preview.json"
+  if not digest_path.exists():
+    return
+  preview = _read_json(str(digest_path))
+  preview["evidence_map_synthesis"] = {
+    "publication_number": synthesis.get("publication_number"),
+    "title": synthesis.get("title"),
+    "synthesis_status": synthesis.get("synthesis_status"),
+    "claim_element_count": synthesis.get("claim_element_count"),
+    "selected_evidence_paper_count": synthesis.get("selected_evidence_paper_count"),
+    "key_findings_japanese": synthesis.get("key_findings_japanese", []),
+    "evidence_gaps_japanese": synthesis.get("evidence_gaps_japanese", []),
+    "next_actions_japanese": synthesis.get("next_actions_japanese", []),
+    "selected_evidence_papers": synthesis.get("selected_evidence_papers", []),
+  }
+  save_weekly_digest_preview(preview, digest_dir)
+
+
+def _infer_run_root(output_dir: str) -> str:
+  parts = Path(output_dir).parts
+  if "stages" in parts:
+    idx = parts.index("stages")
+    return str(Path(*parts[:idx]))
+  return str(Path(output_dir).parent)
+
+
 def _save_run_cost_artifacts(
   config: PipelineConfig,
   run_output_dir: str,
@@ -525,6 +585,20 @@ def run_evidence_validation_stage(
   )
   paths["evidence_validation_report_md"] = save_evidence_validation_report(markdown, output_dir)
 
+  pub = str(config.fulltext_publication_number or "US-12565719-B2")
+  if config.build_evidence_map_synthesis and (
+    (result.get("claim_element_result") or {}).get("elements")
+    or paths.get("claim_elements_from_manual_fulltext_csv")
+    or paths.get("paper_query_candidates_from_claims_csv")
+  ):
+    synthesis_paths = _run_evidence_map_synthesis_if_enabled(
+      config,
+      pub,
+      _infer_run_root(output_dir),
+      openalex_dir=None,
+    )
+    paths.update(synthesis_paths)
+
   validation_status = result.get("status", "success")
   return {
     "status": validation_status,
@@ -668,6 +742,13 @@ def run_openalex_stage(config: PipelineConfig, output_dir: str, previous_outputs
       patched = patch_evidence_validation_with_openalex_limited(ev_dir, limited, links)
       paths.update(patched)
       _patch_weekly_digest_with_openalex(ev_dir, limited, links)
+    synthesis_paths = _run_evidence_map_synthesis_if_enabled(
+      config,
+      pub,
+      _infer_run_root(output_dir),
+      openalex_dir=output_dir,
+    )
+    paths.update(synthesis_paths)
     return {
       "status": limited.get("execution_status", "ok"),
       "paths": paths,

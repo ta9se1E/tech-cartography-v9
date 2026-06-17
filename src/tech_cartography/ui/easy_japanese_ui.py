@@ -430,6 +430,8 @@ def render_evidence_validation_summary(summary: dict[str, Any] | None) -> str:
   link_html = render_claim_paper_candidate_map_card(links) if links else ""
   relevance_block = summary.get("paper_candidate_relevance") if isinstance(summary, dict) else {}
   relevance_html = render_paper_candidate_relevance_card(relevance_block) if relevance_block else ""
+  synthesis_block = summary.get("evidence_map_synthesis") if isinstance(summary, dict) else {}
+  synthesis_html = render_evidence_map_synthesis_card(synthesis_block) if synthesis_block else ""
   return (
     f"{render_info_box(explain_evidence_validation_readiness())}"
     f"{render_metric_cards(metrics)}"
@@ -437,6 +439,7 @@ def render_evidence_validation_summary(summary: dict[str, Any] | None) -> str:
     f'<div class="tc-patent-title">OpenAlex: {openalex_mode}</div>'
     f'<div class="tc-patent-meta">{explain_evidence_validation_mode(openalex_mode)}</div>'
     f"</div>"
+    f"{synthesis_html}"
     f"{relevance_html}"
     f"{limited_html}"
     f"{link_html}"
@@ -835,6 +838,54 @@ def render_paper_candidate_relevance_card(relevance: dict[str, Any] | None) -> s
     f"bucket分布: {_safe(bucket_html)}<br><br>"
     f"<strong>Selected evidence papers</strong><ul>{selected_html or '<li>(none)</li>'}</ul>"
     f"<strong>Broad background / excluded</strong><ul>{broad_html or '<li>(none)</li>'}</ul>"
+    f"<strong>Caveat</strong><br>{caveat}"
+    f"</div>"
+  )
+
+
+def render_evidence_map_synthesis_card(synthesis: dict[str, Any] | None) -> str:
+  if not synthesis:
+    return ""
+  findings_html = "".join(
+    f"<li>{_safe(f)}</li>" for f in (synthesis.get("key_findings_japanese") or [])[:5]
+  )
+  gaps_html = "".join(
+    f"<li>{_safe(g)}</li>" for g in (synthesis.get("evidence_gaps_japanese") or [])[:5]
+  )
+  actions_html = "".join(
+    f"<li>{_safe(a)}</li>" for a in (synthesis.get("next_actions_japanese") or [])[:5]
+  )
+  papers_html = "".join(
+    f"<li>{_safe(p.get('title', '(no title)'))} ({_safe(p.get('relevance_bucket', ''))})</li>"
+    for p in (synthesis.get("selected_evidence_papers") or [])[:5]
+    if isinstance(p, dict)
+  )
+  items = synthesis.get("evidence_map_items") or []
+  items_html = "".join(
+    f"<li>{_safe(i.get('element_type'))}: {_safe((i.get('element_text') or '')[:60])} "
+    f"→ {_safe(i.get('best_paper_title') or '(no paper)')} "
+    f"({_safe(i.get('confidence'))})</li>"
+    for i in items[:8]
+    if isinstance(i, dict)
+  )
+  caveat = _safe(
+    (synthesis.get("caveats_japanese") or [""])[0]
+    if synthesis.get("caveats_japanese")
+    else "このEvidence Mapは、請求項と論文候補の対応を整理したものです。論文候補は技術背景の裏取り候補であり、特許主張を証明するものではありません。",
+  )
+  return (
+    f'<div class="tc-info-box">'
+    f"<strong>Evidence Map Synthesis</strong><br>"
+    f"対象: {_safe(synthesis.get('publication_number'))} / {_safe(synthesis.get('title'))}<br>"
+    f"status: {_safe(synthesis.get('synthesis_status'))} / "
+    f"Claim Elements: {synthesis.get('claim_element_count', 0)} / "
+    f"selected papers: {synthesis.get('selected_evidence_paper_count', 0)} / "
+    f"links: {synthesis.get('claim_paper_link_count', 0)}<br><br>"
+    f"<strong>Key findings</strong><ul>{findings_html or '<li>(none)</li>'}</ul>"
+    f"<strong>Claim Element × Paper Candidate</strong><ul>{items_html or '<li>(none)</li>'}</ul>"
+    f"<strong>Selected evidence papers</strong><ul>{papers_html or '<li>(none)</li>'}</ul>"
+    f"<strong>Evidence gaps</strong><ul>{gaps_html or '<li>(none)</li>'}</ul>"
+    f"<strong>Next actions</strong><ul>{actions_html or '<li>(none)</li>'}</ul>"
     f"<strong>Caveat</strong><br>{caveat}"
     f"</div>"
   )
