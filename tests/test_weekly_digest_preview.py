@@ -34,9 +34,11 @@ def test_preview_markdown_builds() -> None:
   )
   md = render_weekly_digest_preview_markdown(preview)
   assert "Weekly Digest Preview" in md
+  assert "今週の特許インテリジェンス" in md
   assert "標準監視モード" in md
-  assert "中国 Strategic Watch" in md
+  assert "Strategic Watch" in md
   assert "ZHONGFU" in md or "中複" in md
+  assert "週次で届く想定" in md
 
 
 def test_china_strategic_watch_included() -> None:
@@ -85,7 +87,7 @@ def test_weekly_digest_includes_claims_paper_query_section() -> None:
     {"user_facing_name_japanese": "標準監視モード", "included_items": [], "excluded_items": []},
   )
   md = render_weekly_digest_preview_markdown(preview)
-  assert "技術の裏取り候補" in md
+  assert "論文裏取り候補" in md
   assert "plan_only" in md or "OpenAlex実行準備" in md
   assert "supporting evidence candidate" in md
 
@@ -130,8 +132,9 @@ def test_weekly_digest_includes_relevance_filter_section() -> None:
     {"user_facing_name_japanese": "標準監視モード", "included_items": [], "excluded_items": []},
   )
   md = render_weekly_digest_preview_markdown(preview)
-  assert "論文裏取り候補の絞り込み" in md
+  assert "論文裏取り候補" in md
   assert "PAN carbon fiber" in md
+  assert "broad background除外" in md or "off-topic除外" in md
   assert "$" not in md
 
 
@@ -154,4 +157,5 @@ def test_weekly_digest_includes_evidence_map_summary() -> None:
   md = render_weekly_digest_preview_markdown(preview)
   assert "Evidence Map Summary" in md
   assert "US-12565719-B2" in md
+  assert "今週の特許インテリジェンス" in md
   assert "$" not in md

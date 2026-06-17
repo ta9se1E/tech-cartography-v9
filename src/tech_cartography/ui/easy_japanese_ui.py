@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -27,6 +28,47 @@ from tech_cartography.ui.japanese_labels import (
   translate_stage_id,
   translate_stage_status,
   translate_tab_name,
+)
+
+EVIDENCE_MAP_INTRO_JAPANESE = (
+  "このEvidence Mapは、請求項と論文候補の対応を整理したものです。"
+  "論文候補は技術背景の裏取り候補であり、特許主張を証明するものではありません。"
+)
+
+WEAK_LINK_EXPLANATION_JAPANESE = (
+  "これは請求項と論文候補の弱い対応です。"
+  "技術背景を確認するための候補であり、特許主張を証明するものではありません。"
+)
+
+DEMO_DEEP_DIVE_PUBLICATION = "US-12565719-B2"
+DEMO_DEEP_DIVE_TITLE = "Carbon fiber and method of manufacturing same"
+
+DEMO_ARTIFACT_SPECS: tuple[tuple[str, str, str], ...] = (
+  (
+    "evidence_map_synthesis_md",
+    "Evidence Map Synthesis Report",
+    "outputs/evidence_map_synthesis/US-12565719-B2/evidence_map_synthesis.md",
+  ),
+  (
+    "evidence_map_items_csv",
+    "Evidence Map Items",
+    "outputs/evidence_map_synthesis/US-12565719-B2/evidence_map_items.csv",
+  ),
+  (
+    "selected_evidence_papers_csv",
+    "Selected Evidence Papers",
+    "outputs/openalex_limited_execution/selected_evidence_papers.csv",
+  ),
+  (
+    "claim_paper_candidate_links_csv",
+    "Claim × Paper Candidate Links",
+    "outputs/openalex_limited_execution/claim_paper_candidate_links.csv",
+  ),
+  (
+    "paper_candidate_relevance_report_md",
+    "Paper Candidate Relevance Report",
+    "outputs/openalex_limited_execution/paper_candidate_relevance_report.md",
+  ),
 )
 
 V7_EASY_CSS = """
@@ -572,19 +614,28 @@ def render_acquisition_policy_summary(summary: dict[str, Any] | None) -> str:
 
 
 def render_weekly_digest_preview_block(preview: dict[str, Any] | None, markdown_text: str = "") -> str:
+  delivery_note = (
+    "<br><em>この内容が週次で届く想定です。実際のメール送信はまだ行いません。</em>"
+  )
   if markdown_text and not _text_has_cost_amounts(markdown_text):
     return (
       f'<div class="tc-info-box"><strong>Weekly Digest Preview</strong>'
+      f"{delivery_note}"
       f'<pre style="white-space:pre-wrap">{markdown_text[:6000]}</pre></div>'
     )
   if not preview:
     return render_info_box("Weekly Digest Preview はまだありません。")
   policy = preview.get("acquisition_policy") or {}
   note = _safe(preview.get("note_japanese"), "週次メールのプレビューです。実際の送信はまだ行いません。")
+  ev_map = preview.get("evidence_map_synthesis") or {}
   lines = [
-    "<strong>Weekly Digest Preview</strong>",
+    "<strong>Weekly Digest Preview — 今週の特許インテリジェンス</strong>",
     note,
-    f"取得方針: {_safe(policy.get('name_japanese'))}",
+    delivery_note,
+    f"監視テーマ / 取得方針: {_safe(policy.get('name_japanese'))}",
+    f"今週のDeep Dive: {ev_map.get('publication_number', '')} / {ev_map.get('title', '')}",
+    f"Evidence Map: {ev_map.get('synthesis_status', '—')} "
+    f"(papers={ev_map.get('selected_evidence_paper_count', 0)}, links={ev_map.get('claim_paper_link_count', 0)})",
     f"重要特許: {len(preview.get('important_patents', []))} 件",
     f"中国 Strategic Watch: {len(preview.get('china_strategic_watch', []))} 件",
     f"US Deep Dive候補: {len(preview.get('us_deep_dive_candidates', []))} 件",
@@ -896,3 +947,256 @@ def render_evidence_map_synthesis_card(synthesis: dict[str, Any] | None) -> str:
     f"<strong>Caveat</strong><br>{caveat}"
     f"</div>"
   )
+
+
+def discover_demo_artifacts(project_root: str | Path | None = None) -> list[dict[str, Any]]:
+  root = Path(project_root or Path.cwd())
+  rows: list[dict[str, Any]] = []
+  for key, label, relative in DEMO_ARTIFACT_SPECS:
+    path = root / relative
+    rows.append(
+      {
+        "key": key,
+        "label": label,
+        "path": str(path),
+        "exists": path.exists(),
+      },
+    )
+  return rows
+
+
+def render_demo_artifact_status(artifacts: list[dict[str, Any]] | None) -> str:
+  rows = artifacts or []
+  if not rows:
+    return render_info_box("デモ成果物の検出情報がありません。")
+  items_html = "".join(
+    f"<li>{'✓' if row.get('exists') else '—'} {_safe(row.get('label'))}"
+    f"{'（準備済み）' if row.get('exists') else '（まだ生成されていません）'}</li>"
+    for row in rows
+  )
+  return (
+    f'<div class="tc-card-box">'
+    f"<strong>デモ成果物の状態</strong><ul>{items_html}</ul>"
+    f"存在する成果物だけEvidence Mapセクションに表示します。"
+    f"</div>"
+  )
+
+
+def render_demo_story_cards() -> str:
+  card1 = (
+    f'<div class="tc-card-box">'
+    f"<strong>Tech Cartography がやること</strong><ul>"
+    f"<li>特許候補を集める</li>"
+    f"<li>読むべき特許を選ぶ</li>"
+    f"<li>請求項から技術要素を抽出する</li>"
+    f"<li>論文候補と対応づける</li>"
+    f"<li>Evidence Gapと次アクションを出す</li>"
+    f"</ul></div>"
+  )
+  card2 = (
+    f'<div class="tc-card-box">'
+    f"<strong>今回のDeep Dive対象</strong><ul>"
+    f"<li>{DEMO_DEEP_DIVE_PUBLICATION}</li>"
+    f"<li>{DEMO_DEEP_DIVE_TITLE}</li>"
+    f"<li>manual claims route</li>"
+    f"<li>Evidence Map ready</li>"
+    f"</ul></div>"
+  )
+  card3 = (
+    f'<div class="tc-caution-box">'
+    f"<strong>重要な注意</strong><ul>"
+    f"<li>論文は証明ではなく supporting evidence candidate</li>"
+    f"<li>FTO / 侵害 / 有効性判断ではない</li>"
+    f"<li>専門家レビューが必要</li>"
+    f"</ul></div>"
+  )
+  return card1 + card2 + card3
+
+
+def render_evidence_map_summary_metrics(synthesis: dict[str, Any] | None) -> str:
+  if not synthesis:
+    return ""
+  metrics = [
+    {"label": "synthesis status", "value": synthesis.get("synthesis_status", "—")},
+    {"label": "Claim Elements", "value": synthesis.get("claim_element_count", 0)},
+    {"label": "selected papers", "value": synthesis.get("selected_evidence_paper_count", 0)},
+    {"label": "claim-paper links", "value": synthesis.get("claim_paper_link_count", 0)},
+    {"label": "retrieval route", "value": synthesis.get("retrieval_route", "—")},
+    {"label": "evidence level", "value": synthesis.get("evidence_level", "—")},
+  ]
+  return render_metric_cards(metrics)
+
+
+def _relevance_role_label(bucket: str, role: str = "") -> str:
+  if role and "supporting_evidence" in role:
+    return "supporting evidence candidate"
+  if role:
+    return role.replace("_", " ")
+  if bucket in {"strong_material_process_background", "property_background", "surface_interface_background"}:
+    return "supporting evidence candidate"
+  return "background literature"
+
+
+def render_selected_evidence_papers_list(
+  papers: list[dict[str, Any]] | None,
+  *,
+  excluded_papers: list[dict[str, Any]] | None = None,
+) -> str:
+  selected = [row for row in (papers or []) if isinstance(row, dict)]
+  if not selected:
+    return render_info_box("Selected Evidence Papers はまだ生成されていません。")
+
+  cards_html = ""
+  for paper in selected[:8]:
+    bucket = str(paper.get("relevance_bucket") or "")
+    role = _relevance_role_label(bucket, str(paper.get("recommended_evidence_role") or ""))
+    cards_html += (
+      f'<div class="tc-patent-card">'
+      f'<div class="tc-patent-title">{_safe(paper.get("title", "(no title)"))}</div>'
+      f'<div class="tc-patent-meta">'
+      f"DOI: {_safe(paper.get('doi') or 'n/a')}<br>"
+      f"年: {_safe(paper.get('publication_year') or 'n/a')} / "
+      f"引用数: {_safe(paper.get('cited_by_count') or 'n/a')}<br>"
+      f"source: {_safe(paper.get('source') or paper.get('source_name') or 'n/a')}<br>"
+      f"relevance bucket: {_safe(bucket)}<br>"
+      f"<em>{_safe(role)}</em>"
+      f"</div></div>"
+    )
+
+  excluded_html = ""
+  excluded = [row for row in (excluded_papers or []) if isinstance(row, dict)]
+  if excluded:
+    excluded_html = (
+      f"<br><strong>Evidence Map外（broad / off-topic）</strong><ul>"
+      + "".join(
+        f"<li>{_safe(row.get('title', '(no title)'))} ({_safe(row.get('relevance_bucket'))})</li>"
+        for row in excluded[:5]
+      )
+      + "</ul>"
+    )
+
+  return (
+    f'<div class="tc-info-box">'
+    f"<strong>Selected Evidence Papers</strong>（{len(selected)} 件）<br><br>"
+    f"{cards_html}{excluded_html}"
+    f"</div>"
+  )
+
+
+def render_claim_paper_links_detail(links: list[dict[str, Any]] | None) -> str:
+  rows = [row for row in (links or []) if isinstance(row, dict)]
+  if not rows:
+    return render_info_box("Claim × Paper Candidate Links はまだ生成されていません。")
+
+  items_html = ""
+  for link in rows[:10]:
+    confidence = str(link.get("confidence") or "weak")
+    weak_note = ""
+    if confidence in {"low", "weak"} or link.get("is_fallback_link"):
+      weak_note = f"<br><span style='font-size:0.92rem;'>{WEAK_LINK_EXPLANATION_JAPANESE}</span>"
+    fallback_tag = " <em>[弱い対応]</em>" if link.get("is_fallback_link") else ""
+    items_html += (
+      f'<div class="tc-patent-card">'
+      f'<div class="tc-patent-title">{_safe(link.get("paper_title", "(no paper)"))}{fallback_tag}</div>'
+      f'<div class="tc-patent-meta">'
+      f"claim element: {_safe((link.get('element_text') or link.get('element_type') or '')[:80])}<br>"
+      f"link type: {_safe(link.get('link_type'))} / confidence: {_safe(confidence)}<br>"
+      f"DOI: {_safe(link.get('paper_doi') or 'n/a')} / "
+      f"source: {_safe(link.get('paper_source') or 'n/a')} / "
+      f"cited_by: {_safe(link.get('cited_by_count') or 'n/a')}<br>"
+      f"caveat: {_safe(link.get('caveat_japanese') or '—')}"
+      f"{weak_note}"
+      f"</div></div>"
+    )
+
+  return (
+    f'<div class="tc-info-box">'
+    f"<strong>Claim × Paper Candidate Links</strong>（{len(rows)} 件）<br><br>"
+    f"{items_html}"
+    f"</div>"
+  )
+
+
+def render_evidence_gaps_caution(gaps: list[str] | None) -> str:
+  gap_items = [gap for gap in (gaps or []) if gap]
+  default_gaps = [
+    "BigQuery全文が欠落している可能性があります。",
+    "manual claims routeを使用しています。",
+    "description未入力のため材料・プロセスの裏取り精度が限定的です。",
+    "examples未確認のため物性数値の裏取りは不足しています。",
+    "claims_only由来のため、論文は証明ではなく supporting evidence candidate としてのみ扱えます。",
+    "CN/EP/JP候補はmanual route継続で確認が必要です。",
+  ]
+  display_gaps = gap_items or default_gaps
+  items_html = "".join(f"<li>{_safe(gap)}</li>" for gap in display_gaps[:8])
+  return (
+    f'<div class="tc-caution-box">'
+    f"<strong>Evidence Gaps（確認が必要な点）</strong>"
+    f"<ul>{items_html}</ul>"
+    f"これらは警告ではなく、現時点のデータ制約を示す注意事項です。"
+    f"</div>"
+  )
+
+
+def render_evidence_map_demo_section(
+  synthesis: dict[str, Any] | None,
+  *,
+  selected_papers: list[dict[str, Any]] | None = None,
+  claim_links: list[dict[str, Any]] | None = None,
+  excluded_papers: list[dict[str, Any]] | None = None,
+  artifact_status: list[dict[str, Any]] | None = None,
+) -> str:
+  parts = [
+    render_info_box(EVIDENCE_MAP_INTRO_JAPANESE),
+    render_demo_artifact_status(artifact_status),
+  ]
+  if synthesis:
+    parts.append(render_evidence_map_summary_metrics(synthesis))
+    findings = synthesis.get("key_findings_japanese") or []
+    if findings:
+      findings_html = "".join(f"<li>{_safe(item)}</li>" for item in findings[:6])
+      parts.append(
+        f'<div class="tc-card-box"><strong>Key Findings</strong><ul>{findings_html}</ul></div>',
+      )
+    papers = selected_papers or synthesis.get("selected_evidence_papers") or []
+    parts.append(
+      render_selected_evidence_papers_list(
+        papers,
+        excluded_papers=excluded_papers or synthesis.get("broad_background_papers"),
+      ),
+    )
+    links = claim_links or []
+    if not links and synthesis.get("evidence_map_items"):
+      links = [
+        {
+          "element_type": item.get("element_type"),
+          "element_text": item.get("element_text"),
+          "paper_title": item.get("best_paper_title"),
+          "paper_doi": item.get("best_paper_doi"),
+          "paper_source": item.get("best_paper_source"),
+          "cited_by_count": item.get("best_paper_cited_by_count"),
+          "link_type": item.get("link_type"),
+          "confidence": item.get("confidence"),
+          "is_fallback_link": item.get("is_fallback_link"),
+          "caveat_japanese": item.get("caveat_japanese"),
+        }
+        for item in synthesis.get("evidence_map_items") or []
+        if isinstance(item, dict) and item.get("best_paper_title")
+      ]
+    parts.append(render_claim_paper_links_detail(links))
+    parts.append(render_evidence_gaps_caution(synthesis.get("evidence_gaps_japanese")))
+    actions = synthesis.get("next_actions_japanese") or []
+    if actions:
+      parts.append(render_next_action_box(actions))
+    caveats = synthesis.get("caveats_japanese") or [EVIDENCE_MAP_INTRO_JAPANESE]
+    caveat_html = "".join(f"<li>{_safe(c)}</li>" for c in caveats[:4])
+    parts.append(
+      f'<div class="tc-card-box"><strong>Caveats</strong><ul>{caveat_html}</ul></div>',
+    )
+  else:
+    parts.append(
+      render_warning_box(
+        "Evidence Map Synthesis はまだ生成されていません。filter / build スクリプトを実行してください。",
+      ),
+    )
+  return "".join(parts)

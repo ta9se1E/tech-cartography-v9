@@ -7,11 +7,17 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_acquisition_policy_summary,
   render_claims_paper_query_plan_card,
   render_claim_paper_candidate_map_card,
+  render_claim_paper_links_detail,
   render_cost_ledger_debug,
+  render_demo_story_cards,
+  render_evidence_gaps_caution,
+  render_evidence_map_demo_section,
+  render_evidence_map_summary_metrics,
   render_evidence_validation_summary,
   render_evidence_map_synthesis_card,
   render_openalex_limited_execution_card,
   render_paper_candidate_relevance_card,
+  render_selected_evidence_papers_list,
   render_fulltext_availability_notice,
   render_fulltext_execute_summary,
   render_fulltext_status_card,
@@ -509,4 +515,121 @@ def test_evidence_summary_includes_synthesis_card() -> None:
   }
   html = render_evidence_validation_summary(summary)
   assert "Evidence Map Synthesis" in html
+  assert "$" not in html
+
+
+def test_demo_story_cards_render() -> None:
+  html = render_demo_story_cards()
+  assert "Tech Cartography がやること" in html
+  assert "US-12565719-B2" in html
+  assert "supporting evidence candidate" in html.lower()
+  assert "$" not in html
+
+
+def test_evidence_map_summary_metrics_render() -> None:
+  html = render_evidence_map_summary_metrics(
+    {
+      "synthesis_status": "ready_with_selected_papers",
+      "claim_element_count": 1,
+      "selected_evidence_paper_count": 5,
+      "claim_paper_link_count": 5,
+      "retrieval_route": "manual_claims_loaded",
+      "evidence_level": "low_fulltext_evidence",
+    },
+  )
+  assert "ready_with_selected_papers" in html
+  assert "claim-paper links" in html.lower() or "links" in html.lower()
+
+
+def test_selected_evidence_papers_list_renders_real_fields() -> None:
+  html = render_selected_evidence_papers_list(
+    [
+      {
+        "title": "Fabrication and Properties of Carbon Fibers",
+        "doi": "10.3390/ma2042369",
+        "source": "Materials",
+        "publication_year": 2009,
+        "cited_by_count": 931,
+        "relevance_bucket": "strong_material_process_background",
+        "recommended_evidence_role": "material_process_supporting_evidence",
+      },
+    ],
+  )
+  assert "Fabrication and Properties of Carbon Fibers" in html
+  assert "10.3390/ma2042369" in html
+  assert "931" in html
+  assert "supporting evidence candidate" in html.lower()
+  assert "$" not in html
+
+
+def test_claim_paper_links_detail_shows_weak_explanation() -> None:
+  html = render_claim_paper_links_detail(
+    [
+      {
+        "element_text": "manual claims loaded",
+        "paper_title": "Fabrication and Properties of Carbon Fibers",
+        "paper_doi": "10.3390/ma2042369",
+        "paper_source": "Materials",
+        "cited_by_count": 931,
+        "link_type": "material_process_background",
+        "confidence": "low",
+        "is_fallback_link": True,
+        "caveat_japanese": "弱い supporting evidence candidate",
+      },
+    ],
+  )
+  assert "Fabrication and Properties of Carbon Fibers" in html
+  assert "弱い対応" in html
+  assert "証明するものではありません" in html
+  assert "$" not in html
+
+
+def test_evidence_gaps_caution_renders() -> None:
+  html = render_evidence_gaps_caution(
+    ["BigQuery fulltextは未取得", "description未入力", "claims_only由来の限界"],
+  )
+  assert "Evidence Gaps" in html
+  assert "description未入力" in html
+  assert "$" not in html
+
+
+def test_evidence_map_demo_section_integrates_cards() -> None:
+  html = render_evidence_map_demo_section(
+    {
+      "publication_number": "US-12565719-B2",
+      "title": "Carbon fiber",
+      "synthesis_status": "ready_with_selected_papers",
+      "claim_element_count": 1,
+      "selected_evidence_paper_count": 5,
+      "claim_paper_link_count": 5,
+      "retrieval_route": "manual_claims_loaded",
+      "evidence_level": "low_fulltext_evidence",
+      "key_findings_japanese": ["Claim × Paper linkを作成"],
+      "evidence_gaps_japanese": ["description未入力"],
+      "next_actions_japanese": ["descriptionを追加"],
+      "caveats_japanese": ["supporting evidence candidate"],
+    },
+    selected_papers=[
+      {
+        "title": "Fabrication and Properties of Carbon Fibers",
+        "doi": "10.3390/ma2042369",
+        "source": "Materials",
+        "cited_by_count": 931,
+        "relevance_bucket": "strong_material_process_background",
+      },
+    ],
+    claim_links=[
+      {
+        "element_text": "manual claims loaded",
+        "paper_title": "Fabrication and Properties of Carbon Fibers",
+        "confidence": "low",
+        "link_type": "material_process_background",
+      },
+    ],
+    artifact_status=[{"label": "Evidence Map Synthesis Report", "exists": True}],
+  )
+  assert "Evidence Map" in html or "supporting evidence" in html.lower()
+  assert "Fabrication and Properties of Carbon Fibers" in html
+  assert "Key Findings" in html
+  assert "Evidence Gaps" in html
   assert "$" not in html

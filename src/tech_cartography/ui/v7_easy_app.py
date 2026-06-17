@@ -13,6 +13,8 @@ from tech_cartography.manual.manual_fulltext_loader import get_manual_fulltext_s
 from tech_cartography.orchestration.latest_outputs import read_latest_run_pointer
 from tech_cartography.reports.project_export import load_records_csv
 from tech_cartography.ui.easy_japanese_ui import (
+  DEMO_DEEP_DIVE_PUBLICATION,
+  discover_demo_artifacts,
   inject_easy_ui_css,
   prepare_patent_display_df,
   render_acquisition_policy_summary,
@@ -23,7 +25,9 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_caution_box,
   render_claims_paper_query_plan_card,
   render_claim_paper_candidate_map_card,
+  render_demo_story_cards,
   render_evidence_validation_summary,
+  render_evidence_map_demo_section,
   render_evidence_map_synthesis_card,
   render_openalex_limited_execution_card,
   render_paper_candidate_relevance_card,
@@ -149,6 +153,7 @@ def _resolve_manifest(
 
 
 def _tab_start(user: dict[str, Any], watch: dict[str, Any], manifest: dict[str, Any] | None, *, debug_mode: bool = False) -> None:
+  st.markdown(render_demo_story_cards(), unsafe_allow_html=True)
   st.markdown(render_ok_box("このアプリでできること: 特許候補の整理、全文確認計画、技術の裏取り候補の確認"), unsafe_allow_html=True)
   st.markdown(
     render_caution_box(
@@ -314,9 +319,21 @@ def _tab_fulltext(manifest: dict[str, Any], display_mode: str, *, debug_mode: bo
 
 def _tab_evidence(manifest: dict[str, Any]) -> None:
   st.markdown(render_caution_box("論文候補は証明ではありません。専門家レビューが必要です。"), unsafe_allow_html=True)
-  ev_summary = _load_json_artifact(manifest, "evidence_validation_summary_json")
-  st.markdown(render_evidence_validation_summary(ev_summary), unsafe_allow_html=True)
 
+  demo_bundle = _load_demo_evidence_bundle(manifest, PROJECT_ROOT)
+  st.subheader("Evidence Map")
+  st.markdown(
+    render_evidence_map_demo_section(
+      demo_bundle.get("synthesis"),
+      selected_papers=demo_bundle.get("selected_papers"),
+      claim_links=demo_bundle.get("claim_links"),
+      excluded_papers=demo_bundle.get("excluded_papers"),
+      artifact_status=demo_bundle.get("artifact_status"),
+    ),
+    unsafe_allow_html=True,
+  )
+
+  ev_summary = _load_json_artifact(manifest, "evidence_validation_summary_json")
   claims_plan_path = _artifact_path(manifest, "claims_paper_query_plan_md")
   claims_queries_df = _load_csv_artifact(manifest, "paper_query_candidates_from_claims_csv")
   records_df = _load_csv_artifact(manifest, "top5_fulltext_records_csv")
@@ -345,101 +362,120 @@ def _tab_evidence(manifest: dict[str, Any]) -> None:
       ),
     }
 
-  claims_card = render_claims_paper_query_plan_card(claims_plan, manual_claims_loaded=manual_loaded)
-  if claims_card:
-    st.markdown(claims_card, unsafe_allow_html=True)
+  with st.expander("Evidence Validation / OpenAlex 詳細", expanded=False):
+    st.markdown(render_evidence_validation_summary(ev_summary), unsafe_allow_html=True)
 
-  openalex_summary = _load_json_artifact(manifest, "openalex_execution_summary_json")
-  if openalex_summary:
-    st.markdown(render_openalex_limited_execution_card(openalex_summary), unsafe_allow_html=True)
-  elif ev_summary and isinstance(ev_summary.get("openalex_limited_execution"), dict):
-    st.markdown(
-      render_openalex_limited_execution_card(ev_summary["openalex_limited_execution"]),
-      unsafe_allow_html=True,
-    )
+    claims_card = render_claims_paper_query_plan_card(claims_plan, manual_claims_loaded=manual_loaded)
+    if claims_card:
+      st.markdown(claims_card, unsafe_allow_html=True)
 
-  claim_links_df = _load_csv_artifact(manifest, "claim_paper_candidate_links_csv")
-  if not claim_links_df.empty:
-    st.markdown(
-      render_claim_paper_candidate_map_card(claim_links_df.to_dict(orient="records")),
-      unsafe_allow_html=True,
-    )
-    with st.expander("Claim × Paper Candidate Links"):
-      render_small_table(claim_links_df.head(50))
-  elif ev_summary and isinstance(ev_summary.get("claim_paper_candidate_links"), dict):
-    rep = ev_summary["claim_paper_candidate_links"].get("representative_links") or []
-    if rep:
-      st.markdown(render_claim_paper_candidate_map_card(rep), unsafe_allow_html=True)
+    openalex_summary = _load_json_artifact(manifest, "openalex_execution_summary_json")
+    if openalex_summary:
+      st.markdown(render_openalex_limited_execution_card(openalex_summary), unsafe_allow_html=True)
+    elif ev_summary and isinstance(ev_summary.get("openalex_limited_execution"), dict):
+      st.markdown(
+        render_openalex_limited_execution_card(ev_summary["openalex_limited_execution"]),
+        unsafe_allow_html=True,
+      )
 
-  relevance_summary = None
-  if ev_summary and isinstance(ev_summary.get("paper_candidate_relevance"), dict):
-    relevance_summary = ev_summary["paper_candidate_relevance"]
-  if relevance_summary:
-    st.markdown(render_paper_candidate_relevance_card(relevance_summary), unsafe_allow_html=True)
+    claim_links_df = _load_csv_artifact(manifest, "claim_paper_candidate_links_csv")
+    if claim_links_df.empty and demo_bundle.get("claim_links"):
+      claim_links_df = pd.DataFrame(demo_bundle["claim_links"])
+    if not claim_links_df.empty:
+      st.markdown(
+        render_claim_paper_candidate_map_card(claim_links_df.to_dict(orient="records")),
+        unsafe_allow_html=True,
+      )
+      with st.expander("Claim × Paper Candidate Links（表）"):
+        render_small_table(claim_links_df.head(50))
+    elif ev_summary and isinstance(ev_summary.get("claim_paper_candidate_links"), dict):
+      rep = ev_summary["claim_paper_candidate_links"].get("representative_links") or []
+      if rep:
+        st.markdown(render_claim_paper_candidate_map_card(rep), unsafe_allow_html=True)
 
-  ev_map = _load_json_artifact(manifest, "evidence_map_synthesis_json")
-  if not ev_map and ev_summary and isinstance(ev_summary.get("evidence_map_synthesis"), dict):
-    ev_map = ev_summary["evidence_map_synthesis"]
-  if ev_map:
-    st.markdown(render_evidence_map_synthesis_card(ev_map), unsafe_allow_html=True)
+    relevance_summary = None
+    if ev_summary and isinstance(ev_summary.get("paper_candidate_relevance"), dict):
+      relevance_summary = ev_summary["paper_candidate_relevance"]
+    if relevance_summary:
+      st.markdown(render_paper_candidate_relevance_card(relevance_summary), unsafe_allow_html=True)
 
-  selected_df = _load_csv_artifact(manifest, "selected_evidence_papers_csv")
-  if not selected_df.empty:
-    with st.expander("Selected Evidence Papers"):
-      render_small_table(selected_df.head(20))
+    ev_map = demo_bundle.get("synthesis") or _load_json_artifact(manifest, "evidence_map_synthesis_json")
+    if not ev_map and ev_summary and isinstance(ev_summary.get("evidence_map_synthesis"), dict):
+      ev_map = ev_summary["evidence_map_synthesis"]
+    if ev_map:
+      st.markdown(render_evidence_map_synthesis_card(ev_map), unsafe_allow_html=True)
 
-  relevance_md = _artifact_path(manifest, "paper_candidate_relevance_report_md")
-  if relevance_md and relevance_md.exists():
-    with st.expander("Paper Candidate Relevance Report"):
-      st.markdown(relevance_md.read_text(encoding="utf-8"))
+    selected_df = _load_csv_artifact(manifest, "selected_evidence_papers_csv")
+    if selected_df.empty and demo_bundle.get("selected_papers"):
+      selected_df = pd.DataFrame(demo_bundle["selected_papers"])
+    if not selected_df.empty:
+      with st.expander("Selected Evidence Papers（表）"):
+        render_small_table(selected_df.head(20))
 
-  openalex_papers_df = _load_csv_artifact(manifest, "openalex_paper_records_csv")
-  if not openalex_papers_df.empty:
-    with st.expander("OpenAlex Paper Records"):
-      render_small_table(openalex_papers_df.head(50))
+    relevance_md = _artifact_path(manifest, "paper_candidate_relevance_report_md")
+    if not relevance_md or not relevance_md.exists():
+      fallback_rel = PROJECT_ROOT / "outputs/openalex_limited_execution/paper_candidate_relevance_report.md"
+      if fallback_rel.exists():
+        relevance_md = fallback_rel
+    if relevance_md and relevance_md.exists():
+      with st.expander("Paper Candidate Relevance Report"):
+        st.markdown(relevance_md.read_text(encoding="utf-8"))
 
-  openalex_selected_df = _load_csv_artifact(manifest, "openalex_selected_queries_csv")
-  if not openalex_selected_df.empty:
-    with st.expander("OpenAlex Selected Queries"):
-      render_small_table(openalex_selected_df.head(20))
+    openalex_papers_df = _load_csv_artifact(manifest, "openalex_paper_records_csv")
+    if not openalex_papers_df.empty:
+      with st.expander("OpenAlex Paper Records"):
+        render_small_table(openalex_papers_df.head(50))
 
-  claim_df = _load_csv_artifact(manifest, "claim_elements_csv")
-  paper_df = _load_csv_artifact(manifest, "paper_query_candidates_csv")
-  if not claim_df.empty:
-    with st.expander("Claim Elements"):
-      render_small_table(claim_df.head(50))
-  if not claims_queries_df.empty:
-    with st.expander("Claims-based Paper Query Candidates"):
-      render_small_table(claims_queries_df.head(50))
-  elif not paper_df.empty:
-    with st.expander("Paper Query Candidates"):
-      render_small_table(paper_df.head(50))
+    openalex_selected_df = _load_csv_artifact(manifest, "openalex_selected_queries_csv")
+    if not openalex_selected_df.empty:
+      with st.expander("OpenAlex Selected Queries"):
+        render_small_table(openalex_selected_df.head(20))
 
-  openalex_plan = _load_json_artifact(manifest, "openalex_query_plan_json")
-  if openalex_plan:
-    mode = openalex_plan.get("mode", "plan_only") if isinstance(openalex_plan, dict) else "plan_only"
-    st.markdown(render_info_box(f"OpenAlex: {mode}（plan_only — 本実行はまだ任意）"), unsafe_allow_html=True)
-  elif claims_plan:
-    st.markdown(render_info_box("OpenAlex: plan_only（本実行はまだ任意）"), unsafe_allow_html=True)
+    claim_df = _load_csv_artifact(manifest, "claim_elements_csv")
+    paper_df = _load_csv_artifact(manifest, "paper_query_candidates_csv")
+    if not claim_df.empty:
+      with st.expander("Claim Elements"):
+        render_small_table(claim_df.head(50))
+    if not claims_queries_df.empty:
+      with st.expander("Claims-based Paper Query Candidates"):
+        render_small_table(claims_queries_df.head(50))
+    elif not paper_df.empty:
+      with st.expander("Paper Query Candidates"):
+        render_small_table(paper_df.head(50))
 
-  if claims_plan_path and claims_plan_path.exists():
-    with st.expander("Claims Paper Query Plan"):
-      st.markdown(claims_plan_path.read_text(encoding="utf-8"))
+    openalex_plan = _load_json_artifact(manifest, "openalex_query_plan_json")
+    if openalex_plan:
+      mode = openalex_plan.get("mode", "plan_only") if isinstance(openalex_plan, dict) else "plan_only"
+      st.markdown(render_info_box(f"OpenAlex: {mode}（plan_only — 本実行はまだ任意）"), unsafe_allow_html=True)
+    elif claims_plan:
+      st.markdown(render_info_box("OpenAlex: plan_only（本実行はまだ任意）"), unsafe_allow_html=True)
 
-  quality_md = _artifact_path(manifest, "paper_query_quality_report_md")
-  if quality_md and quality_md.exists():
-    with st.expander("Paper Query Quality"):
-      st.markdown(quality_md.read_text(encoding="utf-8"))
+    if claims_plan_path and claims_plan_path.exists():
+      with st.expander("Claims Paper Query Plan"):
+        st.markdown(claims_plan_path.read_text(encoding="utf-8"))
 
-  ev_map_md = _artifact_path(manifest, "evidence_map_synthesis_md")
-  if ev_map_md and ev_map_md.exists():
-    with st.expander("Evidence Map Synthesis Report"):
-      st.markdown(ev_map_md.read_text(encoding="utf-8"))
+    quality_md = _artifact_path(manifest, "paper_query_quality_report_md")
+    if quality_md and quality_md.exists():
+      with st.expander("Paper Query Quality"):
+        st.markdown(quality_md.read_text(encoding="utf-8"))
 
-  ev_map_items_df = _load_csv_artifact(manifest, "evidence_map_items_csv")
-  if not ev_map_items_df.empty:
-    with st.expander("Evidence Map Items"):
-      render_small_table(ev_map_items_df.head(50))
+    ev_map_md = _artifact_path(manifest, "evidence_map_synthesis_md")
+    if not ev_map_md or not ev_map_md.exists():
+      fallback_md = PROJECT_ROOT / "outputs/evidence_map_synthesis" / DEMO_DEEP_DIVE_PUBLICATION / "evidence_map_synthesis.md"
+      if fallback_md.exists():
+        ev_map_md = fallback_md
+    if ev_map_md and ev_map_md.exists():
+      with st.expander("Evidence Map Synthesis Report"):
+        st.markdown(ev_map_md.read_text(encoding="utf-8"))
+
+    ev_map_items_df = _load_csv_artifact(manifest, "evidence_map_items_csv")
+    if ev_map_items_df.empty:
+      fallback_items = PROJECT_ROOT / "outputs/evidence_map_synthesis" / DEMO_DEEP_DIVE_PUBLICATION / "evidence_map_items.csv"
+      if fallback_items.exists():
+        ev_map_items_df = pd.DataFrame(_load_csv_path(fallback_items))
+    if not ev_map_items_df.empty:
+      with st.expander("Evidence Map Items"):
+        render_small_table(ev_map_items_df.head(50))
 
 
 def _tab_market(manifest: dict[str, Any]) -> None:
@@ -573,3 +609,63 @@ def render_easy_japanese_app() -> None:
 
 # Backward-compatible alias used by app.py import
 DEFAULT_PIPELINE_ROOT = default_pipeline_root()
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _load_json_path(path: Path) -> dict[str, Any] | None:
+  if not path.exists():
+    return None
+  try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else None
+  except json.JSONDecodeError:
+    return None
+
+
+def _load_csv_path(path: Path) -> list[dict[str, Any]]:
+  if not path.exists():
+    return []
+  try:
+    return load_records_csv(str(path))
+  except Exception:
+    return []
+
+
+def _load_demo_evidence_bundle(
+  manifest: dict[str, Any] | None,
+  project_root: Path,
+) -> dict[str, Any]:
+  ev_map = _load_json_artifact(manifest, "evidence_map_synthesis_json") if manifest else None
+  if not ev_map:
+    ev_map = _load_json_path(
+      project_root / "outputs/evidence_map_synthesis" / DEMO_DEEP_DIVE_PUBLICATION / "evidence_map_synthesis.json",
+    )
+  if not ev_map and manifest:
+    ev_summary = _load_json_artifact(manifest, "evidence_validation_summary_json")
+    if ev_summary and isinstance(ev_summary.get("evidence_map_synthesis"), dict):
+      ev_map = ev_summary["evidence_map_synthesis"]
+
+  selected = _load_csv_artifact(manifest, "selected_evidence_papers_csv") if manifest else pd.DataFrame()
+  selected_rows = selected.to_dict(orient="records") if not selected.empty else []
+  if not selected_rows:
+    selected_rows = _load_csv_path(project_root / "outputs/openalex_limited_execution/selected_evidence_papers.csv")
+
+  claim_links_df = _load_csv_artifact(manifest, "claim_paper_candidate_links_csv") if manifest else pd.DataFrame()
+  claim_links = claim_links_df.to_dict(orient="records") if not claim_links_df.empty else []
+  if not claim_links:
+    claim_links = _load_csv_path(project_root / "outputs/openalex_limited_execution/claim_paper_candidate_links.csv")
+
+  excluded: list[dict[str, Any]] = []
+  relevance_path = project_root / "outputs/openalex_limited_execution/paper_candidate_relevance.csv"
+  if relevance_path.exists():
+    for row in _load_csv_path(relevance_path):
+      if row.get("relevance_bucket") in {"broad_composite_background", "likely_off_topic"}:
+        excluded.append(row)
+
+  return {
+    "synthesis": ev_map,
+    "selected_papers": selected_rows,
+    "claim_links": claim_links,
+    "excluded_papers": excluded,
+    "artifact_status": discover_demo_artifacts(project_root),
+  }
