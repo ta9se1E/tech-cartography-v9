@@ -467,14 +467,21 @@ def test_evidence_map_synthesis_card_renders() -> None:
       "evidence_gaps_japanese": ["明細書未入力"],
       "next_actions_japanese": ["descriptionを追加"],
       "selected_evidence_papers": [
-        {"title": "PAN carbon fiber carbonization", "relevance_bucket": "strong_material_process_background"},
+        {
+          "title": "Fabrication and Properties of Carbon Fibers",
+          "relevance_bucket": "strong_material_process_background",
+          "doi": "10.3390/ma2042369",
+          "source": "Materials",
+          "cited_by_count": 931,
+        },
       ],
       "evidence_map_items": [
         {
           "element_type": "material",
           "element_text": "PAN precursor",
-          "best_paper_title": "PAN carbon fiber",
+          "best_paper_title": "Fabrication and Properties of Carbon Fibers",
           "confidence": "low",
+          "is_fallback_link": True,
         },
       ],
       "caveats_japanese": ["supporting evidence candidate"],
@@ -482,7 +489,9 @@ def test_evidence_map_synthesis_card_renders() -> None:
   )
   assert "Evidence Map Synthesis" in html
   assert "supporting evidence candidate" in html.lower()
-  assert "PAN carbon fiber" in html
+  assert "Fabrication and Properties of Carbon Fibers" in html
+  assert "10.3390/ma2042369" in html
+  assert "弱い対応" in html
   assert "$" not in html
 
 

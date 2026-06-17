@@ -8,7 +8,118 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from tech_cartography.reports.project_export import save_records_csv
+from tech_cartography.reports.project_export import load_records_csv, save_records_csv
+
+_SYNTHETIC_PAPER_ID = re.compile(r"^W\d+$", re.I)
+
+SELECTED_EVIDENCE_PAPER_COLUMNS = (
+  "publication_number",
+  "paper_id",
+  "openalex_id",
+  "title",
+  "doi",
+  "publication_year",
+  "source",
+  "cited_by_count",
+  "is_oa",
+  "query",
+  "query_type",
+  "relevance_bucket",
+  "relevance_score",
+  "relevance_confidence",
+  "recommended_evidence_role",
+  "concepts",
+  "keywords",
+)
+
+
+def is_synthetic_paper_id(paper_id: str) -> bool:
+  pid = str(paper_id or "").strip()
+  if not pid:
+    return True
+  if _SYNTHETIC_PAPER_ID.match(pid):
+    return True
+  if pid.lower().startswith("w-") or pid.lower() in {"w-off", "w-broad"}:
+    return True
+  return False
+
+
+def resolve_paper_id(paper: dict[str, Any]) -> str:
+  for key in ("openalex_id", "paper_id", "work_id"):
+    value = str(paper.get(key) or "").strip()
+    if value and not is_synthetic_paper_id(value):
+      return value
+  openalex_id = str(paper.get("openalex_id") or "").strip()
+  if openalex_id:
+    return openalex_id
+  doi = str(paper.get("doi") or "").strip()
+  if doi:
+    return doi
+  return str(paper.get("paper_id") or paper.get("work_id") or "")
+
+
+def records_have_synthetic_ids(records: list[dict[str, Any]]) -> bool:
+  if not records:
+    return False
+  synthetic = sum(
+    1 for row in records
+    if is_synthetic_paper_id(str(row.get("paper_id") or row.get("openalex_id") or ""))
+  )
+  return synthetic >= max(1, len(records) // 2)
+
+
+def load_openalex_paper_records(paper_records_path: str | Path) -> list[dict[str, Any]]:
+  path = Path(paper_records_path)
+  if not path.exists():
+    raise FileNotFoundError(f"paper records not found: {path}")
+
+  records = load_records_csv(str(path))
+  json_path = path.with_suffix(".json")
+  if json_path.exists() and (not records or records_have_synthetic_ids(records)):
+    try:
+      payload = json.loads(json_path.read_text(encoding="utf-8"))
+      if isinstance(payload, list) and payload:
+        records = payload
+    except json.JSONDecodeError:
+      pass
+  return [dict(row) for row in records]
+
+
+def build_selected_evidence_paper_row(
+  paper: dict[str, Any],
+  relevance: dict[str, Any],
+  *,
+  publication_number: str = "",
+) -> dict[str, Any]:
+  paper_id = resolve_paper_id(paper)
+  openalex_id = str(paper.get("openalex_id") or "").strip()
+  if not openalex_id and "openalex.org" in paper_id:
+    openalex_id = paper_id
+  source = str(paper.get("source") or paper.get("source_name") or paper.get("journal") or "")
+  is_oa = paper.get("is_oa")
+  if is_oa in (None, ""):
+    is_oa = paper.get("is_open_access")
+  return {
+    "publication_number": str(publication_number or paper.get("publication_number") or ""),
+    "paper_id": paper_id,
+    "openalex_id": openalex_id,
+    "title": str(paper.get("title") or ""),
+    "doi": str(paper.get("doi") or ""),
+    "publication_year": paper.get("publication_year") or "",
+    "source": source,
+    "cited_by_count": paper.get("cited_by_count") if paper.get("cited_by_count") not in (None, "") else 0,
+    "is_oa": is_oa if is_oa not in (None, "") else "",
+    "query": str(paper.get("query") or ""),
+    "query_type": str(paper.get("query_type") or ""),
+    "relevance_bucket": str(relevance.get("relevance_bucket") or paper.get("relevance_bucket") or ""),
+    "relevance_score": relevance.get("relevance_score", paper.get("relevance_score", 0)),
+    "relevance_confidence": str(relevance.get("confidence") or paper.get("relevance_confidence") or ""),
+    "recommended_evidence_role": str(
+      relevance.get("recommended_evidence_role") or paper.get("recommended_evidence_role") or "",
+    ),
+    "concepts": paper.get("concepts") or [],
+    "keywords": paper.get("keywords") or [],
+  }
 
 FILTER_CAVEAT_JAPANESE = (
   "論文候補は特許請求項の証明ではなく supporting evidence candidate です。"
@@ -353,14 +464,22 @@ def apply_relevance_to_paper_records(
     top_n=top_n,
     has_description=has_description,
   )
+  publication_number = ""
+  if claim_elements:
+    publication_number = str(claim_elements[0].get("publication_number") or "")
+  if not publication_number and papers:
+    publication_number = str(papers[0].get("publication_number") or "")
+
   selected_papers = []
   for row in selected:
     paper = dict(row.get("paper_record") or {})
-    paper["relevance_bucket"] = row.get("relevance_bucket")
-    paper["relevance_score"] = row.get("relevance_score")
-    paper["relevance_confidence"] = row.get("confidence")
-    paper["recommended_evidence_role"] = row.get("recommended_evidence_role")
-    selected_papers.append(paper)
+    selected_papers.append(
+      build_selected_evidence_paper_row(
+        paper,
+        row,
+        publication_number=publication_number,
+      ),
+    )
   return {
     "all_evaluated": all_evaluated,
     "selected": selected,
@@ -394,5 +513,8 @@ def save_paper_candidate_relevance_artifacts(
     "paper_candidate_relevance_json": str(json_path),
     "paper_candidate_relevance_csv": save_records_csv(all_rows, out / "paper_candidate_relevance.csv"),
     "paper_candidate_relevance_report_md": str(report_path),
-    "selected_evidence_papers_csv": save_records_csv(selected_papers, out / "selected_evidence_papers.csv"),
+    "selected_evidence_papers_csv": save_records_csv(
+      [{col: row.get(col, "") for col in SELECTED_EVIDENCE_PAPER_COLUMNS} for row in selected_papers],
+      out / "selected_evidence_papers.csv",
+    ),
   }

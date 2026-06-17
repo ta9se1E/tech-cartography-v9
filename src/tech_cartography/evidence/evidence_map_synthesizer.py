@@ -7,7 +7,10 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from tech_cartography.evidence.claims_paper_candidate_mapper import map_claim_elements_to_paper_candidates
+from tech_cartography.evidence.claims_paper_candidate_mapper import (
+  map_claim_elements_to_paper_candidates,
+)
+from tech_cartography.evidence.paper_candidate_relevance_filter import load_openalex_paper_records
 from tech_cartography.reports.project_export import load_records_csv
 
 SYNTHESIS_CAVEAT = (
@@ -30,6 +33,7 @@ class EvidenceMapItem:
   element_text: str = ""
   selected_paper_count: int = 0
   best_paper_title: str | None = None
+  best_paper_doi: str | None = None
   best_paper_source: str | None = None
   best_paper_year: int | None = None
   best_paper_cited_by_count: int | None = None
@@ -37,6 +41,7 @@ class EvidenceMapItem:
   link_type: str | None = None
   confidence: str = "weak"
   evidence_role: str = "supporting_evidence_candidate"
+  is_fallback_link: bool = False
   caveat_japanese: str = ITEM_CAVEAT
   next_action_japanese: str = "技術者が論文候補を確認してください"
 
@@ -125,8 +130,11 @@ def _resolve_paths(
     ),
     "paper_records": _find_first_existing(
       [
+        *( [Path(oa_path) / "openalex_paper_records.json"] if oa_path else [] ),
         *( [Path(oa_path) / "openalex_paper_records.csv"] if oa_path else [] ),
+        *( [oa_stage / "openalex_paper_records.json"] if oa_stage else [] ),
         *( [oa_stage / "openalex_paper_records.csv"] if oa_stage else [] ),
+        Path("outputs/openalex_limited_execution/openalex_paper_records.json"),
         Path("outputs/openalex_limited_execution/openalex_paper_records.csv"),
       ],
     ),
@@ -331,6 +339,12 @@ def build_next_actions_japanese(
   return actions
 
 
+def load_openalex_paper_records_for_synthesis(path: str | Path | None) -> list[dict[str, Any]]:
+  if not path or not Path(path).exists():
+    return []
+  return load_openalex_paper_records(path)
+
+
 def build_evidence_map_items(
   claim_elements: list[dict[str, Any]],
   links: list[dict[str, Any]],
@@ -339,27 +353,31 @@ def build_evidence_map_items(
   publication_number: str,
   has_description: bool = False,
 ) -> list[EvidenceMapItem]:
-  if not links and claim_elements and selected_papers:
-    enriched_papers = list(selected_papers)
-    links = map_claim_elements_to_paper_candidates(
+  active_links = list(links)
+  if not active_links and claim_elements and selected_papers:
+    active_links = map_claim_elements_to_paper_candidates(
       claim_elements,
-      enriched_papers,
+      selected_papers,
       has_description=has_description,
     )
 
-  paper_by_id = {
-    str(p.get("paper_id") or p.get("openalex_id") or ""): p
-    for p in selected_papers
-    if str(p.get("paper_id") or p.get("openalex_id") or "")
-  }
+  paper_by_id: dict[str, dict[str, Any]] = {}
+  for paper in selected_papers:
+    for key in (paper.get("paper_id"), paper.get("openalex_id")):
+      pid = str(key or "").strip()
+      if pid:
+        paper_by_id[pid] = paper
 
   items: list[EvidenceMapItem] = []
   for element in claim_elements:
-    element_id = str(element.get("element_id") or "")
-    element_links = [link for link in links if str(link.get("element_id") or "") == element_id]
-    if not element_links and links:
+    element_id = str(element.get("element_id") or element.get("claim_element_id") or "")
+    element_links = [
+      link for link in active_links
+      if str(link.get("element_id") or link.get("claim_element_id") or "") == element_id
+    ]
+    if not element_links and active_links:
       element_links = [
-        link for link in links
+        link for link in active_links
         if str(link.get("element_type") or "") == str(element.get("element_type") or "")
       ]
     element_links.sort(key=lambda row: float(row.get("link_score", 0)), reverse=True)
@@ -371,6 +389,10 @@ def build_evidence_map_items(
     if confidence == "high":
       confidence = "medium"
 
+    caveat = str(best.get("caveat_japanese") or ITEM_CAVEAT)
+    if best.get("is_fallback_link"):
+      caveat = f"{caveat} 弱い対応（fallback link）です。"
+
     items.append(
       EvidenceMapItem(
         publication_number=publication_number,
@@ -379,14 +401,29 @@ def build_evidence_map_items(
         element_text=str(element.get("element_text") or ""),
         selected_paper_count=len({str(l.get("paper_id")) for l in element_links if l.get("paper_id")}),
         best_paper_title=best.get("paper_title") or paper.get("title"),
-        best_paper_source=paper.get("source_name") or paper.get("journal"),
-        best_paper_year=int(paper["publication_year"]) if paper.get("publication_year") not in (None, "") else None,
-        best_paper_cited_by_count=int(paper["cited_by_count"]) if paper.get("cited_by_count") not in (None, "") else None,
+        best_paper_doi=best.get("paper_doi") or paper.get("doi"),
+        best_paper_source=(
+          best.get("paper_source")
+          or paper.get("source")
+          or paper.get("source_name")
+          or paper.get("journal")
+        ),
+        best_paper_year=(
+          int(best["paper_year"])
+          if best.get("paper_year") not in (None, "")
+          else int(paper["publication_year"]) if paper.get("publication_year") not in (None, "") else None
+        ),
+        best_paper_cited_by_count=(
+          int(best["cited_by_count"])
+          if best.get("cited_by_count") not in (None, "")
+          else int(paper["cited_by_count"]) if paper.get("cited_by_count") not in (None, "") else None
+        ),
         relevance_bucket=best.get("relevance_bucket") or paper.get("relevance_bucket"),
         link_type=best.get("link_type"),
         confidence=confidence,
         evidence_role=str(best.get("evidence_role") or "supporting_evidence_candidate"),
-        caveat_japanese=str(best.get("caveat_japanese") or ITEM_CAVEAT),
+        is_fallback_link=bool(best.get("is_fallback_link")),
+        caveat_japanese=caveat,
         next_action_japanese=(
           "論文候補を確認（supporting evidence candidate）"
           if best
@@ -414,7 +451,7 @@ def build_evidence_map_synthesis(
 
   paper_queries = load_records_csv(str(paths["paper_queries"])) if paths.get("paper_queries") else []
   selected_papers = load_selected_evidence_papers_for_synthesis(paths.get("selected_papers"))
-  paper_records = load_records_csv(str(paths["paper_records"])) if paths.get("paper_records") else []
+  paper_records = load_openalex_paper_records_for_synthesis(paths.get("paper_records"))
   relevance_rows = load_paper_relevance_for_synthesis(paths.get("paper_relevance"))
   links = load_claim_paper_links_for_synthesis(paths.get("claim_paper_links"))
 
@@ -428,6 +465,13 @@ def build_evidence_map_synthesis(
   for element in claim_elements:
     etype = str(element.get("element_type") or "unknown")
     element_type_counts[etype] = element_type_counts.get(etype, 0) + 1
+
+  if not links and claim_elements and selected_papers:
+    links = map_claim_elements_to_paper_candidates(
+      claim_elements,
+      selected_papers,
+      has_description=bool(meta["has_description"]),
+    )
 
   selected_count = len(selected_papers)
   paper_candidate_count = len(paper_records) or len(relevance_rows)
@@ -461,7 +505,7 @@ def build_evidence_map_synthesis(
     paper_query_count=len(paper_queries),
     paper_candidate_count=paper_candidate_count,
     selected_evidence_paper_count=selected_count,
-    claim_paper_link_count=max(link_count, len(links)),
+    claim_paper_link_count=link_count,
     synthesis_status=status,
     evidence_map_items=items,
     selected_evidence_papers=selected_papers,
@@ -477,7 +521,7 @@ def build_evidence_map_synthesis(
     has_examples=bool(meta["has_examples"]),
     retrieval_route=str(meta["retrieval_route"]),
     selected_count=selected_count,
-    link_count=max(link_count, len(links)),
+    link_count=link_count,
     claim_element_count=len(claim_elements),
   )
   synthesis.next_actions_japanese = build_next_actions_japanese(

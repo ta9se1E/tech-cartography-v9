@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from tech_cartography.evidence.claims_paper_candidate_mapper import (
+  build_fallback_claim_paper_link,
   classify_claim_paper_link,
+  is_weak_claim_element,
   map_claim_elements_to_paper_candidates,
   render_claim_paper_candidate_map_markdown,
   score_claim_paper_candidate_link,
@@ -96,3 +98,61 @@ def test_broad_composite_background_becomes_weak_link() -> None:
   }
   link = score_claim_paper_candidate_link(_element(), broad, has_description=False)
   assert link["link_type"] == "weak_background"
+
+
+def _real_selected_paper() -> dict:
+  return {
+    "paper_id": "https://openalex.org/W2116590770",
+    "openalex_id": "https://openalex.org/W2116590770",
+    "title": "Fabrication and Properties of Carbon Fibers",
+    "doi": "10.3390/ma2042369",
+    "source": "Materials",
+    "publication_year": 2009,
+    "cited_by_count": 931,
+    "relevance_bucket": "strong_material_process_background",
+    "relevance_score": 0.7,
+    "query_type": "material_process",
+  }
+
+
+def test_generic_claim_element_gets_fallback_link() -> None:
+  element = {
+    "element_id": "manual-1",
+    "element_type": "material",
+    "element_text": "manual claims loaded",
+    "publication_number": "US-12565719-B2",
+  }
+  assert is_weak_claim_element(element)
+  links = map_claim_elements_to_paper_candidates([element], [_real_selected_paper()], has_description=False)
+  assert len(links) >= 1
+  assert links[0]["is_fallback_link"] is True
+  assert links[0]["link_type"] == "material_process_background"
+
+
+def test_fallback_link_type_from_relevance_bucket() -> None:
+  element = {
+    "element_id": "e-prop",
+    "element_type": "property",
+    "element_text": "manual claims loaded",
+  }
+  paper = _real_selected_paper()
+  paper["relevance_bucket"] = "property_background"
+  link = build_fallback_claim_paper_link(element, paper, has_description=False)
+  assert link is not None
+  assert link["link_type"] == "property_background"
+
+
+def test_fallback_confidence_never_high() -> None:
+  element = {"element_id": "e1", "element_type": "material", "element_text": "manual claims loaded"}
+  link = build_fallback_claim_paper_link(element, _real_selected_paper(), has_description=False)
+  assert link is not None
+  assert link["confidence"] != "high"
+
+
+def test_fallback_link_preserves_doi_source_cited_by() -> None:
+  element = {"element_id": "e1", "element_type": "material", "element_text": "manual claims loaded"}
+  link = build_fallback_claim_paper_link(element, _real_selected_paper(), has_description=False)
+  assert link is not None
+  assert link["paper_doi"] == "10.3390/ma2042369"
+  assert link["paper_source"] == "Materials"
+  assert int(link["cited_by_count"]) == 931

@@ -59,9 +59,13 @@ def render_evidence_map_synthesis_markdown(synthesis: EvidenceMapSynthesis | dic
     ],
   )
   for paper in data.get("selected_evidence_papers") or []:
+    doi = paper.get("doi") or ""
+    source = paper.get("source") or paper.get("source_name") or ""
+    cited = paper.get("cited_by_count", "")
     lines.append(
       f"- {paper.get('title')} "
-      f"(bucket={paper.get('relevance_bucket')}, score={paper.get('relevance_score', '')})",
+      f"(bucket={paper.get('relevance_bucket')}, score={paper.get('relevance_score', '')}, "
+      f"doi={doi or 'n/a'}, source={source or 'n/a'}, cited_by={cited})",
     )
   if not data.get("selected_evidence_papers"):
     lines.append("- (none selected)")
@@ -74,11 +78,20 @@ def render_evidence_map_synthesis_markdown(synthesis: EvidenceMapSynthesis | dic
 
   lines.extend(["", "## 3. Claim × Paper Candidate Map", ""])
   for item in data.get("evidence_map_items") or []:
+    fallback_note = " [弱い対応]" if item.get("is_fallback_link") else ""
+    doi = item.get("best_paper_doi") or ""
+    source = item.get("best_paper_source") or ""
+    cited = item.get("best_paper_cited_by_count", "")
     lines.append(
       f"- [{item.get('element_type')}] {item.get('element_text', '')[:80]} "
       f"→ {item.get('best_paper_title') or '(no paper)'} "
-      f"({item.get('link_type')}, {item.get('confidence')}, bucket={item.get('relevance_bucket')})",
+      f"({item.get('link_type')}, {item.get('confidence')}, bucket={item.get('relevance_bucket')})"
+      f"{fallback_note}",
     )
+    if item.get("best_paper_title"):
+      lines.append(
+        f"  - doi={doi or 'n/a'}, source={source or 'n/a'}, cited_by={cited if cited not in (None, '') else 'n/a'}",
+      )
     lines.append(f"  - caveat: {item.get('caveat_japanese', '')[:120]}")
   if not data.get("evidence_map_items"):
     lines.append("- (no claim × paper items)")

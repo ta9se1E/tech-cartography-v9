@@ -36,9 +36,77 @@ PRIORITY_BUCKETS = {
   "surface_interface_background",
 }
 
+WEAK_ELEMENT_MARKERS = (
+  "manual claims loaded",
+  "manual claim",
+  "claims loaded",
+)
+
+BUCKET_TO_LINK_TYPE = {
+  "strong_material_process_background": "material_process_background",
+  "property_background": "property_background",
+  "surface_interface_background": "surface_interface_background",
+  "broad_composite_background": "weak_background",
+  "weak_background": "weak_background",
+  "likely_off_topic": "unrelated",
+}
+
+FALLBACK_CAVEAT_JAPANESE = (
+  "請求項が汎用的または弱いため、論文との対応は弱い supporting evidence candidate です。"
+  "特許主張の証明ではありません。"
+)
+
 
 def _paper_relevance_bucket(paper_record: dict[str, Any]) -> str:
   return str(paper_record.get("relevance_bucket") or "")
+
+
+def _paper_source_name(paper_record: dict[str, Any]) -> str:
+  return str(
+    paper_record.get("paper_source")
+    or paper_record.get("source")
+    or paper_record.get("source_name")
+    or paper_record.get("journal")
+    or "",
+  )
+
+
+def is_weak_claim_element(claim_element: dict[str, Any]) -> bool:
+  text = str(claim_element.get("element_text") or "").lower().strip()
+  if any(marker in text for marker in WEAK_ELEMENT_MARKERS):
+    return True
+  tokens = _tokenize(text)
+  return len(tokens) < 3
+
+
+def link_type_from_relevance_bucket(relevance_bucket: str) -> str:
+  return BUCKET_TO_LINK_TYPE.get(relevance_bucket, "weak_background")
+
+
+def _enrich_link_row(
+  row: dict[str, Any],
+  claim_element: dict[str, Any],
+  paper_record: dict[str, Any],
+) -> dict[str, Any]:
+  element_id = claim_element.get("element_id") or claim_element.get("claim_element_id")
+  row["claim_element_id"] = element_id
+  row["element_id"] = element_id
+  row["element_text"] = claim_element.get("element_text")
+  row["paper_id"] = (
+    paper_record.get("paper_id")
+    or paper_record.get("openalex_id")
+    or row.get("paper_id")
+  )
+  row["paper_title"] = paper_record.get("title") or row.get("paper_title")
+  row["paper_doi"] = paper_record.get("doi") or paper_record.get("paper_doi") or ""
+  row["paper_source"] = _paper_source_name(paper_record) or row.get("paper_source") or ""
+  row["paper_year"] = paper_record.get("publication_year") or paper_record.get("paper_year") or ""
+  row["cited_by_count"] = (
+    paper_record.get("cited_by_count")
+    if paper_record.get("cited_by_count") not in (None, "")
+    else row.get("cited_by_count")
+  )
+  return row
 
 
 def classify_claim_paper_link(link: dict[str, Any]) -> str:
@@ -113,9 +181,15 @@ def score_claim_paper_candidate_link(
   row = {
     "publication_number": claim_element.get("publication_number") or paper_record.get("publication_number"),
     "element_id": claim_element.get("element_id"),
+    "claim_element_id": claim_element.get("element_id"),
     "element_type": element_type,
+    "element_text": claim_element.get("element_text"),
     "paper_id": paper_record.get("paper_id") or paper_record.get("openalex_id"),
     "paper_title": paper_record.get("title"),
+    "paper_doi": paper_record.get("doi") or "",
+    "paper_source": _paper_source_name(paper_record),
+    "paper_year": paper_record.get("publication_year") or "",
+    "cited_by_count": paper_record.get("cited_by_count") if paper_record.get("cited_by_count") not in (None, "") else "",
     "query_id": paper_record.get("query_id"),
     "query_type": paper_record.get("query_type") or paper_record.get("element_type"),
     "relevance_bucket": relevance_bucket,
@@ -124,6 +198,7 @@ def score_claim_paper_candidate_link(
     "overlap_terms": sorted(overlap),
     "has_description": has_description,
     "evidence_role": "supporting_evidence_candidate",
+    "is_fallback_link": False,
   }
   row["link_type"] = classify_claim_paper_link(row)
   row["confidence"] = _link_confidence(link_score, has_description, relevance_bucket=relevance_bucket)
@@ -136,6 +211,52 @@ def score_claim_paper_candidate_link(
   return row
 
 
+def build_fallback_claim_paper_link(
+  claim_element: dict[str, Any],
+  paper_record: dict[str, Any],
+  *,
+  has_description: bool = False,
+) -> dict[str, Any] | None:
+  relevance_bucket = _paper_relevance_bucket(paper_record)
+  if relevance_bucket in {"likely_off_topic", "broad_composite_background"}:
+    return None
+  link_type = link_type_from_relevance_bucket(relevance_bucket)
+  if link_type == "unrelated":
+    return None
+  relevance_score = float(paper_record.get("relevance_score", 0) or 0)
+  confidence = "low" if relevance_bucket in PRIORITY_BUCKETS else "weak"
+  if confidence == "high":
+    confidence = "low"
+  row = {
+    "publication_number": claim_element.get("publication_number") or paper_record.get("publication_number"),
+    "element_id": claim_element.get("element_id"),
+    "claim_element_id": claim_element.get("element_id"),
+    "element_type": claim_element.get("element_type"),
+    "element_text": claim_element.get("element_text"),
+    "paper_id": paper_record.get("paper_id") or paper_record.get("openalex_id"),
+    "paper_title": paper_record.get("title"),
+    "paper_doi": paper_record.get("doi") or "",
+    "paper_source": _paper_source_name(paper_record),
+    "paper_year": paper_record.get("publication_year") or "",
+    "cited_by_count": paper_record.get("cited_by_count") if paper_record.get("cited_by_count") not in (None, "") else "",
+    "query_type": paper_record.get("query_type"),
+    "relevance_bucket": relevance_bucket,
+    "relevance_score": relevance_score,
+    "link_score": round(max(0.12, relevance_score * 0.35), 3),
+    "link_type": link_type,
+    "confidence": confidence,
+    "evidence_role": "supporting_evidence_candidate",
+    "is_fallback_link": True,
+    "has_description": has_description,
+    "caveat_japanese": (
+      FALLBACK_CAVEAT_JAPANESE
+      if not has_description
+      else f"{FALLBACK_CAVEAT_JAPANESE} 明細書はあるが請求項対応は弱いです。"
+    ),
+  }
+  return _enrich_link_row(row, claim_element, paper_record)
+
+
 def map_claim_elements_to_paper_candidates(
   claim_elements: list[dict[str, Any]],
   paper_records: list[dict[str, Any]],
@@ -146,15 +267,25 @@ def map_claim_elements_to_paper_candidates(
 ) -> list[dict[str, Any]]:
   links: list[dict[str, Any]] = []
   for element in claim_elements:
+    element_links: list[dict[str, Any]] = []
     for paper in paper_records:
-      if use_relevance_filter and _paper_relevance_bucket(paper) == "likely_off_topic":
+      if use_relevance_filter and _paper_relevance_bucket(paper) in {"likely_off_topic", "broad_composite_background"}:
         continue
       link = score_claim_paper_candidate_link(element, paper, has_description=has_description)
+      link = _enrich_link_row(link, element, paper)
       if link["link_type"] == "unrelated":
         continue
       if float(link["link_score"]) < min_score and link["link_type"] == "weak_background":
         continue
-      links.append(link)
+      element_links.append(link)
+
+    if not element_links and is_weak_claim_element(element):
+      for paper in paper_records:
+        fallback = build_fallback_claim_paper_link(element, paper, has_description=has_description)
+        if fallback:
+          element_links.append(fallback)
+
+    links.extend(element_links)
   links.sort(
     key=lambda row: (
       0 if str(row.get("relevance_bucket")) in PRIORITY_BUCKETS else 1,
@@ -189,10 +320,11 @@ def render_claim_paper_candidate_map_markdown(links: list[dict[str, Any]]) -> st
 
   lines.extend(["", "## Representative links", ""])
   for link in links[:10]:
+    fallback_note = " [弱い対応]" if link.get("is_fallback_link") else ""
     lines.append(
       f"- {link.get('element_type')} ↔ {link.get('paper_title')} "
       f"({link.get('link_type')}, {link.get('confidence')}, bucket={link.get('relevance_bucket')}, "
-      f"score={link.get('link_score')})",
+      f"score={link.get('link_score')}){fallback_note}",
     )
   if not links:
     lines.append("- (no links)")

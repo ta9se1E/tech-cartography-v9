@@ -247,9 +247,10 @@ def render_weekly_digest_preview_markdown(preview: dict[str, Any]) -> str:
       lines.append("- Claimとの関係:")
       for link in claim_links[:3]:
         if isinstance(link, dict):
+          fallback = " [弱い対応]" if link.get("is_fallback_link") else ""
           lines.append(
             f"  - {link.get('element_type')} ↔ {link.get('paper_title')} "
-            f"({link.get('link_type')}, {link.get('confidence')})",
+            f"({link.get('link_type')}, {link.get('confidence')}){fallback}",
           )
     lines.append("- 次アクション:")
     for action in [
@@ -270,13 +271,21 @@ def render_weekly_digest_preview_markdown(preview: dict[str, Any]) -> str:
     if selected:
       for row in selected[:5]:
         if isinstance(row, dict):
-          lines.append(f"  - {row.get('title', row.get('paper_record', {}).get('title', '(no title)'))}")
+          title = row.get("title", row.get("paper_record", {}).get("title", "(no title)"))
+          doi = row.get("doi") or "n/a"
+          source = row.get("source") or row.get("source_name") or "n/a"
+          cited = row.get("cited_by_count", "n/a")
+          lines.append(f"  - {title} (doi={doi}, source={source}, cited_by={cited})")
     else:
       lines.append("  - (まだ選定なし)")
     broad_count = int(relevance.get("broad_background_count", 0))
     off_topic = int(relevance.get("excluded_off_topic_count", 0))
     lines.append(f"- broad backgroundとして扱う論文: {broad_count} 件")
     lines.append(f"- off-topic除外: {off_topic} 件")
+    lines.append(
+      "- 論文候補は証明ではなく supporting evidence candidate として扱います。"
+      "広い複合材料レビューとoff-topicはEvidence Mapから除外しています。",
+    )
     lines.append("- 次アクション:")
     for action in [
       "selected evidence papersを技術者が確認する",

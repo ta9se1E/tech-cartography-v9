@@ -791,7 +791,8 @@ def render_claim_paper_candidate_map_card(links: list[dict[str, Any]] | None) ->
   conf_html = ", ".join(f"{k}={v}" for k, v in sorted(conf_counts.items()))
   rep_html = "".join(
     f"<li>{_safe(link.get('element_type'))} ↔ {_safe(link.get('paper_title'))} "
-    f"({_safe(link.get('link_type'))}, {_safe(link.get('confidence'))})</li>"
+    f"({_safe(link.get('link_type'))}, {_safe(link.get('confidence'))}"
+    f"{', 弱い対応' if link.get('is_fallback_link') else ''})</li>"
     for link in links[:5]
   )
   return (
@@ -815,7 +816,9 @@ def render_paper_candidate_relevance_card(relevance: dict[str, Any] | None) -> s
   bucket_html = ", ".join(f"{k}={v}" for k, v in sorted(bucket_dist.items())) or "n/a"
   selected_html = "".join(
     f"<li>{_safe(row.get('title', '(no title)'))} "
-    f"({_safe(row.get('relevance_bucket'))}, score={row.get('relevance_score', '')})</li>"
+    f"({_safe(row.get('relevance_bucket'))}, score={row.get('relevance_score', '')}, "
+    f"doi={_safe(row.get('doi') or 'n/a')}, source={_safe(row.get('source') or row.get('source_name') or 'n/a')}, "
+    f"cited_by={row.get('cited_by_count', 'n/a')})</li>"
     for row in selected[:5]
     if isinstance(row, dict)
   )
@@ -856,7 +859,10 @@ def render_evidence_map_synthesis_card(synthesis: dict[str, Any] | None) -> str:
     f"<li>{_safe(a)}</li>" for a in (synthesis.get("next_actions_japanese") or [])[:5]
   )
   papers_html = "".join(
-    f"<li>{_safe(p.get('title', '(no title)'))} ({_safe(p.get('relevance_bucket', ''))})</li>"
+    f"<li>{_safe(p.get('title', '(no title)'))} "
+    f"({_safe(p.get('relevance_bucket', ''))}, doi={_safe(p.get('doi') or 'n/a')}, "
+    f"source={_safe(p.get('source') or p.get('source_name') or 'n/a')}, "
+    f"cited_by={p.get('cited_by_count', 'n/a')})</li>"
     for p in (synthesis.get("selected_evidence_papers") or [])[:5]
     if isinstance(p, dict)
   )
@@ -864,7 +870,8 @@ def render_evidence_map_synthesis_card(synthesis: dict[str, Any] | None) -> str:
   items_html = "".join(
     f"<li>{_safe(i.get('element_type'))}: {_safe((i.get('element_text') or '')[:60])} "
     f"→ {_safe(i.get('best_paper_title') or '(no paper)')} "
-    f"({_safe(i.get('confidence'))})</li>"
+    f"({_safe(i.get('confidence'))}"
+    f"{', 弱い対応' if i.get('is_fallback_link') else ''})</li>"
     for i in items[:8]
     if isinstance(i, dict)
   )

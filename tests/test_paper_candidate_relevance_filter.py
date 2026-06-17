@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from tech_cartography.evidence.paper_candidate_relevance_filter import (
+  apply_relevance_to_paper_records,
+  build_selected_evidence_paper_row,
   evaluate_paper_candidate_relevance,
   filter_and_rank_paper_candidates,
+  is_synthetic_paper_id,
+  load_openalex_paper_records,
   render_paper_candidate_relevance_report,
   save_paper_candidate_relevance_artifacts,
 )
-from tech_cartography.evidence.paper_candidate_relevance_filter import apply_relevance_to_paper_records
 
 
 def test_pan_carbonization_is_strong_material_process_background() -> None:
@@ -125,3 +128,88 @@ def test_save_artifacts(tmp_path) -> None:
   paths = save_paper_candidate_relevance_artifacts(result, tmp_path)
   assert paths["selected_evidence_papers_csv"]
   assert paths["paper_candidate_relevance_report_md"]
+
+
+def _openalex_like_paper() -> dict:
+  return {
+    "paper_id": "https://openalex.org/W2116590770",
+    "openalex_id": "https://openalex.org/W2116590770",
+    "title": "Fabrication and Properties of Carbon Fibers",
+    "abstract": "polyacrylonitrile precursor carbonization stabilization",
+    "doi": "10.3390/ma2042369",
+    "publication_year": 2009,
+    "source_name": "Materials",
+    "cited_by_count": 931,
+    "is_open_access": True,
+    "concepts": ["Carbon fibers", "Polyacrylonitrile"],
+    "keywords": ["carbonization"],
+    "query": "PAN carbon fiber",
+    "query_type": "material_process",
+  }
+
+
+def test_selected_evidence_papers_keep_real_openalex_fields() -> None:
+  paper = _openalex_like_paper()
+  result = apply_relevance_to_paper_records([paper], top_n=5)
+  selected = result["selected_papers"]
+  assert len(selected) == 1
+  row = selected[0]
+  assert row["title"] == "Fabrication and Properties of Carbon Fibers"
+  assert row["doi"] == "10.3390/ma2042369"
+  assert row["source"] == "Materials"
+  assert int(row["cited_by_count"]) == 931
+  assert not is_synthetic_paper_id(str(row["paper_id"]))
+  assert "openalex.org" in str(row["paper_id"])
+
+
+def test_selected_evidence_papers_do_not_use_w1_style_ids() -> None:
+  paper = _openalex_like_paper()
+  paper["paper_id"] = "W1"
+  row = build_selected_evidence_paper_row(paper, {"relevance_bucket": "property_background", "confidence": "low"})
+  assert row["paper_id"] == "https://openalex.org/W2116590770"
+  assert not is_synthetic_paper_id(row["paper_id"])
+
+
+def test_broad_composite_background_excluded_from_selected() -> None:
+  papers = [
+    _openalex_like_paper(),
+    {
+      "paper_id": "https://openalex.org/W999",
+      "title": "Natural Fiber Reinforced Composites: A Review",
+      "abstract": "hemp fiber jute fiber general composite applications review",
+    },
+  ]
+  selected = filter_and_rank_paper_candidates(papers, top_n=5)
+  buckets = {row["relevance_bucket"] for row in selected}
+  assert "broad_composite_background" not in buckets
+
+
+def test_likely_off_topic_excluded_from_selected() -> None:
+  papers = [
+    _openalex_like_paper(),
+    {
+      "paper_id": "https://openalex.org/W888",
+      "title": "Quantum computing error correction",
+      "abstract": "qubit decoherence",
+    },
+  ]
+  selected = filter_and_rank_paper_candidates(papers, top_n=5)
+  buckets = {row["relevance_bucket"] for row in selected}
+  assert "likely_off_topic" not in buckets
+
+
+def test_load_openalex_paper_records_prefers_json_over_synthetic_csv(tmp_path) -> None:
+  csv_path = tmp_path / "openalex_paper_records.csv"
+  csv_path.write_text(
+    "paper_id,title,abstract\nW1,sample title,sample abstract\n",
+    encoding="utf-8",
+  )
+  json_path = tmp_path / "openalex_paper_records.json"
+  json_path.write_text(
+    '[{"paper_id":"https://openalex.org/W2116590770","title":"Fabrication and Properties of Carbon Fibers","abstract":"pan carbon fiber"}]',
+    encoding="utf-8",
+  )
+  records = load_openalex_paper_records(csv_path)
+  assert len(records) == 1
+  assert records[0]["title"] == "Fabrication and Properties of Carbon Fibers"
+  assert "openalex.org" in records[0]["paper_id"]

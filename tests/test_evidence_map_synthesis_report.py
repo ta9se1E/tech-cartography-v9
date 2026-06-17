@@ -30,7 +30,13 @@ def _sample_synthesis() -> EvidenceMapSynthesis:
     next_actions_japanese=["descriptionをmanualで追加する"],
     caveats_japanese=["論文候補は supporting evidence candidate です。"],
     selected_evidence_papers=[
-      {"title": "PAN carbon fiber carbonization", "relevance_bucket": "strong_material_process_background"},
+      {
+        "title": "Fabrication and Properties of Carbon Fibers",
+        "doi": "10.3390/ma2042369",
+        "source": "Materials",
+        "cited_by_count": 931,
+        "relevance_bucket": "strong_material_process_background",
+      },
     ],
     evidence_map_items=[
       EvidenceMapItem(
@@ -38,7 +44,10 @@ def _sample_synthesis() -> EvidenceMapSynthesis:
         claim_element_id="e1",
         element_type="material",
         element_text="PAN precursor",
-        best_paper_title="PAN carbon fiber carbonization",
+        best_paper_title="Fabrication and Properties of Carbon Fibers",
+        best_paper_doi="10.3390/ma2042369",
+        best_paper_source="Materials",
+        best_paper_cited_by_count=931,
         confidence="low",
         evidence_role="supporting_evidence_candidate",
       ),
@@ -68,3 +77,11 @@ def test_no_monetary_amounts_in_report() -> None:
   md = render_evidence_map_synthesis_markdown(_sample_synthesis())
   assert "$" not in md
   assert "usd" not in md.lower()
+
+
+def test_real_paper_title_and_doi_in_report() -> None:
+  md = render_evidence_map_synthesis_markdown(_sample_synthesis())
+  assert "Fabrication and Properties of Carbon Fibers" in md
+  assert "10.3390/ma2042369" in md
+  assert "931" in md
+  assert "supporting evidence candidate" in md.lower()
