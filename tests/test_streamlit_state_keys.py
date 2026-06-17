@@ -1,7 +1,14 @@
 """Tests for Streamlit session_state key separation."""
 
+from pathlib import Path
+import inspect
+
+import pytest
+import streamlit as st
+
 from tech_cartography.ui.streamlit_session import (
   STATE_DISPLAY_MODE,
+  STATE_PENDING_SELECTED_RUN_ID,
   STATE_PIPELINE_ROOT,
   STATE_SELECTED_RUN_ID,
   STATE_WEEKLY_EMAIL_ENABLED,
@@ -10,6 +17,7 @@ from tech_cartography.ui.streamlit_session import (
   WIDGET_PIPELINE_ROOT,
   WIDGET_SELECTED_RUN_ID,
   INTERNAL_KEYS,
+  apply_pending_widget_state_updates,
   assert_no_widget_internal_key_collision,
   default_app_session_state,
   merge_session_defaults,
@@ -74,3 +82,50 @@ def test_prime_widget_keys_from_internal() -> None:
   assert primed[WIDGET_PIPELINE_ROOT] == "outputs/pipeline_runs"
   assert primed[WIDGET_SELECTED_RUN_ID] == "run-abc"
   assert primed[WIDGET_DISPLAY_MODE] == "かんたん表示"
+
+
+def test_widget_and_internal_selected_run_id_keys_differ() -> None:
+  assert WIDGET_SELECTED_RUN_ID != STATE_SELECTED_RUN_ID
+  assert WIDGET_SELECTED_RUN_ID == "selected_run_id_input"
+  assert STATE_SELECTED_RUN_ID == "selected_run_id"
+
+
+def test_apply_pending_selected_run_id_updates_internal_and_widget(monkeypatch: pytest.MonkeyPatch) -> None:
+  fake_state = {STATE_PENDING_SELECTED_RUN_ID: "20260616_163006"}
+  monkeypatch.setattr(st, "session_state", fake_state, raising=False)
+  apply_pending_widget_state_updates()
+  assert STATE_PENDING_SELECTED_RUN_ID not in fake_state
+  assert fake_state[STATE_SELECTED_RUN_ID] == "20260616_163006"
+  assert fake_state[WIDGET_SELECTED_RUN_ID] == "20260616_163006"
+
+
+def test_apply_pending_noop_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+  fake_state: dict[str, str] = {}
+  monkeypatch.setattr(st, "session_state", fake_state, raising=False)
+  apply_pending_widget_state_updates()
+  assert STATE_SELECTED_RUN_ID not in fake_state
+  assert WIDGET_SELECTED_RUN_ID not in fake_state
+
+
+def test_sync_internal_from_widget_values_is_widget_to_internal_only() -> None:
+  source = inspect.getsource(sync_internal_from_widget_values)
+  assert "WIDGET_" not in source
+  synced = sync_internal_from_widget_values(
+    pipeline_root="outputs/pipeline_runs",
+    selected_run_id="run-xyz",
+    display_mode="詳細表示",
+  )
+  assert set(synced.keys()) <= INTERNAL_KEYS
+
+
+def test_app_py_does_not_assign_widget_selected_run_id_directly() -> None:
+  app_text = Path("app.py").read_text(encoding="utf-8")
+  assert "st.session_state[WIDGET_SELECTED_RUN_ID] =" not in app_text
+  assert "STATE_PENDING_SELECTED_RUN_ID" in app_text
+  assert "apply_pending_widget_state_updates" in app_text
+
+
+def test_app_py_latest_run_uses_pending_selected_run_id() -> None:
+  app_text = Path("app.py").read_text(encoding="utf-8")
+  assert "st.session_state[STATE_PENDING_SELECTED_RUN_ID]" in app_text
+  assert "load_latest_run_button" in app_text

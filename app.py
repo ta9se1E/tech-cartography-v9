@@ -17,17 +17,21 @@ from tech_cartography.ui.easy_japanese_ui import inject_easy_ui_css, render_warn
 from tech_cartography.ui.login_view import logout_user, render_logged_in_header, require_login
 from tech_cartography.ui.streamlit_session import (
   DISPLAY_MODE_OPTIONS,
+  STATE_CURRENT_USER,
   STATE_DISPLAY_MODE,
   STATE_MANIFEST_PATH,
+  STATE_PENDING_SELECTED_RUN_ID,
   STATE_PIPELINE_ROOT,
   STATE_SELECTED_RUN_ID,
   WIDGET_DISPLAY_MODE,
   WIDGET_PIPELINE_ROOT,
   WIDGET_SELECTED_RUN_ID,
+  apply_pending_widget_state_updates,
   init_app_session_state,
   sync_internal_from_widget_values,
 )
 from tech_cartography.ui.v7_easy_app import DEFAULT_PIPELINE_ROOT, render_tabbed_easy_app
+from tech_cartography.users.user_store import set_last_run_id
 
 st.set_page_config(page_title="Tech Cartography v7", layout="wide", initial_sidebar_state="expanded")
 st.markdown(inject_easy_ui_css(), unsafe_allow_html=True)
@@ -37,6 +41,7 @@ if not user:
   raise SystemExit(0)
 
 init_app_session_state(user)
+apply_pending_widget_state_updates()
 
 with st.sidebar:
   st.header("ユーザー")
@@ -66,10 +71,12 @@ with st.sidebar:
   if st.button("latest_run を読み込む", use_container_width=True, key="load_latest_run_button"):
     pointer = read_latest_run_pointer(pipeline_root_input)
     if pointer and pointer.get("run_id"):
-      st.session_state[STATE_SELECTED_RUN_ID] = pointer["run_id"]
+      run_id = str(pointer["run_id"])
+      st.session_state[STATE_PENDING_SELECTED_RUN_ID] = run_id
       st.session_state[STATE_MANIFEST_PATH] = pointer.get("manifest_path", "")
-      st.session_state[WIDGET_SELECTED_RUN_ID] = pointer["run_id"]
-      st.success(f"最新 run: {pointer['run_id']}")
+      updated_user = set_last_run_id(user["user_id"], run_id)
+      st.session_state[STATE_CURRENT_USER] = updated_user
+      st.success(f"最新 run: {run_id}")
       st.rerun()
     else:
       st.warning("latest_run.json が見つかりません。")

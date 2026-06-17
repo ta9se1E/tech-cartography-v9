@@ -25,6 +25,7 @@ STATE_MANIFEST_PATH = "easy_manifest_path"
 STATE_SAVED_RUN_ID = "easy_saved_run_id"
 STATE_CURRENT_USER = "current_user"
 STATE_WEEKLY_EMAIL_ENABLED = "weekly_email_enabled"
+STATE_PENDING_SELECTED_RUN_ID = "pending_selected_run_id"
 
 WIDGET_KEYS = frozenset(
   {
@@ -50,6 +51,7 @@ INTERNAL_KEYS = frozenset(
     STATE_SAVED_RUN_ID,
     STATE_CURRENT_USER,
     STATE_WEEKLY_EMAIL_ENABLED,
+    STATE_PENDING_SELECTED_RUN_ID,
   },
 )
 
@@ -140,15 +142,26 @@ def init_app_session_state(user: dict[str, Any] | None = None) -> None:
     if key in INTERNAL_KEYS and key not in st.session_state:
       st.session_state[key] = value
   for widget_key, value in prime_widget_keys_from_internal(dict(st.session_state)).items():
-    st.session_state[widget_key] = value
+    if widget_key not in st.session_state:
+      st.session_state[widget_key] = value
+
+
+def apply_pending_widget_state_updates() -> None:
+  """Apply deferred widget values before widgets are instantiated."""
+  import streamlit as st
+
+  pending = st.session_state.pop(STATE_PENDING_SELECTED_RUN_ID, None)
+  if pending:
+    st.session_state[STATE_SELECTED_RUN_ID] = pending
+    st.session_state[WIDGET_SELECTED_RUN_ID] = pending
 
 
 def apply_internal_state_updates(updates: dict[str, Any]) -> None:
-  """Write internal keys and prime widget keys before rerun."""
+  """Write internal keys; defer selected run widget sync until before next widget render."""
   import streamlit as st
 
   for key, value in updates.items():
     if key in INTERNAL_KEYS:
       st.session_state[key] = value
-  for widget_key, value in prime_widget_keys_from_internal(updates).items():
-    st.session_state[widget_key] = value
+  if STATE_SELECTED_RUN_ID in updates:
+    st.session_state[STATE_PENDING_SELECTED_RUN_ID] = updates[STATE_SELECTED_RUN_ID]
