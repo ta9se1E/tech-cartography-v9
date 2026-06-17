@@ -59,6 +59,7 @@ def build_weekly_digest_preview(
   claims_paper_query_plan = artifacts.get("claims_paper_query_plan") or {}
   openalex_limited = artifacts.get("openalex_limited_execution") or {}
   claim_paper_links = artifacts.get("claim_paper_candidate_links") or []
+  paper_candidate_relevance = artifacts.get("paper_candidate_relevance") or {}
 
   def _bq_status(row: dict[str, Any]) -> str:
     if not isinstance(row, dict):
@@ -116,6 +117,7 @@ def build_weekly_digest_preview(
     "claims_paper_query_plan": claims_paper_query_plan,
     "openalex_limited_execution": openalex_limited,
     "claim_paper_candidate_links": claim_paper_links,
+    "paper_candidate_relevance": paper_candidate_relevance,
     "china_strategic_watch": cn_watch[:10],
     "next_actions": next_actions[:8],
     "manual_watch_count": acquisition_policy_summary.get("manual_watch_count", len(cn_watch)),
@@ -257,6 +259,29 @@ def render_weekly_digest_preview_markdown(preview: dict[str, Any]) -> str:
     lines.append(
       "- 論文候補は技術背景の裏取り候補です。特許の有効性、実施可能性、侵害性を判断するものではありません。",
     )
+
+  relevance = preview.get("paper_candidate_relevance") or {}
+  if relevance:
+    lines.extend(["", "## 論文裏取り候補の絞り込み", ""])
+    selected = relevance.get("selected_evidence_papers") or relevance.get("selected_paper_records") or []
+    lines.append("- Evidence Mapに載せる代表論文:")
+    if selected:
+      for row in selected[:5]:
+        if isinstance(row, dict):
+          lines.append(f"  - {row.get('title', row.get('paper_record', {}).get('title', '(no title)'))}")
+    else:
+      lines.append("  - (まだ選定なし)")
+    broad_count = int(relevance.get("broad_background_count", 0))
+    off_topic = int(relevance.get("excluded_off_topic_count", 0))
+    lines.append(f"- broad backgroundとして扱う論文: {broad_count} 件")
+    lines.append(f"- off-topic除外: {off_topic} 件")
+    lines.append("- 次アクション:")
+    for action in [
+      "selected evidence papersを技術者が確認する",
+      "descriptionを追加して裏取り精度を上げる",
+      "broad reviewは背景参照のみとする",
+    ]:
+      lines.append(f"  - {action}")
 
   lines.extend(["", "## 今週の次アクション", ""])
   for action in preview.get("next_actions", []):

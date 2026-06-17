@@ -196,3 +196,46 @@ def test_openalex_limited_execution_reflected_in_report(tmp_path: Path) -> None:
   patch_evidence_validation_with_openalex_limited(tmp_path / "ev", limited, links)
   patched_md = (tmp_path / "ev" / "evidence_validation_report.md").read_text(encoding="utf-8")
   assert "OpenAlex Limited Execution" in patched_md
+
+
+def test_relevance_filter_reflected_in_report(tmp_path: Path) -> None:
+  from tech_cartography.reports.evidence_validation_report import (
+    merge_openalex_limited_into_summary,
+    render_evidence_validation_markdown,
+  )
+
+  records = [
+    {
+      "publication_number": "US-12565719-B2",
+      "title": "Carbon fiber",
+      "country": "US",
+      "retrieval_status": "manual_claims_loaded",
+      "claims": "1. A carbon fiber comprising PAN precursor fibers.",
+      "evidence_level": "low_fulltext_evidence",
+    },
+  ]
+  result = run_evidence_validation(records, output_dir=str(tmp_path / "rel"))
+  limited = {
+    "mode": "execute",
+    "execution_status": "success",
+    "executed_queries_count": 2,
+    "total_paper_records": 3,
+    "cache_hits": 0,
+    "api_errors": [],
+    "paper_candidate_relevance": {
+      "all_evaluated": [
+        {"title": "PAN carbon fiber", "relevance_bucket": "strong_material_process_background", "relevance_score": 0.6},
+        {"title": "Natural fiber review", "relevance_bucket": "broad_composite_background", "relevance_score": 0.2},
+      ],
+      "selected": [
+        {"title": "PAN carbon fiber", "relevance_bucket": "strong_material_process_background", "relevance_score": 0.6},
+      ],
+      "excluded_off_topic_count": 0,
+      "broad_background_count": 1,
+    },
+  }
+  merged = merge_openalex_limited_into_summary(result["evidence_validation_summary"], limited, [])
+  md = render_evidence_validation_markdown(merged)
+  assert "## Paper Candidate Relevance Filter" in md
+  assert "PAN carbon fiber" in md
+  assert "$" not in md

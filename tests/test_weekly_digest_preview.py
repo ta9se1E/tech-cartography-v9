@@ -114,3 +114,22 @@ def test_weekly_digest_includes_paper_evidence_section() -> None:
   assert "論文裏取り候補" in md
   assert "supporting" in md.lower() or "裏取り候補" in md
   assert "$" not in md
+
+
+def test_weekly_digest_includes_relevance_filter_section() -> None:
+  preview = build_weekly_digest_preview(
+    {
+      "paper_candidate_relevance": {
+        "selected_evidence_papers": [
+          {"title": "PAN carbon fiber carbonization", "relevance_bucket": "strong_material_process_background"},
+        ],
+        "broad_background_count": 2,
+        "excluded_off_topic_count": 1,
+      },
+    },
+    {"user_facing_name_japanese": "標準監視モード", "included_items": [], "excluded_items": []},
+  )
+  md = render_weekly_digest_preview_markdown(preview)
+  assert "論文裏取り候補の絞り込み" in md
+  assert "PAN carbon fiber" in md
+  assert "$" not in md

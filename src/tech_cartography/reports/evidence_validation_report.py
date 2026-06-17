@@ -261,6 +261,35 @@ def merge_openalex_limited_into_summary(
   openalex_block["paper_records"] = limited.get("total_paper_records", 0)
   openalex_block["source_quality_count"] = len(limited.get("source_quality_results") or [])
   merged["openalex"] = openalex_block
+
+  relevance = limited.get("paper_candidate_relevance") or {}
+  if relevance:
+    all_evaluated = relevance.get("all_evaluated") or []
+    selected = relevance.get("selected") or []
+    bucket_counts: dict[str, int] = {}
+    for row in all_evaluated:
+      bucket = str(row.get("relevance_bucket"))
+      bucket_counts[bucket] = bucket_counts.get(bucket, 0) + 1
+    excluded = [
+      row for row in all_evaluated
+      if row.get("relevance_bucket") in {"likely_off_topic", "broad_composite_background"}
+    ]
+    from tech_cartography.evidence.paper_candidate_relevance_filter import FILTER_CAVEAT_JAPANESE, REPORT_INTRO_JAPANESE
+
+    merged["paper_candidate_relevance"] = {
+      "total_paper_candidates": len(all_evaluated),
+      "selected_evidence_papers": len(selected),
+      "relevance_bucket_distribution": bucket_counts,
+      "representative_selected_papers": selected[:5],
+      "excluded_broad_off_topic": excluded[:10],
+      "excluded_off_topic_count": relevance.get("excluded_off_topic_count", 0),
+      "broad_background_count": relevance.get("broad_background_count", 0),
+      "caveat_japanese": FILTER_CAVEAT_JAPANESE,
+      "intro_japanese": REPORT_INTRO_JAPANESE,
+    }
+    top_summary["selected_evidence_papers"] = len(selected)
+    merged["summary"] = top_summary
+
   return merged
 
 
@@ -361,6 +390,42 @@ def _render_claim_paper_candidate_sections(summary: dict[str, Any]) -> list[str]
   if not block.get("representative_links"):
     lines.append("- (no links)")
   lines.extend(["", block.get("caveat_japanese", ""), ""])
+  return lines
+
+
+def _render_paper_candidate_relevance_sections(summary: dict[str, Any]) -> list[str]:
+  block = summary.get("paper_candidate_relevance") or {}
+  if not block:
+    return []
+  lines = [
+    "## Paper Candidate Relevance Filter",
+    "",
+    block.get("intro_japanese")
+    or "広い複合材料レビューは背景候補として扱い、PAN系炭素繊維・炭化・物性に近い論文をEvidence Map候補として優先します。",
+    "",
+    f"- total paper candidates: {block.get('total_paper_candidates', 0)}",
+    f"- selected evidence papers: {block.get('selected_evidence_papers', 0)}",
+    f"- excluded off-topic: {block.get('excluded_off_topic_count', 0)}",
+    f"- broad background: {block.get('broad_background_count', 0)}",
+    "",
+    "### relevance bucket distribution",
+    "",
+  ]
+  for key, count in sorted((block.get("relevance_bucket_distribution") or {}).items()):
+    lines.append(f"- {key}: {count}")
+  lines.extend(["", "### representative selected papers", ""])
+  for row in block.get("representative_selected_papers") or []:
+    lines.append(
+      f"- {row.get('title')} ({row.get('relevance_bucket')}, score={row.get('relevance_score')})",
+    )
+  if not block.get("representative_selected_papers"):
+    lines.append("- (none)")
+  lines.extend(["", "### excluded broad/off-topic papers", ""])
+  for row in block.get("excluded_broad_off_topic") or []:
+    lines.append(f"- {row.get('title')} ({row.get('relevance_bucket')})")
+  if not block.get("excluded_broad_off_topic"):
+    lines.append("- (none)")
+  lines.extend(["", "### caveat", "", block.get("caveat_japanese", ""), ""])
   return lines
 
 
@@ -488,6 +553,9 @@ def render_evidence_validation_markdown(summary: dict[str, Any]) -> str:
   claim_link_sections = _render_claim_paper_candidate_sections(summary)
   if claim_link_sections:
     lines.extend(claim_link_sections)
+  relevance_sections = _render_paper_candidate_relevance_sections(summary)
+  if relevance_sections:
+    lines.extend(relevance_sections)
 
   lines.extend(["## 5. China / Non-US Manual Watch", ""])
   manual = summary.get("manual_watch") or {}

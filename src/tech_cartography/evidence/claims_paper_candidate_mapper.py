@@ -30,7 +30,23 @@ def _tokenize(text: str) -> set[str]:
   return {tok for tok in re.findall(r"[a-z0-9]+", text.lower()) if len(tok) > 2}
 
 
+PRIORITY_BUCKETS = {
+  "strong_material_process_background",
+  "property_background",
+  "surface_interface_background",
+}
+
+
+def _paper_relevance_bucket(paper_record: dict[str, Any]) -> str:
+  return str(paper_record.get("relevance_bucket") or "")
+
+
 def classify_claim_paper_link(link: dict[str, Any]) -> str:
+  relevance_bucket = str(link.get("relevance_bucket") or "")
+  if relevance_bucket == "likely_off_topic":
+    return "unrelated"
+  if relevance_bucket == "broad_composite_background":
+    return "weak_background"
   score = float(link.get("link_score", 0))
   element_type = str(link.get("element_type") or "")
   if score < 0.15:
@@ -50,10 +66,12 @@ def classify_claim_paper_link(link: dict[str, Any]) -> str:
   return "weak_background"
 
 
-def _link_confidence(link_score: float, has_description: bool) -> str:
-  if link_score >= 0.55 and has_description:
+def _link_confidence(link_score: float, has_description: bool, relevance_bucket: str = "") -> str:
+  if relevance_bucket in {"likely_off_topic", "broad_composite_background"}:
+    return "weak"
+  if link_score >= 0.55 and has_description and relevance_bucket in PRIORITY_BUCKETS:
     return "medium"
-  if link_score >= 0.35:
+  if link_score >= 0.35 or relevance_bucket in PRIORITY_BUCKETS:
     return "low"
   return "weak"
 
@@ -85,7 +103,12 @@ def score_claim_paper_candidate_link(
   overlap = element_terms & paper_text
   type_keywords = set(TYPE_KEYWORDS.get(element_type, ()))
   type_overlap = type_keywords & paper_text
-  link_score = min(1.0, len(overlap) * 0.12 + len(type_overlap) * 0.15 + (0.1 if overlap else 0.0))
+  relevance_bucket = _paper_relevance_bucket(paper_record)
+  relevance_score = float(paper_record.get("relevance_score", 0) or 0)
+  link_score = min(
+    1.0,
+    len(overlap) * 0.12 + len(type_overlap) * 0.15 + (0.1 if overlap else 0.0) + relevance_score * 0.2,
+  )
 
   row = {
     "publication_number": claim_element.get("publication_number") or paper_record.get("publication_number"),
@@ -95,13 +118,15 @@ def score_claim_paper_candidate_link(
     "paper_title": paper_record.get("title"),
     "query_id": paper_record.get("query_id"),
     "query_type": paper_record.get("query_type") or paper_record.get("element_type"),
+    "relevance_bucket": relevance_bucket,
+    "relevance_score": relevance_score,
     "link_score": round(link_score, 3),
     "overlap_terms": sorted(overlap),
     "has_description": has_description,
     "evidence_role": "supporting_evidence_candidate",
   }
   row["link_type"] = classify_claim_paper_link(row)
-  row["confidence"] = _link_confidence(link_score, has_description)
+  row["confidence"] = _link_confidence(link_score, has_description, relevance_bucket=relevance_bucket)
   if not has_description:
     row["caveat_japanese"] = (
       "明細書・実施例が未入力のため、請求項と論文の対応は限定的な supporting evidence candidate です。"
@@ -117,17 +142,26 @@ def map_claim_elements_to_paper_candidates(
   *,
   has_description: bool = False,
   min_score: float = 0.12,
+  use_relevance_filter: bool = True,
 ) -> list[dict[str, Any]]:
   links: list[dict[str, Any]] = []
   for element in claim_elements:
     for paper in paper_records:
+      if use_relevance_filter and _paper_relevance_bucket(paper) == "likely_off_topic":
+        continue
       link = score_claim_paper_candidate_link(element, paper, has_description=has_description)
       if link["link_type"] == "unrelated":
         continue
       if float(link["link_score"]) < min_score and link["link_type"] == "weak_background":
         continue
       links.append(link)
-  links.sort(key=lambda row: float(row.get("link_score", 0)), reverse=True)
+  links.sort(
+    key=lambda row: (
+      0 if str(row.get("relevance_bucket")) in PRIORITY_BUCKETS else 1,
+      -float(row.get("relevance_score", 0)),
+      -float(row.get("link_score", 0)),
+    ),
+  )
   return links
 
 
@@ -157,7 +191,8 @@ def render_claim_paper_candidate_map_markdown(links: list[dict[str, Any]]) -> st
   for link in links[:10]:
     lines.append(
       f"- {link.get('element_type')} ↔ {link.get('paper_title')} "
-      f"({link.get('link_type')}, {link.get('confidence')}, score={link.get('link_score')})",
+      f"({link.get('link_type')}, {link.get('confidence')}, bucket={link.get('relevance_bucket')}, "
+      f"score={link.get('link_score')})",
     )
   if not links:
     lines.append("- (no links)")

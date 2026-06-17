@@ -25,6 +25,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_claim_paper_candidate_map_card,
   render_evidence_validation_summary,
   render_openalex_limited_execution_card,
+  render_paper_candidate_relevance_card,
   render_fulltext_execute_summary,
   render_fulltext_status_card,
   render_fulltext_vs_watch_notice,
@@ -368,6 +369,22 @@ def _tab_evidence(manifest: dict[str, Any]) -> None:
     rep = ev_summary["claim_paper_candidate_links"].get("representative_links") or []
     if rep:
       st.markdown(render_claim_paper_candidate_map_card(rep), unsafe_allow_html=True)
+
+  relevance_summary = None
+  if ev_summary and isinstance(ev_summary.get("paper_candidate_relevance"), dict):
+    relevance_summary = ev_summary["paper_candidate_relevance"]
+  if relevance_summary:
+    st.markdown(render_paper_candidate_relevance_card(relevance_summary), unsafe_allow_html=True)
+
+  selected_df = _load_csv_artifact(manifest, "selected_evidence_papers_csv")
+  if not selected_df.empty:
+    with st.expander("Selected Evidence Papers"):
+      render_small_table(selected_df.head(20))
+
+  relevance_md = _artifact_path(manifest, "paper_candidate_relevance_report_md")
+  if relevance_md and relevance_md.exists():
+    with st.expander("Paper Candidate Relevance Report"):
+      st.markdown(relevance_md.read_text(encoding="utf-8"))
 
   openalex_papers_df = _load_csv_artifact(manifest, "openalex_paper_records_csv")
   if not openalex_papers_df.empty:

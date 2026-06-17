@@ -17,6 +17,10 @@ from tech_cartography.evidence.claims_paper_candidate_mapper import (
   map_claim_elements_to_paper_candidates,
   save_claim_paper_candidate_map_artifacts,
 )
+from tech_cartography.evidence.paper_candidate_relevance_filter import (
+  apply_relevance_to_paper_records,
+  save_paper_candidate_relevance_artifacts,
+)
 from tech_cartography.evidence.openalex_limited_executor import (
   OpenAlexExecutionConfig,
   execute_openalex_limited,
@@ -127,14 +131,24 @@ def main() -> int:
     if ev_dir:
       claim_elements = _load_claim_elements(ev_dir, publication_number)
 
+  relevance_result = apply_relevance_to_paper_records(
+    result.get("paper_records", []),
+    claim_elements or None,
+    top_n=int(args.max_queries),
+    has_description=has_description,
+  )
+  paths.update(save_paper_candidate_relevance_artifacts(relevance_result, output_dir))
+  papers_for_mapping = relevance_result.get("selected_papers") or []
+
   links = map_claim_elements_to_paper_candidates(
     claim_elements,
-    result.get("paper_records", []),
+    papers_for_mapping,
     has_description=has_description,
   )
   if links or result.get("paper_records"):
     paths.update(save_claim_paper_candidate_map_artifacts(links, output_dir))
     result["claim_paper_candidate_links"] = links
+    result["paper_candidate_relevance"] = relevance_result
 
   payload = {
     "mode": result.get("mode"),
@@ -144,6 +158,7 @@ def main() -> int:
     "cache_hits": result.get("cache_hits"),
     "api_errors": result.get("api_errors"),
     "claim_paper_links_count": len(links),
+    "selected_evidence_papers": len(relevance_result.get("selected_papers", [])),
     "paths": paths,
   }
   print(json.dumps(payload, indent=2, ensure_ascii=False))

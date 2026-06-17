@@ -40,6 +40,9 @@ PRIMARY_ARTIFACT_KEYS = [
   "openalex_paper_records_csv",
   "claim_paper_candidate_links_csv",
   "claim_paper_candidate_map_md",
+  "paper_candidate_relevance_csv",
+  "paper_candidate_relevance_report_md",
+  "selected_evidence_papers_csv",
   "final_report_md",
 ]
 

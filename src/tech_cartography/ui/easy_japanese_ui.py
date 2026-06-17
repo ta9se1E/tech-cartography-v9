@@ -428,6 +428,8 @@ def render_evidence_validation_summary(summary: dict[str, Any] | None) -> str:
   link_block = summary.get("claim_paper_candidate_links") if isinstance(summary, dict) else {}
   links = link_block.get("representative_links") if isinstance(link_block, dict) else []
   link_html = render_claim_paper_candidate_map_card(links) if links else ""
+  relevance_block = summary.get("paper_candidate_relevance") if isinstance(summary, dict) else {}
+  relevance_html = render_paper_candidate_relevance_card(relevance_block) if relevance_block else ""
   return (
     f"{render_info_box(explain_evidence_validation_readiness())}"
     f"{render_metric_cards(metrics)}"
@@ -435,6 +437,7 @@ def render_evidence_validation_summary(summary: dict[str, Any] | None) -> str:
     f'<div class="tc-patent-title">OpenAlex: {openalex_mode}</div>'
     f'<div class="tc-patent-meta">{explain_evidence_validation_mode(openalex_mode)}</div>'
     f"</div>"
+    f"{relevance_html}"
     f"{limited_html}"
     f"{link_html}"
     f'<div class="tc-patent-card"><div class="tc-patent-title">次にやるべきこと</div>'
@@ -796,5 +799,42 @@ def render_claim_paper_candidate_map_card(links: list[dict[str, Any]] | None) ->
     f"confidence分布: {_safe(conf_html)}<br><br>"
     f"<strong>代表リンク</strong><ul>{rep_html}</ul>"
     f"論文候補は技術背景の裏取り候補です。特許の有効性、実施可能性、侵害性を判断するものではありません。"
+    f"</div>"
+  )
+
+
+def render_paper_candidate_relevance_card(relevance: dict[str, Any] | None) -> str:
+  if not relevance:
+    return ""
+  selected = relevance.get("representative_selected_papers") or relevance.get("selected_evidence_papers") or []
+  excluded = relevance.get("excluded_broad_off_topic") or []
+  bucket_dist = relevance.get("relevance_bucket_distribution") or {}
+  bucket_html = ", ".join(f"{k}={v}" for k, v in sorted(bucket_dist.items())) or "n/a"
+  selected_html = "".join(
+    f"<li>{_safe(row.get('title', '(no title)'))} "
+    f"({_safe(row.get('relevance_bucket'))}, score={row.get('relevance_score', '')})</li>"
+    for row in selected[:5]
+    if isinstance(row, dict)
+  )
+  broad_html = "".join(
+    f"<li>{_safe(row.get('title', '(no title)'))} ({_safe(row.get('relevance_bucket'))})</li>"
+    for row in excluded[:5]
+    if isinstance(row, dict)
+  )
+  caveat = _safe(
+    relevance.get("caveat_japanese")
+    or "広い複合材料レビューは背景候補として扱い、PAN系炭素繊維・炭化・物性に近い論文を優先します。",
+  )
+  return (
+    f'<div class="tc-info-box">'
+    f"<strong>Paper Candidate Relevance Filter</strong><br>"
+    f"total candidates: {relevance.get('total_paper_candidates', 0)} / "
+    f"selected: {relevance.get('selected_evidence_papers', len(selected))}<br>"
+    f"off-topic除外: {relevance.get('excluded_off_topic_count', 0)} / "
+    f"broad background: {relevance.get('broad_background_count', 0)}<br>"
+    f"bucket分布: {_safe(bucket_html)}<br><br>"
+    f"<strong>Selected evidence papers</strong><ul>{selected_html or '<li>(none)</li>'}</ul>"
+    f"<strong>Broad background / excluded</strong><ul>{broad_html or '<li>(none)</li>'}</ul>"
+    f"<strong>Caveat</strong><br>{caveat}"
     f"</div>"
   )

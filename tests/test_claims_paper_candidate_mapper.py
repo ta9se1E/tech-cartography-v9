@@ -64,3 +64,35 @@ def test_caveat_when_no_description() -> None:
   )
   assert "$" not in md
   assert "supporting" in md.lower() or "Candidate" in md
+
+
+def test_likely_off_topic_not_linked() -> None:
+  off_topic = {
+    "paper_id": "W-off",
+    "title": "Quantum computing error correction",
+    "abstract": "qubit decoherence",
+    "relevance_bucket": "likely_off_topic",
+    "relevance_score": 0.0,
+  }
+  links = map_claim_elements_to_paper_candidates([_element()], [off_topic], has_description=False)
+  assert links == []
+
+
+def test_relevance_bucket_in_link() -> None:
+  paper = _paper()
+  paper["relevance_bucket"] = "strong_material_process_background"
+  paper["relevance_score"] = 0.6
+  link = score_claim_paper_candidate_link(_element(), paper, has_description=False)
+  assert link.get("relevance_bucket") == "strong_material_process_background"
+
+
+def test_broad_composite_background_becomes_weak_link() -> None:
+  broad = {
+    "paper_id": "W-broad",
+    "title": "Natural Fiber Reinforced Composites review",
+    "abstract": "hemp fiber general composite",
+    "relevance_bucket": "broad_composite_background",
+    "relevance_score": 0.2,
+  }
+  link = score_claim_paper_candidate_link(_element(), broad, has_description=False)
+  assert link["link_type"] == "weak_background"

@@ -285,6 +285,15 @@ def _patch_weekly_digest_with_openalex(
     "caveat_japanese": limited.get("caveat_japanese"),
   }
   preview["claim_paper_candidate_links"] = links[:10]
+  relevance = limited.get("paper_candidate_relevance") or {}
+  if relevance:
+    preview["paper_candidate_relevance"] = {
+      "total_paper_candidates": len(relevance.get("all_evaluated") or []),
+      "selected_evidence_papers": relevance.get("selected_papers") or [],
+      "selected_paper_records": relevance.get("selected_papers") or [],
+      "excluded_off_topic_count": relevance.get("excluded_off_topic_count", 0),
+      "broad_background_count": relevance.get("broad_background_count", 0),
+    }
   save_weekly_digest_preview(preview, digest_dir)
 
 
@@ -622,9 +631,24 @@ def run_openalex_stage(config: PipelineConfig, output_dir: str, previous_outputs
     )
 
     limited = execute_openalex_limited(query_rows, oa_cfg, publication_number=pub)
+    from tech_cartography.evidence.paper_candidate_relevance_filter import (
+      apply_relevance_to_paper_records,
+      save_paper_candidate_relevance_artifacts,
+    )
+
+    all_papers = list(limited.get("paper_records", []))
+    relevance_result = apply_relevance_to_paper_records(
+      all_papers,
+      claim_elements,
+      top_n=min(5, int(config.openalex_max_results_per_query)),
+      has_description=has_description,
+    )
+    papers_for_mapping = relevance_result.get("selected_papers") or []
+    limited["paper_candidate_relevance"] = relevance_result
+    limited["selected_evidence_papers"] = papers_for_mapping
     links = map_claim_elements_to_paper_candidates(
       claim_elements,
-      limited.get("paper_records", []),
+      papers_for_mapping,
       has_description=has_description,
     )
     limited["claim_paper_candidate_links"] = links
@@ -632,6 +656,7 @@ def run_openalex_stage(config: PipelineConfig, output_dir: str, previous_outputs
       "openalex_paper_evidence",
       {
         **save_openalex_limited_artifacts(limited, output_dir),
+        **save_paper_candidate_relevance_artifacts(relevance_result, output_dir),
         **save_claim_paper_candidate_map_artifacts(links, output_dir),
       },
     )

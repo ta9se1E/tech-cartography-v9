@@ -10,6 +10,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_cost_ledger_debug,
   render_evidence_validation_summary,
   render_openalex_limited_execution_card,
+  render_paper_candidate_relevance_card,
   render_fulltext_availability_notice,
   render_fulltext_execute_summary,
   render_fulltext_status_card,
@@ -405,3 +406,48 @@ def test_evidence_validation_summary_shows_openalex_limited() -> None:
   assert "Claim × Paper" in html or "Claim×Paper" in html
   assert "$" not in html
 
+
+def test_paper_candidate_relevance_card_renders_without_amounts() -> None:
+  html = render_paper_candidate_relevance_card(
+    {
+      "total_paper_candidates": 5,
+      "selected_evidence_papers": 2,
+      "excluded_off_topic_count": 1,
+      "broad_background_count": 2,
+      "relevance_bucket_distribution": {
+        "strong_material_process_background": 1,
+        "broad_composite_background": 2,
+      },
+      "representative_selected_papers": [
+        {"title": "PAN carbon fiber carbonization", "relevance_bucket": "strong_material_process_background", "relevance_score": 0.6},
+      ],
+      "excluded_broad_off_topic": [
+        {"title": "Natural Fiber Reinforced Composites review", "relevance_bucket": "broad_composite_background"},
+      ],
+      "caveat_japanese": "広い複合材料レビューは背景候補として扱います。",
+    },
+  )
+  assert "Paper Candidate Relevance Filter" in html
+  assert "broad background" in html.lower() or "Broad background" in html
+  assert "PAN carbon fiber" in html
+  assert "$" not in html
+  assert "usd" not in html.lower()
+
+
+def test_evidence_summary_includes_relevance_filter() -> None:
+  summary = {
+    "summary": {"openalex_mode": "execute"},
+    "paper_candidate_relevance": {
+      "total_paper_candidates": 4,
+      "selected_evidence_papers": 2,
+      "excluded_off_topic_count": 1,
+      "broad_background_count": 1,
+      "representative_selected_papers": [
+        {"title": "PAN carbon fiber", "relevance_bucket": "strong_material_process_background", "relevance_score": 0.5},
+      ],
+    },
+    "recommended_actions": [],
+  }
+  html = render_evidence_validation_summary(summary)
+  assert "Paper Candidate Relevance Filter" in html
+  assert "$" not in html
