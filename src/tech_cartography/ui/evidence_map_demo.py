@@ -1,4 +1,4 @@
-"""Evidence Map demo mode — load existing outputs and render Streamlit UI (Phase 21.1)."""
+"""Evidence Map demo mode — load existing outputs and render Streamlit UI (Phase 21.1–21.2)."""
 
 from __future__ import annotations
 
@@ -22,6 +22,9 @@ from tech_cartography.ui.easy_japanese_ui import (
 from tech_cartography.ui.streamlit_session import DEMO_PUBLICATION_NUMBER
 
 NOT_AVAILABLE = "not available"
+TITLE_MAX_LEN = 120
+EVIDENCE_LEVEL_LABEL = "claims_only / weak-to-medium"
+ROUTE_LABEL = "Manual Claims Route"
 
 ARTIFACT_RELATIVE_PATHS: dict[str, str] = {
   "evidence_map_synthesis_md": (
@@ -45,24 +48,30 @@ ARTIFACT_RELATIVE_PATHS: dict[str, str] = {
   ),
 }
 
-DEFAULT_EVIDENCE_GAPS: tuple[str, ...] = (
-  "BigQuery fulltext claims/description欠落",
-  "Manual Claims Route",
-  "description未入力",
-  "examples未確認",
-  "claims_only由来の限界",
-  "CN/EP/JPはmanual route継続",
+FIXED_EVIDENCE_GAPS: tuple[str, ...] = (
+  "BigQuery fulltextでclaims/descriptionが取得できなかった",
+  "Manual Claims Routeに切り替えた",
+  "descriptionが未入力",
+  "examples / 実施例が未確認",
+  "測定条件・数値条件が未確認",
+  "claims_only由来のためconfidenceは最大medium",
+  "CN/EP/JP Strategic Watch候補はmanual確認が必要",
   "専門家レビューが必要",
 )
 
-DEFAULT_NEXT_ACTIONS: tuple[str, ...] = (
-  "descriptionをmanualで追加する",
-  "実施例・測定条件を確認する",
+FIXED_NEXT_ACTIONS: tuple[str, ...] = (
+  "Google Patents等からdescriptionをmanual追加する",
+  "実施例・測定条件・数値範囲を確認する",
   "selected evidence papersを技術者が確認する",
   "Claim × Paper linksを専門家がレビューする",
   "CN/EP/JP Strategic Watch候補をmanual確認する",
-  "追加1〜2件で再現性確認を行う",
+  "追加1〜2件の特許で再現性確認を行う",
+  "Weekly Digest Previewに反映する",
 )
+
+# Backward-compatible aliases for tests / older imports
+DEFAULT_EVIDENCE_GAPS = FIXED_EVIDENCE_GAPS
+DEFAULT_NEXT_ACTIONS = FIXED_NEXT_ACTIONS
 
 SELECTED_PAPERS_COLUMNS: tuple[str, ...] = (
   "title",
@@ -75,21 +84,50 @@ SELECTED_PAPERS_COLUMNS: tuple[str, ...] = (
   "confidence",
 )
 
-CLAIM_LINKS_COLUMNS: tuple[str, ...] = (
+CLAIM_LINKS_DISPLAY_COLUMNS: tuple[str, ...] = (
   "claim_element",
   "claim_element_text",
-  "paper_title",
-  "title",
+  "paper_display",
   "link_type",
   "confidence",
   "caveat",
   "evidence_role",
 )
 
+EVIDENCE_MAP_READING_GUIDE = (
+  "このEvidence Mapは、特許請求項から抽出した技術要素と、OpenAlex由来の論文候補を対応づけたものです。"
+  "論文候補は特許主張の証明ではなく、技術背景を確認するための supporting evidence candidate です。"
+  "claims_only由来のため、明細書・実施例・測定条件の確認は未完了です。"
+)
+
+EXECUTIVE_SUMMARY_TEXT = (
+  f"{DEMO_PUBLICATION_NUMBER}について、BigQuery fulltextではclaims/descriptionが取得できなかったため、"
+  "Manual Claims Routeに切り替えました。"
+  "manual claimsから技術要素を抽出し、OpenAlex由来の論文候補と対応づけたEvidence Mapを生成しています。"
+  "ただし、この分析はclaims_only由来であり、論文候補はsupporting evidence candidateです。"
+  "FTO、侵害、有効性判断ではありません。"
+)
+
 MARKET_SIGNAL_NOTICE = (
   "企業・市場シグナルは、現時点では手動入力または将来拡張の対象です。"
   "架空情報を本物のように表示することはしません。"
   'デモ用の仮想シグナルを使う場合は、必ず "Synthetic demo signal" と明記します。'
+  "このタブは将来的に Strategic Watch Brief として、"
+  "Patent signal / Paper signal / Company signal / Hypothesis / Confidence / "
+  "Next verification action を整理する予定です。"
+)
+
+SELECTED_PAPERS_NOTICE = (
+  "論文は supporting evidence candidate であり、特許主張を証明するものではありません。"
+)
+
+CLAIM_LINKS_NOTICE = (
+  "この対応は claims_only 由来であり、weak / low / medium confidence の候補対応です。"
+  "最終判断には専門家レビューが必要です。"
+)
+
+EVIDENCE_TAB_CAUTION = (
+  "論文候補は証明ではありません。FTO、侵害、有効性判断はしません。専門家レビューが必要です。"
 )
 
 
@@ -161,6 +199,204 @@ def _normalize_cell(value: Any) -> Any:
   if pd.isna(value):
     return ""
   return value
+
+
+def _is_empty_value(value: Any) -> bool:
+  if value is None:
+    return True
+  if isinstance(value, float) and pd.isna(value):
+    return True
+  if pd.isna(value):
+    return True
+  return str(value).strip() == ""
+
+
+def _truncate_title(text: str, max_len: int = TITLE_MAX_LEN) -> str:
+  cleaned = str(text or "").strip()
+  if len(cleaned) <= max_len:
+    return cleaned
+  return cleaned[: max_len - 1] + "…"
+
+
+def _format_status_label(status: str) -> str:
+  mapping = {
+    "ready": "Evidence Map ready",
+    "partial": "Evidence Map partial",
+    "missing": "Evidence Map missing",
+    "error": "Evidence Map error",
+  }
+  return mapping.get(status, f"Evidence Map {status}")
+
+
+def _format_cited_by_count(value: Any) -> str:
+  if _is_empty_value(value):
+    return NOT_AVAILABLE
+  try:
+    number = int(float(value))
+    return str(number)
+  except (TypeError, ValueError):
+    return str(value).strip() or NOT_AVAILABLE
+
+
+def _format_display_value(value: Any, *, default: str = NOT_AVAILABLE) -> str:
+  if _is_empty_value(value):
+    return default
+  return str(value).strip()
+
+
+def _format_link_type(value: Any) -> str:
+  text = str(value or "").strip().lower()
+  if not text:
+    return NOT_AVAILABLE
+  if text in {"fallback", "fallback_link", "weak_fallback"}:
+    return "弱い対応 (fallback)"
+  return str(value).strip()
+
+
+def _format_confidence(value: Any) -> str:
+  if _is_empty_value(value):
+    return "low / weak"
+  return str(value).strip()
+
+
+def prepare_selected_papers_display_df(df: pd.DataFrame | None) -> pd.DataFrame:
+  """Format selected papers for display; safe on empty / missing columns / NaN."""
+  if df is None or df.empty:
+    return pd.DataFrame(columns=list(SELECTED_PAPERS_COLUMNS))
+
+  rows: list[dict[str, str]] = []
+  for _, row in df.iterrows():
+    row_dict = {str(k): _normalize_cell(v) for k, v in row.to_dict().items()}
+    rows.append(
+      {
+        "title": _truncate_title(_format_display_value(row_dict.get("title"), default="(no title)")),
+        "doi": _format_display_value(row_dict.get("doi")),
+        "source": _format_display_value(row_dict.get("source")),
+        "publication_year": _format_display_value(row_dict.get("publication_year")),
+        "cited_by_count": _format_cited_by_count(row_dict.get("cited_by_count")),
+        "relevance_bucket": _format_display_value(row_dict.get("relevance_bucket")),
+        "evidence_role": _format_display_value(row_dict.get("evidence_role")),
+        "confidence": _format_display_value(row_dict.get("confidence"), default="low / weak"),
+      },
+    )
+  return pd.DataFrame(rows, columns=list(SELECTED_PAPERS_COLUMNS))
+
+
+def prepare_claim_paper_links_display_df(df: pd.DataFrame | None) -> pd.DataFrame:
+  """Format claim × paper links for display; safe on empty / missing columns / NaN."""
+  if df is None or df.empty:
+    return pd.DataFrame(columns=list(CLAIM_LINKS_DISPLAY_COLUMNS))
+
+  rows: list[dict[str, str]] = []
+  for _, row in df.iterrows():
+    row_dict = {str(k): _normalize_cell(v) for k, v in row.to_dict().items()}
+    paper_title_raw = row_dict.get("paper_title")
+    title_raw = row_dict.get("title")
+    if not _is_empty_value(paper_title_raw):
+      paper_display = str(paper_title_raw).strip()
+    elif not _is_empty_value(title_raw):
+      paper_display = str(title_raw).strip()
+    else:
+      paper_display = "(no paper title)"
+
+    claim_text = _format_display_value(row_dict.get("claim_element_text"), default="")
+    if claim_text == NOT_AVAILABLE:
+      claim_text = ""
+
+    rows.append(
+      {
+        "claim_element": _format_display_value(row_dict.get("claim_element")),
+        "claim_element_text": claim_text or NOT_AVAILABLE,
+        "paper_display": _truncate_title(paper_display),
+        "link_type": _format_link_type(row_dict.get("link_type")),
+        "confidence": _format_confidence(row_dict.get("confidence")),
+        "caveat": _format_display_value(row_dict.get("caveat")),
+        "evidence_role": _format_display_value(row_dict.get("evidence_role")),
+      },
+    )
+  return pd.DataFrame(rows, columns=list(CLAIM_LINKS_DISPLAY_COLUMNS))
+
+
+def build_evidence_map_summary_metrics(artifacts: EvidenceMapDemoArtifacts) -> list[dict[str, str]]:
+  """Build 4–6 summary metric cards for the Evidence Map demo tab."""
+  return [
+    {"label": "Deep Dive Patent", "value": artifacts.publication_number},
+    {"label": "Route", "value": ROUTE_LABEL},
+    {"label": "Selected Evidence Papers", "value": str(len(artifacts.selected_papers_df))},
+    {"label": "Claim × Paper Links", "value": str(len(artifacts.claim_paper_links_df))},
+    {"label": "Evidence Level", "value": EVIDENCE_LEVEL_LABEL},
+    {"label": "Status", "value": _format_status_label(artifacts.status)},
+  ]
+
+
+def _extract_list_from_synthesis(
+  synthesis: dict[str, Any] | None,
+  *keys: str,
+) -> list[str]:
+  if not isinstance(synthesis, dict):
+    return []
+  for key in keys:
+    value = synthesis.get(key)
+    if isinstance(value, list):
+      return [str(item) for item in value if item]
+    if isinstance(value, str) and value.strip():
+      return [line.strip("- ").strip() for line in value.splitlines() if line.strip()]
+  return []
+
+
+def get_fixed_evidence_gaps(synthesis: dict[str, Any] | None = None) -> list[str]:
+  """Return fixed Evidence Gaps list; merge synthesis extras when present."""
+  gaps = list(FIXED_EVIDENCE_GAPS)
+  extras = _extract_list_from_synthesis(synthesis, "evidence_gaps", "gaps")
+  for item in extras:
+    if item and item not in gaps:
+      gaps.append(item)
+  return gaps
+
+
+def get_fixed_next_actions(synthesis: dict[str, Any] | None = None) -> list[str]:
+  """Return fixed Next Actions list; merge synthesis extras when present."""
+  actions = list(FIXED_NEXT_ACTIONS)
+  extras = _extract_list_from_synthesis(
+    synthesis,
+    "next_actions",
+    "recommended_next_actions",
+    "next_actions_japanese",
+  )
+  for item in extras:
+    if item and item not in actions:
+      actions.append(item)
+  return actions
+
+
+def render_evidence_map_reading_guide() -> str:
+  return render_info_box(EVIDENCE_MAP_READING_GUIDE)
+
+
+def render_executive_summary() -> str:
+  return render_info_box(f"<strong>Executive Summary</strong><br>{EXECUTIVE_SUMMARY_TEXT}")
+
+
+def render_three_minute_demo_guide() -> str:
+  steps = [
+    "はじめる: ツールの目的",
+    "全文確認: BigQuery fulltext欠落とManual Claims Route",
+    "技術の裏取り: Evidence Map Summary",
+    "技術の裏取り: Selected Evidence Papers",
+    "技術の裏取り: Claim × Paper Links",
+    "技術の裏取り: Evidence Gaps / Next Actions",
+    "レポート: Evidence Map Synthesis",
+  ]
+  items = "".join(f"<li>{step}</li>" for step in steps)
+  return (
+    '<div class="tc-card-box">'
+    "<strong>3分デモの見方</strong><ol>"
+    f"{items}"
+    "</ol>"
+    "審査員・研究者向け: 上から順に見ると、"
+    "「読むべき特許」と「次に確認すべきギャップ」が一目で分かります。"
+    "</div>"
+  )
 
 
 def _resolve_project_root(project_root: Path | str) -> Path:
@@ -276,34 +512,6 @@ def load_demo_evidence_map_artifacts(
   )
 
 
-def _select_existing_columns(df: pd.DataFrame, preferred: tuple[str, ...]) -> pd.DataFrame:
-  if df.empty:
-    return df
-  cols = [c for c in preferred if c in df.columns]
-  if cols:
-    return df[cols]
-  return df
-
-
-def _summary_value(artifacts: EvidenceMapDemoArtifacts, key: str, fallback: Any = NOT_AVAILABLE) -> str:
-  synthesis = artifacts.evidence_map_json or {}
-  if isinstance(synthesis, dict) and synthesis.get(key) not in (None, ""):
-    return str(synthesis.get(key))
-  if key == "publication_number":
-    return artifacts.publication_number
-  if key == "selected_evidence_paper_count":
-    return str(len(artifacts.selected_papers_df))
-  if key == "claim_paper_link_count":
-    return str(len(artifacts.claim_paper_links_df))
-  if key == "retrieval_route":
-    return "Manual Claims Route"
-  if key == "evidence_level":
-    return "claims_only / weak-to-medium supporting evidence candidate"
-  if key == "claim_element_count" and not artifacts.evidence_items_df.empty:
-    return str(len(artifacts.evidence_items_df))
-  return str(fallback)
-
-
 def render_demo_mode_banner(artifacts: EvidenceMapDemoArtifacts) -> None:
   st.markdown(inject_easy_ui_css(), unsafe_allow_html=True)
   title = f"デモモード: {artifacts.publication_number} Evidence Map"
@@ -311,7 +519,7 @@ def render_demo_mode_banner(artifacts: EvidenceMapDemoArtifacts) -> None:
     render_info_box(
       f"{title}<br>"
       "このデモは既存outputsを読み込んで表示しています。新しいAPI実行は行っていません。"
-      f"<br>status: {artifacts.status}"
+      f"<br>status: {_format_status_label(artifacts.status)}"
     ),
     unsafe_allow_html=True,
   )
@@ -329,7 +537,8 @@ def render_demo_mode_banner(artifacts: EvidenceMapDemoArtifacts) -> None:
         st.caption(err)
 
 
-def render_demo_story_cards() -> str:
+def render_demo_story_cards(artifacts: EvidenceMapDemoArtifacts | None = None) -> str:
+  status_label = _format_status_label(artifacts.status) if artifacts else "Evidence Map demo"
   card1 = (
     '<div class="tc-card-box">'
     "<strong>Tech Cartographyがやること</strong><ul>"
@@ -344,8 +553,8 @@ def render_demo_story_cards() -> str:
     '<div class="tc-card-box">'
     "<strong>今回のDeep Dive対象</strong><ul>"
     f"<li>Publication: {DEMO_PUBLICATION_NUMBER}</li>"
-    "<li>Route: Manual Claims Route</li>"
-    "<li>Status: Evidence Map ready</li>"
+    f"<li>Route: {ROUTE_LABEL}</li>"
+    f"<li>Status: {status_label}</li>"
     "<li>Note: BigQueryに公報行は存在したが、claims/descriptionが空だったためManual Routeへ切り替え</li>"
     "</ul></div>"
   )
@@ -357,6 +566,9 @@ def render_demo_story_cards() -> str:
     "<li>FTO、侵害、有効性判断はしない</li>"
     "<li>最終判断には専門家レビューが必要</li>"
     "<li>架空情報を本物のように見せない</li>"
+  )
+  card3 += (
+    '<li>デモ用仮想シグナルは必ず "Synthetic demo signal" と明記する</li>'
     "</ul></div>"
   )
   return card1 + card2 + card3
@@ -364,88 +576,62 @@ def render_demo_story_cards() -> str:
 
 def render_evidence_map_summary(artifacts: EvidenceMapDemoArtifacts) -> None:
   st.subheader("Evidence Map Summary")
-  metrics = [
-    {"label": "publication_number", "value": _summary_value(artifacts, "publication_number")},
-    {"label": "synthesis_status", "value": _summary_value(artifacts, "synthesis_status")},
-    {"label": "retrieval_route", "value": _summary_value(artifacts, "retrieval_route")},
-    {"label": "claim_element_count", "value": _summary_value(artifacts, "claim_element_count")},
-    {
-      "label": "selected_evidence_paper_count",
-      "value": _summary_value(artifacts, "selected_evidence_paper_count"),
-    },
-    {"label": "claim_paper_link_count", "value": _summary_value(artifacts, "claim_paper_link_count")},
-    {"label": "evidence_level", "value": _summary_value(artifacts, "evidence_level")},
-    {"label": "caveat", "value": _summary_value(artifacts, "caveat")},
-  ]
+  metrics = build_evidence_map_summary_metrics(artifacts)
   st.markdown(render_metric_cards(metrics), unsafe_allow_html=True)
-  caveat = _summary_value(artifacts, "caveat_japanese", "")
-  if caveat and caveat != NOT_AVAILABLE:
-    st.markdown(render_caution_box(caveat), unsafe_allow_html=True)
+  st.markdown(render_evidence_map_reading_guide(), unsafe_allow_html=True)
 
 
 def render_selected_evidence_papers(artifacts: EvidenceMapDemoArtifacts) -> None:
   st.subheader("Selected Evidence Papers")
-  st.markdown(
-    render_info_box(
-      "論文は特許主張の証明ではなく、"
-      "技術背景を確認するためのsupporting evidence candidateです。"
-    ),
-    unsafe_allow_html=True,
-  )
-  df = _select_existing_columns(artifacts.selected_papers_df, SELECTED_PAPERS_COLUMNS)
-  if df.empty:
-    st.info("Selected Evidence Papers の成果物がまだありません。")
+  st.markdown(render_info_box(SELECTED_PAPERS_NOTICE), unsafe_allow_html=True)
+  display_df = prepare_selected_papers_display_df(artifacts.selected_papers_df)
+  if display_df.empty:
+    st.warning("Selected Evidence Papers の成果物がまだありません。")
     return
-  render_dataframe_stretch(df, hide_index=True)
+  render_dataframe_stretch(display_df, hide_index=True)
 
 
 def render_claim_paper_links(artifacts: EvidenceMapDemoArtifacts) -> None:
   st.subheader("Claim × Paper Candidate Links")
+  st.markdown(render_caution_box(CLAIM_LINKS_NOTICE), unsafe_allow_html=True)
+  display_df = prepare_claim_paper_links_display_df(artifacts.claim_paper_links_df)
+  if display_df.empty:
+    st.warning("Claim × Paper Candidate Links の成果物がまだありません。")
+    return
+  render_dataframe_stretch(display_df, hide_index=True)
+
+
+def render_evidence_gaps_section(artifacts: EvidenceMapDemoArtifacts) -> None:
+  st.subheader("Evidence Gaps")
+  gaps = get_fixed_evidence_gaps(artifacts.evidence_map_json)
+  gap_html = "".join(f"<li>{gap}</li>" for gap in gaps)
   st.markdown(
-    render_caution_box(
-      "claims_only由来のため、この対応はweak / low / medium confidenceとして扱います。"
+    render_warning_box(
+      "<strong>現時点で確認が必要なギャップ</strong>"
+      f"<ul>{gap_html}</ul>"
+      "これらは警告ではなく、データ制約と未確認項目を示す注意事項です。"
     ),
     unsafe_allow_html=True,
   )
-  df = _select_existing_columns(artifacts.claim_paper_links_df, CLAIM_LINKS_COLUMNS)
-  if df.empty:
-    st.info("Claim × Paper Candidate Links の成果物がまだありません。")
-    return
-  render_dataframe_stretch(df, hide_index=True)
 
 
-def _extract_list_from_synthesis(
-  synthesis: dict[str, Any] | None,
-  *keys: str,
-) -> list[str]:
-  if not isinstance(synthesis, dict):
-    return []
-  for key in keys:
-    value = synthesis.get(key)
-    if isinstance(value, list):
-      return [str(item) for item in value if item]
-    if isinstance(value, str) and value.strip():
-      return [line.strip("- ").strip() for line in value.splitlines() if line.strip()]
-  return []
+def render_next_actions_section(artifacts: EvidenceMapDemoArtifacts) -> None:
+  st.subheader("Next Actions")
+  actions = get_fixed_next_actions(artifacts.evidence_map_json)
+  action_html = "".join(f"<li>{action}</li>" for action in actions)
+  st.markdown(
+    render_info_box(
+      "<strong>次に取るべき実務ステップ</strong>"
+      f"<ul>{action_html}</ul>"
+      "研究者・中小企業ユーザーが、次に何をすればよいかを把握するための案内です。"
+    ),
+    unsafe_allow_html=True,
+  )
 
 
 def render_evidence_gaps_and_next_actions(artifacts: EvidenceMapDemoArtifacts) -> None:
-  synthesis = artifacts.evidence_map_json or {}
-  gaps = _extract_list_from_synthesis(synthesis, "evidence_gaps", "gaps")
-  actions = _extract_list_from_synthesis(synthesis, "next_actions", "recommended_next_actions")
-  if not gaps:
-    gaps = list(DEFAULT_EVIDENCE_GAPS)
-  if not actions:
-    actions = list(DEFAULT_NEXT_ACTIONS)
-
-  st.subheader("Evidence Gaps")
-  gap_html = "".join(f"<li>{gap}</li>" for gap in gaps)
-  st.markdown(f'<div class="tc-warning-box"><ul>{gap_html}</ul></div>', unsafe_allow_html=True)
-
-  st.subheader("Next Actions")
-  action_html = "".join(f"<li>{action}</li>" for action in actions)
-  st.markdown(f'<div class="tc-card-box"><ul>{action_html}</ul></div>', unsafe_allow_html=True)
-
+  render_evidence_gaps_section(artifacts)
+  render_next_actions_section(artifacts)
   if artifacts.evidence_map_md:
     with st.expander("Evidence Map Synthesis（Markdown抜粋）"):
       st.markdown(artifacts.evidence_map_md[:8000])
@@ -453,6 +639,7 @@ def render_evidence_gaps_and_next_actions(artifacts: EvidenceMapDemoArtifacts) -
 
 def render_evidence_map_report(artifacts: EvidenceMapDemoArtifacts) -> None:
   st.subheader("Evidence Map レポート")
+  st.markdown(render_executive_summary(), unsafe_allow_html=True)
   if artifacts.evidence_map_md:
     st.markdown(artifacts.evidence_map_md)
   else:
@@ -478,12 +665,7 @@ def render_market_signal_demo_notice() -> None:
 
 
 def render_demo_evidence_tab(artifacts: EvidenceMapDemoArtifacts) -> None:
-  st.markdown(
-    render_caution_box(
-      "論文候補は証明ではありません。FTO、侵害、有効性判断はしません。専門家レビューが必要です。"
-    ),
-    unsafe_allow_html=True,
-  )
+  st.markdown(render_caution_box(EVIDENCE_TAB_CAUTION), unsafe_allow_html=True)
   render_evidence_map_summary(artifacts)
   render_selected_evidence_papers(artifacts)
   render_claim_paper_links(artifacts)
@@ -494,10 +676,11 @@ def render_demo_evidence_tab(artifacts: EvidenceMapDemoArtifacts) -> None:
 
 
 def render_demo_start_tab(artifacts: EvidenceMapDemoArtifacts) -> None:
-  st.markdown(render_demo_story_cards(), unsafe_allow_html=True)
+  st.markdown(render_demo_story_cards(artifacts), unsafe_allow_html=True)
+  st.markdown(render_three_minute_demo_guide(), unsafe_allow_html=True)
   st.markdown(
     render_info_box(
-      f"デモ run_id: demo_us_12565719_b2 / status: {artifacts.status} / "
+      f"デモ run_id: demo_us_12565719_b2 / status: {_format_status_label(artifacts.status)} / "
       "BigQuery・OpenAlexの新規実行は行っていません。"
     ),
     unsafe_allow_html=True,

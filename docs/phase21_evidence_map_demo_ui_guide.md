@@ -1,11 +1,12 @@
-# Phase 21.1 — Evidence Map デモモード UI ガイド
+# Phase 21 — Evidence Map デモモード UI ガイド
 
-## 目的
+## Phase 21.2 の目的
 
-US-12565719-B2 の Evidence Map を、Streamlit UI 上でワンクリック表示できるデモモードを提供します。
-新しい BigQuery / OpenAlex 実行は行わず、既存 `outputs/` の成果物を安全に読み込んで表示します。
+Phase 21.1 で追加した US-12565719-B2 Evidence Map デモを、研究者・中小企業・ハッカソン審査員が **一目で価値を理解できる UI** に改善します。
 
-研究者や中小企業が、次に何を確認すべきかを迷わず見られる実務支援 UI です。
+- 新しい分析アルゴリズムは追加しない
+- BigQuery / OpenAlex の新規実行は行わない
+- 既存 `outputs/` を読み込み、Evidence Map の意味・限界・次アクションを迷わず伝える
 
 ## デモモードの起動方法
 
@@ -14,84 +15,101 @@ US-12565719-B2 の Evidence Map を、Streamlit UI 上でワンクリック表�
    - または **はじめる** タブ上部の同じボタン
 3. 画面上部にデモバナーが表示され、7タブが利用可能になります
 
-内部状態（widget key は直接更新しません）:
+## 3分デモ手順
 
-- `demo_mode_enabled` = True
-- `demo_publication_number` = US-12565719-B2
-- `selected_run_id` = demo_us_12565719_b2
-- `pending_selected_run_id` 経由で run_id 入力欄も次回描画前に同期
+1. **はじめる** — ツールの目的・Deep Dive 対象・「3分デモの見方」
+2. **全文確認** — BigQuery fulltext 欠落と Manual Claims Route（案内メッセージ）
+3. **技術の裏取り: Evidence Map Summary** — 6枚のメトリクスカード
+4. **技術の裏取り: Selected Evidence Papers** — 論文候補（supporting evidence candidate）
+5. **技術の裏取り: Claim × Paper Links** — 請求項要素と論文の候補対応
+6. **技術の裏取り: Evidence Gaps / Next Actions** — ギャップと次の実務ステップ
+7. **レポート** — Executive Summary + `evidence_map_synthesis.md`
 
-## 読み込む artifact 一覧
+口頭台本は `docs/demo_script_phase21.md` を参照してください。
 
-| キー | パス |
+## Evidence Map 中心 UI の見方
+
+特許を大量に並べるのではなく、**読むべき1件（Deep Dive Patent）** と **Evidence Gap** を中心に表示します。
+
+### Evidence Map Summary（メトリクスカード）
+
+| 項目 | 意味 |
 |------|------|
-| evidence_map_synthesis_md | `outputs/evidence_map_synthesis/US-12565719-B2/evidence_map_synthesis.md` |
-| evidence_map_synthesis_json | `outputs/evidence_map_synthesis/US-12565719-B2/evidence_map_synthesis.json` |
-| evidence_map_items_csv | `outputs/evidence_map_synthesis/US-12565719-B2/evidence_map_items.csv` |
-| selected_evidence_papers_csv | `outputs/openalex_limited_execution/selected_evidence_papers.csv` |
-| claim_paper_candidate_links_csv | `outputs/openalex_limited_execution/claim_paper_candidate_links.csv` |
-| paper_candidate_relevance_report_md | `outputs/openalex_limited_execution/paper_candidate_relevance_report.md` |
-| openalex_execution_summary_md | `outputs/openalex_limited_execution/openalex_execution_summary.md` |
+| Deep Dive Patent | 今回深掘りしている公報番号（US-12565719-B2） |
+| Route | Manual Claims Route（BigQuery fulltext で claims/description が取れなかったため） |
+| Selected Evidence Papers | OpenAlex 由来の論文候補件数 |
+| Claim × Paper Links | 請求項要素と論文候補の対応件数 |
+| Evidence Level | claims_only / weak-to-medium（証明ではない候補レベル） |
+| Status | Evidence Map ready / partial / missing / error |
 
-## 推奨する見せ方（タブ順）
-
-1. **はじめる** — デモストーリーカード（Tech Cartography の流れ / Deep Dive 対象 / 注意）
-2. **技術の裏取り** — Evidence Map の中心
-   - Evidence Map Summary
-   - Selected Evidence Papers
-   - Claim × Paper Candidate Links
-   - Evidence Gaps
-   - Next Actions
-3. **レポート** — `evidence_map_synthesis.md`（先頭表示）、関連 MD は expander
-
-特許候補・全文確認タブはデモモードでは案内メッセージのみ（Evidence Map に集中）。
-
-## 各セクションの見方
-
-### Evidence Map Summary
-
-- publication_number / synthesis_status / retrieval_route
-- claim_element_count / selected_evidence_paper_count / claim_paper_link_count
-- evidence_level / caveat
-- JSON に無い項目は DataFrame 件数や既定値で補完（`not available` 表示）
+Summary 直下の **読み方ガイド** で、claims_only の限界と supporting evidence candidate の位置づけを説明します。
 
 ### Selected Evidence Papers
 
-- 実 OpenAlex 由来の論文候補（supporting evidence candidate）
-- 論文は特許主張の**証明ではない**ことに注意
+- 実 OpenAlex 由来の論文候補
+- **論文は特許主張の証明ではない** — supporting evidence candidate
+- 長い title は省略表示、欠損列は `not available`
+- 空の場合は warning を表示し画面は落とさない
 
 ### Claim × Paper Candidate Links
 
-- 請求項要素と論文候補の対応（claims_only 由来の weak / low / medium confidence）
+- 請求項要素（`claim_element_text` 優先）と論文タイトルの対応
+- claims_only 由来の **weak / low / medium** 候補対応
+- `link_type` が fallback の場合は「弱い対応」と表示
+- 最終判断には専門家レビューが必要
 
 ### Evidence Gaps
 
-- BigQuery fulltext 欠落、Manual Route、description 未入力などのギャップ
+現時点で確認が必要なギャップ（固定リスト + synthesis からの追加分）:
+
+- BigQuery fulltext で claims/description が取得できなかった
+- Manual Claims Route に切り替えた
+- description / 実施例 / 測定条件が未確認
+- claims_only 由来の confidence 上限
+- CN/EP/JP Strategic Watch は manual 確認が必要
+- 専門家レビューが必要
 
 ### Next Actions
 
-- 技術者・専門家が次に取るべき確認ステップ
+研究者・中小企業が次に取るべき実務ステップ:
+
+- description の manual 追加
+- 実施例・測定条件の確認
+- selected papers / Claim × Paper links のレビュー
+- Strategic Watch 候補の manual 確認
+- 追加1〜2件での再現性確認
+- Weekly Digest Preview への反映
+
+### レポートタブ — Executive Summary
+
+`evidence_map_synthesis.md` の前に、Manual Route・claims_only・supporting evidence candidate・FTO/侵害/有効性非判断を短く要約します。
+
+## 企業・市場シグナル
+
+- 手動入力または将来拡張の対象
+- **架空情報を本物のように表示しない**
+- デモ用仮想シグナルは必ず **"Synthetic demo signal"** と明記
+- 将来 Strategic Watch Brief（Patent / Paper / Company signal 等）として拡張予定
+- **この Phase では架空企業シグナルは追加しない**
+
+## 注意事項（全体）
+
+- 論文は **supporting evidence candidate**（証明ではない）
+- **claims_only** 由来 — confidence は最大 medium、基本 low/weak
+- **FTO、侵害、有効性判断はしない**
+- **専門家レビューが必要**
+- **ユーザー向け UI に金額は表示しない**
+- **画面を落とさない** — 成果物欠落・空 CSV・列名不一致・NaN でも継続表示
 
 ## missing artifact 時の挙動
 
-- loader は例外を握りつぶさず `missing_artifacts` / `errors` に記録
+- loader は `missing_artifacts` / `errors` に記録
 - status: `ready` / `partial` / `missing` / `error`
-- 画面は落とさず、利用可能な成果物だけ表示を継続
-- バナーに「一部の成果物が見つかりませんでした」と表示
-
-## 注意事項
-
-- 論文は **supporting evidence candidate**（証明ではない）
-- **claims_only** 由来のため confidence は最大 medium、基本は low/weak
-- **FTO、侵害、有効性判断はしない**
-- **専門家レビューが必要**
-- **架空情報を本物のように見せない**
-- 企業・市場シグナルで Synthetic demo signal を使う場合は必ず **"Synthetic demo signal"** と明記
-- メール送信は未実装
-- このデモは新しい API 実行を行わない（既存 outputs の表示のみ）
+- 利用可能な成果物だけ表示を継続
 
 ## 関連モジュール
 
-- `src/tech_cartography/ui/evidence_map_demo.py` — loader / render
+- `src/tech_cartography/ui/evidence_map_demo.py` — loader / render / 表示整形
 - `src/tech_cartography/ui/streamlit_session.py` — `activate_evidence_map_demo_state()`
+- `docs/demo_script_phase21.md` — デモ台本・Q&A
 - `docs/phase21_ui_state_patch_checklist.md` — session_state 回帰チェック
