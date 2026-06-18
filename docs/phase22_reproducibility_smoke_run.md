@@ -114,6 +114,60 @@ per-patent 成果物（query plan 等）は `{output_dir}/per_patent/{publicatio
 
 - `scripts/run_reproducibility_smoke.py` — CLI エントリ
 - `src/tech_cartography/validation/reproducibility_smoke.py` — 診断ロジック
+- `src/tech_cartography/ui/reproducibility_smoke_ui.py` — Streamlit UI（Phase 22.1）
 - `scripts/check_fulltext_availability.py` — BigQuery probe（再利用）
 - `scripts/build_claims_paper_query_plan.py` — query plan（再利用）
 - `docs/demo_script_phase21.md` — デモ台本・Q&A
+
+---
+
+## Phase 22.1 — UI 表示
+
+### 見る場所（デモモード）
+
+| タブ | 表示内容 |
+|------|---------|
+| **はじめる** | 「再現性確認の現在地」短いカード（3分デモの見方の下） |
+| **技術の裏取り** | 同上の短いカード（Evidence Gaps / Next Actions の下） |
+| **レポート** | Reproducibility Smoke Run 詳細セクション |
+
+デモモード起動後、`outputs/reproducibility_smoke/` の成果物を自動読み込みします。  
+新しい BigQuery / OpenAlex 実行は UI から行いません。
+
+### Summary Cards の意味
+
+| カード | 意味 |
+|--------|------|
+| Checked Patents | smoke run で診断した特許数 |
+| Evidence Map Ready | `complete_existing_demo` / `evidence_map_ready` の件数 |
+| Manual Claims Required | `blocked_missing_manual_claims` / `manual_route_required` の件数 |
+| Next Manual Actions | manual claims checklist 対象数 |
+
+### Summary Table の見方
+
+`reproducibility_summary.csv` を表示。欠損列は `not available`。  
+`status` と `next_action` で候補ごとの停止理由と次ステップを確認します。
+
+### Manual Claims Checklist の使い方（UI）
+
+1. レポートタブ → Reproducibility Smoke Run → **Next Manual Claims Checklist** expander
+2. Google Patents URL 候補を**手動で**確認
+3. import コマンド例で claims を投入
+4. `run_reproducibility_smoke.py` を再実行
+
+**自動スクレイピングは行いません。**
+
+### 「1件だけでは？」への回答（UI カード）
+
+Evidence Map 完了は現時点 1 件（US-12565719-B2）ですが、追加候補も同じパイプラインで診断しています。  
+追加 2 件が `blocked_missing_manual_claims` なのは**失敗ではなく**、次に必要な manual action が明確になった状態です。
+
+### UI 注意事項
+
+- FTO、侵害、有効性判断ではない
+- supporting evidence candidate
+- 自動スクレイピングしない
+- 架空情報を本物のように見せない
+- Synthetic demo signal は必ず明記
+
+成果物が無い場合は warning を表示し、画面は落としません。

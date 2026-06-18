@@ -14,7 +14,27 @@
 
 ---
 
-## 3分版
+## 3分版（Phase 21.2 + 22.1）
+
+1. **はじめる** — Tech Cartography の流れと Deep Dive 対象（US-12565719-B2）
+2. **再現性確認の現在地** — 「1件 Evidence Map ready / 2件 Manual Claims Route required」カードを説明
+3. **全文確認** — BigQuery fulltext で claims/description が取れず Manual Claims Route へ（案内メッセージ）
+4. **技術の裏取り: Summary** — 6枚のメトリクスカード
+5. **Selected Evidence Papers / Claim × Paper Links** — supporting evidence candidate
+6. **Evidence Gaps / Next Actions** — 実務で次にやること
+7. **レポート** — Executive Summary + **Reproducibility Smoke Run** 詳細セクション
+
+**再現性の話し方（Phase 22.1）**:
+
+- 「US-12565719-B2 以外の追加2件（US-12435451-B2 / US-12516451-B2）も同じパイプラインで診断しました」
+- 「2件は `blocked_missing_manual_claims` — **失敗ではなく**、claims 手動投入が次のステップだと分かった状態です」
+- 「1件だけの偶然ではなく、候補ごとに状態管理できています」
+
+**締め**: 「読むべき1件の深掘りと、追加候補の再現性診断の両方を見せられます。」
+
+---
+
+## 3分版（Phase 21.2 のみ・旧）
 
 1. **はじめる** — Tech Cartography の流れと Deep Dive 対象（US-12565719-B2）
 2. **全文確認** — BigQuery fulltext で claims/description が取れず Manual Claims Route へ（案内メッセージ）
@@ -45,8 +65,9 @@
 ### 「1件だけではないのか？」
 
 Carbon fiber ケースでは **Deep Dive 1件（US-12565719-B2）** をデモの中心に置いています。  
-パイプライン全体では Top20 特許候補・戦略監視候補も扱えますが、**この Phase の UI は「読むべき特許を絞り、Evidence Gap まで見せる」** ことに集中しています。  
-1件デモは価値の見せ方であり、製品は複数件の run に拡張可能です。
+**Phase 22** では追加候補（US-12435451-B2 / US-12516451-B2）も Reproducibility Smoke Run で診断し、UI の「再現性確認の現在地」カードに表示します。  
+追加2件は `blocked_missing_manual_claims` ですが、**これは失敗ではなく、次に必要な manual action（claims 投入）が明確になった状態**です。  
+1件デモは価値の見せ方であり、製品は複数件の候補を状態管理できます。
 
 ### 「論文が特許を証明しているのか？」
 

@@ -70,6 +70,11 @@ from tech_cartography.ui.evidence_map_demo import (
   render_evidence_map_report,
   render_market_signal_demo_notice,
 )
+from tech_cartography.ui.reproducibility_smoke_ui import (
+  load_reproducibility_smoke_artifacts,
+  render_reproducibility_brief_section,
+  render_reproducibility_smoke_section,
+)
 from tech_cartography.ui.streamlit_session import (
   DISPLAY_MODE_OPTIONS,
   STATE_CURRENT_USER,
@@ -170,9 +175,20 @@ def _render_demo_mode_load_button(*, key: str) -> None:
     st.rerun()
 
 
-def _tab_start(user: dict[str, Any], watch: dict[str, Any], manifest: dict[str, Any] | None, *, debug_mode: bool = False, demo_mode: bool = False, demo_artifacts: Any = None) -> None:
+def _tab_start(
+  user: dict[str, Any],
+  watch: dict[str, Any],
+  manifest: dict[str, Any] | None,
+  *,
+  debug_mode: bool = False,
+  demo_mode: bool = False,
+  demo_artifacts: Any = None,
+  repro_artifacts: Any = None,
+) -> None:
   if demo_mode and demo_artifacts is not None:
     render_demo_start_tab(demo_artifacts)
+    if repro_artifacts is not None:
+      render_reproducibility_brief_section(repro_artifacts)
     return
   _render_demo_mode_load_button(key="start_tab_demo_evidence_map_button")
   st.markdown(render_demo_story_cards(), unsafe_allow_html=True)
@@ -346,9 +362,17 @@ def _tab_fulltext(manifest: dict[str, Any], display_mode: str, *, debug_mode: bo
           st.caption(f"ledger: {ledger_path}")
 
 
-def _tab_evidence(manifest: dict[str, Any] | None, *, demo_artifacts: Any = None) -> None:
+def _tab_evidence(
+  manifest: dict[str, Any] | None,
+  *,
+  demo_artifacts: Any = None,
+  repro_artifacts: Any = None,
+) -> None:
   if demo_artifacts is not None:
     render_demo_evidence_tab(demo_artifacts)
+    if repro_artifacts is not None:
+      st.divider()
+      render_reproducibility_brief_section(repro_artifacts)
     return
   if not manifest:
     st.info("実行結果を読み込んでください。")
@@ -548,9 +572,17 @@ def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> 
       render_small_table(company_df.head(15))
 
 
-def _tab_reports(manifest: dict[str, Any] | None, *, demo_artifacts: Any = None) -> None:
+def _tab_reports(
+  manifest: dict[str, Any] | None,
+  *,
+  demo_artifacts: Any = None,
+  repro_artifacts: Any = None,
+) -> None:
   if demo_artifacts is not None:
     render_evidence_map_report(demo_artifacts)
+    if repro_artifacts is not None:
+      st.divider()
+      render_reproducibility_smoke_section(repro_artifacts)
     return
 
   if not manifest:
@@ -600,6 +632,7 @@ def render_tabbed_easy_app(
   root = pipeline_root or default_pipeline_root()
   demo_mode = bool(st.session_state.get(STATE_DEMO_MODE))
   demo_artifacts = load_demo_evidence_map_artifacts(PROJECT_ROOT) if demo_mode else None
+  repro_artifacts = load_reproducibility_smoke_artifacts(PROJECT_ROOT) if demo_mode else None
   if demo_mode and demo_artifacts is not None:
     render_demo_mode_banner(demo_artifacts)
 
@@ -639,6 +672,7 @@ def render_tabbed_easy_app(
       debug_mode=debug_mode,
       demo_mode=demo_mode,
       demo_artifacts=demo_artifacts,
+      repro_artifacts=repro_artifacts,
     )
   with tabs[1]:
     if demo_mode:
@@ -651,11 +685,19 @@ def render_tabbed_easy_app(
     elif manifest:
       _tab_fulltext(manifest, display_mode, debug_mode=debug_mode)
   with tabs[3]:
-    _tab_evidence(manifest, demo_artifacts=demo_artifacts if demo_mode else None)
+    _tab_evidence(
+      manifest,
+      demo_artifacts=demo_artifacts if demo_mode else None,
+      repro_artifacts=repro_artifacts if demo_mode else None,
+    )
   with tabs[4]:
     _tab_market(manifest, demo_mode=demo_mode)
   with tabs[5]:
-    _tab_reports(manifest, demo_artifacts=demo_artifacts if demo_mode else None)
+    _tab_reports(
+      manifest,
+      demo_artifacts=demo_artifacts if demo_mode else None,
+      repro_artifacts=repro_artifacts if demo_mode else None,
+    )
   with tabs[6]:
     render_user_settings_tab(user, current_run_id=(manifest or {}).get("run_id"))
 
