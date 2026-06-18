@@ -95,3 +95,21 @@ CSV が無い場合は `0` 表示し、画面は落ちません。
 
 - `src/tech_cartography/ui/web_signal_review_ui.py`
 - `src/tech_cartography/ui/v7_easy_app.py`
+
+## Phase 23.4 Linker への接続
+
+Web Signal Review UI で確認した候補は、次の CLI で Patent × Paper × Web Signal Link Candidate に進みます。
+
+```bash
+python scripts/build_patent_paper_web_signal_links.py \
+  --publication-number US-12565719-B2 \
+  --web-signal-review-dir outputs/web_signals/tavily_pan_carbon_fiber/review_pack \
+  --output-dir outputs/web_signal_links/US-12565719-B2
+```
+
+- Review Pack の `high_priority_web_signals.csv` 等を読み込み
+- US-12565719-B2 の Claim Element / Selected Papers / Claim×Paper Links と照合
+- `technology_theme_match` / `project_context_match` などの link candidate を生成
+- 断定ではなく、次に人手確認すべき横断シグナルとして整理
+
+詳細: `docs/phase23_patent_paper_web_signal_linker.md`
