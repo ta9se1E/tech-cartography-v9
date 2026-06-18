@@ -164,3 +164,16 @@ outputs/web_signal_links/US-12565719-B2/
 
 - `src/tech_cartography/web_signals/linker.py`
 - `scripts/build_patent_paper_web_signal_links.py`
+
+## Strategic Watch Brief への接続（Phase 23.5）
+
+Link Candidate は `scripts/build_strategic_watch_brief.py` により Strategic Watch Item に変換されます。
+
+```
+web_signal_link_candidates.csv
+  → build_watch_items_from_web_signal_links()
+  → strategic_watch_items.csv / top_strategic_watch_items.csv
+  → UI: 企業・市場シグナルタブ
+```
+
+Link Candidate の `link_score` / `confidence` / `matched_terms` が `watch_priority` / `why_it_matters` に引き継がれます。

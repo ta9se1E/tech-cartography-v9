@@ -79,6 +79,10 @@ from tech_cartography.ui.web_signal_review_ui import (
   load_web_signal_review_artifacts,
   render_web_signal_review_section,
 )
+from tech_cartography.ui.strategic_watch_ui import (
+  load_strategic_watch_artifacts,
+  render_strategic_watch_section,
+)
 from tech_cartography.ui.streamlit_session import (
   DISPLAY_MODE_OPTIONS,
   STATE_CURRENT_USER,
@@ -548,6 +552,10 @@ def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> 
 
   web_review_artifacts = load_web_signal_review_artifacts(PROJECT_ROOT)
   render_web_signal_review_section(web_review_artifacts)
+
+  st.divider()
+  strategic_watch_artifacts = load_strategic_watch_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
+  render_strategic_watch_section(strategic_watch_artifacts)
 
   if not manifest:
     if not demo_mode:

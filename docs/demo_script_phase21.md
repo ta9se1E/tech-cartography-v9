@@ -25,6 +25,13 @@
 7. **企業・市場シグナル** — Web Signal Review Pack（NEDO / JST / METI 国家プロジェクト候補）
 8. **レポート** — Executive Summary + **Reproducibility Smoke Run** 詳細セクション
 
+**Strategic Watch Brief（Phase 23.5）**:
+
+- 「Link Candidate を Strategic Watch Brief に統合し、**次に監視・確認すべきテーマ**を1画面で示せます」
+- 「**これは重点監視候補であり、最終結論ではありません** — high priority でも事実確定ではありません」
+- 「NEDO/JST/METI の公的シグナルは National Project セクションで、論文・Webとの横断は Patent×Paper×Web セクションで見せます」
+- 「中小企業ユーザーにとって、特許1件の深掘りのあと『何をウォッチすべきか』が明確になります」
+
 **Patent × Paper × Web Signal Link（Phase 23.4 / 23.4.1）**:
 
 - 「Review Pack で見た NEDO / JST シグナルを、US-12565719-B2 の Claim Element / 論文候補と **link candidate** として横断整理できます」
