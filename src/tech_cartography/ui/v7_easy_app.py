@@ -29,6 +29,7 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_evidence_validation_summary,
   render_evidence_map_demo_section,
   render_evidence_map_synthesis_card,
+  normalize_dataframe_row,
   render_openalex_limited_execution_card,
   render_paper_candidate_relevance_card,
   render_fulltext_execute_summary,
@@ -274,8 +275,15 @@ def _tab_fulltext(manifest: dict[str, Any], display_mode: str, *, debug_mode: bo
   if not records_df.empty:
     with st.expander("全文取得の実行状態"):
       for _, row in records_df.iterrows():
-        row_dict = row.to_dict()
-        st.markdown(render_fulltext_availability_notice(row_dict), unsafe_allow_html=True)
+        row_dict = normalize_dataframe_row(row.to_dict())
+        try:
+          notice_html = render_fulltext_availability_notice(row_dict)
+          if notice_html:
+            st.markdown(notice_html, unsafe_allow_html=True)
+        except Exception as exc:
+          st.warning(f"全文確認情報の表示中に問題が発生しました: {exc}")
+          if debug_mode:
+            st.write(row_dict)
         st.markdown(render_fulltext_status_card(row_dict), unsafe_allow_html=True)
         pub = str(row_dict.get("publication_number") or "")
         bq_not_found = str(row_dict.get("retrieval_status") or "") in {

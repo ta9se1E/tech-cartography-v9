@@ -242,13 +242,53 @@ def render_next_action_box(actions: list[str]) -> str:
   return f'<div class="tc-card-box"><b>次にやること</b><ul>{items or "<li>実行結果を読み込んでください。</li>"}</ul></div>'
 
 
+def _coerce_mapping(value: Any) -> dict[str, Any]:
+  if isinstance(value, dict):
+    return value
+  if value is None:
+    return {}
+  if isinstance(value, str):
+    text = value.strip()
+    if not text:
+      return {}
+    try:
+      parsed = json.loads(text)
+      if isinstance(parsed, dict):
+        return parsed
+      return {"raw_value": value}
+    except Exception:
+      return {"raw_value": value}
+  return {"raw_value": value}
+
+
+def normalize_dataframe_row(row: Any) -> dict[str, Any]:
+  if not isinstance(row, dict):
+    return _coerce_mapping(row)
+  out: dict[str, Any] = {}
+  for key, value in row.items():
+    if pd.isna(value):
+      out[str(key)] = ""
+    else:
+      out[str(key)] = value
+  return out
+
+
+def _render_dataframe_stretch(df: pd.DataFrame, **kwargs: Any) -> None:
+  import streamlit as st
+
+  try:
+    st.dataframe(df, width="stretch", **kwargs)
+  except TypeError:
+    st.dataframe(df, use_container_width=True, **kwargs)
+
+
 def render_small_table(df: pd.DataFrame, height: int = 320) -> None:
   import streamlit as st
 
   if df is None or df.empty:
     st.info("表示するデータがありません。")
     return
-  st.dataframe(df, use_container_width=True, hide_index=True, height=height)
+  _render_dataframe_stretch(df, hide_index=True, height=height)
 
 
 def render_markdown_preview(md: str, max_chars: int = 4000) -> str:
@@ -655,17 +695,25 @@ def render_cost_ledger_debug(ledger_summary: dict[str, Any] | None) -> str:
   )
 
 
-def render_fulltext_availability_notice(record: dict[str, Any] | None, markdown_text: str = "") -> str:
+def render_fulltext_availability_notice(record: Any = None, markdown_text: str = "") -> str:
   if markdown_text and not _text_has_cost_amounts(markdown_text):
     return (
       f'<div class="tc-info-box"><strong>Fulltext Availability Probe</strong>'
       f'<pre style="white-space:pre-wrap">{markdown_text[:5000]}</pre></div>'
     )
-  if not record:
-    return ""
-  status = str(record.get("retrieval_status") or "")
-  probe = record.get("availability_probe") or {}
-  probe_status = str(probe.get("probe_status") or "")
+  row = normalize_dataframe_row(record) if isinstance(record, dict) else _coerce_mapping(record)
+  if not row:
+    if record in (None, "", {}):
+      return ""
+    row = _coerce_mapping(record)
+  probe_raw = (
+    row.get("fulltext_availability_probe")
+    or row.get("availability_probe")
+    or row.get("probe")
+  )
+  probe = _coerce_mapping(probe_raw)
+  probe_status = str(probe.get("probe_status") or row.get("probe_status") or "")
+  status = str(row.get("retrieval_status") or probe.get("retrieval_status") or "")
   if status == "skipped_known_not_found":
     msg = "前回確認済みのため、今回は手動確認候補として扱います。"
   elif status in {"not_found", "bigquery_fulltext_not_available", "manual_google_patents_recommended", "fulltext_probe_not_found"} or probe_status in {
@@ -680,10 +728,23 @@ def render_fulltext_availability_notice(record: dict[str, Any] | None, markdown_
   elif probe_status == "found_claims" or status == "fulltext_probe_found_claims":
     msg = "BigQueryで請求項の存在を確認しました。fulltext取得に進めます。"
   else:
-    msg = probe.get("user_status_japanese") or ""
+    recommendation = str(probe.get("recommendation") or row.get("recommendation") or "")
+    if recommendation == "manual_route_recommended":
+      msg = (
+        "BigQuery側では請求項が確認できませんでした。"
+        "Google Patents / PDF / 手動貼り付けルートで確認してください。"
+      )
+    else:
+      msg = str(probe.get("user_status_japanese") or row.get("user_status_japanese") or "")
   if not msg:
-    return ""
-  return f'<div class="tc-caution-box">{msg}</div>'
+    raw = probe.get("raw_value")
+    if raw:
+      msg = f"全文確認の状態: {_safe(str(raw))}"
+    elif record not in (None, "", {}):
+      msg = "全文確認の状態を表示できませんでした。手動で Google Patents 等を確認してください。"
+    else:
+      return ""
+  return f'<div class="tc-caution-box">{_safe(msg)}</div>'
 
 
 def render_manual_fulltext_route_card(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 _ROOT = Path(__file__).resolve().parent
 _SRC = _ROOT / "src"
@@ -43,12 +44,19 @@ if not user:
 init_app_session_state(user)
 apply_pending_widget_state_updates()
 
+def _sidebar_button(label: str, **kwargs: Any) -> bool:
+  try:
+    return st.button(label, width="stretch", **kwargs)
+  except TypeError:
+    return st.button(label, use_container_width=True, **kwargs)
+
+
 with st.sidebar:
   st.header("ユーザー")
   render_logged_in_header(user)
   if user.get("company_name"):
     st.caption(f"会社: {user['company_name']}")
-  if st.button("ログアウト", use_container_width=True, key="logout_button"):
+  if _sidebar_button("ログアウト", key="logout_button"):
     logout_user()
     st.rerun()
 
@@ -57,21 +65,19 @@ with st.sidebar:
 
   pipeline_root_input = st.text_input(
     "実行結果フォルダ",
-    value=st.session_state.get(STATE_PIPELINE_ROOT, str(DEFAULT_PIPELINE_ROOT)),
     key=WIDGET_PIPELINE_ROOT,
+    help="outputs など、実行結果が保存されているフォルダを指定します。",
   )
 
-  default_run = user.get("last_run_id") or st.session_state.get(STATE_SELECTED_RUN_ID, "")
   run_id_input = st.text_input(
     "run_id",
-    value=default_run,
     key=WIDGET_SELECTED_RUN_ID,
     help="outputs配下のrun_idを指定します。latest_runまたはデモモードから自動設定できます。",
   )
   if run_id_input and str(run_id_input).strip():
     st.session_state[STATE_SELECTED_RUN_ID] = str(run_id_input).strip()
 
-  if st.button("latest_run を読み込む", use_container_width=True, key="load_latest_run_button"):
+  if _sidebar_button("latest_run を読み込む", key="load_latest_run_button"):
     pointer = read_latest_run_pointer(pipeline_root_input)
     if pointer and pointer.get("run_id"):
       run_id = str(pointer["run_id"])

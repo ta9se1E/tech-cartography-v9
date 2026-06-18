@@ -6,6 +6,14 @@
 
 - [ ] `streamlit run app.py` で起動できる（`StreamlitAPIException` が出ない）
 - [ ] メールアドレスでログインできる
+- [ ] コンソールに `easy_pipeline_root_input` の session_state / default value 二重管理 warning が出ない
+
+## Widget session_state ルール（Patch 2）
+
+- [ ] **すべての widget key**（`easy_pipeline_root_input` / `selected_run_id_input` / `display_mode_input` など）で、`value=`（または `index=` の二重指定）と `st.session_state[key] = ...` の**二重初期化をしない**
+- [ ] 初期値は widget 生成**前**に `if key not in st.session_state: st.session_state[key] = ...` または `setdefault` で入れる
+- [ ] widget 生成時は `key=` のみ（`value=` は付けない）
+- [ ] widget 生成**後**に widget key へ直接代入しない（`STATE_PENDING_*` + `apply_pending_widget_state_updates()` を使う）
 
 ## run_id / latest_run
 
@@ -19,10 +27,16 @@
 - [ ] 7タブが表示される
 - [ ] **はじめる** タブを表示できる（デモストーリーカード）
 - [ ] **特許候補** タブを表示できる
-- [ ] **全文確認** タブを表示できる
+- [ ] **全文確認** タブを表示できる（`AttributeError: 'str' object has no attribute 'get'` が出ない）
+- [ ] **全文確認** タブで `fulltext_retrieval_records` がある run を開いても落ちない（probe が str / dict / JSON 文字列のどれでも表示継続）
 - [ ] **技術の裏取り** タブを表示できる（Evidence Map セクション）
 - [ ] **レポート** タブを表示できる
 - [ ] **設定** タブを表示できる
+
+## Fulltext availability notice（堅牢化）
+
+- [ ] `render_fulltext_availability_notice` は row / probe が `dict` / `str` / `None` / JSON 文字列のどれでも `AttributeError` を出さない
+- [ ] 最低限の注意文（HTML）または空文字が返る
 
 ## 回帰確認
 
@@ -33,7 +47,7 @@
 
 ```bash
 python3 -m compileall src scripts tests app.py
-python3 -m pytest tests/test_streamlit_state_keys.py -q
+python3 -m pytest tests/test_streamlit_state_keys.py tests/test_easy_japanese_ui.py -q
 ```
 
 期待:
@@ -41,3 +55,4 @@ python3 -m pytest tests/test_streamlit_state_keys.py -q
 - pending selected_run_id の apply が通る
 - pending key は apply 後に pop される
 - `app.py` に `st.session_state[WIDGET_SELECTED_RUN_ID] =` の直接代入がない
+- `_coerce_mapping` / `render_fulltext_availability_notice` の堅牢化テストが通る

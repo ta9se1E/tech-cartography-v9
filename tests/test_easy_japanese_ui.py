@@ -3,6 +3,7 @@
 import pandas as pd
 
 from tech_cartography.ui.easy_japanese_ui import (
+  _coerce_mapping,
   prepare_patent_display_df,
   render_acquisition_policy_summary,
   render_claims_paper_query_plan_card,
@@ -299,6 +300,71 @@ def test_fulltext_availability_notice_bigquery_not_found() -> None:
   )
   assert "BigQuery側では請求項が確認できませんでした" in html
   assert "Google Patents" in html
+
+
+def test_coerce_mapping_cases() -> None:
+  payload = {"probe_status": "manual_route_recommended"}
+  assert _coerce_mapping(payload) is payload
+  assert _coerce_mapping(None) == {}
+  assert _coerce_mapping("") == {}
+  assert _coerce_mapping('{"probe_status": "manual_route_recommended"}') == {
+    "probe_status": "manual_route_recommended",
+  }
+  assert _coerce_mapping("manual_route_recommended") == {"raw_value": "manual_route_recommended"}
+  assert _coerce_mapping(["x"]) == {"raw_value": ["x"]}
+
+
+def test_fulltext_availability_notice_probe_dict() -> None:
+  html = render_fulltext_availability_notice(
+    {
+      "retrieval_status": "pending",
+      "availability_probe": {"probe_status": "manual_route_recommended"},
+    },
+  )
+  assert isinstance(html, str)
+  assert "BigQuery側では請求項が確認できませんでした" in html
+
+
+def test_fulltext_availability_notice_probe_json_string() -> None:
+  html = render_fulltext_availability_notice(
+    {
+      "retrieval_status": "pending",
+      "availability_probe": '{"probe_status": "manual_route_recommended"}',
+    },
+  )
+  assert isinstance(html, str)
+  assert "BigQuery側では請求項が確認できませんでした" in html
+
+
+def test_fulltext_availability_notice_probe_plain_string() -> None:
+  html = render_fulltext_availability_notice(
+    {
+      "retrieval_status": "pending",
+      "availability_probe": "manual_route_recommended",
+    },
+  )
+  assert isinstance(html, str)
+  assert "全文確認の状態" in html
+
+
+def test_fulltext_availability_notice_row_none() -> None:
+  html = render_fulltext_availability_notice(None)
+  assert isinstance(html, str)
+  assert html == ""
+
+
+def test_fulltext_availability_notice_row_str() -> None:
+  html = render_fulltext_availability_notice("manual_route_recommended")
+  assert isinstance(html, str)
+  assert "全文確認の状態" in html
+
+
+def test_normalize_dataframe_row_nan() -> None:
+  from tech_cartography.ui.easy_japanese_ui import normalize_dataframe_row
+
+  row = normalize_dataframe_row({"retrieval_status": float("nan"), "probe": "x"})
+  assert row["retrieval_status"] == ""
+  assert row["probe"] == "x"
 
 
 def test_claims_paper_query_plan_card_shows_plan_only_caveat() -> None:
