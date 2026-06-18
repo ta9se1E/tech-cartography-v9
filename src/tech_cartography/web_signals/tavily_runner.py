@@ -1,12 +1,17 @@
-"""Orchestrate Tavily Web Signal search runs (Phase 23.1)."""
+"""Orchestrate Tavily Web Signal search runs (Phase 23.1 / 23.2)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 from tech_cartography.web_signals.query_templates import WebSignalQuery, build_web_signal_queries
+from tech_cartography.web_signals.review_pack import (
+  DEFAULT_REVIEW_KEYWORDS,
+  build_web_signal_review_pack,
+  save_web_signal_review_pack,
+)
 from tech_cartography.web_signals.schema import WebSignal, WebSignalBatch, new_batch_id, utc_now_iso
 from tech_cartography.web_signals.store import SOURCE_POLICY_VERSION, save_tavily_web_signal_run
 from tech_cartography.web_signals.tavily_adapter import (
@@ -16,6 +21,10 @@ from tech_cartography.web_signals.tavily_adapter import (
   tavily_extract_results_to_web_signals,
   tavily_search_results_to_web_signals,
 )
+
+MAX_SAFE_QUERIES = 10
+MAX_SAFE_RESULTS_PER_QUERY = 5
+MAX_SAFE_EXTRACT_URLS = 10
 
 
 @dataclass
@@ -33,6 +42,10 @@ class TavilyRunConfig:
   execute_tavily: bool = False
   extract_top_urls: bool = False
   max_extract_urls: int = 3
+  build_review_pack: bool = False
+  review_min_priority: int = 0
+  review_keywords: list[str] = field(default_factory=list)
+  save_rejected: bool = True
 
 
 def _merge_domains(base: list[str], extra: list[str]) -> list[str]:
@@ -44,8 +57,20 @@ def _merge_domains(base: list[str], extra: list[str]) -> list[str]:
   return merged
 
 
+def apply_execution_safety_limits(config: TavilyRunConfig) -> TavilyRunConfig:
+  if not config.execute_tavily:
+    return config
+  return replace(
+    config,
+    max_queries=min(config.max_queries, MAX_SAFE_QUERIES),
+    max_results_per_query=min(config.max_results_per_query, MAX_SAFE_RESULTS_PER_QUERY),
+    max_extract_urls=min(config.max_extract_urls, MAX_SAFE_EXTRACT_URLS),
+  )
+
+
 def prepare_web_signal_queries(config: TavilyRunConfig) -> list[WebSignalQuery]:
-  queries = build_web_signal_queries(config.topic, config.categories, config.languages)
+  categories = [category for category in config.categories if str(category).lower() != "human"]
+  queries = build_web_signal_queries(config.topic, categories, config.languages)
   if config.max_queries > 0:
     queries = queries[: config.max_queries]
   if config.include_domains or config.exclude_domains:
@@ -67,7 +92,30 @@ def prepare_web_signal_queries(config: TavilyRunConfig) -> list[WebSignalQuery]:
   return queries
 
 
+def _build_and_save_review_pack(
+  batch: WebSignalBatch,
+  output_dir: Path,
+  config: TavilyRunConfig,
+) -> dict[str, Any]:
+  keywords = config.review_keywords or list(DEFAULT_REVIEW_KEYWORDS)
+  pack = build_web_signal_review_pack(
+    batch,
+    keywords=keywords,
+    review_min_priority=config.review_min_priority,
+    save_rejected=config.save_rejected,
+  )
+  paths = save_web_signal_review_pack(pack, output_dir)
+  return {
+    "review_item_count": len(pack.items),
+    "high_priority_count": len(pack.high_priority_items),
+    "rejected_count": len(pack.rejected_items),
+    "duplicates_removed": pack.duplicates_removed,
+    "output_paths": {key: str(path) for key, path in paths.items()},
+  }
+
+
 def run_tavily_web_signal_pipeline(config: TavilyRunConfig) -> dict[str, Any]:
+  config = apply_execution_safety_limits(config)
   queries = prepare_web_signal_queries(config)
   batch_id = new_batch_id()
   output_dir = Path(config.output_dir) if config.output_dir else Path("outputs/web_signals") / batch_id
@@ -81,6 +129,7 @@ def run_tavily_web_signal_pipeline(config: TavilyRunConfig) -> dict[str, Any]:
     "execute_tavily": config.execute_tavily,
     "dry_run": config.dry_run,
     "plan_only": config.plan_only,
+    "build_review_pack": config.build_review_pack,
     "errors": [],
   }
 
@@ -99,21 +148,24 @@ def run_tavily_web_signal_pipeline(config: TavilyRunConfig) -> dict[str, Any]:
       result["status"] = "blocked_missing_api_key"
       result["errors"].append("TAVILY_API_KEY is not set. Set the env var or use --dry-run / --plan-only.")
       if config.output_dir:
+        batch = WebSignalBatch(
+          batch_id=batch_id,
+          topic=config.topic,
+          created_at=utc_now_iso(),
+          query_set=[query.query for query in queries],
+          signals=[],
+          source_policy_version=SOURCE_POLICY_VERSION,
+          notes="Blocked: missing TAVILY_API_KEY",
+        )
         save_tavily_web_signal_run(
-          batch=WebSignalBatch(
-            batch_id=batch_id,
-            topic=config.topic,
-            created_at=utc_now_iso(),
-            query_set=[query.query for query in queries],
-            signals=[],
-            source_policy_version=SOURCE_POLICY_VERSION,
-            notes="Blocked: missing TAVILY_API_KEY",
-          ),
+          batch=batch,
           queries=queries,
           search_raw=search_raw,
           extract_raw=extract_raw,
           output_dir=output_dir,
         )
+        if config.build_review_pack:
+          result["review_pack"] = _build_and_save_review_pack(batch, output_dir, config)
       return result
 
     result["status"] = "executed"
@@ -142,13 +194,16 @@ def run_tavily_web_signal_pipeline(config: TavilyRunConfig) -> dict[str, Any]:
           "response": search_response,
         },
       )
-      query_signals = tavily_search_results_to_web_signals(
-        search_response,
-        query=query.query,
-        default_signal_type=query.intended_signal_type,
-        query_category=query.category,
-      )
-      signals.extend(query_signals)
+      try:
+        query_signals = tavily_search_results_to_web_signals(
+          search_response,
+          query=query.query,
+          default_signal_type=query.intended_signal_type,
+          query_category=query.category,
+        )
+        signals.extend(query_signals)
+      except Exception as exc:  # noqa: BLE001
+        result["errors"].append(f"signal conversion failed for {query.query_id}: {exc}")
 
       if config.extract_top_urls and not search_response.get("error"):
         for hit in search_response.get("results") or []:
@@ -167,14 +222,17 @@ def run_tavily_web_signal_pipeline(config: TavilyRunConfig) -> dict[str, Any]:
         extract_response = {"error": "unexpected_exception", "detail": str(exc)}
         result["errors"].append(f"extract failed: {exc}")
       extract_raw.append({"urls": extract_urls, "response": extract_response})
-      signals.extend(
-        tavily_extract_results_to_web_signals(
-          extract_response,
-          query=config.topic,
-          default_signal_type="other",
-          query_category="",
-        ),
-      )
+      try:
+        signals.extend(
+          tavily_extract_results_to_web_signals(
+            extract_response,
+            query=config.topic,
+            default_signal_type="other",
+            query_category="",
+          ),
+        )
+      except Exception as exc:  # noqa: BLE001
+        result["errors"].append(f"extract signal conversion failed: {exc}")
 
   batch = WebSignalBatch(
     batch_id=batch_id,
@@ -194,6 +252,8 @@ def run_tavily_web_signal_pipeline(config: TavilyRunConfig) -> dict[str, Any]:
       extract_raw=extract_raw,
       output_dir=output_dir,
     )
+    if config.build_review_pack:
+      result["review_pack"] = _build_and_save_review_pack(batch, output_dir, config)
 
   result["signal_count"] = len(signals)
   result["queries"] = [query.to_dict() for query in queries]

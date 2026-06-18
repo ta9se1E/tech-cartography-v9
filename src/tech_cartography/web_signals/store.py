@@ -18,7 +18,7 @@ from tech_cartography.web_signals.schema import (
   web_signal_from_dict,
 )
 
-SOURCE_POLICY_VERSION = "phase23.1"
+SOURCE_POLICY_VERSION = "phase23.2"
 
 SUMMARY_CAUTION = (
   "Web signals are signal candidates, not final conclusions.\n"

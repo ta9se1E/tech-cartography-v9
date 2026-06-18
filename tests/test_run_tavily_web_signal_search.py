@@ -118,3 +118,66 @@ def test_output_files_on_plan_only(tmp_path: Path) -> None:
   ]
   for name in expected:
     assert (out / name).exists(), name
+
+
+def test_plan_only_build_review_pack_without_api(tmp_path: Path) -> None:
+  out = tmp_path / "plan_review"
+  with patch("tech_cartography.web_signals.tavily_runner.run_tavily_search") as mock_search:
+    result = run_tavily_web_signal_pipeline(
+      TavilyRunConfig(
+        topic="PAN carbon fiber",
+        categories=["national_project", "ir_disclosure"],
+        languages=["en"],
+        max_queries=2,
+        output_dir=str(out),
+        plan_only=True,
+        build_review_pack=True,
+        save_rejected=True,
+      ),
+    )
+  mock_search.assert_not_called()
+  assert result["status"] == "plan_only"
+  assert result["signal_count"] == 0
+  assert "review_pack" in result
+  review_dir = out / "review_pack"
+  assert (review_dir / "web_signal_review_pack.json").exists()
+  assert (review_dir / "web_signal_review_summary.md").exists()
+  summary = (review_dir / "web_signal_review_summary.md").read_text(encoding="utf-8")
+  assert "signal candidates" in summary
+
+
+def test_build_review_pack_without_execute(tmp_path: Path) -> None:
+  out = tmp_path / "review_only"
+  result = run_tavily_web_signal_pipeline(
+    TavilyRunConfig(
+      topic="PAN carbon fiber",
+      categories=["company"],
+      languages=["en"],
+      max_queries=1,
+      output_dir=str(out),
+      plan_only=True,
+      execute_tavily=False,
+      build_review_pack=True,
+    ),
+  )
+  assert result["execute_tavily"] is False
+  assert (out / "review_pack" / "rejected_or_low_quality_sources.csv").exists()
+
+
+def test_execute_without_api_key_blocked_with_review_pack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+  monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+  with patch("tech_cartography.web_signals.tavily_runner.run_tavily_search") as mock_search:
+    result = run_tavily_web_signal_pipeline(
+      TavilyRunConfig(
+        topic="PAN carbon fiber",
+        categories=["company"],
+        languages=["en"],
+        max_queries=1,
+        output_dir=str(tmp_path / "blocked_review"),
+        plan_only=False,
+        execute_tavily=True,
+        build_review_pack=True,
+      ),
+    )
+  mock_search.assert_not_called()
+  assert result["status"] == "blocked_missing_api_key"

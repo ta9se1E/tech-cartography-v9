@@ -29,6 +29,17 @@ from tech_cartography.web_signals.store import (
   save_web_signal_batch,
   web_signals_to_dataframe,
 )
+from tech_cartography.web_signals.review_pack import (
+  DEFAULT_REVIEW_KEYWORDS,
+  WebSignalReviewItem,
+  WebSignalReviewPack,
+  build_web_signal_review_pack,
+  extract_evidence_sentences,
+  render_review_pack_summary_md,
+  save_web_signal_review_pack,
+  score_review_priority,
+)
+from tech_cartography.web_signals.tavily_runner import TavilyRunConfig, run_tavily_web_signal_pipeline
 from tech_cartography.web_signals.tavily_adapter import (
   build_tavily_extract_payload,
   build_tavily_search_payload,
@@ -71,4 +82,14 @@ __all__ = [
   "run_tavily_search",
   "tavily_extract_results_to_web_signals",
   "tavily_search_results_to_web_signals",
+  "DEFAULT_REVIEW_KEYWORDS",
+  "WebSignalReviewItem",
+  "WebSignalReviewPack",
+  "build_web_signal_review_pack",
+  "extract_evidence_sentences",
+  "render_review_pack_summary_md",
+  "save_web_signal_review_pack",
+  "score_review_priority",
+  "TavilyRunConfig",
+  "run_tavily_web_signal_pipeline",
 ]

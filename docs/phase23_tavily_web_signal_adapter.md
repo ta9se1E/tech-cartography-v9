@@ -136,4 +136,45 @@ outputs/web_signals/{batch_id}/
 - `src/tech_cartography/web_signals/query_templates.py`
 - `src/tech_cartography/web_signals/signal_classifier.py`
 - `src/tech_cartography/web_signals/tavily_runner.py`
+- `src/tech_cartography/web_signals/review_pack.py`（Phase 23.2）
 - `scripts/run_tavily_web_signal_search.py`
+
+## Phase 23.2 Review Pack への接続
+
+Phase 23.2 では Tavily batch 生成後に **Web Signal Review Pack** を構築できます。
+
+```bash
+python scripts/run_tavily_web_signal_search.py \
+  --topic "PAN carbon fiber mid-temperature carbonization" \
+  --categories national_project money ir_disclosure company local_news \
+  --output-dir outputs/web_signals/tavily_pan_carbon_fiber \
+  --plan-only \
+  --build-review-pack
+```
+
+詳細: `docs/phase23_web_signal_review_pack.md`
+
+### --build-review-pack の使い方
+
+- `--build-review-pack` を付けると `outputs/web_signals/{batch_id}/review_pack/` を生成
+- plan-only で `signal_count=0` でも空の review pack を安全に作成
+- `--review-min-priority` で高優先度フィルタの閾値を指定
+- `--review-keywords` で evidence 抽出キーワードを上書き
+- `--save-rejected` で低品質候補を `rejected_or_low_quality_sources.csv` に保存
+
+### --extract-top-urls の注意
+
+- execute 時のみ有効
+- 追加 API 呼び出しが発生するため `--max-extract-urls` は **10 以下** に制限
+- Extract 結果も signal candidate として扱い、本文確認は必須
+
+### execute-tavily 時の安全上限
+
+| パラメータ | 推奨 / 上限 |
+|-----------|-------------|
+| `--max-queries` | 10 以下（runner が自動制限） |
+| `--max-results-per-query` | 5 以下 |
+| `--max-extract-urls` | 10 以下 |
+| `--categories` | `human` は除外 |
+
+API キーは環境変数 `TAVILY_API_KEY` のみ。ログ・出力ファイルに含めません。

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Tavily Web Signal search plan / execution (Phase 23.1)."""
+"""Run Tavily Web Signal search plan / execution (Phase 23.1 / 23.2)."""
 
 from __future__ import annotations
 
@@ -23,10 +23,16 @@ def parse_args() -> argparse.Namespace:
     "--categories",
     nargs="+",
     default=["national_project", "money", "ir_disclosure", "company", "local_news"],
+    help="human category is excluded from execution for safety",
   )
   parser.add_argument("--languages", nargs="+", default=["ja", "en"])
-  parser.add_argument("--max-queries", type=int, default=10)
-  parser.add_argument("--max-results-per-query", type=int, default=5)
+  parser.add_argument("--max-queries", type=int, default=10, help="capped at 10 when executing Tavily")
+  parser.add_argument(
+    "--max-results-per-query",
+    type=int,
+    default=5,
+    help="capped at 5 when executing Tavily",
+  )
   parser.add_argument("--include-domains", nargs="*", default=[])
   parser.add_argument("--exclude-domains", nargs="*", default=[])
   parser.add_argument("--output-dir", default=None)
@@ -39,7 +45,26 @@ def parse_args() -> argparse.Namespace:
     help="Execute Tavily Search/Extract (requires TAVILY_API_KEY)",
   )
   parser.add_argument("--extract-top-urls", action="store_true", default=False)
-  parser.add_argument("--max-extract-urls", type=int, default=3)
+  parser.add_argument("--max-extract-urls", type=int, default=3, help="capped at 10 when executing Tavily")
+  parser.add_argument(
+    "--build-review-pack",
+    action="store_true",
+    default=False,
+    help="Build Web Signal Review Pack after batch save",
+  )
+  parser.add_argument("--review-min-priority", type=int, default=0)
+  parser.add_argument(
+    "--review-keywords",
+    nargs="*",
+    default=[],
+    help="Keywords for evidence sentence extraction (defaults to PAN carbon fiber set)",
+  )
+  parser.add_argument(
+    "--save-rejected",
+    action="store_true",
+    default=False,
+    help="Include rejected / low quality sources in review pack outputs",
+  )
   return parser.parse_args()
 
 
@@ -61,6 +86,10 @@ def main() -> int:
     execute_tavily=args.execute_tavily,
     extract_top_urls=args.extract_top_urls,
     max_extract_urls=args.max_extract_urls,
+    build_review_pack=args.build_review_pack,
+    review_min_priority=args.review_min_priority,
+    review_keywords=list(args.review_keywords or []),
+    save_rejected=args.save_rejected or args.build_review_pack,
   )
 
   result = run_tavily_web_signal_pipeline(config)
