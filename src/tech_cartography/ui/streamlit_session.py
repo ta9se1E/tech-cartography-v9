@@ -26,6 +26,11 @@ STATE_SAVED_RUN_ID = "easy_saved_run_id"
 STATE_CURRENT_USER = "current_user"
 STATE_WEEKLY_EMAIL_ENABLED = "weekly_email_enabled"
 STATE_PENDING_SELECTED_RUN_ID = "pending_selected_run_id"
+STATE_DEMO_MODE = "demo_mode_enabled"
+STATE_DEMO_PUBLICATION_NUMBER = "demo_publication_number"
+
+DEMO_RUN_ID = "demo_us_12565719_b2"
+DEMO_PUBLICATION_NUMBER = "US-12565719-B2"
 
 WIDGET_KEYS = frozenset(
   {
@@ -52,6 +57,8 @@ INTERNAL_KEYS = frozenset(
     STATE_CURRENT_USER,
     STATE_WEEKLY_EMAIL_ENABLED,
     STATE_PENDING_SELECTED_RUN_ID,
+    STATE_DEMO_MODE,
+    STATE_DEMO_PUBLICATION_NUMBER,
   },
 )
 
@@ -92,6 +99,8 @@ def default_app_session_state(
     STATE_MANIFEST_PATH: "",
     STATE_SAVED_RUN_ID: "",
     STATE_WEEKLY_EMAIL_ENABLED: False,
+    STATE_DEMO_MODE: False,
+    STATE_DEMO_PUBLICATION_NUMBER: "",
   }
   if user:
     if user.get("last_run_id"):
@@ -171,3 +180,18 @@ def apply_internal_state_updates(updates: dict[str, Any]) -> None:
       st.session_state[key] = value
   if STATE_SELECTED_RUN_ID in updates:
     st.session_state[STATE_PENDING_SELECTED_RUN_ID] = updates[STATE_SELECTED_RUN_ID]
+
+
+def activate_evidence_map_demo_state() -> dict[str, Any]:
+  """Internal session_state updates for one-click Evidence Map demo (no widget keys)."""
+  return {
+    STATE_DEMO_MODE: True,
+    STATE_DEMO_PUBLICATION_NUMBER: DEMO_PUBLICATION_NUMBER,
+    STATE_SELECTED_RUN_ID: DEMO_RUN_ID,
+    STATE_PENDING_SELECTED_RUN_ID: DEMO_RUN_ID,
+    STATE_MANIFEST_PATH: "",
+  }
+
+
+def deactivate_demo_mode_state() -> dict[str, Any]:
+  return {STATE_DEMO_MODE: False, STATE_DEMO_PUBLICATION_NUMBER: ""}

@@ -62,14 +62,24 @@ from tech_cartography.ui.japanese_labels import (
   translate_tab_name,
 )
 from tech_cartography.ui.user_settings_view import render_user_settings_tab
+from tech_cartography.ui.evidence_map_demo import (
+  load_demo_evidence_map_artifacts,
+  render_demo_evidence_tab,
+  render_demo_mode_banner,
+  render_demo_start_tab,
+  render_evidence_map_report,
+  render_market_signal_demo_notice,
+)
 from tech_cartography.ui.streamlit_session import (
   DISPLAY_MODE_OPTIONS,
   STATE_CURRENT_USER,
   STATE_DISPLAY_MODE,
+  STATE_DEMO_MODE,
   STATE_MANIFEST_PATH,
   STATE_PIPELINE_ROOT,
   STATE_SAVED_RUN_ID,
   STATE_SELECTED_RUN_ID,
+  activate_evidence_map_demo_state,
   default_pipeline_root,
 )
 from tech_cartography.users.user_store import set_last_run_id
@@ -153,7 +163,18 @@ def _resolve_manifest(
   return None
 
 
-def _tab_start(user: dict[str, Any], watch: dict[str, Any], manifest: dict[str, Any] | None, *, debug_mode: bool = False) -> None:
+def _render_demo_mode_load_button(*, key: str) -> None:
+  if st.button("デモモードで読み込む：US-12565719-B2 Evidence Map", key=key):
+    for state_key, value in activate_evidence_map_demo_state().items():
+      st.session_state[state_key] = value
+    st.rerun()
+
+
+def _tab_start(user: dict[str, Any], watch: dict[str, Any], manifest: dict[str, Any] | None, *, debug_mode: bool = False, demo_mode: bool = False, demo_artifacts: Any = None) -> None:
+  if demo_mode and demo_artifacts is not None:
+    render_demo_start_tab(demo_artifacts)
+    return
+  _render_demo_mode_load_button(key="start_tab_demo_evidence_map_button")
   st.markdown(render_demo_story_cards(), unsafe_allow_html=True)
   st.markdown(render_ok_box("このアプリでできること: 特許候補の整理、全文確認計画、技術の裏取り候補の確認"), unsafe_allow_html=True)
   st.markdown(
@@ -325,7 +346,14 @@ def _tab_fulltext(manifest: dict[str, Any], display_mode: str, *, debug_mode: bo
           st.caption(f"ledger: {ledger_path}")
 
 
-def _tab_evidence(manifest: dict[str, Any]) -> None:
+def _tab_evidence(manifest: dict[str, Any] | None, *, demo_artifacts: Any = None) -> None:
+  if demo_artifacts is not None:
+    render_demo_evidence_tab(demo_artifacts)
+    return
+  if not manifest:
+    st.info("実行結果を読み込んでください。")
+    return
+
   st.markdown(render_caution_box("論文候補は証明ではありません。専門家レビューが必要です。"), unsafe_allow_html=True)
 
   demo_bundle = _load_demo_evidence_bundle(manifest, PROJECT_ROOT)
@@ -486,14 +514,21 @@ def _tab_evidence(manifest: dict[str, Any]) -> None:
         render_small_table(ev_map_items_df.head(50))
 
 
-def _tab_market(manifest: dict[str, Any]) -> None:
-  st.markdown(
-    render_info_box(
-      "Toray / Teijin / Zhongfu Shenying などの企業動向は、"
-      "特許候補と併せて確認してください。自動Web検索はまだ行いません。"
-    ),
-    unsafe_allow_html=True,
-  )
+def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> None:
+  if demo_mode:
+    render_market_signal_demo_notice()
+  if not manifest:
+    if not demo_mode:
+      st.info("Web signal CSV を追加するとここに表示されます。テンプレートを埋めてパイプラインを実行してください。")
+    return
+  if not demo_mode:
+    st.markdown(
+      render_info_box(
+        "Toray / Teijin / Zhongfu Shenying などの企業動向は、"
+        "特許候補と併せて確認してください。自動Web検索はまだ行いません。"
+      ),
+      unsafe_allow_html=True,
+    )
   web_df = _load_csv_artifact(manifest, "web_signal_patent_links_csv")
   business_df = _load_csv_artifact(manifest, "patent_business_summary_csv")
   company_df = _load_csv_artifact(manifest, "company_watch_summary_csv")
@@ -513,7 +548,14 @@ def _tab_market(manifest: dict[str, Any]) -> None:
       render_small_table(company_df.head(15))
 
 
-def _tab_reports(manifest: dict[str, Any]) -> None:
+def _tab_reports(manifest: dict[str, Any] | None, *, demo_artifacts: Any = None) -> None:
+  if demo_artifacts is not None:
+    render_evidence_map_report(demo_artifacts)
+    return
+
+  if not manifest:
+    st.info("レポートがまだありません。パイプラインを実行してください。")
+    return
   reports = [
     ("carbon_fiber_evidence_map_report_md", "Carbon Fiber Evidence Map"),
     ("fulltext_evidence_report_md", "Full Text Evidence"),
@@ -556,7 +598,12 @@ def render_tabbed_easy_app(
     st.caption(f"run_id: {run_id or user.get('last_run_id') or '未選択'}")
 
   root = pipeline_root or default_pipeline_root()
-  manifest = _resolve_manifest(user, root, run_id)
+  demo_mode = bool(st.session_state.get(STATE_DEMO_MODE))
+  demo_artifacts = load_demo_evidence_map_artifacts(PROJECT_ROOT) if demo_mode else None
+  if demo_mode and demo_artifacts is not None:
+    render_demo_mode_banner(demo_artifacts)
+
+  manifest = None if demo_mode else _resolve_manifest(user, root, run_id)
   debug_mode = bool(st.session_state.get("tc_debug_mode", False))
   if manifest and manifest.get("run_id"):
     rid = str(manifest["run_id"])
@@ -567,9 +614,9 @@ def render_tabbed_easy_app(
       refreshed["last_run_id"] = rid
       st.session_state[STATE_CURRENT_USER] = refreshed
 
-  if not manifest:
+  if not manifest and not demo_mode:
     st.markdown(render_info_box("実行結果を読み込んでください。sidebar で run_id を指定するか latest_run を読み込みます。"), unsafe_allow_html=True)
-    _tab_start(user, watch, None, debug_mode=debug_mode)
+    _tab_start(user, watch, None, debug_mode=debug_mode, demo_mode=False)
     st.markdown(render_caveat_footer(), unsafe_allow_html=True)
     return
 
@@ -585,19 +632,32 @@ def render_tabbed_easy_app(
     ],
   )
   with tabs[0]:
-    _tab_start(user, watch, manifest, debug_mode=debug_mode)
+    _tab_start(
+      user,
+      watch,
+      manifest,
+      debug_mode=debug_mode,
+      demo_mode=demo_mode,
+      demo_artifacts=demo_artifacts,
+    )
   with tabs[1]:
-    _tab_patents(manifest, display_mode)
+    if demo_mode:
+      st.info("デモモード: 「技術の裏取り」タブで Evidence Map をご覧ください。")
+    elif manifest:
+      _tab_patents(manifest, display_mode)
   with tabs[2]:
-    _tab_fulltext(manifest, display_mode, debug_mode=debug_mode)
+    if demo_mode:
+      st.info("デモモード: 全文確認は Manual Claims Route のデモ成果物を Evidence Map で確認できます。")
+    elif manifest:
+      _tab_fulltext(manifest, display_mode, debug_mode=debug_mode)
   with tabs[3]:
-    _tab_evidence(manifest)
+    _tab_evidence(manifest, demo_artifacts=demo_artifacts if demo_mode else None)
   with tabs[4]:
-    _tab_market(manifest)
+    _tab_market(manifest, demo_mode=demo_mode)
   with tabs[5]:
-    _tab_reports(manifest)
+    _tab_reports(manifest, demo_artifacts=demo_artifacts if demo_mode else None)
   with tabs[6]:
-    render_user_settings_tab(user, current_run_id=manifest.get("run_id"))
+    render_user_settings_tab(user, current_run_id=(manifest or {}).get("run_id"))
 
   st.markdown(render_caveat_footer(), unsafe_allow_html=True)
 

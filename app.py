@@ -27,7 +27,9 @@ from tech_cartography.ui.streamlit_session import (
   WIDGET_DISPLAY_MODE,
   WIDGET_PIPELINE_ROOT,
   WIDGET_SELECTED_RUN_ID,
+  activate_evidence_map_demo_state,
   apply_pending_widget_state_updates,
+  deactivate_demo_mode_state,
   init_app_session_state,
   sync_internal_from_widget_values,
 )
@@ -78,6 +80,8 @@ with st.sidebar:
     st.session_state[STATE_SELECTED_RUN_ID] = str(run_id_input).strip()
 
   if _sidebar_button("latest_run を読み込む", key="load_latest_run_button"):
+    for key, value in deactivate_demo_mode_state().items():
+      st.session_state[key] = value
     pointer = read_latest_run_pointer(pipeline_root_input)
     if pointer and pointer.get("run_id"):
       run_id = str(pointer["run_id"])
@@ -90,6 +94,15 @@ with st.sidebar:
       st.rerun()
     else:
       st.warning("latest_run.json が見つかりません。")
+
+  if _sidebar_button(
+    "デモモードで読み込む：US-12565719-B2 Evidence Map",
+    key="load_demo_evidence_map_button",
+  ):
+    for key, value in activate_evidence_map_demo_state().items():
+      st.session_state[key] = value
+    st.success("デモモードで Evidence Map を読み込みました。")
+    st.rerun()
 
   current_mode = st.session_state.get(STATE_DISPLAY_MODE, DISPLAY_MODE_OPTIONS[0])
   mode_index = DISPLAY_MODE_OPTIONS.index(current_mode) if current_mode in DISPLAY_MODE_OPTIONS else 0

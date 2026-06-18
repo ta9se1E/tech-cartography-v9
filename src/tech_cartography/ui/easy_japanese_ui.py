@@ -282,6 +282,11 @@ def _render_dataframe_stretch(df: pd.DataFrame, **kwargs: Any) -> None:
     st.dataframe(df, use_container_width=True, **kwargs)
 
 
+def render_dataframe_stretch(df: pd.DataFrame, **kwargs: Any) -> None:
+  """Public wrapper for stretch-width dataframe display."""
+  _render_dataframe_stretch(df, **kwargs)
+
+
 def render_small_table(df: pd.DataFrame, height: int = 320) -> None:
   import streamlit as st
 
