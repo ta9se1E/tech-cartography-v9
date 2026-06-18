@@ -227,6 +227,59 @@ def _normalize_df(df: pd.DataFrame) -> pd.DataFrame:
   return out
 
 
+def _safe_card_count(value: Any) -> str:
+  if value is None:
+    return "0"
+  if isinstance(value, float) and pd.isna(value):
+    return "0"
+  try:
+    return str(int(value))
+  except (TypeError, ValueError):
+    text = str(value).strip()
+    return text if text and text.lower() not in {"nan", "none"} else "0"
+
+
+def build_strategic_watch_summary_cards(artifacts: StrategicWatchUIArtifacts) -> list[dict[str, str]]:
+  counts = get_strategic_watch_status_counts(artifacts)
+  return [
+    {
+      "label": "Watch Items",
+      "value": _safe_card_count(counts["watch_items"]),
+      "help": "Total strategic watch items.",
+    },
+    {
+      "label": "Top Watch Items",
+      "value": _safe_card_count(counts["top_watch_items"]),
+      "help": "Top watch items selected for review.",
+    },
+    {
+      "label": "High Priority",
+      "value": _safe_card_count(counts["high_priority"]),
+      "help": "High priority means high review priority, not confirmed fact.",
+    },
+    {
+      "label": "Medium Priority",
+      "value": _safe_card_count(counts["medium_priority"]),
+      "help": "Medium priority candidates requiring review.",
+    },
+    {
+      "label": "Low Priority",
+      "value": _safe_card_count(counts["low_priority"]),
+      "help": "Low priority or weak candidates.",
+    },
+    {
+      "label": "National Project / Money",
+      "value": _safe_card_count(counts["national_project_money"]),
+      "help": "Public project / funding signal candidates.",
+    },
+    {
+      "label": "IR / Disclosure",
+      "value": _safe_card_count(counts["ir_disclosure"]),
+      "help": "IR / disclosure candidates requiring document-level verification.",
+    },
+  ]
+
+
 def render_strategic_watch_caution_cards() -> None:
   st.markdown(render_caution_box(STRATEGIC_WATCH_CAUTION_JA), unsafe_allow_html=True)
   st.markdown(
@@ -239,16 +292,7 @@ def render_strategic_watch_caution_cards() -> None:
 
 
 def render_strategic_watch_summary_cards(artifacts: StrategicWatchUIArtifacts) -> None:
-  counts = get_strategic_watch_status_counts(artifacts)
-  cards = [
-    ("Watch Items", counts["watch_items"]),
-    ("Top Watch Items", counts["top_watch_items"]),
-    ("High Priority", counts["high_priority"]),
-    ("Medium Priority", counts["medium_priority"]),
-    ("Low Priority", counts["low_priority"]),
-    ("National Project / Money", counts["national_project_money"]),
-    ("IR / Disclosure", counts["ir_disclosure"]),
-  ]
+  cards = build_strategic_watch_summary_cards(artifacts)
   st.markdown(render_metric_cards(cards), unsafe_allow_html=True)
 
 
@@ -388,7 +432,11 @@ def render_strategic_watch_section(artifacts: StrategicWatchUIArtifacts) -> None
   if artifacts.status == "missing":
     st.warning(MISSING_ARTIFACT_WARNING)
     render_strategic_watch_caution_cards()
-    render_strategic_watch_summary_cards(artifacts)
+    try:
+      render_strategic_watch_summary_cards(artifacts)
+    except Exception as exc:  # noqa: BLE001
+      st.warning("Strategic Watch Summary Cards の表示中に問題が発生しました。")
+      st.caption(str(exc))
     return
 
   if artifacts.missing_artifacts:
@@ -398,7 +446,11 @@ def render_strategic_watch_section(artifacts: StrategicWatchUIArtifacts) -> None
     )
 
   render_strategic_watch_caution_cards()
-  render_strategic_watch_summary_cards(artifacts)
+  try:
+    render_strategic_watch_summary_cards(artifacts)
+  except Exception as exc:  # noqa: BLE001
+    st.warning("Strategic Watch Summary Cards の表示中に問題が発生しました。")
+    st.caption(str(exc))
   render_top_strategic_watch_items(artifacts)
   render_national_project_money_signals(artifacts)
   render_ir_disclosure_signals(artifacts)

@@ -10,6 +10,7 @@ import pytest
 from tech_cartography.strategic_watch.store import save_strategic_watch_brief
 from tech_cartography.strategic_watch.brief_builder import build_strategic_watch_brief
 from tech_cartography.ui.strategic_watch_ui import (
+  build_strategic_watch_summary_cards,
   get_strategic_watch_caution_text,
   get_strategic_watch_status_counts,
   load_strategic_watch_artifacts,
@@ -70,3 +71,51 @@ def test_partial_missing_still_loads(tmp_path: Path) -> None:
   artifacts = load_strategic_watch_artifacts(tmp_path, publication_number="US-12565719-B2")
   assert artifacts.status == "partial"
   assert not artifacts.watch_items_df.empty
+
+
+def test_build_summary_cards_returns_dict_list(tmp_path: Path) -> None:
+  _write_fixture(tmp_path)
+  brief = build_strategic_watch_brief("US-12565719-B2", project_root=tmp_path)
+  out = tmp_path / "outputs/strategic_watch_briefs/US-12565719-B2"
+  save_strategic_watch_brief(brief, out)
+  artifacts = load_strategic_watch_artifacts(tmp_path, publication_number="US-12565719-B2")
+  cards = build_strategic_watch_summary_cards(artifacts)
+  assert cards
+  assert all(isinstance(card, dict) for card in cards)
+  assert all("label" in card and "value" in card for card in cards)
+  assert cards[2]["label"] == "High Priority"
+  assert "not confirmed fact" in cards[2]["help"]
+
+
+def test_summary_cards_reflect_priority_counts(tmp_path: Path) -> None:
+  _write_fixture(tmp_path)
+  brief = build_strategic_watch_brief("US-12565719-B2", project_root=tmp_path)
+  out = tmp_path / "outputs/strategic_watch_briefs/US-12565719-B2"
+  save_strategic_watch_brief(brief, out)
+  artifacts = load_strategic_watch_artifacts(tmp_path, publication_number="US-12565719-B2")
+  counts = get_strategic_watch_status_counts(artifacts)
+  cards = build_strategic_watch_summary_cards(artifacts)
+  card_map = {card["label"]: card["value"] for card in cards}
+  assert card_map["Medium Priority"] == str(counts["medium_priority"])
+  assert card_map["Low Priority"] == str(counts["low_priority"])
+
+
+def test_summary_cards_empty_artifacts(tmp_path: Path) -> None:
+  artifacts = load_strategic_watch_artifacts(tmp_path)
+  cards = build_strategic_watch_summary_cards(artifacts)
+  assert all(card["value"] == "0" for card in cards)
+
+
+def test_summary_cards_nan_safe() -> None:
+  from tech_cartography.ui.strategic_watch_ui import StrategicWatchUIArtifacts, _safe_card_count
+
+  assert _safe_card_count(float("nan")) == "0"
+  assert _safe_card_count(None) == "0"
+  artifacts = StrategicWatchUIArtifacts(
+    publication_number="US-1",
+    status="partial",
+    brief_dir="",
+    watch_items_df=pd.DataFrame([{"watch_priority": float("nan"), "watch_type": "evidence_gap"}]),
+  )
+  cards = build_strategic_watch_summary_cards(artifacts)
+  assert cards[0]["value"] == "1"

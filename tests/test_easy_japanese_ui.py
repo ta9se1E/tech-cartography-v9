@@ -699,3 +699,51 @@ def test_evidence_map_demo_section_integrates_cards() -> None:
   assert "Key Findings" in html
   assert "Evidence Gaps" in html
   assert "$" not in html
+
+
+def test_render_metric_cards_dict_list() -> None:
+  from tech_cartography.ui.easy_japanese_ui import render_metric_cards
+
+  html_out = render_metric_cards(
+    [
+      {"label": "Watch Items", "value": "10", "help": "Total items"},
+      {"label": "High Priority", "value": "2"},
+    ],
+  )
+  assert "Watch Items" in html_out
+  assert "10" in html_out
+  assert "tc-metric-card" in html_out
+
+
+def test_render_metric_cards_tuple_list() -> None:
+  from tech_cartography.ui.easy_japanese_ui import render_metric_cards
+
+  html_out = render_metric_cards([("Watch Items", 10), ("Top Watch Items", 5, "help text")])
+  assert "Watch Items" in html_out
+  assert "10" in html_out
+  assert 'title="help text"' in html_out
+
+
+def test_render_metric_cards_nested_list() -> None:
+  from tech_cartography.ui.easy_japanese_ui import render_metric_cards
+
+  html_out = render_metric_cards([["Label", "3", "hint"]])
+  assert "Label" in html_out
+  assert "3" in html_out
+
+
+def test_render_metric_cards_none_and_string_entries() -> None:
+  from tech_cartography.ui.easy_japanese_ui import render_metric_cards
+
+  html_out = render_metric_cards([None, "plain", {"label": "X", "value": None}])
+  assert "tc-metric-card" in html_out
+  assert "plain" in html_out
+
+
+def test_render_metric_cards_html_escape() -> None:
+  from tech_cartography.ui.easy_japanese_ui import render_metric_cards
+
+  html_out = render_metric_cards([{"label": "<script>", "value": "&bad"}])
+  assert "<script>" not in html_out
+  assert "&lt;script&gt;" in html_out
+  assert "&amp;bad" in html_out

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 from pathlib import Path
 from typing import Any
@@ -325,13 +326,38 @@ def render_step_header(step_no: int, title: str, subtitle: str) -> str:
   )
 
 
-def render_metric_cards(metrics: list[dict[str, Any]]) -> str:
+def _normalize_metric_card(metric: Any) -> dict[str, str]:
+  if isinstance(metric, dict):
+    return {
+      "label": str(metric.get("label", "")),
+      "value": str(metric.get("value", "")),
+      "help": str(metric.get("help", metric.get("delta", ""))),
+    }
+  if isinstance(metric, (tuple, list)):
+    label = str(metric[0]) if len(metric) >= 1 else "Metric"
+    value = str(metric[1]) if len(metric) >= 2 else ""
+    help_text = str(metric[2]) if len(metric) >= 3 else ""
+    return {"label": label, "value": value, "help": help_text}
+  return {"label": "Metric", "value": str(metric), "help": ""}
+
+
+def _escape_metric_text(value: str) -> str:
+  text = str(value or "").strip()
+  if not text or text.lower() in {"nan", "none", "null"}:
+    return ""
+  return html.escape(text, quote=True)
+
+
+def render_metric_cards(metrics: list[Any]) -> str:
   cards = []
   for metric in metrics:
-    label = str(metric.get("label", ""))
-    value = str(metric.get("value", ""))
+    normalized = _normalize_metric_card(metric)
+    label = _escape_metric_text(normalized["label"])
+    value = _escape_metric_text(normalized["value"]) or "0"
+    help_text = _escape_metric_text(normalized["help"])
+    title_attr = f' title="{help_text}"' if help_text else ""
     cards.append(
-      f'<div class="tc-metric-card">'
+      f'<div class="tc-metric-card"{title_attr}>'
       f'<div class="tc-metric-label">{label}</div>'
       f'<div class="tc-metric-value">{value}</div>'
       f"</div>",
