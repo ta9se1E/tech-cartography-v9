@@ -25,11 +25,13 @@
 7. **企業・市場シグナル** — Web Signal Review Pack（NEDO / JST / METI 国家プロジェクト候補）
 8. **レポート** — Executive Summary + **Reproducibility Smoke Run** 詳細セクション
 
-**Patent × Paper × Web Signal Link（Phase 23.4）**:
+**Patent × Paper × Web Signal Link（Phase 23.4 / 23.4.1）**:
 
 - 「Review Pack で見た NEDO / JST シグナルを、US-12565719-B2 の Claim Element / 論文候補と **link candidate** として横断整理できます」
 - 「**これは最終結論ではなく、次に確認すべき横断シグナルです** — 技術語が重なっても、同じ意味とは限りません」
 - 「`project_context_match` は国家プロジェクト文脈の候補であり、FTO・侵害・有効性判断ではありません」
+- 「Web Signal Link は、NEDO/JST/METI などの高品質ソースと、特許・論文の技術テーマの重なりを見るものです。ただし、これは最終結論ではなく Link Candidate です」
+- 「Phase 23.4.1 では、広いキーワード（PAN 等）だけで過剰に高スコアにならないように調整しています」
 
 **Web Signal の話し方（Phase 23.3）**:
 

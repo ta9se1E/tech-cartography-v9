@@ -1,4 +1,4 @@
-"""Tests for build_patent_paper_web_signal_links CLI (Phase 23.4)."""
+"""Tests for build_patent_paper_web_signal_links CLI (Phase 23.4 / 23.4.1)."""
 
 from __future__ import annotations
 
@@ -68,3 +68,72 @@ def test_build_link_pack_via_linker_api(tmp_path: Path) -> None:
   out = tmp_path / "outputs/web_signal_links/US-12565719-B2"
   save_web_signal_link_pack(pack, out)
   assert (out / "web_signal_link_candidates.csv").exists()
+  assert (out / "top_priority_web_signal_links.csv").exists()
+  assert (out / "weak_web_signal_links.csv").exists()
+
+
+def test_cli_calibrated_scoring_subprocess(tmp_path: Path) -> None:
+  _write_fixture(tmp_path)
+  out_dir = tmp_path / "outputs/web_signal_links/US-12565719-B2"
+  proc = subprocess.run(
+    [
+      sys.executable,
+      str(SCRIPT),
+      "--publication-number",
+      "US-12565719-B2",
+      "--web-signal-review-dir",
+      str(tmp_path / "outputs/web_signals/tavily_pan_carbon_fiber/review_pack"),
+      "--evidence-map-dir",
+      str(tmp_path / "outputs/evidence_map_synthesis/US-12565719-B2"),
+      "--openalex-dir",
+      str(tmp_path / "outputs/openalex_limited_execution"),
+      "--output-dir",
+      str(out_dir),
+      "--calibrated-scoring",
+    ],
+    cwd=PROJECT_ROOT,
+    capture_output=True,
+    text=True,
+    check=False,
+  )
+  assert proc.returncode == 0, proc.stderr
+  payload = json.loads(proc.stdout)
+  assert payload["calibrated_scoring"] is True
+  assert (out_dir / "top_priority_web_signal_links.csv").exists()
+
+
+def test_cli_dry_run_no_output_files(tmp_path: Path) -> None:
+  _write_fixture(tmp_path)
+  out_dir = tmp_path / "outputs/web_signal_links/US-12565719-B2"
+  proc = subprocess.run(
+    [
+      sys.executable,
+      str(SCRIPT),
+      "--publication-number",
+      "US-12565719-B2",
+      "--dry-run",
+    ],
+    cwd=PROJECT_ROOT,
+    capture_output=True,
+    text=True,
+    check=False,
+  )
+  assert proc.returncode == 0
+  assert not out_dir.exists()
+
+
+def test_cli_missing_inputs_no_crash() -> None:
+  proc = subprocess.run(
+    [
+      sys.executable,
+      str(SCRIPT),
+      "--publication-number",
+      "US-MISSING-PATENT",
+      "--dry-run",
+    ],
+    cwd=PROJECT_ROOT,
+    capture_output=True,
+    text=True,
+    check=False,
+  )
+  assert proc.returncode == 0

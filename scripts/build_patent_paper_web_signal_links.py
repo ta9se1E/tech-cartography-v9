@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Patent × Paper × Web Signal link candidates (Phase 23.4)."""
+"""Build Patent × Paper × Web Signal link candidates (Phase 23.4 / 23.4.1)."""
 
 from __future__ import annotations
 
@@ -14,8 +14,12 @@ if str(SRC_ROOT) not in sys.path:
   sys.path.insert(0, str(SRC_ROOT))
 
 from tech_cartography.web_signals.linker import (
+  LinkScoringConfig,
   build_web_signal_link_pack,
   dry_run_link_build,
+  is_high_priority_link,
+  is_top_priority_link,
+  is_weak_link_candidate,
   save_web_signal_link_pack,
 )
 
@@ -40,6 +44,18 @@ def parse_args() -> argparse.Namespace:
     action="store_false",
     dest="include_company_local_news",
   )
+  parser.add_argument("--calibrated-scoring", action="store_true", default=True)
+  parser.add_argument("--no-calibrated-scoring", action="store_false", dest="calibrated_scoring")
+  parser.add_argument("--min-high-priority-score", type=int, default=70)
+  parser.add_argument("--min-top-priority-score", type=int, default=80)
+  parser.add_argument("--exclude-broad-only-from-high-priority", action="store_true", default=True)
+  parser.add_argument(
+    "--no-exclude-broad-only-from-high-priority",
+    action="store_false",
+    dest="exclude_broad_only_from_high_priority",
+  )
+  parser.add_argument("--include-weak-links", action="store_true", default=True)
+  parser.add_argument("--no-include-weak-links", action="store_false", dest="include_weak_links")
   parser.add_argument("--dry-run", action="store_true", default=False)
   return parser.parse_args()
 
@@ -48,6 +64,13 @@ def main() -> int:
   args = parse_args()
   pub = str(args.publication_number).strip()
   output_dir = args.output_dir or f"outputs/web_signal_links/{pub}"
+  scoring_config = LinkScoringConfig(
+    calibrated_scoring=args.calibrated_scoring,
+    min_high_priority_score=args.min_high_priority_score,
+    min_top_priority_score=args.min_top_priority_score,
+    exclude_broad_only_from_high_priority=args.exclude_broad_only_from_high_priority,
+    include_weak_links=args.include_weak_links,
+  )
 
   if args.dry_run:
     result = dry_run_link_build(
@@ -70,14 +93,18 @@ def main() -> int:
     top_n=args.top_n,
     include_ir_disclosure=args.include_ir_disclosure,
     include_company_local_news=args.include_company_local_news,
+    scoring_config=scoring_config,
   )
-  paths = save_web_signal_link_pack(pack, PROJECT_ROOT / output_dir)
+  paths = save_web_signal_link_pack(pack, PROJECT_ROOT / output_dir, scoring_config=scoring_config)
   print(
     json.dumps(
       {
         "publication_number": pack.publication_number,
         "link_candidate_count": len(pack.link_candidates),
-        "high_priority_count": sum(1 for item in pack.link_candidates if item.link_score >= 60),
+        "top_priority_count": sum(1 for item in pack.link_candidates if is_top_priority_link(item, scoring_config)),
+        "high_priority_count": sum(1 for item in pack.link_candidates if is_high_priority_link(item, scoring_config)),
+        "weak_count": sum(1 for item in pack.link_candidates if is_weak_link_candidate(item)),
+        "calibrated_scoring": scoring_config.calibrated_scoring,
         "output_dir": str(PROJECT_ROOT / output_dir),
         "paths": {key: str(path) for key, path in paths.items()},
       },

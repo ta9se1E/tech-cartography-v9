@@ -1,4 +1,4 @@
-"""Patent × Paper × Web Signal link candidate builder (Phase 23.4)."""
+"""Patent × Paper × Web Signal link candidate builder (Phase 23.4 / 23.4.1)."""
 
 from __future__ import annotations
 
@@ -41,39 +41,69 @@ GOVERNMENT_DOMAIN_HINTS: tuple[str, ...] = (
   "go.jp",
 )
 
-TECHNOLOGY_TERMS_EN: tuple[str, ...] = (
-  "polyacrylonitrile",
-  "carbon fiber",
-  "carbonization",
-  "stabilization",
-  "surface treatment",
-  "tensile strength",
-  "pressure vessel",
-  "hydrogen tank",
-  "aerospace",
-  "composite",
-  "precursor",
-  "cfrp",
-  "pan",
-  "sizing",
-  "modulus",
+STRONG_TERMS: frozenset[str] = frozenset(
+  {
+    "carbonization",
+    "stabilization",
+    "surface treatment",
+    "sizing",
+    "tensile strength",
+    "modulus",
+    "precursor",
+    "polyacrylonitrile",
+    "炭化",
+    "耐炎化",
+    "表面処理",
+    "サイジング",
+    "引張強度",
+    "弾性率",
+    "前駆体",
+  },
 )
 
-TECHNOLOGY_TERMS_JA: tuple[str, ...] = (
-  "pan系",
-  "炭素繊維",
-  "炭化",
-  "耐炎化",
-  "表面処理",
-  "サイジング",
-  "引張強度",
-  "弾性率",
-  "複合材料",
-  "航空機",
-  "水素タンク",
-  "圧力容器",
-  "前駆体",
-  "cfrp",
+MODERATE_TERMS: frozenset[str] = frozenset(
+  {
+    "carbon fiber",
+    "cfrp",
+    "composite",
+    "aerospace",
+    "hydrogen tank",
+    "pressure vessel",
+    "炭素繊維",
+    "複合材料",
+    "航空機",
+    "水素タンク",
+    "圧力容器",
+  },
+)
+
+BROAD_TERMS: frozenset[str] = frozenset(
+  {
+    "pan",
+    "pan系",
+    "material",
+    "fiber",
+    "project",
+    "研究開発",
+    "プロジェクト",
+    "繊維",
+  },
+)
+
+ORDERED_MATCH_TERMS: tuple[str, ...] = tuple(
+  sorted(STRONG_TERMS | MODERATE_TERMS | BROAD_TERMS, key=len, reverse=True),
+)
+
+TECHNOLOGY_TERMS_EN: tuple[str, ...] = tuple(
+  term for term in ORDERED_MATCH_TERMS if term.isascii()
+)
+TECHNOLOGY_TERMS_JA: tuple[str, ...] = tuple(
+  term for term in ORDERED_MATCH_TERMS if not term.isascii()
+)
+
+CALIBRATION_NOTE = (
+  "Phase23.4.1 recalibrates link scores to avoid overclaiming. "
+  "High-quality public sources alone do not prove linkage to the target patent."
 )
 
 SUMMARY_CAUTION = (
@@ -105,6 +135,15 @@ LINK_CSV_COLUMNS: tuple[str, ...] = (
   "caveat",
   "next_verification_action",
   "web_signal_url",
+  "matched_strong_terms",
+  "matched_moderate_terms",
+  "matched_broad_terms",
+  "matched_term_strengths",
+  "link_explanation",
+  "score_reason",
+  "score_cap_reason",
+  "needs_manual_review",
+  "why_not_conclusive",
 )
 
 DEFAULT_NEXT_ACTIONS: tuple[str, ...] = (
@@ -116,6 +155,40 @@ DEFAULT_NEXT_ACTIONS: tuple[str, ...] = (
   "IR / disclosure 候補がある場合は原典 PDF / 決算説明資料を確認する",
   "断定的な競合戦略判断には使わない",
 )
+
+MEDIUM_CANDIDATE_ACTIONS: tuple[str, ...] = (
+  "Open source URL and verify original document context.",
+  "Check patent description / examples for thematic alignment.",
+  "Compare selected paper technical context with the web signal.",
+)
+
+LOW_CANDIDATE_ACTIONS: tuple[str, ...] = (
+  "Confirm whether matched terms share the same technical meaning.",
+  "Check whether the web signal relates to adjacent technology rather than the target patent.",
+)
+
+WEAK_CANDIDATE_ACTIONS: tuple[str, ...] = (
+  "Do not add to Evidence Map yet.",
+  "Keep as reference candidate pending more information.",
+  "Gather stronger claim, paper, or document-level evidence.",
+)
+
+
+@dataclass
+class LinkScoringConfig:
+  calibrated_scoring: bool = True
+  min_high_priority_score: int = 70
+  min_top_priority_score: int = 80
+  exclude_broad_only_from_high_priority: bool = True
+  include_weak_links: bool = True
+
+
+@dataclass
+class CalibratedScoreResult:
+  score: int
+  confidence: str
+  score_reason: str
+  score_cap_reason: str
 
 
 @dataclass
@@ -141,6 +214,15 @@ class WebSignalLinkCandidate:
   verification_status: str
   caveat: str
   next_verification_action: str
+  matched_strong_terms: list[str] = field(default_factory=list)
+  matched_moderate_terms: list[str] = field(default_factory=list)
+  matched_broad_terms: list[str] = field(default_factory=list)
+  matched_term_strengths: str = ""
+  link_explanation: str = ""
+  score_reason: str = ""
+  score_cap_reason: str = ""
+  needs_manual_review: bool = True
+  why_not_conclusive: str = ""
 
   def to_dict(self) -> dict[str, Any]:
     return asdict(self)
@@ -184,13 +266,59 @@ def extract_technology_terms(text: str) -> list[str]:
   if not normalized:
     return []
   found: list[str] = []
-  for term in TECHNOLOGY_TERMS_EN:
-    if term in normalized and term not in found:
-      found.append(term)
-  for term in TECHNOLOGY_TERMS_JA:
+  for term in ORDERED_MATCH_TERMS:
     if term in normalized and term not in found:
       found.append(term)
   return found
+
+
+def classify_term_strength(term: str) -> str:
+  value = str(term or "").strip().lower()
+  if value in STRONG_TERMS:
+    return "strong"
+  if value in MODERATE_TERMS:
+    return "moderate"
+  if value in BROAD_TERMS:
+    return "broad"
+  return "unknown"
+
+
+def split_terms_by_strength(matched_terms: list[str]) -> tuple[list[str], list[str], list[str]]:
+  strong: list[str] = []
+  moderate: list[str] = []
+  broad: list[str] = []
+  for term in matched_terms:
+    strength = classify_term_strength(term)
+    if strength == "strong":
+      strong.append(term)
+    elif strength == "moderate":
+      moderate.append(term)
+    elif strength == "broad":
+      broad.append(term)
+  return strong, moderate, broad
+
+
+def is_broad_only_match(matched_terms: list[str]) -> bool:
+  if not matched_terms:
+    return False
+  strong, moderate, _broad = split_terms_by_strength(matched_terms)
+  return not strong and not moderate
+
+
+def has_strong_or_moderate_match(matched_terms: list[str]) -> bool:
+  strong, moderate, _broad = split_terms_by_strength(matched_terms)
+  return bool(strong or moderate)
+
+
+def _meaningful_claim_text(text: str | None) -> bool:
+  value = str(text or "").strip()
+  if not value:
+    return False
+  if value.endswith("-manual") or re.fullmatch(r"CE-\d+", value, flags=re.IGNORECASE):
+    return False
+  if len(value) <= 12 and not extract_technology_terms(value):
+    return False
+  return True
 
 
 def match_terms(left_text: str, right_text: str) -> list[str]:
@@ -296,7 +424,26 @@ def score_link_candidate(
   has_claim_match: bool,
   has_paper_match: bool,
   source_url: str,
+  claim_element_text: str | None = None,
+  paper_title: str | None = None,
+  claim_term_match: bool = False,
+  paper_term_match: bool = False,
+  calibrated: bool = True,
 ) -> int:
+  if calibrated:
+    return score_link_candidate_calibrated(
+      matched_terms=matched_terms,
+      source_quality=source_quality,
+      web_signal_type=web_signal_type,
+      web_signal_domain=web_signal_domain,
+      evidence_sentence=evidence_sentence,
+      source_url=source_url,
+      claim_element_text=claim_element_text,
+      paper_title=paper_title,
+      claim_term_match=claim_term_match,
+      paper_term_match=paper_term_match,
+    ).score
+
   score = 20
   quality = str(source_quality or "").lower()
   signal_type = str(web_signal_type or "").lower()
@@ -333,6 +480,136 @@ def score_link_candidate(
   return max(0, min(100, score))
 
 
+def score_link_candidate_calibrated(
+  *,
+  matched_terms: list[str],
+  source_quality: str,
+  web_signal_type: str,
+  web_signal_domain: str,
+  evidence_sentence: str | None,
+  source_url: str,
+  claim_element_text: str | None,
+  paper_title: str | None,
+  claim_term_match: bool,
+  paper_term_match: bool,
+) -> CalibratedScoreResult:
+  score = 20
+  reasons: list[str] = []
+  caps: list[str] = []
+
+  quality = str(source_quality or "").lower()
+  signal_type = str(web_signal_type or "").lower()
+  strong, moderate, broad = split_terms_by_strength(matched_terms)
+  broad_only = is_broad_only_match(matched_terms)
+  has_claim_text = _meaningful_claim_text(claim_element_text)
+  has_paper = bool(str(paper_title or "").strip())
+  has_url = bool(str(source_url or "").strip())
+  has_evidence = bool(str(evidence_sentence or "").strip())
+
+  if quality == "high":
+    score += 15
+    reasons.append("source_quality=high")
+  elif quality == "medium_high":
+    score += 10
+    reasons.append("source_quality=medium_high")
+  elif quality == "medium":
+    score += 5
+    reasons.append("source_quality=medium")
+  elif quality in {"low", "unknown"}:
+    score -= 15
+    reasons.append("source_quality=low_or_unknown")
+
+  if signal_type in MONEY_NATIONAL_TYPES:
+    score += 15
+    reasons.append(f"signal_type={signal_type}")
+  elif signal_type in IR_DISCLOSURE_TYPES:
+    score += 10
+    reasons.append(f"signal_type={signal_type}")
+  elif signal_type in COMPANY_LOCAL_TYPES:
+    score += 8
+    reasons.append(f"signal_type={signal_type}")
+
+  if strong:
+    score += 20
+    reasons.append(f"strong_terms={','.join(strong)}")
+  if moderate:
+    score += 10
+    reasons.append(f"moderate_terms={','.join(moderate)}")
+  if broad_only:
+    score += 3
+    score -= 20
+    reasons.append("broad_term_only")
+  if len(strong) >= 2:
+    score += 10
+    reasons.append("strong_terms>=2")
+  if len(matched_terms) >= 3 and has_strong_or_moderate_match(matched_terms):
+    score += 8
+    reasons.append("matched_terms>=3_with_strong_or_moderate")
+
+  if has_claim_text and claim_term_match:
+    score += 15
+    reasons.append("claim_element_match")
+  if has_paper and paper_term_match:
+    score += 10
+    reasons.append("paper_title_match")
+  if has_evidence:
+    score += 10
+    reasons.append("evidence_sentence_exists=True")
+  if has_url:
+    score += 5
+    reasons.append("source_url_exists=True")
+  if _is_government_domain(web_signal_domain):
+    score += 5
+    reasons.append("government_domain=True")
+
+  if not has_claim_text:
+    score -= 10
+    reasons.append("claim_element_missing")
+  if not has_paper:
+    score -= 5
+    reasons.append("paper_title_missing")
+  if not has_evidence:
+    score -= 10
+    reasons.append("evidence_sentence_missing")
+  if signal_type == "human":
+    score -= 20
+    reasons.append("human_signal")
+
+  score = max(0, min(100, score))
+
+  if broad_only:
+    caps.append("broad_term_only_cap_45")
+    score = min(score, 45)
+  if not has_claim_text and has_paper and broad_only:
+    caps.append("claim_missing_broad_only_cap_40")
+    score = min(score, 40)
+  elif not has_claim_text and has_paper:
+    caps.append("claim_element_missing_cap_75")
+    score = min(score, 75)
+  elif not has_claim_text and broad_only:
+    caps.append("claim_missing_broad_only_cap_40")
+    score = min(score, 40)
+  if not has_url:
+    caps.append("source_url_missing_cap_40")
+    score = min(score, 40)
+  if signal_type == "human":
+    caps.append("human_signal_cap_50")
+    score = min(score, 50)
+  if signal_type in IR_DISCLOSURE_TYPES:
+    caps.append("ir_disclosure_cap_70")
+    score = min(score, 70)
+  if not has_evidence:
+    caps.append("no_evidence_sentence_cap_70")
+    score = min(score, 70)
+
+  return CalibratedScoreResult(
+    score=score,
+    confidence=_confidence_from_score(score),
+    score_reason="; ".join(reasons),
+    score_cap_reason="; ".join(caps) if caps else "",
+  )
+
+
 def infer_link_type(
   *,
   web_signal_type: str,
@@ -340,10 +617,38 @@ def infer_link_type(
   has_claim: bool,
   has_paper: bool,
   claim_paper_context: bool,
+  claim_term_match: bool = False,
+  paper_term_match: bool = False,
+  source_quality: str = "unknown",
+  calibrated: bool = True,
 ) -> str:
   signal_type = str(web_signal_type or "").lower()
   if not matched_terms:
     return "manual_review_required"
+
+  if calibrated:
+    broad_only = is_broad_only_match(matched_terms)
+    strong_or_moderate = has_strong_or_moderate_match(matched_terms)
+    if broad_only or (len(matched_terms) == 1 and matched_terms[0].lower() in {"pan", "pan系"}):
+      return "weak_keyword_overlap"
+    if signal_type in MONEY_NATIONAL_TYPES and strong_or_moderate:
+      return "project_context_match"
+    if signal_type in IR_DISCLOSURE_TYPES and strong_or_moderate:
+      return "company_context_match"
+    if signal_type in COMPANY_LOCAL_TYPES and strong_or_moderate:
+      return "company_context_match"
+    if has_paper and paper_term_match and strong_or_moderate:
+      return "paper_context_match"
+    if claim_paper_context and paper_term_match and strong_or_moderate:
+      return "paper_context_match"
+    if has_claim and claim_term_match and strong_or_moderate:
+      return "technology_theme_match"
+    if str(source_quality or "").lower() == "high" and not strong_or_moderate:
+      return "manual_review_required"
+    if broad_only:
+      return "weak_keyword_overlap"
+    return "manual_review_required"
+
   if signal_type in MONEY_NATIONAL_TYPES and matched_terms:
     return "project_context_match"
   if signal_type in IR_DISCLOSURE_TYPES and matched_terms:
@@ -359,6 +664,55 @@ def infer_link_type(
   if len(matched_terms) == 1:
     return "weak_keyword_overlap"
   return "technology_theme_match"
+
+
+def build_link_explanation(
+  *,
+  web_signal_type: str,
+  web_signal_domain: str,
+  link_type: str,
+  matched_terms: list[str],
+  paper_title: str | None,
+) -> str:
+  terms = ", ".join(matched_terms) if matched_terms else "no terms"
+  domain = web_signal_domain or "unknown domain"
+  if link_type == "project_context_match":
+    return (
+      f"{domain} source with {terms} theme overlap"
+      f"{' with selected paper' if paper_title else ''}. "
+      "This is a project-context candidate, not proof of patent relevance."
+    )
+  if link_type == "paper_context_match":
+    return (
+      f"Selected paper and web signal share {terms}. "
+      "This is a paper-context candidate, not proof of patent claims."
+    )
+  if link_type == "technology_theme_match":
+    return (
+      f"Claim element and web signal share {terms}. "
+      "This is a thematic candidate requiring manual technical review."
+    )
+  if link_type == "weak_keyword_overlap":
+    return (
+      f"Weak overlap on broad terms ({terms}) only. "
+      "Do not treat as a strong linkage."
+    )
+  return (
+    f"{web_signal_type} signal from {domain} shows {terms} overlap. "
+    "Manual review required before use."
+  )
+
+
+def build_why_not_conclusive(link_type: str) -> str:
+  if link_type == "weak_keyword_overlap":
+    return (
+      "The link relies on broad keyword overlap only. "
+      "Patent description/examples and original source documents require manual review."
+    )
+  return (
+    "The link is based on thematic overlap. "
+    "Patent description/examples and original project document require manual review."
+  )
 
 
 def _next_action_for_link(link_type: str, web_signal_type: str) -> str:
@@ -545,6 +899,53 @@ def _iter_papers(papers_df: pd.DataFrame) -> list[dict[str, str]]:
   return papers
 
 
+def _format_term_strengths(matched_terms: list[str]) -> str:
+  parts: list[str] = []
+  for term in matched_terms:
+    strength = classify_term_strength(term)
+    if strength != "unknown":
+      parts.append(f"{term}:{strength}")
+  return "; ".join(parts)
+
+
+def is_high_priority_link(
+  candidate: WebSignalLinkCandidate,
+  config: LinkScoringConfig,
+) -> bool:
+  if candidate.link_score < config.min_high_priority_score:
+    return False
+  if not str(candidate.web_signal_url or "").strip():
+    return False
+  if not str(candidate.evidence_sentence or "").strip():
+    return False
+  if config.exclude_broad_only_from_high_priority and is_broad_only_match(candidate.matched_terms):
+    return False
+  if candidate.confidence not in {"medium", "low"}:
+    return False
+  if candidate.verification_status in {"rejected", "low_quality"}:
+    return False
+  return True
+
+
+def is_top_priority_link(
+  candidate: WebSignalLinkCandidate,
+  config: LinkScoringConfig,
+) -> bool:
+  if candidate.link_score < config.min_top_priority_score:
+    return False
+  return has_strong_or_moderate_match(candidate.matched_terms)
+
+
+def is_weak_link_candidate(candidate: WebSignalLinkCandidate) -> bool:
+  if candidate.confidence == "weak":
+    return True
+  if candidate.link_type == "weak_keyword_overlap":
+    return True
+  if candidate.link_score < 50:
+    return True
+  return False
+
+
 def _build_candidate(
   *,
   publication_number: str,
@@ -556,11 +957,13 @@ def _build_candidate(
   left_text: str,
   right_text: str,
   contexts: list[str],
+  scoring_config: LinkScoringConfig | None = None,
 ) -> WebSignalLinkCandidate | None:
   matched = match_terms(left_text, right_text)
   if not matched:
     return None
 
+  config = scoring_config or LinkScoringConfig()
   web_signal_type = _first_value(web_row, "signal_type", "web_signal_type") or "other"
   source_quality = _first_value(web_row, "source_quality") or "unknown"
   source_url = _first_value(web_row, "source_url", "web_signal_url")
@@ -569,31 +972,76 @@ def _build_candidate(
   if evidence_sentence:
     evidence_sentence = evidence_sentence[:500]
 
+  claim_element_text = (claim or {}).get("claim_element_text") or None
+  paper_title = (paper or {}).get("paper_title") or None
+  claim_text = " ".join(filter(None, [claim_element_text, (claim or {}).get("claim_element_id")]))
+  paper_text = " ".join(filter(None, [paper_title, (paper or {}).get("paper_text", "")]))
+
+  claim_term_match = bool(claim) and bool(match_terms(claim_text, right_text))
+  paper_term_match = bool(paper) and bool(match_terms(paper_text, right_text))
+
   link_type = infer_link_type(
     web_signal_type=web_signal_type,
     matched_terms=matched,
     has_claim=bool(claim),
     has_paper=bool(paper),
     claim_paper_context=claim_paper_context,
-  )
-  score = score_link_candidate(
-    matched_terms=matched,
+    claim_term_match=claim_term_match,
+    paper_term_match=paper_term_match,
     source_quality=source_quality,
+    calibrated=config.calibrated_scoring,
+  )
+
+  if config.calibrated_scoring:
+    calibrated = score_link_candidate_calibrated(
+      matched_terms=matched,
+      source_quality=source_quality,
+      web_signal_type=web_signal_type,
+      web_signal_domain=source_domain,
+      evidence_sentence=evidence_sentence,
+      source_url=source_url,
+      claim_element_text=claim_element_text,
+      paper_title=paper_title,
+      claim_term_match=claim_term_match,
+      paper_term_match=paper_term_match,
+    )
+    score = calibrated.score
+    confidence = calibrated.confidence
+    score_reason = calibrated.score_reason
+    score_cap_reason = calibrated.score_cap_reason
+  else:
+    score = score_link_candidate(
+      matched_terms=matched,
+      source_quality=source_quality,
+      web_signal_type=web_signal_type,
+      web_signal_domain=source_domain,
+      evidence_sentence=evidence_sentence,
+      has_claim_match=bool(claim),
+      has_paper_match=bool(paper),
+      source_url=source_url,
+      calibrated=False,
+    )
+    confidence = _confidence_from_score(score)
+    score_reason = ""
+    score_cap_reason = ""
+
+  strong, moderate, broad = split_terms_by_strength(matched)
+  link_explanation = build_link_explanation(
     web_signal_type=web_signal_type,
     web_signal_domain=source_domain,
-    evidence_sentence=evidence_sentence,
-    has_claim_match=bool(claim),
-    has_paper_match=bool(paper),
-    source_url=source_url,
+    link_type=link_type,
+    matched_terms=matched,
+    paper_title=paper_title,
   )
+  why_not_conclusive = build_why_not_conclusive(link_type)
 
   return WebSignalLinkCandidate(
     link_id=new_link_id(),
     publication_number=publication_number,
     claim_element_id=(claim or {}).get("claim_element_id") or None,
-    claim_element_text=(claim or {}).get("claim_element_text") or None,
+    claim_element_text=claim_element_text,
     paper_id=(paper or {}).get("paper_id") or None,
-    paper_title=(paper or {}).get("paper_title") or None,
+    paper_title=paper_title,
     web_signal_id=_first_value(web_row, "signal_id", "web_signal_id") or new_link_id(),
     web_signal_type=web_signal_type,
     web_signal_title=_first_value(web_row, "source_title", "web_signal_title", "title"),
@@ -605,10 +1053,19 @@ def _build_candidate(
     matched_terms=matched,
     matched_contexts=contexts,
     evidence_sentence=evidence_sentence,
-    confidence=_confidence_from_score(score),
+    confidence=confidence,
     verification_status="needs_human_review",
     caveat=_caveat_for_link(web_signal_type, link_type),
     next_verification_action=_next_action_for_link(link_type, web_signal_type),
+    matched_strong_terms=strong,
+    matched_moderate_terms=moderate,
+    matched_broad_terms=broad,
+    matched_term_strengths=_format_term_strengths(matched),
+    link_explanation=link_explanation,
+    score_reason=score_reason,
+    score_cap_reason=score_cap_reason,
+    needs_manual_review=True,
+    why_not_conclusive=why_not_conclusive,
   )
 
 
@@ -618,7 +1075,9 @@ def build_web_signal_link_candidates(
   evidence_inputs: dict[str, Any],
   web_signal_inputs: dict[str, Any],
   min_link_score: int = 40,
+  scoring_config: LinkScoringConfig | None = None,
 ) -> list[WebSignalLinkCandidate]:
+  config = scoring_config or LinkScoringConfig()
   candidates: list[WebSignalLinkCandidate] = []
   web_df = web_signal_inputs.get("web_signals_df")
   if not isinstance(web_df, pd.DataFrame) or web_df.empty:
@@ -666,6 +1125,7 @@ def build_web_signal_link_candidates(
           left_text=claim_text,
           right_text=web_text,
           contexts=["claim_element", "web_signal"],
+          scoring_config=config,
         )
         if candidate:
           candidates.append(candidate)
@@ -684,6 +1144,7 @@ def build_web_signal_link_candidates(
           left_text=paper.get("paper_text", ""),
           right_text=web_text,
           contexts=["selected_paper", "web_signal"],
+          scoring_config=config,
         )
         if candidate:
           candidates.append(candidate)
@@ -715,6 +1176,7 @@ def build_web_signal_link_candidates(
           left_text=combined,
           right_text=web_text,
           contexts=["claim_paper_link", "web_signal"],
+          scoring_config=config,
         )
         if candidate:
           candidates.append(candidate)
@@ -736,7 +1198,9 @@ def build_web_signal_link_pack(
   top_n: int = 20,
   include_ir_disclosure: bool = True,
   include_company_local_news: bool = True,
+  scoring_config: LinkScoringConfig | None = None,
 ) -> WebSignalLinkPack:
+  config = scoring_config or LinkScoringConfig()
   root = Path(project_root)
   pub = str(publication_number).strip()
   evidence = load_evidence_map_inputs(pub, root)
@@ -768,6 +1232,7 @@ def build_web_signal_link_pack(
     evidence_inputs=evidence,
     web_signal_inputs=web_inputs,
     min_link_score=min_link_score,
+    scoring_config=config,
   )
   links.sort(key=lambda item: item.link_score, reverse=True)
   if top_n > 0:
@@ -814,6 +1279,15 @@ def link_candidates_to_records(candidates: list[WebSignalLinkCandidate]) -> list
         "caveat": item.caveat,
         "next_verification_action": item.next_verification_action,
         "web_signal_url": item.web_signal_url,
+        "matched_strong_terms": "; ".join(item.matched_strong_terms),
+        "matched_moderate_terms": "; ".join(item.matched_moderate_terms),
+        "matched_broad_terms": "; ".join(item.matched_broad_terms),
+        "matched_term_strengths": item.matched_term_strengths,
+        "link_explanation": item.link_explanation,
+        "score_reason": item.score_reason,
+        "score_cap_reason": item.score_cap_reason,
+        "needs_manual_review": item.needs_manual_review,
+        "why_not_conclusive": item.why_not_conclusive,
       },
     )
   return records
@@ -828,14 +1302,36 @@ def _save_link_csv(records: list[dict[str, Any]], path: Path) -> None:
       writer.writerow({col: record.get(col, "") for col in LINK_CSV_COLUMNS})
 
 
-def render_patent_paper_web_signal_summary_md(pack: WebSignalLinkPack) -> str:
+def render_patent_paper_web_signal_summary_md(
+  pack: WebSignalLinkPack,
+  scoring_config: LinkScoringConfig | None = None,
+) -> str:
+  config = scoring_config or LinkScoringConfig()
   links = pack.link_candidates
-  high_priority = [item for item in links if item.link_score >= 60]
+  high_priority = [item for item in links if is_high_priority_link(item, config)]
+  top_priority = [item for item in links if is_top_priority_link(item, config)]
+  weak_links = [item for item in links if is_weak_link_candidate(item)]
+  broad_only = [item for item in links if is_broad_only_match(item.matched_terms)]
+  claim_missing = [item for item in links if not _meaningful_claim_text(item.claim_element_text)]
+
+  score_ge_80 = sum(1 for item in links if item.link_score >= 80)
+  score_60_79 = sum(1 for item in links if 60 <= item.link_score < 80)
+  score_40_59 = sum(1 for item in links if 40 <= item.link_score < 60)
+  score_lt_40 = sum(1 for item in links if item.link_score < 40)
+
+  conf_medium = sum(1 for item in links if item.confidence == "medium")
+  conf_low = sum(1 for item in links if item.confidence == "low")
+  conf_weak = sum(1 for item in links if item.confidence == "weak")
+
   link_type_counts: dict[str, int] = {}
   signal_type_counts: dict[str, int] = {}
   for item in links:
     link_type_counts[item.link_type] = link_type_counts.get(item.link_type, 0) + 1
     signal_type_counts[item.web_signal_type] = signal_type_counts.get(item.web_signal_type, 0) + 1
+
+  medium_candidates = [item for item in links if item.confidence == "medium"]
+  low_candidates = [item for item in links if item.confidence == "low"]
+  weak_overlap = [item for item in links if item.link_type == "weak_keyword_overlap"]
 
   lines = [
     "# Patent × Paper × Web Signal Link Candidate Summary",
@@ -849,7 +1345,25 @@ def render_patent_paper_web_signal_summary_md(pack: WebSignalLinkPack) -> str:
     "## Counts",
     "",
     f"- total link candidates: {len(links)}",
-    f"- high priority link candidates (score>=60): {len(high_priority)}",
+    f"- top priority link candidates (score>={config.min_top_priority_score}, strong/moderate): {len(top_priority)}",
+    f"- high priority link candidates (score>={config.min_high_priority_score}): {len(high_priority)}",
+    f"- weak link candidates: {len(weak_links)}",
+    "",
+    "## Score Distribution",
+    "",
+    f"- score >= 80: {score_ge_80}",
+    f"- 60 <= score < 80: {score_60_79}",
+    f"- 40 <= score < 60: {score_40_59}",
+    f"- score < 40: {score_lt_40}",
+    "",
+    "## Link Strength Distribution",
+    "",
+    f"- medium: {conf_medium}",
+    f"- low: {conf_low}",
+    f"- weak: {conf_weak}",
+    "",
+    f"- broad term only candidates: {len(broad_only)}",
+    f"- claim_element missing candidates: {len(claim_missing)}",
     "",
     "## Link Type Counts",
     "",
@@ -867,6 +1381,35 @@ def render_patent_paper_web_signal_summary_md(pack: WebSignalLinkPack) -> str:
   else:
     lines.append("- (none)")
 
+  lines.extend(["", "## Top Medium Candidates", ""])
+  if medium_candidates:
+    for item in medium_candidates[:5]:
+      lines.append(
+        f"- {item.web_signal_title} (score={item.link_score}, type={item.link_type}, "
+        f"terms={', '.join(item.matched_terms)})",
+      )
+  else:
+    lines.append("- (none)")
+
+  lines.extend(["", "## Top Low Candidates", ""])
+  if low_candidates:
+    for item in low_candidates[:5]:
+      lines.append(
+        f"- {item.web_signal_title} (score={item.link_score}, type={item.link_type}, "
+        f"terms={', '.join(item.matched_terms)})",
+      )
+  else:
+    lines.append("- (none)")
+
+  lines.extend(["", "## weak_keyword_overlap Candidates Summary", ""])
+  if weak_overlap:
+    for item in weak_overlap[:5]:
+      lines.append(
+        f"- {item.web_signal_title} (score={item.link_score}, terms={', '.join(item.matched_terms)})",
+      )
+  else:
+    lines.append("- (none)")
+
   lines.extend(["", "## Top Link Candidates", ""])
   for item in links[:10]:
     lines.extend(
@@ -880,6 +1423,7 @@ def render_patent_paper_web_signal_summary_md(pack: WebSignalLinkPack) -> str:
         f"- paper: {item.paper_title or '(none)'}",
         f"- matched_terms: {', '.join(item.matched_terms) if item.matched_terms else '(none)'}",
         f"- confidence: {item.confidence}",
+        f"- link_explanation: {item.link_explanation}",
         "",
       ],
     )
@@ -911,6 +1455,8 @@ def render_patent_paper_web_signal_summary_md(pack: WebSignalLinkPack) -> str:
   lines.append("- Web signals are retrieved candidates; thematic overlap is not proof of linkage")
   lines.append("- Expert review is required before Evidence Map integration")
 
+  lines.extend(["", "## Calibration Note", "", CALIBRATION_NOTE, ""])
+
   lines.extend(["", "## Next Verification Actions", ""])
   for action in DEFAULT_NEXT_ACTIONS:
     lines.append(f"- {action}")
@@ -920,39 +1466,76 @@ def render_patent_paper_web_signal_summary_md(pack: WebSignalLinkPack) -> str:
 
 
 def render_next_verification_actions_md() -> str:
-  lines = ["# Next Verification Actions", ""]
+  lines = [
+    "# Next Verification Actions",
+    "",
+    "## Medium Candidates",
+    "",
+  ]
+  for action in MEDIUM_CANDIDATE_ACTIONS:
+    lines.append(f"- {action}")
+  lines.extend(["", "## Low Candidates", ""])
+  for action in LOW_CANDIDATE_ACTIONS:
+    lines.append(f"- {action}")
+  lines.extend(["", "## Weak Candidates", ""])
+  for action in WEAK_CANDIDATE_ACTIONS:
+    lines.append(f"- {action}")
+  lines.extend(["", "## General Actions", ""])
   for action in DEFAULT_NEXT_ACTIONS:
     lines.append(f"- {action}")
   lines.extend(["", "## Important", "", SUMMARY_CAUTION, ""])
   return "\n".join(lines)
 
 
-def save_web_signal_link_pack(pack: WebSignalLinkPack, output_dir: Path | str) -> dict[str, Path]:
+def save_web_signal_link_pack(
+  pack: WebSignalLinkPack,
+  output_dir: Path | str,
+  scoring_config: LinkScoringConfig | None = None,
+) -> dict[str, Path]:
+  config = scoring_config or LinkScoringConfig()
   out = Path(output_dir)
   out.mkdir(parents=True, exist_ok=True)
 
   all_records = link_candidates_to_records(pack.link_candidates)
-  high_records = link_candidates_to_records([item for item in pack.link_candidates if item.link_score >= 60])
+  high_items = [item for item in pack.link_candidates if is_high_priority_link(item, config)]
+  top_items = [item for item in pack.link_candidates if is_top_priority_link(item, config)]
+  weak_items = [item for item in pack.link_candidates if is_weak_link_candidate(item)]
+
+  high_records = link_candidates_to_records(high_items)
+  top_records = link_candidates_to_records(top_items)
+  weak_records = link_candidates_to_records(weak_items) if config.include_weak_links else []
 
   json_path = out / "web_signal_link_candidates.json"
   csv_path = out / "web_signal_link_candidates.csv"
   high_csv_path = out / "high_priority_web_signal_links.csv"
+  top_csv_path = out / "top_priority_web_signal_links.csv"
+  weak_csv_path = out / "weak_web_signal_links.csv"
   summary_path = out / "patent_paper_web_signal_summary.md"
   actions_path = out / "next_verification_actions.md"
 
   json_path.write_text(json.dumps(pack.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
   _save_link_csv(all_records, csv_path)
   _save_link_csv(high_records, high_csv_path)
-  summary_path.write_text(render_patent_paper_web_signal_summary_md(pack), encoding="utf-8")
+  _save_link_csv(top_records, top_csv_path)
+  if config.include_weak_links:
+    _save_link_csv(weak_records, weak_csv_path)
+  summary_path.write_text(
+    render_patent_paper_web_signal_summary_md(pack, scoring_config=config),
+    encoding="utf-8",
+  )
   actions_path.write_text(render_next_verification_actions_md(), encoding="utf-8")
 
-  return {
+  result = {
     "web_signal_link_candidates_json": json_path,
     "web_signal_link_candidates_csv": csv_path,
     "high_priority_web_signal_links_csv": high_csv_path,
+    "top_priority_web_signal_links_csv": top_csv_path,
     "patent_paper_web_signal_summary_md": summary_path,
     "next_verification_actions_md": actions_path,
   }
+  if config.include_weak_links:
+    result["weak_web_signal_links_csv"] = weak_csv_path
+  return result
 
 
 def dry_run_link_build(
