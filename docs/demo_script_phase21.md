@@ -22,7 +22,15 @@
 4. **技術の裏取り: Summary** — 6枚のメトリクスカード
 5. **Selected Evidence Papers / Claim × Paper Links** — supporting evidence candidate
 6. **Evidence Gaps / Next Actions** — 実務で次にやること
-7. **レポート** — Executive Summary + **Reproducibility Smoke Run** 詳細セクション
+7. **企業・市場シグナル** — Web Signal Review Pack（NEDO / JST / METI 国家プロジェクト候補）
+8. **レポート** — Executive Summary + **Reproducibility Smoke Run** 詳細セクション
+
+**Web Signal の話し方（Phase 23.3）**:
+
+- 「特許・論文だけでなく、NEDO / JST / METI などの **国家プロジェクト・公的研究開発シグナル候補** も見られます」
+- 「**これは最終結論ではなく、次に確認すべき外部シグナルです** — 特許・論文との関係はまだ人間が確認します」
+- 「`source_quality=high` でも signal candidate として扱い、FTO・侵害・有効性判断ではありません」
+- 「IR / disclosure 候補が空でも画面は落ちず、次 Phase で EDINET / 企業 IR を広げる予定です」
 
 **再現性の話し方（Phase 22.1）**:
 
@@ -53,7 +61,7 @@
 
 3分版に加えて:
 
-- **企業・市場シグナル** — 手動入力・将来拡張。架空情報は使わない方針
+- **企業・市場シグナル** — Web Signal Review Pack（NEDO/JST/METI 候補）。架空情報は使わない方針
 - **設定** — Watch テーマ・週次メール設定（送信は未実装）
 - **堅牢性** — 成果物が一部欠けても画面は落ちず partial 表示
 - **再現性** — 追加1〜2件の特許で同じフローを試せる設計意図
@@ -78,8 +86,8 @@ FTO、侵害、有効性判断はしません。最終判断には専門家レ�
 ### 「架空情報は使っているのか？」
 
 **Evidence Map デモの論文・リンクは既存 outputs（OpenAlex 実行結果）から読み込んでいます。**  
-企業・市場シグナルは現時点では手動入力または将来拡張で、**架空情報を本物のように表示しません。**  
-将来デモ用の仮想シグナルを使う場合は、必ず **"Synthetic demo signal"** と明記するルールです。この Phase では架空企業シグナルは追加していません。
+企業・市場シグナルは **Web Signal Review Pack（Tavily 取得済み review_pack）** を表示します。架空情報を本物のように表示しません。  
+将来デモ用の仮想シグナルを使う場合は、必ず **"Synthetic demo signal"** と明記するルールです。
 
 ### 「中小企業にどう役立つのか？」
 
@@ -97,4 +105,5 @@ FTO、侵害、有効性判断はしません。最終判断には専門家レ�
 - [ ] はじめるタブに「3分デモの見方」がある
 - [ ] 技術の裏取りタブに Summary カード・ガイド・Gaps・Next Actions がある
 - [ ] レポートタブ先頭に Executive Summary がある
-- [ ] 企業・市場シグナルに Synthetic demo signal 方針が表示される
+- [ ] 企業・市場シグナルに Web Signal Review Pack（Summary Cards / High Priority）がある
+- [ ] 企業・市場シグナルに「signal candidates / FTOではない」注意文がある

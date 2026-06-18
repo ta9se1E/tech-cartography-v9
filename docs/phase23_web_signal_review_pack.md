@@ -165,3 +165,15 @@ outputs/web_signals/{batch_id}/review_pack/
 - `src/tech_cartography/web_signals/review_pack.py`
 - `src/tech_cartography/web_signals/tavily_runner.py`
 - `scripts/run_tavily_web_signal_search.py`
+- `src/tech_cartography/ui/web_signal_review_ui.py`（Phase 23.3）
+
+## Phase 23.3 UI表示への接続
+
+Phase 23.3 では Review Pack 成果物を Streamlit の **「企業・市場シグナル」** タブで表示します。
+
+- 読み込み元: `outputs/web_signals/tavily_pan_carbon_fiber/review_pack/`（または最新 batch）
+- 新規 Tavily 実行は UI から行いません
+- Summary Cards / High Priority / Money / IR / Company / Rejected を一覧表示
+- IR 候補が空でも画面は落ちず、次 Phase の案内を表示
+
+詳細: `docs/phase23_web_signal_review_ui.md`

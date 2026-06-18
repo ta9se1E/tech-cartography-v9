@@ -75,6 +75,10 @@ from tech_cartography.ui.reproducibility_smoke_ui import (
   render_reproducibility_brief_section,
   render_reproducibility_smoke_section,
 )
+from tech_cartography.ui.web_signal_review_ui import (
+  load_web_signal_review_artifacts,
+  render_web_signal_review_section,
+)
 from tech_cartography.ui.streamlit_session import (
   DISPLAY_MODE_OPTIONS,
   STATE_CURRENT_USER,
@@ -541,11 +545,18 @@ def _tab_evidence(
 def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> None:
   if demo_mode:
     render_market_signal_demo_notice()
+
+  web_review_artifacts = load_web_signal_review_artifacts(PROJECT_ROOT)
+  render_web_signal_review_section(web_review_artifacts)
+
   if not manifest:
     if not demo_mode:
-      st.info("Web signal CSV を追加するとここに表示されます。テンプレートを埋めてパイプラインを実行してください。")
+      st.divider()
+      st.info("パイプライン manifest の Web signal CSV は未読み込みです。上記 Review Pack を優先して確認してください。")
     return
+
   if not demo_mode:
+    st.divider()
     st.markdown(
       render_info_box(
         "Toray / Teijin / Zhongfu Shenying などの企業動向は、"
@@ -559,13 +570,13 @@ def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> 
 
   if not web_df.empty or not business_df.empty:
     if not web_df.empty:
-      with st.expander("Web Signal"):
+      with st.expander("Web Signal (Pipeline Manifest)"):
         render_small_table(web_df.head(20))
     if not business_df.empty:
       with st.expander("Business Summary"):
         render_small_table(business_df.head(20))
-  else:
-    st.info("Web signal CSV を追加するとここに表示されます。テンプレートを埋めてパイプラインを実行してください。")
+  elif not demo_mode:
+    st.info("manifest 内の Web signal CSV はまだありません。Review Pack を上で確認してください。")
 
   if not company_df.empty:
     with st.expander("Company Watch"):
