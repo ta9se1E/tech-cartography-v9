@@ -64,14 +64,18 @@ with st.sidebar:
   default_run = user.get("last_run_id") or st.session_state.get(STATE_SELECTED_RUN_ID, "")
   run_id_input = st.text_input(
     "run_id",
-    value=st.session_state.get(STATE_SELECTED_RUN_ID, default_run),
+    value=default_run,
     key=WIDGET_SELECTED_RUN_ID,
+    help="outputs配下のrun_idを指定します。latest_runまたはデモモードから自動設定できます。",
   )
+  if run_id_input and str(run_id_input).strip():
+    st.session_state[STATE_SELECTED_RUN_ID] = str(run_id_input).strip()
 
   if st.button("latest_run を読み込む", use_container_width=True, key="load_latest_run_button"):
     pointer = read_latest_run_pointer(pipeline_root_input)
     if pointer and pointer.get("run_id"):
       run_id = str(pointer["run_id"])
+      st.session_state[STATE_SELECTED_RUN_ID] = run_id
       st.session_state[STATE_PENDING_SELECTED_RUN_ID] = run_id
       st.session_state[STATE_MANIFEST_PATH] = pointer.get("manifest_path", "")
       updated_user = set_last_run_id(user["user_id"], run_id)

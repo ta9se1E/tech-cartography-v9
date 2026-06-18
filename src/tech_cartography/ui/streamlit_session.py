@@ -55,6 +55,12 @@ INTERNAL_KEYS = frozenset(
   },
 )
 
+PENDING_KEYS = frozenset(
+  {
+    STATE_PENDING_SELECTED_RUN_ID,
+  },
+)
+
 DISPLAY_MODE_OPTIONS = ("かんたん表示", "詳細表示")
 
 

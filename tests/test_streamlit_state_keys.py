@@ -128,4 +128,6 @@ def test_app_py_does_not_assign_widget_selected_run_id_directly() -> None:
 def test_app_py_latest_run_uses_pending_selected_run_id() -> None:
   app_text = Path("app.py").read_text(encoding="utf-8")
   assert "st.session_state[STATE_PENDING_SELECTED_RUN_ID]" in app_text
+  assert "st.session_state[STATE_SELECTED_RUN_ID]" in app_text
   assert "load_latest_run_button" in app_text
+  assert "apply_pending_widget_state_updates()" in app_text
