@@ -18,12 +18,15 @@ from tech_cartography.web_signals.schema import (
   web_signal_from_dict,
 )
 
-SOURCE_POLICY_VERSION = "phase23.0"
+SOURCE_POLICY_VERSION = "phase23.1"
 
 SUMMARY_CAUTION = (
   "Web signals are signal candidates, not final conclusions.\n"
-  "Human and money signals require source verification.\n"
+  "IR / disclosure signals require document-level verification.\n"
+  "Human signals require careful identity verification.\n"
+  "Money / national_project signals require source verification.\n"
   "Synthetic demo signal must be clearly labeled.\n"
+  "Tavily results are retrieved web candidates and may include noise.\n"
   "This is not FTO, infringement, or validity analysis."
 )
 
@@ -31,6 +34,7 @@ LIST_FIELDS = (
   "related_technology_terms",
   "related_publication_numbers",
   "related_paper_ids",
+  "extracted_evidence_sentences",
 )
 
 
@@ -61,6 +65,15 @@ def web_signals_to_dataframe(signals: list[WebSignal]) -> pd.DataFrame:
       "is_synthetic_demo": row.is_synthetic_demo,
       "caveat": row.caveat,
       "next_verification_action": row.next_verification_action,
+      "source_kind": row.source_kind or "",
+      "disclosure_type": row.disclosure_type or "",
+      "listed_company_code": row.listed_company_code or "",
+      "fiscal_period": row.fiscal_period or "",
+      "document_date": row.document_date or "",
+      "language": row.language or "",
+      "extracted_evidence_sentences": "; ".join(row.extracted_evidence_sentences),
+      "source_quality": row.source_quality or "",
+      "source_category": row.source_category or "",
     }
     rows.append(data)
   return pd.DataFrame(rows)
@@ -106,6 +119,10 @@ def render_web_signal_summary_md(batch: WebSignalBatch) -> str:
           f"- confidence: {row.confidence}",
           f"- verification_status: {row.verification_status}",
           f"- synthetic_demo: {row.is_synthetic_demo}",
+          f"- source_kind: {row.source_kind or '(none)'}",
+          f"- disclosure_type: {row.disclosure_type or '(none)'}",
+          f"- source_quality: {row.source_quality or '(none)'}",
+          f"- source_category: {row.source_category or '(none)'}",
           f"- caveat: {row.caveat}",
           f"- next_verification_action: {row.next_verification_action or '(none)'}",
           "",
@@ -152,6 +169,46 @@ def save_web_signal_batch(batch: WebSignalBatch, output_dir: Path | str) -> dict
     "web_signals_csv": csv_path,
     "web_signal_summary_md": md_path,
   }
+
+
+def save_tavily_web_signal_run(
+  *,
+  batch: WebSignalBatch,
+  queries: list[Any],
+  search_raw: list[dict[str, Any]],
+  extract_raw: list[dict[str, Any]],
+  output_dir: Path | str,
+) -> dict[str, Path]:
+  out = Path(output_dir)
+  out.mkdir(parents=True, exist_ok=True)
+
+  paths = save_web_signal_batch(batch, out)
+
+  queries_path = out / "web_signal_queries.json"
+  query_payload = [
+    item.to_dict() if hasattr(item, "to_dict") else item for item in queries
+  ]
+  queries_path.write_text(
+    json.dumps(query_payload, indent=2, ensure_ascii=False),
+    encoding="utf-8",
+  )
+
+  search_path = out / "tavily_search_raw.json"
+  search_path.write_text(
+    json.dumps(search_raw, indent=2, ensure_ascii=False),
+    encoding="utf-8",
+  )
+
+  extract_path = out / "tavily_extract_raw.json"
+  extract_path.write_text(
+    json.dumps(extract_raw, indent=2, ensure_ascii=False),
+    encoding="utf-8",
+  )
+
+  paths["web_signal_queries_json"] = queries_path
+  paths["tavily_search_raw_json"] = search_path
+  paths["tavily_extract_raw_json"] = extract_path
+  return paths
 
 
 def load_web_signal_batch(path: Path | str) -> WebSignalBatch | None:

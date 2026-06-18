@@ -1,4 +1,4 @@
-"""Web Signal schema and validation (Phase 23.0)."""
+"""Web Signal schema and validation (Phase 23.0 / 23.1)."""
 
 from __future__ import annotations
 
@@ -21,6 +21,36 @@ SIGNAL_TYPES: frozenset[str] = frozenset(
     "policy",
     "market",
     "other",
+    "ir_disclosure",
+    "disclosure",
+    "grant",
+    "funding",
+    "equipment_investment",
+  },
+)
+
+SOURCE_KINDS: frozenset[str] = frozenset(
+  {
+    "tavily_search",
+    "tavily_extract",
+    "manual_entry",
+    "official_api",
+    "synthetic_demo",
+  },
+)
+
+DISCLOSURE_TYPES: frozenset[str] = frozenset(
+  {
+    "financial_results",
+    "earnings_presentation",
+    "integrated_report",
+    "annual_report",
+    "securities_report",
+    "timely_disclosure",
+    "press_release",
+    "grant_notice",
+    "project_page",
+    "unknown",
   },
 )
 
@@ -48,6 +78,18 @@ CONFIDENCE_RANK: dict[str, int] = {
 
 SYNTHETIC_DEMO_MARKER = "Synthetic demo signal"
 HUMAN_MONEY_SIGNAL_TYPES: frozenset[str] = frozenset({"human", "money", "national_project"})
+
+SOURCE_URL_REQUIRED_TYPES: frozenset[str] = frozenset(
+  {
+    "money",
+    "national_project",
+    "ir_disclosure",
+    "disclosure",
+    "grant",
+    "funding",
+    "equipment_investment",
+  },
+)
 
 DEFAULT_CAVEAT = (
   "Web signals are signal candidates, not final conclusions. "
@@ -134,6 +176,15 @@ class WebSignal:
   is_synthetic_demo: bool = False
   caveat: str = DEFAULT_CAVEAT
   next_verification_action: str = ""
+  source_kind: str | None = None
+  disclosure_type: str | None = None
+  listed_company_code: str | None = None
+  fiscal_period: str | None = None
+  document_date: str | None = None
+  language: str | None = None
+  extracted_evidence_sentences: list[str] = field(default_factory=list)
+  source_quality: str | None = None
+  source_category: str | None = None
 
   def __post_init__(self) -> None:
     self.signal_type = normalize_signal_type(self.signal_type)
@@ -150,7 +201,7 @@ class WebSignalBatch:
   created_at: str
   query_set: list[str]
   signals: list[WebSignal]
-  source_policy_version: str = "phase23.0"
+  source_policy_version: str = "phase23.1"
   notes: str = ""
 
 
@@ -182,6 +233,15 @@ def web_signal_from_dict(data: dict[str, Any]) -> WebSignal:
     is_synthetic_demo=bool(data.get("is_synthetic_demo")),
     caveat=str(data.get("caveat") or DEFAULT_CAVEAT),
     next_verification_action=str(data.get("next_verification_action") or ""),
+    source_kind=data.get("source_kind"),
+    disclosure_type=data.get("disclosure_type"),
+    listed_company_code=data.get("listed_company_code"),
+    fiscal_period=data.get("fiscal_period"),
+    document_date=data.get("document_date"),
+    language=data.get("language"),
+    extracted_evidence_sentences=list(data.get("extracted_evidence_sentences") or []),
+    source_quality=data.get("source_quality"),
+    source_category=data.get("source_category"),
   )
 
 
@@ -205,7 +265,7 @@ def web_signal_batch_from_dict(data: dict[str, Any]) -> WebSignalBatch:
     created_at=str(data.get("created_at") or _utc_now_iso()),
     query_set=[str(item) for item in (data.get("query_set") or [])],
     signals=signals,
-    source_policy_version=str(data.get("source_policy_version") or "phase23.0"),
+    source_policy_version=str(data.get("source_policy_version") or "phase23.1"),
     notes=str(data.get("notes") or ""),
   )
 
@@ -239,9 +299,19 @@ def validate_web_signal(signal: WebSignal) -> list[str]:
     if signal.confidence == "high":
       errors.append("human signal cannot be high confidence without verified_source")
 
-  if signal.signal_type in {"money", "national_project"}:
+  if signal.signal_type in SOURCE_URL_REQUIRED_TYPES:
     if not str(signal.source_url or "").strip() and signal.confidence == "high":
       errors.append(f"{signal.signal_type} signal cannot be high confidence without source_url")
+    if not str(signal.source_domain or "").strip() and signal.confidence == "high":
+      errors.append(f"{signal.signal_type} signal cannot be high confidence without source_domain")
+
+  if signal.disclosure_type is not None:
+    if str(signal.disclosure_type) not in DISCLOSURE_TYPES:
+      errors.append(f"invalid disclosure_type: {signal.disclosure_type}")
+
+  if signal.source_kind is not None:
+    if str(signal.source_kind) not in SOURCE_KINDS:
+      errors.append(f"invalid source_kind: {signal.source_kind}")
 
   required_fields = {
     "source_title": signal.source_title,
@@ -284,7 +354,10 @@ def apply_validation_rules(signal: WebSignal) -> WebSignal:
   if updated.signal_type == "human" and updated.verification_status != "verified_source":
     updated.confidence = _cap_confidence(updated.confidence, "medium")
 
-  if updated.signal_type in {"money", "national_project"} and not str(updated.source_url or "").strip():
+  if updated.signal_type in SOURCE_URL_REQUIRED_TYPES and not str(updated.source_url or "").strip():
+    updated.confidence = _cap_confidence(updated.confidence, "medium")
+
+  if updated.signal_type in SOURCE_URL_REQUIRED_TYPES and not str(updated.source_domain or "").strip():
     updated.confidence = _cap_confidence(updated.confidence, "medium")
 
   if updated.verification_status != "verified_source":
