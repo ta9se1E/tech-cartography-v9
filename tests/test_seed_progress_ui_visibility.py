@@ -23,8 +23,10 @@ def test_seed_progress_dashboard_before_theme_name_gate() -> None:
   section = text.split("def render_theme_validation_section", 1)[1]
   seed_idx = section.index("seed publication numbers（カンマ区切り")
   progress_idx = section.index("progress_list = render_seed_progress_dashboard")
-  theme_gate_idx = section.index("if not theme_name.strip():")
+  theme_gate_idx = section.index("has_theme_name = bool(theme_name.strip())")
+  e2e_idx = section.index("render_end_to_end_chain_section")
   assert seed_idx < progress_idx < theme_gate_idx
+  assert progress_idx < e2e_idx
 
 
 def test_buttons_not_hidden_by_empty_seed_early_return() -> None:
@@ -56,7 +58,7 @@ def test_manual_claims_editor_selectbox_lists_all_seeds() -> None:
 
 def test_evidence_map_builder_selectbox_lists_all_seeds() -> None:
   text = Path("src/tech_cartography/ui/theme_validation_ui.py").read_text(encoding="utf-8")
-  builder = text.split("def render_evidence_map_builder", 1)[1].split("def render_theme_validation_intro_card", 1)[0]
+  builder = text.split("def render_evidence_map_builder", 1)[1].split("def _end_to_end_display_dataframe", 1)[0]
   assert 'options=seeds' in builder
   assert "default_index" in builder
 

@@ -52,8 +52,27 @@ Phase24.4A〜24.4B で確認した JP seed 3 件（Stage 3 pass）について�
 1. トップレベルタブ「**別テーマ検証**」を開く
 2. テーマ名・theme_id・seed 3 件を入力
 3. Seed 進捗で Stage 3 pass を確認
-4. **JP Seed End-to-End Chain** セクションで publication numbers を選択
-5. ボタンで各ステップを実行
+4. **Evidence Map Builder の直下**に **JP Seed End-to-End Chain / 最後までつなぐ検証** セクションが表示されます（ページ下部までスクロール）
+5. publication numbers を multiselect で選択
+6. ボタンで各ステップを実行
+
+### 表示位置（Phase 24.4C.1）
+
+End-to-End Chain セクションは **Evidence Map Builder の直下** に常に表示されます。
+
+- `theme_name` 未入力でも見出しと説明は表示されます
+- seed publication numbers が空の場合は info「seed publication numbersを入力してください」
+- seed がある場合は publication multiselect と全ボタンが有効化されます
+
+### dry_run / allow_external_api / run_openalex / run_tavily
+
+| 設定 | デフォルト | 意味 |
+|------|-----------|------|
+| dry_run | true | 外部 API 実行を抑制 |
+| allow_external_api | false | 明示同意なしでは OpenAlex/Tavily を実行しない |
+| run_openalex | false | Paper 候補取得時に OpenAlex を使うか |
+| run_tavily | false | Web Signal 取得時に Tavily を使うか |
+| run_bigquery | false | 本 Phase では基本未使用 |
 
 ### JP2022090764A から 1 件ずつ
 

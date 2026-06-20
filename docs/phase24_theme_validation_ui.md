@@ -167,6 +167,34 @@ skeleton には英日の注意書きが入ります:
 3. **次に進めるseed** の案内に従い、未完了 seed の Manual Claims を保存
 4. skeleton 未生成 seed で **Evidence Map skeletonを生成する**
 5. 全 seed が Stage 3 pass になるまで繰り返す
+
+## JP Seed End-to-End Chain（Phase 24.4C / 24.4C.1）
+
+**Evidence Map Builder の直下**に **JP Seed End-to-End Chain / 最後までつなぐ検証** が常に表示されます。
+
+### 表示されない場合
+
+- ページ下部までスクロールしてください（Manual Claims / Evidence Map の下）
+- seed publication numbers を入力すると multiselect とボタンが有効になります
+- `theme_name` 未入力でもセクション見出しは表示されます
+
+### 設定の意味
+
+| 設定 | デフォルト | 説明 |
+|------|-----------|------|
+| dry_run | true | 外部 API を抑制 |
+| allow_external_api | false | チェックしない限り OpenAlex/Tavily 未実行 |
+| run_openalex | false | Paper 候補取得で OpenAlex を使う |
+| run_tavily | false | Web Signal 取得で Tavily を使う |
+
+### JP2022090764A 手動確認順
+
+1. End-to-End状態を確認する
+2. Paper Query Planを作る
+3. Link Candidate / Strategic Watch / Digest Preview
+4. End-to-Endレポートを保存する
+
+詳細: `docs/phase24_jp_seed_end_to_end_chain.md`
 6. **Seed進捗レポートを保存する**
 
 ### 例

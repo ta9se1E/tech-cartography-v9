@@ -44,5 +44,20 @@ def test_ui_has_manual_claims_editor_labels() -> None:
     "Seed進捗レポートを保存する",
     "seed publication numbersを入力してください",
     "### 次にやること",
+    "JP Seed End-to-End Chain / 最後までつなぐ検証",
+    "最後までつなぐ検証",
+    "End-to-End状態を確認する",
+    "Paper Query Planを作る",
+    "Link Candidateを生成する",
+    "Digest Previewを生成する",
   ):
     assert label in text
+
+
+def test_theme_validation_section_wires_end_to_end_after_evidence_map() -> None:
+  text = Path("src/tech_cartography/ui/theme_validation_ui.py").read_text(encoding="utf-8")
+  section = text.split("def render_theme_validation_section", 1)[1].split(
+    "def render_theme_validation_intro_card", 1,
+  )[0]
+  assert section.index("render_evidence_map_builder") < section.index("render_end_to_end_chain_section")
+  assert "render_end_to_end_chain_section(case=case" in section

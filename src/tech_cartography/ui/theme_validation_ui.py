@@ -83,6 +83,10 @@ END_TO_END_UI_NOTICES = (
   "Digest は preview only です。outbound email は行いません。",
   "本ツールはFTO、侵害、有効性判断、法的見解には使用しません。",
 )
+END_TO_END_INTRO_LINES = (
+  "Stage 4以降、つまりPaper候補、Webシグナル候補、Link Candidate、Strategic Watch、Digestまでを確認します。",
+  "外部APIは明示同意がある場合のみ実行します。",
+)
 
 EVIDENCE_MAP_BUILDER_NOTICES = (
   "保存済みManual ClaimsからClaim Elementを抽出し、Evidence Map生成の準備を行います。",
@@ -644,7 +648,10 @@ def render_end_to_end_chain_section(
   key_prefix: str,
   progress_list: list | None = None,
 ) -> None:
+  st.divider()
   st.markdown("#### JP Seed End-to-End Chain / 最後までつなぐ検証")
+  for line in END_TO_END_INTRO_LINES:
+    st.markdown(render_info_box(line), unsafe_allow_html=True)
   for notice in END_TO_END_UI_NOTICES:
     st.markdown(render_caution_box(notice), unsafe_allow_html=True)
 
@@ -653,33 +660,80 @@ def render_end_to_end_chain_section(
   items = progress_list or _get_seed_progress_list(seeds)
   stage3_ready = [item.publication_number for item in items if item.stage3_status == "pass"]
   default_selection = stage3_ready or seeds
+  seeds_ready = bool(seeds)
 
-  selected_pubs = st.multiselect(
-    "publication numbers",
-    options=seeds or default_selection,
-    default=default_selection,
-    key=f"{key_prefix}_e2e_pubs",
-  )
+  if not seeds_ready:
+    st.info("seed publication numbersを入力してください")
+
+  selected_pubs: list[str] = []
+  if seeds_ready:
+    selected_pubs = st.multiselect(
+      "publication numbers",
+      options=seeds,
+      default=default_selection,
+      key=f"{key_prefix}_e2e_pubs",
+    )
+  else:
+    st.caption("publication multiselect: seed publication numbers 入力後に表示されます。")
+
   col1, col2, col3 = st.columns(3)
   with col1:
-    max_papers = st.number_input("max_papers", min_value=1, max_value=20, value=5, key=f"{key_prefix}_e2e_max_papers")
+    max_papers = st.number_input(
+      "max_papers",
+      min_value=1,
+      max_value=20,
+      value=5,
+      key=f"{key_prefix}_e2e_max_papers",
+      disabled=not seeds_ready,
+    )
   with col2:
     max_web_signals = st.number_input(
-      "max_web_signals", min_value=1, max_value=20, value=10, key=f"{key_prefix}_e2e_max_web",
+      "max_web_signals",
+      min_value=1,
+      max_value=20,
+      value=10,
+      key=f"{key_prefix}_e2e_max_web",
+      disabled=not seeds_ready,
     )
   with col3:
-    cache_first = st.checkbox("cache_first", value=True, key=f"{key_prefix}_e2e_cache")
+    cache_first = st.checkbox(
+      "cache_first",
+      value=True,
+      key=f"{key_prefix}_e2e_cache",
+      disabled=not seeds_ready,
+    )
 
-  dry_run = st.checkbox("dry_run", value=True, key=f"{key_prefix}_e2e_dry_run")
+  dry_run = st.checkbox(
+    "dry_run",
+    value=True,
+    key=f"{key_prefix}_e2e_dry_run",
+    disabled=not seeds_ready,
+  )
   allow_external_api = st.checkbox(
     "allow_external_api",
     value=False,
     key=f"{key_prefix}_e2e_allow_api",
     help="チェックしない限り OpenAlex/Tavily/BigQuery は実行しません。",
+    disabled=not seeds_ready,
   )
-  run_openalex = st.checkbox("run_openalex", value=False, key=f"{key_prefix}_e2e_openalex")
-  run_tavily = st.checkbox("run_tavily", value=False, key=f"{key_prefix}_e2e_tavily")
-  run_bigquery = st.checkbox("run_bigquery", value=False, key=f"{key_prefix}_e2e_bigquery")
+  run_openalex = st.checkbox(
+    "run_openalex",
+    value=False,
+    key=f"{key_prefix}_e2e_openalex",
+    disabled=not seeds_ready,
+  )
+  run_tavily = st.checkbox(
+    "run_tavily",
+    value=False,
+    key=f"{key_prefix}_e2e_tavily",
+    disabled=not seeds_ready,
+  )
+  run_bigquery = st.checkbox(
+    "run_bigquery",
+    value=False,
+    key=f"{key_prefix}_e2e_bigquery",
+    disabled=not seeds_ready,
+  )
 
   st.markdown(
     render_warning_box(
@@ -689,8 +743,78 @@ def render_end_to_end_chain_section(
     unsafe_allow_html=True,
   )
 
-  if not selected_pubs:
-    st.info("seed publication numbers を選択してください。")
+  actions_enabled = seeds_ready and bool(selected_pubs)
+
+  btn_cols = st.columns(5)
+  with btn_cols[0]:
+    inspect_clicked = st.button(
+      "End-to-End状態を確認する",
+      key=f"{key_prefix}_e2e_inspect",
+      disabled=not actions_enabled,
+    )
+  with btn_cols[1]:
+    paper_plan_clicked = st.button(
+      "Paper Query Planを作る",
+      key=f"{key_prefix}_e2e_paper_plan",
+      disabled=not actions_enabled,
+    )
+  with btn_cols[2]:
+    paper_fetch_clicked = st.button(
+      "Paper候補を取得する",
+      key=f"{key_prefix}_e2e_paper_fetch",
+      disabled=not actions_enabled,
+    )
+  with btn_cols[3]:
+    web_plan_clicked = st.button(
+      "Web Signal Query Planを作る",
+      key=f"{key_prefix}_e2e_web_plan",
+      disabled=not actions_enabled,
+    )
+  with btn_cols[4]:
+    web_fetch_clicked = st.button(
+      "Web Signal候補を取得する",
+      key=f"{key_prefix}_e2e_web_fetch",
+      disabled=not actions_enabled,
+    )
+
+  btn_cols2 = st.columns(5)
+  with btn_cols2[0]:
+    link_clicked = st.button(
+      "Link Candidateを生成する",
+      key=f"{key_prefix}_e2e_link",
+      disabled=not actions_enabled,
+    )
+  with btn_cols2[1]:
+    watch_clicked = st.button(
+      "Strategic Watch Briefを生成する",
+      key=f"{key_prefix}_e2e_watch",
+      disabled=not actions_enabled,
+    )
+  with btn_cols2[2]:
+    digest_clicked = st.button(
+      "Digest Previewを生成する",
+      key=f"{key_prefix}_e2e_digest",
+      disabled=not actions_enabled,
+    )
+  with btn_cols2[3]:
+    all_steps_clicked = st.button(
+      "選択したseedの全ステップを実行する",
+      key=f"{key_prefix}_e2e_all",
+      disabled=not actions_enabled,
+    )
+  with btn_cols2[4]:
+    save_report_clicked = st.button(
+      "End-to-Endレポートを保存する",
+      key=f"{key_prefix}_e2e_save",
+      disabled=not actions_enabled,
+    )
+
+  if not actions_enabled:
+    result = st.session_state.get(STATE_END_TO_END_RESULT)
+    if result is not None and seeds_ready:
+      st.markdown("**End-to-End Stage 表（前回結果）**")
+      st.dataframe(_end_to_end_display_dataframe(result), use_container_width=True, hide_index=True)
+    st.caption(CHAIN_CAUTION)
     return
 
   config = EndToEndChainConfig(
@@ -708,30 +832,6 @@ def render_end_to_end_chain_section(
     allow_external_api=allow_external_api,
     created_by="streamlit_ui",
   )
-
-  btn_cols = st.columns(5)
-  with btn_cols[0]:
-    inspect_clicked = st.button("End-to-End状態を確認する", key=f"{key_prefix}_e2e_inspect")
-  with btn_cols[1]:
-    paper_plan_clicked = st.button("Paper Query Planを作る", key=f"{key_prefix}_e2e_paper_plan")
-  with btn_cols[2]:
-    paper_fetch_clicked = st.button("Paper候補を取得する", key=f"{key_prefix}_e2e_paper_fetch")
-  with btn_cols[3]:
-    web_plan_clicked = st.button("Web Signal Query Planを作る", key=f"{key_prefix}_e2e_web_plan")
-  with btn_cols[4]:
-    web_fetch_clicked = st.button("Web Signal候補を取得する", key=f"{key_prefix}_e2e_web_fetch")
-
-  btn_cols2 = st.columns(5)
-  with btn_cols2[0]:
-    link_clicked = st.button("Link Candidateを生成する", key=f"{key_prefix}_e2e_link")
-  with btn_cols2[1]:
-    watch_clicked = st.button("Strategic Watch Briefを生成する", key=f"{key_prefix}_e2e_watch")
-  with btn_cols2[2]:
-    digest_clicked = st.button("Digest Previewを生成する", key=f"{key_prefix}_e2e_digest")
-  with btn_cols2[3]:
-    all_steps_clicked = st.button("選択したseedの全ステップを実行する", key=f"{key_prefix}_e2e_all")
-  with btn_cols2[4]:
-    save_report_clicked = st.button("End-to-Endレポートを保存する", key=f"{key_prefix}_e2e_save")
 
   result: EndToEndChainResult | None = st.session_state.get(STATE_END_TO_END_RESULT)
 
@@ -915,39 +1015,9 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
     key_prefix=key_prefix,
   )
 
-  if not theme_name.strip():
-    st.caption("テーマ名を入力すると dry-run などの操作ボタンが有効になります。")
-    if seed_publications:
-      placeholder_case = _build_case_from_inputs(
-        theme_name="（テーマ名未入力）",
-        theme_id_override=theme_id_value or progress_theme_id,
-        description=description,
-        core_text=core_text,
-        application_text=application_text,
-        material_text=material_text,
-        exclude_text=exclude_text,
-        seed_text=seed_text,
-      )
-      render_manual_claims_editor(
-        case=placeholder_case,
-        key_prefix=key_prefix,
-        progress_list=progress_list,
-      )
-      render_evidence_map_builder(
-        case=placeholder_case,
-        key_prefix=key_prefix,
-        progress_list=progress_list,
-      )
-      render_end_to_end_chain_section(
-        case=placeholder_case,
-        key_prefix=key_prefix,
-        progress_list=progress_list,
-      )
-    return
-
   case = _build_case_from_inputs(
-    theme_name=theme_name,
-    theme_id_override=theme_id_value,
+    theme_name=theme_name.strip() or "（テーマ名未入力）",
+    theme_id_override=theme_id_value or progress_theme_id,
     description=description,
     core_text=core_text,
     application_text=application_text,
@@ -955,51 +1025,66 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
     exclude_text=exclude_text,
     seed_text=seed_text,
   )
-  st.session_state[STATE_THEME_VALIDATION_CASE] = case
-  st.caption(f"theme_id: `{case.theme_id}`")
 
-  col_a, col_b, col_c = st.columns(3)
-  with col_a:
-    dry_run_clicked = st.button("A. 検索計画を作成する（dry-run）", key=f"{key_prefix}_dry_run")
-  with col_b:
-    existing_clicked = st.button("B. 既存outputsだけで検証する", key=f"{key_prefix}_existing")
-  with col_c:
-    template_clicked = st.button("D. Manual Claimsテンプレートを作成する", key=f"{key_prefix}_template")
+  has_theme_name = bool(theme_name.strip())
+  if not has_theme_name:
+    st.caption("テーマ名を入力すると dry-run などの操作ボタンが有効になります。")
+  else:
+    st.session_state[STATE_THEME_VALIDATION_CASE] = case
+    st.caption(f"theme_id: `{case.theme_id}`")
 
-  st.markdown(
-    render_warning_box(
-      "C. 特許候補検索を実行する場合、入力キーワードが外部APIまたはBigQueryに送信される可能性があります。"
-      " 社外秘情報を入れないでください。"
-    ),
-    unsafe_allow_html=True,
-  )
-  consent = st.checkbox(
-    "外部検索を実行することに同意します",
-    value=False,
-    key=f"{key_prefix}_external_consent",
-  )
-  max_patents = st.number_input("max_patents", min_value=1, max_value=5, value=5, step=1, key=f"{key_prefix}_max_patents")
-  external_clicked = st.button(
-    "C. 特許候補検索を実行する",
-    key=f"{key_prefix}_external_search",
-    disabled=not consent,
-  )
+  dry_run_clicked = False
+  existing_clicked = False
+  template_clicked = False
+  external_clicked = False
+  save_clicked = False
+  consent = False
+  max_patents = 5
 
-  save_clicked = st.button("E. 検証レポートを保存する", key=f"{key_prefix}_save_report")
+  if has_theme_name:
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+      dry_run_clicked = st.button("A. 検索計画を作成する（dry-run）", key=f"{key_prefix}_dry_run")
+    with col_b:
+      existing_clicked = st.button("B. 既存outputsだけで検証する", key=f"{key_prefix}_existing")
+    with col_c:
+      template_clicked = st.button("D. Manual Claimsテンプレートを作成する", key=f"{key_prefix}_template")
+
+    st.markdown(
+      render_warning_box(
+        "C. 特許候補検索を実行する場合、入力キーワードが外部APIまたはBigQueryに送信される可能性があります。"
+        " 社外秘情報を入れないでください。"
+      ),
+      unsafe_allow_html=True,
+    )
+    consent = st.checkbox(
+      "外部検索を実行することに同意します",
+      value=False,
+      key=f"{key_prefix}_external_consent",
+    )
+    max_patents = st.number_input(
+      "max_patents", min_value=1, max_value=5, value=5, step=1, key=f"{key_prefix}_max_patents",
+    )
+    external_clicked = st.button(
+      "C. 特許候補検索を実行する",
+      key=f"{key_prefix}_external_search",
+      disabled=not consent,
+    )
+    save_clicked = st.button("E. 検証レポートを保存する", key=f"{key_prefix}_save_report")
 
   result: ThemeValidationRunResult | None = st.session_state.get(STATE_THEME_VALIDATION_RESULT)
 
-  if dry_run_clicked:
+  if has_theme_name and dry_run_clicked:
     result = run_theme_validation_dry_run(case)
     st.session_state[STATE_THEME_VALIDATION_RESULT] = result
     st.markdown(render_success_box("dry-run 完了（外部API未実行）"), unsafe_allow_html=True)
 
-  if existing_clicked:
+  if has_theme_name and existing_clicked:
     result = run_existing_outputs_validation(case, _project_root())
     st.session_state[STATE_THEME_VALIDATION_RESULT] = result
     st.markdown(render_success_box("既存 outputs 検証完了（外部API未実行）"), unsafe_allow_html=True)
 
-  if template_clicked:
+  if has_theme_name and template_clicked:
     seeds = case.seed_publication_numbers
     if not seeds:
       st.warning("seed publication number を指定してください。")
@@ -1023,7 +1108,7 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
   render_evidence_map_builder(case=case, key_prefix=key_prefix, progress_list=progress_list)
   render_end_to_end_chain_section(case=case, key_prefix=key_prefix, progress_list=progress_list)
 
-  if external_clicked:
+  if has_theme_name and external_clicked:
     if not consent:
       st.warning("外部検索の同意チェックが必要です。")
     else:
@@ -1040,7 +1125,7 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
       else:
         st.markdown(render_success_box("外部検索フローを実行しました。"), unsafe_allow_html=True)
 
-  if save_clicked:
+  if has_theme_name and save_clicked:
     result = st.session_state.get(STATE_THEME_VALIDATION_RESULT)
     if result is None:
       result = run_theme_validation_dry_run(case)
@@ -1054,4 +1139,5 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
     for label, path in paths.items():
       st.caption(f"{label}: {path}")
 
-  render_theme_validation_stage_matrix(st.session_state.get(STATE_THEME_VALIDATION_RESULT))
+  if has_theme_name:
+    render_theme_validation_stage_matrix(st.session_state.get(STATE_THEME_VALIDATION_RESULT))
