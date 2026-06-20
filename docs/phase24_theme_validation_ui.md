@@ -146,6 +146,39 @@ skeleton には英日の注意書きが入ります:
 - seed: `JP2022090764A`
 - 出力: `outputs/evidence_map_synthesis/JP2022090764A/`
 
+## Seed別検証進捗（Phase 24.4A.4）
+
+**Seed別 検証進捗 / Seed Validation Progress** で、複数 seed の Manual Claims / Evidence Map / Stage 2・3 を一覧表示します。
+
+### 見方
+
+| 列 | 意味 |
+|----|------|
+| Manual Claims | 保存済み / テンプレートのみ / 未投入 |
+| Evidence Map | skeletonあり / 本格Evidence Map / 未生成 |
+| Stage 2 | Manual Claims 保存で pass |
+| Stage 3 | skeleton または full map で pass |
+| next_action | 次にやること |
+
+### 3件横展開の手順
+
+1. seed に `JP2022090764A, JP2023163084A, JP2018084002A` を入力
+2. **Seed進捗を更新する** で一覧確認
+3. **次に進めるseed** の案内に従い、未完了 seed の Manual Claims を保存
+4. skeleton 未生成 seed で **Evidence Map skeletonを生成する**
+5. 全 seed が Stage 3 pass になるまで繰り返す
+6. **Seed進捗レポートを保存する**
+
+### 例
+
+| seed | 想定状態（JP2022090764A完了後） |
+|------|--------------------------------|
+| JP2022090764A | Stage 2 pass / Stage 3 pass（完了済み） |
+| JP2023163084A | Manual Claims missing → 貼り付け保存 |
+| JP2018084002A | Manual Claims missing → 貼り付け保存 |
+
+保存先: `outputs/validation/theme_validation/{theme_id}/seed_progress_report.md`
+
 ## Manual Claims Editor（Phase 24.4A.2）
 
 別テーマ検証タブ内の **Manual Claims入力 / Manual Claims Editor** で、公報原文からコピーした請求項を UI 上で保存できます。

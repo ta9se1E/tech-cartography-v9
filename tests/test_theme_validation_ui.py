@@ -39,5 +39,7 @@ def test_ui_has_manual_claims_editor_labels() -> None:
     "保存用テーマID",
     "Evidence Map生成準備 / Evidence Map Builder",
     "Evidence Map skeletonを生成する",
+    "Seed別 検証進捗 / Seed Validation Progress",
+    "Seed進捗を更新する",
   ):
     assert label in text

@@ -15,6 +15,14 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_success_box,
   render_warning_box,
 )
+from tech_cartography.validation.seed_progress import (
+  inspect_seed_progress_many,
+  preferred_publication_for_evidence_map,
+  preferred_publication_for_manual_claims,
+  progress_to_display_dataframe,
+  save_seed_progress_report,
+  summarize_seed_progress_actions,
+)
 from tech_cartography.validation.manual_claims_evidence_builder import (
   SKELETON_CAUTION_JA,
   build_evidence_map_skeleton,
@@ -47,6 +55,7 @@ STATE_THEME_VALIDATION_CASE = "tc_theme_validation_case"
 STATE_MANUAL_CLAIMS_LOADED = "tc_manual_claims_loaded"
 STATE_CLAIM_ELEMENTS = "tc_claim_elements"
 STATE_EVIDENCE_SKELETON = "tc_evidence_skeleton"
+STATE_SEED_PROGRESS = "tc_seed_progress_list"
 
 EVIDENCE_MAP_BUILDER_NOTICES = (
   "保存済みManual ClaimsからClaim Elementを抽出し、Evidence Map生成の準備を行います。",
@@ -175,10 +184,85 @@ def render_theme_validation_stage_matrix(result: ThemeValidationRunResult | None
     )
 
 
+def _get_seed_progress_list(case: ThemeValidationCase) -> list:
+  root = _project_root()
+  return inspect_seed_progress_many(case.seed_publication_numbers, root)
+
+
+def _default_publication_with_manual_claims(
+  case: ThemeValidationCase,
+  root: Path,
+  progress_list: list | None = None,
+) -> str:
+  items = progress_list or _get_seed_progress_list(case)
+  preferred = preferred_publication_for_manual_claims(items)
+  if preferred:
+    return preferred
+  for pub in case.seed_publication_numbers:
+    if has_manual_claims(pub, root)[0]:
+      return pub
+  return case.seed_publication_numbers[0] if case.seed_publication_numbers else ""
+
+
+def render_seed_progress_dashboard(
+  *,
+  case: ThemeValidationCase,
+  key_prefix: str,
+) -> list:
+  st.markdown("#### Seed別 検証進捗 / Seed Validation Progress")
+  st.markdown(
+    render_info_box(
+      "複数seed特許の Manual Claims / Evidence Map skeleton / Stage 2・3 の状態を一覧表示します。"
+      " 外部APIは実行しません。Evidence Map skeletonは最終Evidence Mapではありません。"
+    ),
+    unsafe_allow_html=True,
+  )
+
+  seeds = list(case.seed_publication_numbers)
+  if not seeds:
+    st.info("seed publication numbers を入力すると進捗が表示されます。")
+    return []
+
+  update_clicked = st.button("Seed進捗を更新する", key=f"{key_prefix}_seed_progress_update")
+  save_clicked = st.button("Seed進捗レポートを保存する", key=f"{key_prefix}_seed_progress_save")
+
+  progress_list = st.session_state.get(STATE_SEED_PROGRESS)
+  if update_clicked or progress_list is None:
+    progress_list = _get_seed_progress_list(case)
+    st.session_state[STATE_SEED_PROGRESS] = progress_list
+
+  if save_clicked:
+    progress_list = _get_seed_progress_list(case)
+    st.session_state[STATE_SEED_PROGRESS] = progress_list
+    paths = save_seed_progress_report(
+      progress_list,
+      _project_root() / "outputs" / "validation" / "theme_validation",
+      case.theme_id,
+    )
+    st.markdown(render_success_box("Seed進捗レポートを保存しました。"), unsafe_allow_html=True)
+    for label, path in paths.items():
+      st.caption(f"{label}: {path}")
+
+  if progress_list:
+    render_small_table(progress_to_display_dataframe(progress_list), height=260)
+    pending, completed = summarize_seed_progress_actions(progress_list)
+    if pending:
+      st.markdown("**次に進めるseed:**")
+      for row in pending:
+        st.markdown(render_caution_box(row), unsafe_allow_html=True)
+    if completed:
+      st.markdown("**完了済みseed:**")
+      for row in completed:
+        st.markdown(render_success_box(row), unsafe_allow_html=True)
+
+  return progress_list or []
+
+
 def render_manual_claims_editor(
   *,
   case: ThemeValidationCase,
   key_prefix: str,
+  progress_list: list | None = None,
   on_revalidate: bool = False,
 ) -> bool:
   """Render Manual Claims editor. Returns True if re-validation was requested."""
@@ -305,13 +389,6 @@ def render_manual_claims_editor(
   return False
 
 
-def _default_publication_with_manual_claims(case: ThemeValidationCase, root: Path) -> str:
-  for pub in case.seed_publication_numbers:
-    if has_manual_claims(pub, root)[0]:
-      return pub
-  return case.seed_publication_numbers[0] if case.seed_publication_numbers else ""
-
-
 def _show_stage_delta(result: ThemeValidationRunResult | None) -> None:
   if result is None:
     return
@@ -330,6 +407,7 @@ def render_evidence_map_builder(
   *,
   case: ThemeValidationCase,
   key_prefix: str,
+  progress_list: list | None = None,
 ) -> None:
   st.markdown("#### Evidence Map生成準備 / Evidence Map Builder")
   for notice in EVIDENCE_MAP_BUILDER_NOTICES:
@@ -337,7 +415,8 @@ def render_evidence_map_builder(
 
   root = _project_root()
   seeds = list(case.seed_publication_numbers)
-  default_pub = _default_publication_with_manual_claims(case, root)
+  items = progress_list or _get_seed_progress_list(case)
+  default_pub = preferred_publication_for_evidence_map(items) or _default_publication_with_manual_claims(case, root, items)
   if seeds:
     default_index = seeds.index(default_pub) if default_pub in seeds else 0
     publication_number = st.selectbox(
@@ -567,6 +646,8 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
   st.session_state[STATE_THEME_VALIDATION_CASE] = case
   st.caption(f"theme_id: `{case.theme_id}`")
 
+  progress_list = render_seed_progress_dashboard(case=case, key_prefix=key_prefix)
+
   col_a, col_b, col_c = st.columns(3)
   with col_a:
     dry_run_clicked = st.button("A. 検索計画を作成する（dry-run）", key=f"{key_prefix}_dry_run")
@@ -628,8 +709,8 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
       for path in created:
         st.code(path)
 
-  render_manual_claims_editor(case=case, key_prefix=key_prefix)
-  render_evidence_map_builder(case=case, key_prefix=key_prefix)
+  render_manual_claims_editor(case=case, key_prefix=key_prefix, progress_list=progress_list)
+  render_evidence_map_builder(case=case, key_prefix=key_prefix, progress_list=progress_list)
 
   if external_clicked:
     if not consent:
