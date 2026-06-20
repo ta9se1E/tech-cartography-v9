@@ -65,6 +65,7 @@ def test_initial_digest_no_previous() -> None:
   assert diff.is_initial
   assert "watch-1" in diff.added_watch_items
   assert "Initial Snapshot" in diff.diff_markdown
+  assert "初回ベースライン" in diff.diff_markdown
 
 
 def test_detect_added_web_signals() -> None:

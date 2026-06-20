@@ -17,7 +17,7 @@ def test_weekly_digest_initial(tmp_path: Path) -> None:
   _write_snapshot_fixture(tmp_path)
   diff = DigestDiff(is_initial=True, added_watch_items=["watch-1"])
   digest = build_weekly_digest("US-12565719-B2", tmp_path, diff=diff)
-  assert "What changed this week" in digest.markdown_body
+  assert "今週の差分" in digest.markdown_body
   assert PREVIEW_ONLY_NOTICE in digest.markdown_body
   assert digest.send_status == "preview_only"
 
@@ -25,7 +25,7 @@ def test_weekly_digest_initial(tmp_path: Path) -> None:
 def test_weekly_digest_has_top_watch_section(tmp_path: Path) -> None:
   _write_snapshot_fixture(tmp_path)
   digest = build_weekly_digest("US-12565719-B2", tmp_path, diff=DigestDiff(is_initial=True))
-  assert "Top 3 Watch Items" in digest.markdown_body
+  assert "今週の重点監視候補 Top 3" in digest.markdown_body
 
 
 def test_weekly_digest_html_preview() -> None:
@@ -39,3 +39,4 @@ def test_email_sending_disabled_notice() -> None:
   digest = build_weekly_digest("US-X", Path("/nonexistent"), diff=DigestDiff(is_initial=True))
   assert "preview_only" in digest.send_status
   assert "Email sending is disabled" in digest.markdown_body
+  assert "FTO" in digest.markdown_body or "侵害" in digest.markdown_body

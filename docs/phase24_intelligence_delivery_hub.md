@@ -78,15 +78,25 @@ outputs/delivery/
 - **レポート**タブ最上部: Intelligence Delivery / Export
 - **はじめる**タブ下部: 簡易版タブ説明
 
-## なぜこの Phase ではメール送信しないか
+## なぜこの Phase ではメール送信しないか（Phase 24.0）
 
-実メール送信は誤送信・断定表示のリスクがあるため、Preview とファイル出力までに留めます。
+実メール送信は誤送信・断定表示のリスクがあるため、Preview とファイル出力までに留めました。
+
+## Phase 24.1 — Email Outbox への接続
+
+Phase 24.1 で以下を追加しました。
+
+- Weekly Digest 本文の日本語整形・Top 3 重複抑制
+- `outputs/delivery/email_outbox/` への Email Draft 保存
+- CLI `--build-email-draft` / `--send-email` による明示送信ガード
+- UI では Email Draft Preview のみ（送信ボタンなし）
+
+詳細: [phase24_weekly_digest_email_outbox.md](./phase24_weekly_digest_email_outbox.md)
 
 ## 今後の Phase
 
-- Phase 24.1: actual email draft/export
 - Phase 24.2: scheduled weekly digest
-- Phase 24.3: Gmail/SMTP integration with explicit opt-in
+- Phase 24.3: Gmail API integration with explicit opt-in
 
 ## 注意事項
 

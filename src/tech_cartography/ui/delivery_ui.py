@@ -9,6 +9,10 @@ from typing import Any
 
 import streamlit as st
 
+from tech_cartography.delivery.email_outbox import (
+  EmailDraft,
+  load_email_draft_for_publication,
+)
 from tech_cartography.delivery.overview import (
   DELIVERY_CAUTION,
   TabOverviewItem,
@@ -43,6 +47,13 @@ class DeliveryUIArtifacts:
   weekly_digest_md_path: Path | None = None
   weekly_digest_html_path: Path | None = None
   digest_diff_path: Path | None = None
+  email_draft: EmailDraft | None = None
+  email_draft_md: str | None = None
+  email_draft_html: str | None = None
+  email_draft_json: str | None = None
+  email_draft_md_path: Path | None = None
+  email_draft_html_path: Path | None = None
+  email_draft_json_path: Path | None = None
   tab_overviews: list[TabOverviewItem] = field(default_factory=list)
   missing_artifacts: list[str] = field(default_factory=list)
 
@@ -96,6 +107,9 @@ def collect_download_keys_for_artifacts(
     make_download_key(f"{key_prefix}_dl_weekly_digest_html", pub, artifacts.weekly_digest_html_path),
     make_download_key(f"{key_prefix}_dl_digest_diff", pub, artifacts.digest_diff_path),
     make_download_key(f"{key_prefix}_dl_report_bundle_zip", pub, artifacts.report_zip_path),
+    make_download_key(f"{key_prefix}_dl_email_draft_md", pub, artifacts.email_draft_md_path),
+    make_download_key(f"{key_prefix}_dl_email_draft_html", pub, artifacts.email_draft_html_path),
+    make_download_key(f"{key_prefix}_dl_email_draft_json", pub, artifacts.email_draft_json_path),
   ]
   return keys
 
@@ -147,6 +161,17 @@ def load_delivery_artifacts(
   digest_html_path = paths["weekly_digest_html"] if paths["weekly_digest_html"].exists() else None
   diff_path = paths["digest_diff_md"] if paths["digest_diff_md"].exists() else None
 
+  outbox_dir = ddir / "email_outbox"
+  email_draft_paths = {
+    "email_draft_md": outbox_dir / f"email_draft_{path_pub}.md",
+    "email_draft_html": outbox_dir / f"email_draft_{path_pub}.html",
+    "email_draft_json": outbox_dir / f"email_draft_{path_pub}.json",
+  }
+  email_draft = load_email_draft_for_publication(ddir, path_pub)
+  email_md_path = email_draft_paths["email_draft_md"] if email_draft_paths["email_draft_md"].exists() else None
+  email_html_path = email_draft_paths["email_draft_html"] if email_draft_paths["email_draft_html"].exists() else None
+  email_json_path = email_draft_paths["email_draft_json"] if email_draft_paths["email_draft_json"].exists() else None
+
   return DeliveryUIArtifacts(
     publication_number=pub_for_key,
     status=status,
@@ -161,6 +186,13 @@ def load_delivery_artifacts(
     weekly_digest_md_path=digest_md_path,
     weekly_digest_html_path=digest_html_path,
     digest_diff_path=diff_path,
+    email_draft=email_draft,
+    email_draft_md=_safe_read_text(email_draft_paths["email_draft_md"]) if email_md_path else None,
+    email_draft_html=_safe_read_text(email_draft_paths["email_draft_html"]) if email_html_path else None,
+    email_draft_json=_safe_read_text(email_draft_paths["email_draft_json"]) if email_json_path else None,
+    email_draft_md_path=email_md_path,
+    email_draft_html_path=email_html_path,
+    email_draft_json_path=email_json_path,
     tab_overviews=build_tab_overviews(),
     missing_artifacts=missing,
   )
@@ -282,6 +314,83 @@ def render_weekly_digest_preview_section(
     st.info("Weekly Digest Preview がまだありません。初回は initial snapshot として生成されます。")
 
 
+def render_email_draft_preview_section(
+  artifacts: DeliveryUIArtifacts,
+  *,
+  key_prefix: str = "delivery",
+) -> None:
+  st.subheader("Email Draft Preview")
+  st.markdown(
+    render_warning_box(
+      "<strong>Email sending is disabled from the UI. "
+      "Use CLI with --send-email for explicit sending.</strong>"
+    ),
+    unsafe_allow_html=True,
+  )
+
+  draft = artifacts.email_draft
+  file_pub = artifacts.publication_number if artifacts.publication_number != "unknown" else DEFAULT_PUB
+
+  if draft:
+    st.markdown(f"**Status**: `{draft.status}`")
+    st.markdown(f"**To**: {', '.join(draft.to) if draft.to else '(未設定)'}")
+    st.markdown(f"**CC**: {', '.join(draft.cc) if draft.cc else '(なし)'}")
+    st.markdown(f"**Subject**: {draft.subject}")
+    if draft.caveats:
+      with st.expander("Caveats", expanded=False):
+        for caveat in draft.caveats[:8]:
+          st.caption(caveat)
+
+  if artifacts.email_draft_md:
+    with st.expander("Email Draft Markdown Preview", expanded=True):
+      st.markdown(render_markdown_preview(artifacts.email_draft_md, max_chars=6000))
+    md_key = make_download_key(
+      f"{key_prefix}_dl_email_draft_md",
+      artifacts.publication_number,
+      artifacts.email_draft_md_path,
+    )
+    st.download_button(
+      label="Download email_draft.md",
+      data=artifacts.email_draft_md,
+      file_name=f"email_draft_{file_pub}.md",
+      mime="text/markdown",
+      key=md_key,
+    )
+
+  if artifacts.email_draft_html:
+    html_key = make_download_key(
+      f"{key_prefix}_dl_email_draft_html",
+      artifacts.publication_number,
+      artifacts.email_draft_html_path,
+    )
+    st.download_button(
+      label="Download email_draft.html",
+      data=artifacts.email_draft_html,
+      file_name=f"email_draft_{file_pub}.html",
+      mime="text/html",
+      key=html_key,
+    )
+
+  if artifacts.email_draft_json:
+    json_key = make_download_key(
+      f"{key_prefix}_dl_email_draft_json",
+      artifacts.publication_number,
+      artifacts.email_draft_json_path,
+    )
+    st.download_button(
+      label="Download email_draft.json",
+      data=artifacts.email_draft_json,
+      file_name=f"email_draft_{file_pub}.json",
+      mime="application/json",
+      key=json_key,
+    )
+  elif not artifacts.email_draft_md:
+    st.info(
+      "Email Draft がまだありません。"
+      " `--build-email-draft --email-to reviewer@example.com` で生成してください。"
+    )
+
+
 def render_report_bundle_zip_section(
   artifacts: DeliveryUIArtifacts,
   *,
@@ -331,6 +440,8 @@ def render_delivery_section(
   render_intelligence_report_section(artifacts, key_prefix=key_prefix)
   st.divider()
   render_weekly_digest_preview_section(artifacts, key_prefix=key_prefix)
+  st.divider()
+  render_email_draft_preview_section(artifacts, key_prefix=key_prefix)
   st.divider()
   render_report_bundle_zip_section(artifacts, key_prefix=key_prefix)
 

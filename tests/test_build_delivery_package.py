@@ -62,3 +62,40 @@ def test_cli_dry_run_subprocess() -> None:
   payload = json.loads(proc.stdout)
   assert payload["publication_number"] == "US-12565719-B2"
   assert "planned_files" in payload
+
+
+def test_build_email_draft_creates_outbox_files(tmp_path: Path) -> None:
+  _write_snapshot_fixture(tmp_path)
+  out = tmp_path / "outputs" / "delivery"
+  result = build_delivery_package(
+    "US-12565719-B2",
+    project_root=tmp_path,
+    output_dir=out,
+    include_zip=False,
+    build_email_draft=True,
+    email_to="reviewer@example.com",
+    send_email=False,
+  )
+  assert result.email_draft is not None
+  assert result.email_draft.status == "draft_saved"
+  outbox = out / "email_outbox"
+  assert (outbox / "email_draft_US-12565719-B2.json").exists()
+  assert (outbox / "email_draft_US-12565719-B2.md").exists()
+
+
+def test_send_email_without_smtp_blocked(tmp_path: Path, monkeypatch) -> None:
+  for key in ("TC_SMTP_HOST", "TC_SMTP_PORT", "TC_SMTP_USER", "TC_SMTP_PASSWORD", "TC_SMTP_FROM"):
+    monkeypatch.delenv(key, raising=False)
+  _write_snapshot_fixture(tmp_path)
+  out = tmp_path / "outputs" / "delivery"
+  result = build_delivery_package(
+    "US-12565719-B2",
+    project_root=tmp_path,
+    output_dir=out,
+    include_zip=False,
+    build_email_draft=True,
+    email_to="reviewer@example.com",
+    send_email=True,
+  )
+  assert result.email_draft is not None
+  assert result.email_draft.status == "blocked_missing_adapter"

@@ -89,6 +89,8 @@ def test_collect_download_keys_all_unique(tmp_path: Path) -> None:
     project_root=tmp_path,
     output_dir=tmp_path / "outputs" / "delivery",
     include_zip=True,
+    build_email_draft=True,
+    email_to="reviewer@example.com",
   )
   artifacts = load_delivery_artifacts(tmp_path, publication_number="US-12565719-B2")
   keys_reports = collect_download_keys_for_artifacts(artifacts, key_prefix="reports_delivery")
@@ -102,3 +104,22 @@ def test_collect_download_keys_no_duplicates_within_prefix() -> None:
   artifacts = load_delivery_artifacts(Path("/nonexistent"), publication_number="US-TEST")
   keys = collect_download_keys_for_artifacts(artifacts, key_prefix="reports_delivery")
   assert len(keys) == len(set(keys))
+  assert len(keys) == 8
+
+
+def test_loader_reads_email_draft(tmp_path: Path) -> None:
+  from tests.test_digest_diff import _write_snapshot_fixture
+
+  _write_snapshot_fixture(tmp_path)
+  build_delivery_package(
+    "US-12565719-B2",
+    project_root=tmp_path,
+    output_dir=tmp_path / "outputs" / "delivery",
+    include_zip=False,
+    build_email_draft=True,
+    email_to="reviewer@example.com",
+  )
+  artifacts = load_delivery_artifacts(tmp_path, publication_number="US-12565719-B2")
+  assert artifacts.email_draft is not None
+  assert artifacts.email_draft_md
+  assert artifacts.email_draft.status == "draft_saved"

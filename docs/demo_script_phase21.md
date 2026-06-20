@@ -119,6 +119,14 @@ FTO、侵害、有効性判断はしません。最終判断には専門家レ�
 - BigQuery / OpenAlex の新規実行は UI から行わず、**コストと判断リスクを抑える**  
 - FTO 判断はせず、**調査のたたき台**として使える
 
+### 「Weekly Digest を関係者に送る想定は？」
+
+**Phase 24.1** では Weekly Digest を関係者向けメール形式に整形し、Email Outbox に Draft として保存できます。
+
+- **差分だけ強調して送る**ことで、毎週の全量ノイズを避け、新規 Watch Item / Web Signal / Link の変化に集中できます
+- UI からは送信せず、**CLI の `--send-email` 明示時のみ** SMTP 送信を試みます（誤送信防止）
+- 初回は Initial Snapshot（初回ベースライン）、以降は diff ベースで更新内容を伝えます
+
 ---
 
 ## 手動確認チェックリスト（デモ前）
