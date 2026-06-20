@@ -64,6 +64,11 @@ class DeliveryUIArtifacts:
   send_log: EmailSendLog | None = None
   send_log_json: str | None = None
   send_log_path: Path | None = None
+  scheduler_readme_md: str | None = None
+  scheduler_readme_path: Path | None = None
+  wrapper_script_path: Path | None = None
+  launchd_plist_path: Path | None = None
+  cron_sample_path: Path | None = None
   tab_overviews: list[TabOverviewItem] = field(default_factory=list)
   missing_artifacts: list[str] = field(default_factory=list)
 
@@ -186,6 +191,12 @@ def load_delivery_artifacts(
   send_log_path = ddir / "email_send_logs" / f"send_log_latest_{path_pub}.json"
   send_log_json = _safe_read_text(send_log_path) if send_log_path.exists() else None
 
+  sched_dir = ddir / "scheduler"
+  scheduler_readme_path = sched_dir / "scheduler_readme.md"
+  wrapper_script_path = sched_dir / "run_weekly_digest_job.sh"
+  launchd_plist_path = sched_dir / "com.techcartography.weeklydigest.plist"
+  cron_sample_path = sched_dir / "weekly_digest_cron_sample.txt"
+
   return DeliveryUIArtifacts(
     publication_number=pub_for_key,
     status=status,
@@ -210,6 +221,11 @@ def load_delivery_artifacts(
     send_log=send_log,
     send_log_json=send_log_json,
     send_log_path=send_log_path if send_log_path.exists() else None,
+    scheduler_readme_md=_safe_read_text(scheduler_readme_path) if scheduler_readme_path.exists() else None,
+    scheduler_readme_path=scheduler_readme_path if scheduler_readme_path.exists() else None,
+    wrapper_script_path=wrapper_script_path if wrapper_script_path.exists() else None,
+    launchd_plist_path=launchd_plist_path if launchd_plist_path.exists() else None,
+    cron_sample_path=cron_sample_path if cron_sample_path.exists() else None,
     tab_overviews=build_tab_overviews(),
     missing_artifacts=missing,
   )
@@ -407,6 +423,65 @@ def render_email_draft_preview_section(
     )
 
 
+def render_weekly_schedule_section(
+  artifacts: DeliveryUIArtifacts,
+  *,
+  key_prefix: str = "delivery",
+) -> None:
+  st.subheader("週次スケジュール設定（参照のみ）")
+  st.markdown(
+    render_warning_box(
+      "<strong>UIからスケジュール登録は行いません。</strong> "
+      "登録はCLIで <code>--install --yes</code> を明示してください。"
+      " デフォルトは下書き作成のみです。"
+      " 実送信するには <code>--enable-send</code> が必要です。"
+    ),
+    unsafe_allow_html=True,
+  )
+
+  if artifacts.scheduler_readme_md:
+    with st.expander("scheduler_readme.md", expanded=False):
+      st.markdown(render_markdown_preview(artifacts.scheduler_readme_md, max_chars=8000))
+    readme_key = make_download_key(
+      f"{key_prefix}_dl_scheduler_readme",
+      artifacts.publication_number,
+      artifacts.scheduler_readme_path,
+    )
+    st.download_button(
+      label="scheduler_readme.md をダウンロード",
+      data=artifacts.scheduler_readme_md,
+      file_name="scheduler_readme.md",
+      mime="text/markdown",
+      key=readme_key,
+    )
+  else:
+    st.info(
+      "スケジューラー設定ファイルがまだありません。"
+      " `python scripts/install_weekly_digest_schedule.py` で生成してください。"
+    )
+
+  paths = [
+    ("wrapper script", artifacts.wrapper_script_path),
+    ("launchd plist", artifacts.launchd_plist_path),
+    ("cron sample", artifacts.cron_sample_path),
+  ]
+  for label, path in paths:
+    if path and path.exists():
+      st.markdown(f"**{label}**: `{path}`")
+      file_key = make_download_key(
+        f"{key_prefix}_dl_scheduler_{label.replace(' ', '_')}",
+        artifacts.publication_number,
+        path,
+      )
+      st.download_button(
+        label=f"{label} をダウンロード",
+        data=path.read_bytes(),
+        file_name=path.name,
+        mime="application/octet-stream",
+        key=file_key,
+      )
+
+
 def render_send_log_section(artifacts: DeliveryUIArtifacts) -> None:
   st.subheader("送信ログ（参照のみ）")
   st.markdown(
@@ -490,6 +565,8 @@ def render_delivery_section(
   render_email_draft_preview_section(artifacts, key_prefix=key_prefix)
   st.divider()
   render_send_log_section(artifacts)
+  st.divider()
+  render_weekly_schedule_section(artifacts, key_prefix=key_prefix)
   st.divider()
   render_report_bundle_zip_section(artifacts, key_prefix=key_prefix)
 

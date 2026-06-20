@@ -91,6 +91,10 @@ def save_send_log(log: EmailSendLog, output_dir: Path | str) -> dict[str, Path]:
   return paths
 
 
+def load_send_log_index(log_dir: Path | str) -> list[dict[str, Any]]:
+  return _load_send_log_index(Path(log_dir))
+
+
 def _load_send_log_index(log_dir: Path) -> list[dict[str, Any]]:
   index_path = log_dir / "send_log_index.json"
   if not index_path.exists():

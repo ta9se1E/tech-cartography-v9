@@ -126,6 +126,12 @@ def test_loader_reads_email_draft(tmp_path: Path) -> None:
   assert artifacts.email_draft.status == "draft_saved"
 
 
+def test_loader_scheduler_missing_without_crash(tmp_path: Path) -> None:
+  artifacts = load_delivery_artifacts(tmp_path, publication_number="US-12565719-B2")
+  assert artifacts.scheduler_readme_md is None
+  assert artifacts.wrapper_script_path is None
+
+
 def test_loader_send_log_without_crash(tmp_path: Path) -> None:
   from tech_cartography.delivery.send_log import EmailSendLog, save_send_log
 
