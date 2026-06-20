@@ -1224,13 +1224,18 @@ def render_selected_evidence_papers_list(
     return render_info_box("Selected Evidence Papers はまだ生成されていません。")
 
   cards_html = ""
+  from tech_cartography.ui.label_renderer import format_paper_link_html, resolve_paper_url
+
   for paper in selected[:8]:
     bucket = str(paper.get("relevance_bucket") or "")
     role = _relevance_role_label(bucket, str(paper.get("recommended_evidence_role") or ""))
+    paper_url = resolve_paper_url(paper)
+    link_html = format_paper_link_html(paper_url) if paper_url else "—"
     cards_html += (
       f'<div class="tc-patent-card">'
       f'<div class="tc-patent-title">{_safe(paper.get("title", "(no title)"))}</div>'
       f'<div class="tc-patent-meta">'
+      f"論文を開く: {link_html}<br>"
       f"DOI: {_safe(paper.get('doi') or 'n/a')}<br>"
       f"年: {_safe(paper.get('publication_year') or 'n/a')} / "
       f"引用数: {_safe(paper.get('cited_by_count') or 'n/a')}<br>"

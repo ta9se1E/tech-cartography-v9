@@ -12,6 +12,11 @@ import pandas as pd
 import streamlit as st
 
 from tech_cartography.reports.project_export import load_records_csv
+from tech_cartography.ui.label_renderer import (
+  next_signal_verification,
+  translate_label,
+  why_review_signal,
+)
 from tech_cartography.ui.easy_japanese_ui import (
   render_caution_box,
   render_dataframe_stretch,
@@ -21,6 +26,38 @@ from tech_cartography.ui.easy_japanese_ui import (
 )
 
 NOT_AVAILABLE = "not available"
+SIGNAL_TOP_DISPLAY_LIMIT = 5
+
+SIGNAL_TOP_COLUMNS: tuple[str, ...] = (
+  "タイトル",
+  "出典ドメイン",
+  "シグナル種別",
+  "なぜ見るべきか",
+  "次に確認すること",
+  "原典URL",
+)
+
+SIGNAL_DEVELOPER_COLUMNS: tuple[str, ...] = (
+  "signal_id",
+  "review_priority",
+  "signal_type",
+  "source_title",
+  "source_domain",
+  "source_quality",
+  "source_category",
+  "disclosure_type",
+  "evidence_sentences",
+  "confidence",
+  "verification_status",
+  "next_verification_action",
+  "source_url",
+)
+
+SIGNAL_INTRO_JA = (
+  "このページでは、Webから取得した公的プロジェクト、企業ニュース、IR情報などを整理し、"
+  "対象特許や論文候補と関係しそうな情報を人手で確認するための候補として表示します。"
+  "ここに出る情報は確認候補であり、対象特許との直接関係を示すものではありません。"
+)
 WEB_SIGNALS_RELATIVE_DIR = "outputs/web_signals"
 DEFAULT_BATCH_DIR = "tavily_pan_carbon_fiber"
 
@@ -499,9 +536,11 @@ def is_company_local_news_empty(artifacts: WebSignalReviewUIArtifacts) -> bool:
   return artifacts.company_local_news_df.empty
 
 
-def render_web_signal_caution_cards() -> None:
-  caution_en, caution_ja = get_web_signal_caution_text()
-  st.markdown(render_caution_box(f"{caution_en}<br><br>{caution_ja}"), unsafe_allow_html=True)
+def render_web_signal_caution_cards(*, compact: bool = False) -> None:
+  if compact:
+    st.caption(WEB_SIGNAL_CAUTION_JA)
+    return
+  st.markdown(render_caution_box(WEB_SIGNAL_CAUTION_JA), unsafe_allow_html=True)
 
 
 def render_web_signal_summary_cards(artifacts: WebSignalReviewUIArtifacts) -> None:
@@ -514,50 +553,113 @@ def render_web_signal_summary_cards(artifacts: WebSignalReviewUIArtifacts) -> No
     rejected_df=artifacts.rejected_df,
   )
   metrics = [
-    {"label": "Total Review Signals", "value": str(counts["total_review_signals"])},
-    {"label": "High Priority Signals", "value": str(counts["high_priority_signals"])},
-    {"label": "Money / National Project Signals", "value": str(counts["money_national_project_signals"])},
-    {"label": "IR / Disclosure Signals", "value": str(counts["ir_disclosure_signals"])},
-    {"label": "Company / Local News Signals", "value": str(counts["company_local_news_signals"])},
-    {"label": "Rejected / Low Quality Sources", "value": str(counts["rejected_low_quality_sources"])},
+    {"label": "レビュー対象シグナル", "value": str(counts["total_review_signals"])},
+    {"label": "高優先度", "value": str(counts["high_priority_signals"])},
+    {"label": "公的プロジェクト / 資金", "value": str(counts["money_national_project_signals"])},
+    {"label": "IR / 開示", "value": str(counts["ir_disclosure_signals"])},
+    {"label": "企業 / 地域ニュース", "value": str(counts["company_local_news_signals"])},
+    {"label": "低品質・除外", "value": str(counts["rejected_low_quality_sources"])},
   ]
   st.markdown(render_metric_cards(metrics), unsafe_allow_html=True)
 
 
-def _render_signal_table(df: pd.DataFrame, columns: tuple[str, ...]) -> None:
-  display_df = prepare_web_signal_display_df(df, columns)
-  if display_df.empty:
+def prepare_signal_top_display_df(
+  df: pd.DataFrame | None,
+  *,
+  limit: int = SIGNAL_TOP_DISPLAY_LIMIT,
+) -> pd.DataFrame:
+  """Human-friendly top-N signal rows for demo / reviewer view."""
+  if df is None or df.empty:
+    return pd.DataFrame(columns=list(SIGNAL_TOP_COLUMNS))
+
+  working = prepare_web_signal_display_df(df, HIGH_PRIORITY_COLUMNS)
+  if "review_priority" in df.columns:
+    sort_df = _normalize_dataframe(df.copy())
+    sort_df["_priority_sort"] = sort_df["review_priority"].apply(_coerce_numeric_priority)
+    sort_df = sort_df.sort_values("_priority_sort", ascending=False).head(limit)
+  else:
+    sort_df = _normalize_dataframe(df.head(limit))
+
+  rows: list[dict[str, str]] = []
+  for _, row in sort_df.iterrows():
+    row_dict = {str(k): _normalize_cell(v) for k, v in row.to_dict().items()}
+    url = str(row_dict.get("source_url") or "").strip()
+    rows.append(
+      {
+        "タイトル": _truncate_text(row_dict.get("source_title"), 100),
+        "出典ドメイン": _format_display_value(row_dict.get("source_domain")),
+        "シグナル種別": translate_label(row_dict.get("signal_type")),
+        "なぜ見るべきか": why_review_signal(row_dict),
+        "次に確認すること": next_signal_verification(row_dict),
+        "原典URL": _format_source_url_link(url, row_dict.get("source_title")),
+      },
+    )
+  return pd.DataFrame(rows, columns=list(SIGNAL_TOP_COLUMNS))
+
+
+def render_signal_intro_card() -> None:
+  st.markdown(render_info_box(SIGNAL_INTRO_JA), unsafe_allow_html=True)
+
+
+def _render_signal_top_table(
+  df: pd.DataFrame,
+  *,
+  limit: int = SIGNAL_TOP_DISPLAY_LIMIT,
+  section_key: str,
+) -> None:
+  top_df = prepare_signal_top_display_df(df, limit=limit)
+  if top_df.empty:
     st.info("表示できるシグナル候補はありません。")
     return
-  render_dataframe_stretch(display_df, hide_index=True)
+  st.caption(f"上位 {len(top_df)} 件を表示（全 {len(df)} 件）")
+  render_dataframe_stretch(top_df, hide_index=True)
+
+  with st.expander("開発者向け: 全件・内部ID・raw evidence", expanded=False):
+    st.caption("signal_id / batch_id / review_priority などは開発・監査用です。")
+    full_df = prepare_web_signal_display_df(df, SIGNAL_DEVELOPER_COLUMNS)
+    render_dataframe_stretch(full_df, hide_index=True)
+    if section_key and not df.empty:
+      raw_cols = [c for c in ("signal_id", "evidence_sentences", "caveat", "rejection_reason") if c in df.columns]
+      if raw_cols:
+        st.markdown("**raw evidence（抜粋）**")
+        render_dataframe_stretch(
+          _normalize_dataframe(df[raw_cols].head(10)),
+          hide_index=True,
+        )
 
 
 def render_high_priority_web_signals(artifacts: WebSignalReviewUIArtifacts) -> None:
-  st.subheader("High Priority Web Signals")
+  st.subheader("高優先度 Web シグナル（確認候補）")
   st.markdown(render_info_box(HIGH_PRIORITY_INTRO), unsafe_allow_html=True)
-  _render_signal_table(artifacts.high_priority_df, HIGH_PRIORITY_COLUMNS)
+  if artifacts.high_priority_df.empty:
+    st.info("表示できるシグナル候補はありません。")
+    return
+  _render_signal_top_table(artifacts.high_priority_df, section_key="high_priority")
 
 
 def render_money_national_project_candidates(artifacts: WebSignalReviewUIArtifacts) -> None:
-  st.subheader("Money / National Project Candidates")
+  st.subheader("公的プロジェクト / 資金関連候補")
   st.markdown(render_info_box(MONEY_NATIONAL_INTRO), unsafe_allow_html=True)
-  _render_signal_table(artifacts.money_national_project_df, MONEY_NATIONAL_COLUMNS)
+  if artifacts.money_national_project_df.empty:
+    st.info("表示できる候補はありません。")
+    return
+  _render_signal_top_table(artifacts.money_national_project_df, section_key="money_national")
 
 
 def render_ir_disclosure_candidates(artifacts: WebSignalReviewUIArtifacts) -> None:
-  st.subheader("IR / Disclosure Candidates")
+  st.subheader("IR / 開示候補")
   if is_ir_disclosure_empty(artifacts):
     st.info(IR_EMPTY_INFO)
     return
-  _render_signal_table(artifacts.ir_disclosure_df, IR_DISCLOSURE_COLUMNS)
+  _render_signal_top_table(artifacts.ir_disclosure_df, limit=3, section_key="ir_disclosure")
 
 
 def render_company_local_news_candidates(artifacts: WebSignalReviewUIArtifacts) -> None:
-  st.subheader("Company / Local News Candidates")
+  st.subheader("企業 / 地域ニュース候補")
   if is_company_local_news_empty(artifacts):
     st.info(COMPANY_LOCAL_EMPTY_INFO)
     return
-  _render_signal_table(artifacts.company_local_news_df, COMPANY_LOCAL_COLUMNS)
+  _render_signal_top_table(artifacts.company_local_news_df, limit=3, section_key="company_local")
 
 
 def render_rejected_low_quality_sources(artifacts: WebSignalReviewUIArtifacts) -> None:
@@ -578,16 +680,21 @@ def render_next_phase_card() -> None:
 
 
 def render_web_signal_review_report(artifacts: WebSignalReviewUIArtifacts) -> None:
-  with st.expander("Web Signal Review Summary", expanded=False):
+  with st.expander("英語詳細 / raw summary", expanded=False):
     if artifacts.summary_md:
       st.markdown(artifacts.summary_md)
     else:
       st.info("web_signal_review_summary.md は not available です。")
 
 
-def render_web_signal_review_section(artifacts: WebSignalReviewUIArtifacts) -> None:
-  st.subheader("Web Signal Review Pack")
-  render_web_signal_caution_cards()
+def render_web_signal_review_section(
+  artifacts: WebSignalReviewUIArtifacts,
+  *,
+  developer_mode: bool = False,
+) -> None:
+  st.subheader("企業・市場シグナル")
+  render_signal_intro_card()
+  render_web_signal_caution_cards(compact=True)
 
   if artifacts.missing_artifacts:
     st.markdown(
@@ -596,8 +703,8 @@ def render_web_signal_review_section(artifacts: WebSignalReviewUIArtifacts) -> N
       ),
       unsafe_allow_html=True,
     )
-  if artifacts.errors:
-    with st.expander("読み込みエラー（デバッグ）"):
+  if artifacts.errors and developer_mode:
+    with st.expander("読み込みエラー（開発者向け）"):
       for err in artifacts.errors:
         st.caption(err)
 
@@ -609,7 +716,8 @@ def render_web_signal_review_section(artifacts: WebSignalReviewUIArtifacts) -> N
     render_next_phase_card()
     return
 
-  st.caption(f"review_pack dir: {artifacts.review_pack_dir}")
+  if developer_mode:
+    st.caption(f"review_pack: {artifacts.review_pack_dir.name}")
   render_web_signal_summary_cards(artifacts)
   render_high_priority_web_signals(artifacts)
   render_money_national_project_candidates(artifacts)

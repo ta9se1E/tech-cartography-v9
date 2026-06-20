@@ -556,7 +556,7 @@ def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> 
     render_market_signal_demo_notice()
 
   web_review_artifacts = load_web_signal_review_artifacts(PROJECT_ROOT)
-  render_web_signal_review_section(web_review_artifacts)
+  render_web_signal_review_section(web_review_artifacts, developer_mode=is_developer_view())
 
   st.divider()
   strategic_watch_artifacts = load_strategic_watch_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)

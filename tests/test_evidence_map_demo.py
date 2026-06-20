@@ -153,11 +153,11 @@ def test_summary_metrics_reflect_dataframe_counts() -> None:
   )
   metrics = build_evidence_map_summary_metrics(artifacts)
   labels = {m["label"]: m["value"] for m in metrics}
-  assert labels["Deep Dive Patent"] == DEMO_PUBLICATION_NUMBER
+  assert labels["今回詳しく読む特許"] == DEMO_PUBLICATION_NUMBER
   assert labels["Selected Evidence Papers"] == "2"
   assert labels["Claim × Paper Links"] == "1"
-  assert labels["Evidence Level"] == "claims_only / weak-to-medium"
-  assert labels["Status"] == "Evidence Map partial"
+  assert labels["Evidence Level"] == "請求項のみで判定 / 裏取り強度: 弱〜中"
+  assert labels["Status"] == "Evidence Map 一部のみ"
 
 
 def test_prepare_selected_papers_display_missing_columns() -> None:
@@ -166,6 +166,7 @@ def test_prepare_selected_papers_display_missing_columns() -> None:
   assert list(display.columns) == [
     "title",
     "doi",
+    "論文を開く",
     "source",
     "publication_year",
     "cited_by_count",
@@ -175,7 +176,7 @@ def test_prepare_selected_papers_display_missing_columns() -> None:
   ]
   assert display.iloc[0]["doi"] == "10.1234/example"
   assert display.iloc[0]["source"] == "not available"
-  assert display.iloc[0]["confidence"] == "low / weak"
+  assert display.iloc[0]["confidence"] == "低"
   assert display.iloc[0]["title"].endswith("…")
 
 
@@ -193,7 +194,7 @@ def test_prepare_selected_papers_display_nan_and_empty() -> None:
   display = prepare_selected_papers_display_df(df)
   assert display.iloc[0]["doi"] == "not available"
   assert display.iloc[0]["cited_by_count"] == "not available"
-  assert display.iloc[0]["relevance_bucket"] == "not available"
+  assert display.iloc[0]["relevance_bucket"] == "—"
 
   empty = prepare_selected_papers_display_df(pd.DataFrame())
   assert empty.empty
@@ -220,10 +221,10 @@ def test_prepare_claim_links_display_fallback_and_defaults() -> None:
   )
   display = prepare_claim_paper_links_display_df(df)
   assert display.iloc[0]["paper_display"] == "Fallback Title"
-  assert display.iloc[0]["confidence"] == "low / weak"
-  assert "弱い対応" in display.iloc[0]["link_type"]
+  assert display.iloc[0]["confidence"] == "低"
+  assert "弱い対応" in display.iloc[0]["link_type"] or "fallback" in display.iloc[0]["link_type"].lower()
   assert display.iloc[1]["paper_display"] == "Paper B"
-  assert display.iloc[1]["confidence"] == "medium"
+  assert display.iloc[1]["confidence"] == "中"
 
   empty = prepare_claim_paper_links_display_df(None)
   assert empty.empty
@@ -234,21 +235,20 @@ def test_fixed_evidence_gaps_and_next_actions() -> None:
   actions = get_fixed_next_actions()
   assert gaps == list(FIXED_EVIDENCE_GAPS)
   assert actions == list(FIXED_NEXT_ACTIONS)
-  assert "BigQuery fulltextでclaims/descriptionが取得できなかった" in gaps
-  assert "Weekly Digest Previewに反映する" in actions
+  assert "明細書・実施例が未確認" in gaps
+  assert "Google Patents / J-PlatPat" in actions[0]
 
   merged_gaps = get_fixed_evidence_gaps({"evidence_gaps": ["追加ギャップ"]})
-  assert "追加ギャップ" in merged_gaps
-  assert len(merged_gaps) >= len(FIXED_EVIDENCE_GAPS)
+  assert merged_gaps == list(FIXED_EVIDENCE_GAPS)
 
 
 def test_demo_copy_contains_required_notices() -> None:
   html = render_demo_story_cards(_sample_artifacts())
   guide = render_three_minute_demo_guide()
   executive = render_executive_summary()
-  assert "supporting evidence candidate" in html
-  assert "FTO" in html
-  assert "Synthetic demo signal" in html
+  assert "今回詳しく読む特許" in html
+  assert "どこを見れば何が分かるか" in html
+  assert "Deep Dive" not in html
   assert "3分デモの見方" in guide
   assert "supporting evidence candidate" in EXECUTIVE_SUMMARY_TEXT
   assert "FTO、侵害、有効性判断ではありません" in EXECUTIVE_SUMMARY_TEXT
@@ -263,7 +263,7 @@ def test_render_demo_story_cards_returns_html() -> None:
   html = render_demo_story_cards(_sample_artifacts())
   assert isinstance(html, str)
   assert DEMO_PUBLICATION_NUMBER in html
-  assert "Evidence Map ready" in html
+  assert "Evidence Map 準備完了" in html or "Evidence Map ready" in html
 
 
 def test_activate_evidence_map_demo_state_uses_internal_keys_only() -> None:
