@@ -12,3 +12,4 @@ data/cache/
 .streamlit/secrets.toml
 credentials/
 *.jsonl
+config/email_recipients.json

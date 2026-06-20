@@ -33,6 +33,14 @@ _STATUS_MAP: dict[str, tuple[str, str]] = {
     "送信失敗",
     "送信処理中にエラーが発生しました。",
   ),
+  "dry_run": (
+    "ドライラン",
+    "送信は行わず、宛先と送信内容の確認のみ行いました。",
+  ),
+  "blocked_recipient_disabled": (
+    "送信停止：宛先グループ無効",
+    "recipient group が enabled=false のため送信しません。",
+  ),
 }
 
 _WATCH_PRIORITY_MAP = {

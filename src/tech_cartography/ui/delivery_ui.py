@@ -19,6 +19,7 @@ from tech_cartography.delivery.japanese_copy import (
   ja_status_label,
   ja_ui_send_disabled_notice,
 )
+from tech_cartography.delivery.send_log import EmailSendLog, load_latest_send_log
 from tech_cartography.delivery.overview import (
   DELIVERY_CAUTION,
   TabOverviewItem,
@@ -60,6 +61,9 @@ class DeliveryUIArtifacts:
   email_draft_md_path: Path | None = None
   email_draft_html_path: Path | None = None
   email_draft_json_path: Path | None = None
+  send_log: EmailSendLog | None = None
+  send_log_json: str | None = None
+  send_log_path: Path | None = None
   tab_overviews: list[TabOverviewItem] = field(default_factory=list)
   missing_artifacts: list[str] = field(default_factory=list)
 
@@ -178,6 +182,10 @@ def load_delivery_artifacts(
   email_html_path = email_draft_paths["email_draft_html"] if email_draft_paths["email_draft_html"].exists() else None
   email_json_path = email_draft_paths["email_draft_json"] if email_draft_paths["email_draft_json"].exists() else None
 
+  send_log = load_latest_send_log(ddir, path_pub)
+  send_log_path = ddir / "email_send_logs" / f"send_log_latest_{path_pub}.json"
+  send_log_json = _safe_read_text(send_log_path) if send_log_path.exists() else None
+
   return DeliveryUIArtifacts(
     publication_number=pub_for_key,
     status=status,
@@ -199,6 +207,9 @@ def load_delivery_artifacts(
     email_draft_md_path=email_md_path,
     email_draft_html_path=email_html_path,
     email_draft_json_path=email_json_path,
+    send_log=send_log,
+    send_log_json=send_log_json,
+    send_log_path=send_log_path if send_log_path.exists() else None,
     tab_overviews=build_tab_overviews(),
     missing_artifacts=missing,
   )
@@ -396,6 +407,36 @@ def render_email_draft_preview_section(
     )
 
 
+def render_send_log_section(artifacts: DeliveryUIArtifacts) -> None:
+  st.subheader("送信ログ（参照のみ）")
+  st.markdown(
+    render_warning_box(f"<strong>{ja_ui_send_disabled_notice()}</strong>"),
+    unsafe_allow_html=True,
+  )
+
+  log = artifacts.send_log
+  if log:
+    status_label = ja_status_label(log.status) if log.status in {
+      "dry_run", "draft_saved", "sent", "blocked_missing_recipient",
+      "blocked_recipient_disabled", "blocked_missing_adapter", "failed",
+    } else log.status
+    st.markdown(f"**状態**: {status_label} (`{log.status}`)")
+    st.markdown(f"**最終記録日時**: {log.created_at}")
+    st.caption(log.message)
+    if log.recipient_group:
+      st.markdown(f"**宛先グループ**: {log.recipient_group}")
+    st.markdown(f"**宛先件数**: to={log.to_count} / cc={log.cc_count}")
+    if log.draft_path:
+      st.markdown(f"**下書きパス**: `{log.draft_path}`")
+    if log.error_summary:
+      st.caption(f"エラー概要: {log.error_summary}")
+  else:
+    st.info(
+      "送信ログはまだありません。"
+      " `python scripts/send_weekly_digest_test.py --dry-run` または `--build-draft` で記録されます。"
+    )
+
+
 def render_report_bundle_zip_section(
   artifacts: DeliveryUIArtifacts,
   *,
@@ -447,6 +488,8 @@ def render_delivery_section(
   render_weekly_digest_preview_section(artifacts, key_prefix=key_prefix)
   st.divider()
   render_email_draft_preview_section(artifacts, key_prefix=key_prefix)
+  st.divider()
+  render_send_log_section(artifacts)
   st.divider()
   render_report_bundle_zip_section(artifacts, key_prefix=key_prefix)
 

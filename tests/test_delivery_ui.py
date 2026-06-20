@@ -126,6 +126,28 @@ def test_loader_reads_email_draft(tmp_path: Path) -> None:
   assert artifacts.email_draft.status == "draft_saved"
 
 
+def test_loader_send_log_without_crash(tmp_path: Path) -> None:
+  from tech_cartography.delivery.send_log import EmailSendLog, save_send_log
+
+  ddir = tmp_path / "outputs" / "delivery"
+  save_send_log(
+    EmailSendLog(
+      log_id="log-1",
+      created_at="2026-06-20T00:00:00+00:00",
+      publication_number="US-12565719-B2",
+      subject="Test",
+      to_count=1,
+      cc_count=0,
+      status="dry_run",
+      message="dry-run",
+    ),
+    ddir,
+  )
+  artifacts = load_delivery_artifacts(tmp_path, publication_number="US-12565719-B2")
+  assert artifacts.send_log is not None
+  assert artifacts.send_log.status == "dry_run"
+
+
 def test_ui_japanese_send_disabled_notice() -> None:
   notice = ja_ui_send_disabled_notice()
   assert "メール下書きプレビュー" not in notice

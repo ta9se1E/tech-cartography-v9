@@ -1,0 +1,14 @@
+{
+  "default": {
+    "to": ["reviewer@example.com"],
+    "cc": [],
+    "enabled": false,
+    "note": "Set enabled=true only after confirming recipients."
+  },
+  "internal_review": {
+    "to": ["reviewer@example.com"],
+    "cc": [],
+    "enabled": false,
+    "note": "Internal review recipients for test sending."
+  }
+}
