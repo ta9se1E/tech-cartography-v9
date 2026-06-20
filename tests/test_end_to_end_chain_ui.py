@@ -25,19 +25,21 @@ def test_ui_has_end_to_end_chain_section() -> None:
   assert "End-to-Endレポートを保存する" in text
 
 
+def _analyst_section_text(start: str, end: str) -> str:
+  text = UI_PATH.read_text(encoding="utf-8")
+  return text.split(start, 1)[1].split(end, 1)[0]
+
+
 def test_render_theme_validation_section_calls_end_to_end_chain() -> None:
-  section = _section_text("def render_theme_validation_section", "def render_theme_validation_intro_card")
+  section = _analyst_section_text("def render_analyst_input_execution_section", "def render_theme_validation_section")
   evidence_idx = section.index("render_evidence_map_builder")
   e2e_idx = section.index("render_end_to_end_chain_section")
   assert evidence_idx < e2e_idx
   assert section.count("render_end_to_end_chain_section") == 1
-  assert "if seed_publications:" not in section or section.index("render_end_to_end_chain_section") < section.index(
-    "if has_theme_name and external_clicked",
-  )
 
 
 def test_end_to_end_chain_after_evidence_map_builder() -> None:
-  section = _section_text("def render_theme_validation_section", "def render_theme_validation_intro_card")
+  section = _analyst_section_text("def render_analyst_input_execution_section", "def render_theme_validation_section")
   assert "render_evidence_map_builder" in section
   assert section.index("render_evidence_map_builder") < section.index("render_end_to_end_chain_section")
 

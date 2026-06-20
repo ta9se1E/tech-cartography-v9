@@ -12,6 +12,7 @@ import streamlit as st
 from tech_cartography.manual.manual_fulltext_loader import get_manual_fulltext_status
 from tech_cartography.orchestration.latest_outputs import read_latest_run_pointer
 from tech_cartography.reports.project_export import load_records_csv
+from tech_cartography.validation.theme_validation import ThemeValidationCase
 from tech_cartography.ui.easy_japanese_ui import (
   DEMO_DEEP_DIVE_PUBLICATION,
   discover_demo_artifacts,
@@ -55,6 +56,8 @@ from tech_cartography.ui.easy_japanese_ui import (
   summarize_stage_statuses,
 )
 from tech_cartography.ui.theme_validation_ui import (
+  STATE_THEME_VALIDATION_CASE,
+  render_analyst_input_execution_section,
   render_theme_validation_intro_card,
   render_theme_validation_section,
 )
@@ -68,6 +71,17 @@ from tech_cartography.ui.demo_safe_ui import (
   tab_ids_for_ui_mode,
   tab_labels_for_ui_mode,
 )
+from tech_cartography.ui.analyst_mode_ui import (
+  ANALYST_EMPTY_ARTIFACT_MESSAGE,
+  ANALYST_INPUT_KEY_PREFIX,
+  analyst_has_evidence_outputs,
+  analyst_has_market_outputs,
+  case_from_session_widgets,
+  compute_analyst_workflow_snapshot,
+  load_analyst_evidence_bundle,
+  preferred_analyst_publication,
+)
+from tech_cartography.ui.label_renderer import POLISHED_EVIDENCE_GAPS, POLISHED_NEXT_ACTIONS
 from tech_cartography.ui.japanese_labels import (
   explain_cost_guard_status,
   explain_fulltext_scope,
@@ -192,6 +206,15 @@ def _resolve_manifest(
   return None
 
 
+def _resolve_analyst_case() -> ThemeValidationCase | None:
+  import streamlit as st
+
+  cached = st.session_state.get(STATE_THEME_VALIDATION_CASE)
+  if isinstance(cached, ThemeValidationCase) and cached.theme_name.strip():
+    return cached
+  return case_from_session_widgets(key_prefix=ANALYST_INPUT_KEY_PREFIX)
+
+
 def _tab_start(
   user: dict[str, Any],
   watch: dict[str, Any],
@@ -208,7 +231,15 @@ def _tab_start(
     if repro_artifacts is not None:
       render_reproducibility_brief_section(repro_artifacts)
     return
-  if is_analyst_view() or is_developer_view():
+  if is_analyst_view():
+    st.markdown(
+      render_info_box(
+        "本番実行では、まず『入力・実行』タブでテーマとseed公報を入力します。"
+        "成果物が生成された後は、技術の裏取り、企業・市場シグナル、レポートの順に確認してください。"
+      ),
+      unsafe_allow_html=True,
+    )
+  elif is_developer_view():
     render_theme_validation_intro_card()
   st.markdown(render_demo_story_cards(), unsafe_allow_html=True)
   st.markdown(render_ok_box("このアプリでできること: 特許候補の整理、全文確認計画、技術の裏取り候補の確認"), unsafe_allow_html=True)
@@ -388,6 +419,46 @@ def _tab_evidence(
       st.divider()
       render_reproducibility_brief_section(repro_artifacts)
     return
+  if is_analyst_view():
+    case = _resolve_analyst_case()
+    if not case or not analyst_has_evidence_outputs(case, PROJECT_ROOT):
+      st.info(ANALYST_EMPTY_ARTIFACT_MESSAGE)
+      return
+    publication = preferred_analyst_publication(case, PROJECT_ROOT)
+    if not publication:
+      st.info(ANALYST_EMPTY_ARTIFACT_MESSAGE)
+      return
+    bundle = load_analyst_evidence_bundle(PROJECT_ROOT, publication)
+    st.caption("論文候補は supporting evidence candidate です。FTO・侵害・有効性判断ではありません。")
+    st.caption(f"表示中 seed: {publication}")
+    if not bundle.get("synthesis"):
+      st.info(ANALYST_EMPTY_ARTIFACT_MESSAGE)
+      return
+    st.subheader("Evidence Map")
+    st.markdown(
+      render_evidence_map_demo_section(
+        bundle.get("synthesis"),
+        selected_papers=bundle.get("selected_papers"),
+        claim_links=bundle.get("claim_links"),
+        excluded_papers=bundle.get("excluded_papers"),
+        artifact_status=bundle.get("artifact_status"),
+      ),
+      unsafe_allow_html=True,
+    )
+    if bundle.get("selected_papers"):
+      with st.expander("Selected Evidence Papers"):
+        render_small_table(pd.DataFrame(bundle["selected_papers"]).head(20))
+    if bundle.get("claim_links"):
+      st.markdown(
+        render_claim_paper_candidate_map_card(bundle["claim_links"]),
+        unsafe_allow_html=True,
+      )
+    st.markdown("### 確認ギャップと次アクション")
+    for gap in POLISHED_EVIDENCE_GAPS:
+      st.markdown(f"- {gap}")
+    for action in POLISHED_NEXT_ACTIONS:
+      st.markdown(f"- {action}")
+    return
   if not manifest:
     st.info("実行結果を読み込んでください。")
     return
@@ -553,6 +624,22 @@ def _tab_evidence(
 
 
 def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> None:
+  if is_analyst_view() and not demo_mode:
+    case = _resolve_analyst_case()
+    if not case or not analyst_has_market_outputs(case, PROJECT_ROOT):
+      st.info(ANALYST_EMPTY_ARTIFACT_MESSAGE)
+      return
+    publication = preferred_analyst_publication(case, PROJECT_ROOT) or case.seed_publication_numbers[0]
+    render_market_signal_demo_notice()
+    web_review_artifacts = load_web_signal_review_artifacts(PROJECT_ROOT)
+    render_web_signal_review_section(web_review_artifacts, developer_mode=False)
+    st.divider()
+    strategic_watch_artifacts = load_strategic_watch_artifacts(
+      PROJECT_ROOT,
+      publication_number=publication,
+    )
+    render_strategic_watch_section(strategic_watch_artifacts)
+    return
   if demo_mode:
     render_market_signal_demo_notice()
 
@@ -595,6 +682,10 @@ def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> 
   if not company_df.empty:
     with st.expander("Company Watch"):
       render_small_table(company_df.head(15))
+
+
+def _tab_analyst_input() -> None:
+  render_analyst_input_execution_section(key_prefix=ANALYST_INPUT_KEY_PREFIX)
 
 
 def _tab_theme_validation() -> None:
@@ -703,6 +794,12 @@ def _tab_reports(
   repro_artifacts: Any = None,
   developer_mode: bool = False,
 ) -> None:
+  if is_analyst_view() and demo_artifacts is None:
+    case = _resolve_analyst_case()
+    snapshot = compute_analyst_workflow_snapshot(case, project_root=PROJECT_ROOT)
+    if not snapshot.has_viewable_outputs:
+      st.info(ANALYST_EMPTY_ARTIFACT_MESSAGE)
+      return
   delivery_artifacts = load_delivery_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
   render_compressed_report_tab(
     project_root=PROJECT_ROOT,
@@ -791,6 +888,8 @@ def _render_tab_by_id(
     )
   elif tab_id == "market":
     _tab_market(manifest, demo_mode=demo_mode)
+  elif tab_id == "analyst_input":
+    _tab_analyst_input()
   elif tab_id == "theme_validation":
     _tab_theme_validation()
   elif tab_id == "reports":

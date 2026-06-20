@@ -15,6 +15,13 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_success_box,
   render_warning_box,
 )
+from tech_cartography.ui.demo_safe_ui import format_display_path, is_developer_view
+from tech_cartography.ui.analyst_mode_ui import (
+  ANALYST_INPUT_KEY_PREFIX,
+  build_final_validation_from_case,
+  compute_analyst_workflow_snapshot,
+  pan_theme_session_state_updates,
+)
 from tech_cartography.validation.seed_progress import (
   inspect_seed_progress_many,
   preferred_publication_for_evidence_map,
@@ -98,6 +105,14 @@ EVIDENCE_MAP_BUILDER_NOTICES = (
 
 def _project_root() -> Path:
   return Path(__file__).resolve().parents[3]
+
+
+def _show_output_path(label: str, path: Path | str | None) -> None:
+  root = _project_root()
+  if is_developer_view():
+    st.caption(f"{label}: `{path}`")
+  elif path:
+    st.caption(f"{label}: `{format_display_path(path, project_root=root)}`")
 
 
 def _validation_output_dir(theme_id: str) -> Path:
@@ -300,7 +315,7 @@ def render_seed_progress_dashboard(
     )
     st.markdown(render_success_box("Seed進捗レポートを保存しました。"), unsafe_allow_html=True)
     for label, path in paths.items():
-      st.code(str(path))
+      _show_output_path(label, path)
 
   if progress_list:
     render_small_table(progress_to_display_dataframe(progress_list), height=280)
@@ -426,7 +441,7 @@ def render_manual_claims_editor(
         st.error(warning)
     if saved_path is not None:
       st.markdown(render_success_box("Manual Claims を保存しました。"), unsafe_allow_html=True)
-      st.code(str(saved_path))
+      _show_output_path("manual claims", saved_path)
       st.markdown(
         render_info_box(
           "保存後、「既存outputs検証を再実行する」を押すと Stage 2（fulltext_or_manual_claims_available）が pass になるか確認できます。"
@@ -577,7 +592,7 @@ def render_evidence_map_builder(
         unsafe_allow_html=True,
       )
       for label, path in paths.items():
-        st.caption(f"{label}: {path}")
+        _show_output_path(label, path)
       st.markdown(render_info_box(SKELETON_CAUTION_JA), unsafe_allow_html=True)
       for message in (
         "次に論文候補を取得するにはOpenAlex等の外部API実行が必要です。",
@@ -616,7 +631,7 @@ def render_evidence_map_builder(
     )
     st.markdown(render_success_box("検証レポートを保存しました。"), unsafe_allow_html=True)
     for label, path in paths.items():
-      st.caption(f"{label}: {path}")
+      _show_output_path(label, path)
 
   skeleton_json = evidence_map_output_dir(root, pub) / "evidence_map_skeleton.json" if pub else None
   if skeleton_json and skeleton_json.exists():
@@ -917,20 +932,20 @@ def render_end_to_end_chain_section(
     st.session_state[STATE_END_TO_END_RESULT] = result
     st.markdown(render_success_box("End-to-End レポートを保存しました。"), unsafe_allow_html=True)
     for label, path in paths.items():
-      st.caption(f"{label}: {path}")
+      _show_output_path(label, path)
 
   result = st.session_state.get(STATE_END_TO_END_RESULT)
   if result is not None:
     st.markdown("**End-to-End Stage 表**")
     st.dataframe(_end_to_end_display_dataframe(result), use_container_width=True, hide_index=True)
-    st.caption(f"保存先: `{end_to_end_output_dir(root, case.theme_id)}`")
+    _show_output_path("保存先", end_to_end_output_dir(root, case.theme_id))
     st.caption(CHAIN_CAUTION)
 
 
 def render_theme_validation_intro_card() -> None:
   st.markdown(
     render_info_box(
-      "本番実行: 新しいテーマで分析する場合は「本番実行」タブからテーマ入力・Manual Claims・E2E Chain を利用してください。"
+      "本番実行: 新しいテーマで分析する場合は「入力・実行」タブからテーマ入力・Manual Claims・E2E Chain を利用してください。"
     ),
     unsafe_allow_html=True,
   )
@@ -946,11 +961,29 @@ def render_theme_validation_tab_intro() -> None:
   )
 
 
-def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> None:
-  st.subheader("本番実行 / Theme Validation")
-  render_theme_validation_tab_intro()
-  render_theme_validation_safety_messages()
+def render_analyst_workflow_step_cards(
+  snapshot,
+) -> None:
+  cols = st.columns(2)
+  for index, step in enumerate(snapshot.steps):
+    with cols[index % 2]:
+      st.markdown(f"**{step.label}**")
+      st.caption(step.status)
 
+
+def render_pan_theme_loader_button(*, key_prefix: str) -> None:
+  if st.button(
+    "PAN前駆体欠陥制御テーマを読み込む",
+    key=f"{key_prefix}_load_pan_theme",
+    type="primary",
+  ):
+    for key, value in pan_theme_session_state_updates(key_prefix=key_prefix).items():
+      st.session_state[key] = value
+    st.success("PAN前駆体テーマを読み込みました。")
+    st.rerun()
+
+
+def _render_theme_seed_input_block(*, key_prefix: str) -> tuple[str, str, str, str, str, str, str, list[str], str, ThemeValidationCase]:
   theme_name = st.text_input("テーマ名", value="", key=f"{key_prefix}_theme_name")
   core_text = st.text_area(
     "コアキーワード（カンマまたは改行区切り）",
@@ -1016,14 +1049,28 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
     exclude_text=exclude_text,
     seed_text=seed_text,
   )
+  return (
+    theme_name,
+    core_text,
+    theme_id_value,
+    description,
+    application_text,
+    material_text,
+    exclude_text,
+    seed_text,
+    seed_publications,
+    progress_theme_id,
+    progress_list,
+    case,
+  )
 
-  has_theme_name = bool(theme_name.strip())
-  if not has_theme_name:
-    st.caption("テーマ名を入力すると dry-run などの操作ボタンが有効になります。")
-  else:
-    st.session_state[STATE_THEME_VALIDATION_CASE] = case
-    st.caption(f"theme_id: `{case.theme_id}`")
 
+def _render_theme_validation_actions(
+  *,
+  key_prefix: str,
+  case: ThemeValidationCase,
+  has_theme_name: bool,
+) -> None:
   dry_run_clicked = False
   existing_clicked = False
   template_clicked = False
@@ -1093,11 +1140,7 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
         unsafe_allow_html=True,
       )
       for path in created:
-        st.code(path)
-
-  render_manual_claims_editor(case=case, key_prefix=key_prefix, progress_list=progress_list)
-  render_evidence_map_builder(case=case, key_prefix=key_prefix, progress_list=progress_list)
-  render_end_to_end_chain_section(case=case, key_prefix=key_prefix, progress_list=progress_list)
+        _show_output_path("template", path)
 
   if has_theme_name and external_clicked:
     if not consent:
@@ -1128,7 +1171,87 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
     )
     st.markdown(render_success_box("検証レポートを保存しました。"), unsafe_allow_html=True)
     for label, path in paths.items():
-      st.caption(f"{label}: {path}")
+      _show_output_path(label, path)
 
   if has_theme_name:
     render_theme_validation_stage_matrix(st.session_state.get(STATE_THEME_VALIDATION_RESULT))
+
+
+def render_final_validation_builder(*, case: ThemeValidationCase, key_prefix: str) -> None:
+  st.caption(
+    "Final Validation Summary は seed ごとの Stage 2〜8 と成果物有無を集計します。外部APIは実行しません。"
+  )
+  build_clicked = st.button(
+    "Final Validation Summaryを生成する",
+    key=f"{key_prefix}_build_final_validation",
+  )
+  if build_clicked:
+    if not case.seed_publication_numbers:
+      st.warning("seed publication numbers を入力してください。")
+      return
+    paths = build_final_validation_from_case(case, project_root=_project_root())
+    st.markdown(render_success_box("Final Validation Summary を生成しました。"), unsafe_allow_html=True)
+    for label, path in paths.items():
+      _show_output_path(label, path)
+
+
+def render_analyst_input_execution_section(*, key_prefix: str = ANALYST_INPUT_KEY_PREFIX) -> None:
+  st.subheader("本番実行 / 新しいテーマで分析")
+  st.caption(
+    "新しい技術テーマとseed公報を入力し、Manual ClaimsからEvidence Map、Paper/Web、Link、Watch、Digestまで順番に生成します。"
+  )
+  render_pan_theme_loader_button(key_prefix=key_prefix)
+  render_theme_validation_safety_messages()
+
+  from tech_cartography.ui.analyst_mode_ui import case_from_session_widgets
+
+  preview_case = case_from_session_widgets(key_prefix=key_prefix)
+  snapshot = compute_analyst_workflow_snapshot(preview_case, project_root=_project_root())
+  st.markdown("### 実行ステップ")
+  render_analyst_workflow_step_cards(snapshot)
+
+  with st.expander("1. テーマ・seed入力", expanded=snapshot.steps[0].status == "次にやる"):
+    (
+      theme_name,
+      _core_text,
+      _theme_id_value,
+      _description,
+      _application_text,
+      _material_text,
+      _exclude_text,
+      _seed_text,
+      _seed_publications,
+      _progress_theme_id,
+      progress_list,
+      case,
+    ) = _render_theme_seed_input_block(key_prefix=key_prefix)
+    has_theme_name = bool(theme_name.strip())
+    if not has_theme_name:
+      st.caption("テーマ名を入力すると dry-run などの操作ボタンが有効になります。")
+    else:
+      st.session_state[STATE_THEME_VALIDATION_CASE] = case
+      if is_developer_view():
+        st.caption(f"theme_id: `{case.theme_id}`")
+      _render_theme_validation_actions(key_prefix=key_prefix, case=case, has_theme_name=has_theme_name)
+
+  if preview_case is None:
+    return
+
+  case = preview_case
+  progress_list = _get_seed_progress_list(case.seed_publication_numbers) if case.seed_publication_numbers else []
+
+  with st.expander("2. Manual Claims", expanded=snapshot.steps[2].status == "次にやる"):
+    render_manual_claims_editor(case=case, key_prefix=key_prefix, progress_list=progress_list)
+
+  with st.expander("3. Evidence Map生成", expanded=snapshot.steps[3].status == "次にやる"):
+    render_evidence_map_builder(case=case, key_prefix=key_prefix, progress_list=progress_list)
+
+  with st.expander("4. Paper/Web/Link/Watch/Digest", expanded=snapshot.steps[4].status == "次にやる"):
+    render_end_to_end_chain_section(case=case, key_prefix=key_prefix, progress_list=progress_list)
+
+  with st.expander("5. Final Validation", expanded=snapshot.steps[6].status == "次にやる"):
+    render_final_validation_builder(case=case, key_prefix=key_prefix)
+
+
+def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> None:
+  render_analyst_input_execution_section(key_prefix=key_prefix)

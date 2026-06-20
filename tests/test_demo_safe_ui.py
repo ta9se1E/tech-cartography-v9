@@ -21,11 +21,13 @@ def test_demo_tab_ids_exclude_analyst_inputs() -> None:
   assert demo_ids == demo_safe_ui.DEMO_TAB_IDS
 
 
-def test_analyst_tab_ids_include_theme_validation() -> None:
+def test_analyst_tab_ids_include_input_execution() -> None:
   analyst_ids = demo_safe_ui.tab_ids_for_ui_mode(demo_safe_ui.UI_MODE_ANALYST)
-  assert "theme_validation" in analyst_ids
+  assert "analyst_input" in analyst_ids
+  assert "theme_validation" not in analyst_ids
   labels = demo_safe_ui.tab_labels_for_ui_mode(demo_safe_ui.UI_MODE_ANALYST)
-  assert "本番実行" in labels
+  assert "入力・実行" in labels
+  assert "別テーマ検証" not in labels
 
 
 def test_demo_mode_default_in_session_state() -> None:
@@ -80,7 +82,7 @@ def test_delivery_section_developer_mode_flag() -> None:
 
 def test_theme_validation_renamed_to_production_run() -> None:
   text = THEME_VALIDATION_UI.read_text(encoding="utf-8")
-  assert 'st.subheader("本番実行 / Theme Validation")' in text
+  assert 'st.subheader("本番実行 / 新しいテーマで分析")' in text
   safety = text.split("def render_theme_validation_safety_messages", 1)[1].split("def _build_case_from_inputs", 1)[0]
   assert "THEME_VALIDATION_SAFETY_MESSAGES" not in safety
   assert "利用上の注意" in safety

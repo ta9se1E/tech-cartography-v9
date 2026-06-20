@@ -23,19 +23,20 @@ def test_main_tab_labels_use_demo_safe_ui() -> None:
   demo_labels = v7_easy_app._main_tab_labels(ui_mode="demo")
   assert "本番実行" not in demo_labels
   assert "別テーマ検証" not in demo_labels
+  assert "入力・実行" not in demo_labels
   assert "はじめる" in demo_labels
   analyst_labels = v7_easy_app._main_tab_labels(ui_mode="analyst")
-  assert "本番実行" in analyst_labels
+  assert "入力・実行" in analyst_labels
+  assert "別テーマ検証" not in analyst_labels
   assert translate_tab_name("theme_validation") == "別テーマ検証"
   assert TAB_LABELS["theme_validation"] == "別テーマ検証"
 
 
 def test_v7_easy_app_wires_theme_validation_tab() -> None:
   text = V7_EASY_APP.read_text(encoding="utf-8")
-  assert "def _tab_theme_validation" in text
-  assert "_tab_theme_validation()" in text
+  assert "def _tab_analyst_input" in text
+  assert "render_analyst_input_execution_section" in text
   assert "render_theme_validation_section" in text
-  assert "render_theme_validation_section(key_prefix=\"theme_validation_tab\")" in text
   assert "tab_ids_for_ui_mode" in text
   assert "_render_tab_by_id" in text
   assert "tabs = st.tabs(_main_tab_labels())" not in text

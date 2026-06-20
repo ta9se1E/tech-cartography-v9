@@ -41,12 +41,10 @@ UI_MODE_LABELS: dict[str, str] = {
 
 DEMO_TAB_IDS: tuple[str, ...] = ("start", "evidence", "market", "reports", "settings")
 ANALYST_TAB_IDS: tuple[str, ...] = (
+  "analyst_input",
   "start",
-  "patents",
-  "fulltext",
   "evidence",
   "market",
-  "theme_validation",
   "reports",
   "settings",
 )
@@ -124,13 +122,7 @@ def tab_ids_for_ui_mode(ui_mode: str | None = None) -> tuple[str, ...]:
 
 def tab_labels_for_ui_mode(ui_mode: str | None = None) -> list[str]:
   mode = ui_mode or get_ui_mode()
-  labels: list[str] = []
-  for tab_id in tab_ids_for_ui_mode(mode):
-    if tab_id == "theme_validation" and mode in {UI_MODE_ANALYST, UI_MODE_DEVELOPER}:
-      labels.append("本番実行")
-    else:
-      labels.append(translate_tab_name(tab_id))
-  return labels
+  return [translate_tab_name(tab_id) for tab_id in tab_ids_for_ui_mode(mode)]
 
 
 def render_usage_notices_expander(*, expanded: bool = False, key: str = "usage_notices") -> None:
@@ -169,11 +161,20 @@ def _load_final_validation_next_actions(project_root: Path) -> list[str]:
   return [str(a) for a in actions if str(a).strip()]
 
 
-def sidebar_progress_text(ui_mode: str) -> str:
+def sidebar_progress_text(ui_mode: str, *, project_root: Path | None = None) -> str:
   if ui_mode == UI_MODE_DEMO:
     return "デモ表示中（US-12565719-B2 成果物）"
   if ui_mode == UI_MODE_ANALYST:
-    return "本番実行モード（テーマ入力・E2E Chain）"
+    from tech_cartography.ui.analyst_mode_ui import (
+      ANALYST_INPUT_KEY_PREFIX,
+      compute_analyst_workflow_snapshot,
+      case_from_session_widgets,
+    )
+
+    root = project_root or Path(__file__).resolve().parents[3]
+    case = case_from_session_widgets(key_prefix=ANALYST_INPUT_KEY_PREFIX)
+    snapshot = compute_analyst_workflow_snapshot(case, project_root=root)
+    return "\n".join(snapshot.progress_lines)
   return "開発者向けモード（パス・検証サマリー参照可）"
 
 
@@ -181,10 +182,15 @@ def sidebar_next_steps_text(ui_mode: str, *, project_root: Path) -> str:
   if ui_mode == UI_MODE_DEMO:
     return "はじめる → 技術の裏取り → 企業・市場シグナル → レポート"
   if ui_mode == UI_MODE_ANALYST:
-    actions = _load_final_validation_next_actions(project_root)
-    if actions:
-      return actions[0]
-    return "seed status / Final Validation の next_action を確認"
+    from tech_cartography.ui.analyst_mode_ui import (
+      ANALYST_INPUT_KEY_PREFIX,
+      compute_analyst_workflow_snapshot,
+      case_from_session_widgets,
+    )
+
+    case = case_from_session_widgets(key_prefix=ANALYST_INPUT_KEY_PREFIX)
+    snapshot = compute_analyst_workflow_snapshot(case, project_root=project_root)
+    return snapshot.next_action
   return "開発者向け expander で run_id・validation paths を確認"
 
 
@@ -315,7 +321,7 @@ def render_app_sidebar(
   st.session_state[STATE_UI_MODE] = ui_mode_input
 
   st.markdown("**現在の進捗**")
-  st.caption(sidebar_progress_text(ui_mode_input))
+  st.caption(sidebar_progress_text(ui_mode_input, project_root=project_root))
 
   st.markdown("**次にやること**")
   st.caption(sidebar_next_steps_text(ui_mode_input, project_root=project_root))

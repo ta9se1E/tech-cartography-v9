@@ -339,6 +339,7 @@ def translate_evidence_coverage_level(level: str) -> str:
 
 TAB_LABELS: dict[str, str] = {
   "start": "はじめる",
+  "analyst_input": "入力・実行",
   "patents": "特許候補",
   "fulltext": "全文確認",
   "evidence": "技術の裏取り",

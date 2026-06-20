@@ -20,13 +20,19 @@ def test_ui_source_has_seed_progress_section() -> None:
 
 def test_seed_progress_dashboard_before_theme_name_gate() -> None:
   text = Path("src/tech_cartography/ui/theme_validation_ui.py").read_text(encoding="utf-8")
-  section = text.split("def render_theme_validation_section", 1)[1]
+  section = text.split("def _render_theme_seed_input_block", 1)[1].split(
+    "def _render_theme_validation_actions",
+    1,
+  )[0]
   seed_idx = section.index("seed publication numbers（カンマ区切り")
   progress_idx = section.index("progress_list = render_seed_progress_dashboard")
-  theme_gate_idx = section.index("has_theme_name = bool(theme_name.strip())")
-  e2e_idx = section.index("render_end_to_end_chain_section")
-  assert seed_idx < progress_idx < theme_gate_idx
-  assert progress_idx < e2e_idx
+  analyst_section = text.split("def render_analyst_input_execution_section", 1)[1].split(
+    "def render_theme_validation_section",
+    1,
+  )[0]
+  e2e_idx = analyst_section.index("render_end_to_end_chain_section")
+  assert seed_idx < progress_idx
+  assert e2e_idx > 0
 
 
 def test_buttons_not_hidden_by_empty_seed_early_return() -> None:
