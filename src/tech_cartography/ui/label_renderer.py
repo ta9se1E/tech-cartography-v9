@@ -52,7 +52,41 @@ LABEL_MAP: dict[str, str] = {
   "Evidence Map partial": "Evidence Map 一部のみ",
   "Evidence Map missing": "Evidence Map 未生成",
   "Evidence Map error": "Evidence Map 読み込みエラー",
+  "freeze_ready_with_declared_limitations": "MVPデモ可能（制限あり）",
 }
+
+REPORT_STATUS_LABELS: dict[str, str] = {
+  "freeze_ready_after_cross_theme_end_to_end_validation": "MVPデモ可能",
+  "freeze_ready_with_declared_e2e_limitations": "MVPデモ可能（制限あり）",
+  "freeze_ready_with_declared_limitations": "MVPデモ可能（制限あり）",
+  "not_ready_for_full_e2e_freeze": "End-to-End freeze 未達",
+  "cross_theme_end_to_end_with_actual_paper_web_data": "別テーマでもPaper/Web実データまで確認済み",
+  "cross_theme_end_to_end_with_query_plan_limitations": "別テーマEnd-to-End（検索計画のみの制限あり）",
+  "cross_theme_end_to_end_candidate_artifacts": "別テーマEnd-to-End候補",
+  "partial_end_to_end_incomplete": "End-to-End一部未完了",
+  "actual_data": "実データ取得済み",
+  "query_plan_ready": "検索計画作成済み",
+  "preview_ready": "プレビュー生成済み",
+}
+
+
+def translate_report_status(value: Any, *, default: str | None = None) -> str:
+  """Translate internal validation/freeze tokens for normal report display."""
+  if value is None:
+    return default or "—"
+  text = str(value).strip()
+  if not text:
+    return default or "—"
+  if text in REPORT_STATUS_LABELS:
+    return REPORT_STATUS_LABELS[text]
+  lowered = text.lower()
+  if lowered in REPORT_STATUS_LABELS:
+    return REPORT_STATUS_LABELS[lowered]
+  if lowered == text.replace("-", "_"):
+    snake = text.replace("-", "_").lower()
+    if snake in REPORT_STATUS_LABELS:
+      return REPORT_STATUS_LABELS[snake]
+  return default if default is not None else text
 
 SIGNAL_TYPE_LABELS: dict[str, str] = {
   "national_project": "国家プロジェクト候補",

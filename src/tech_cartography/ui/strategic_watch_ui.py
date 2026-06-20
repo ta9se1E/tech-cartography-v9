@@ -40,6 +40,12 @@ STRATEGIC_WATCH_CAUTION_JA = (
   "Papers are supporting evidence candidates, not proof of patent claims."
 )
 
+STRATEGIC_WATCH_BRIEF_SUMMARY_JA = (
+  "Strategic Watch Briefでは、特許・論文・Webシグナルの重なりから、"
+  "次に監視すべき候補を整理しています。"
+  "ここに出る項目は重点監視候補であり、対象特許との直接関係を断定するものではありません。"
+)
+
 MISSING_ARTIFACT_WARNING = (
   "Strategic Watch Brief の成果物が見つかりません。"
   "先に scripts/build_strategic_watch_brief.py を実行してください。"
@@ -418,6 +424,22 @@ def render_next_verification_actions_section(artifacts: StrategicWatchUIArtifact
     st.info("Next Verification Actions は not available です。")
 
 
+def render_strategic_watch_brief_compact(artifacts: StrategicWatchUIArtifacts, *, key_prefix: str = "sw_brief") -> None:
+  st.markdown(render_info_box(STRATEGIC_WATCH_BRIEF_SUMMARY_JA), unsafe_allow_html=True)
+  if artifacts.brief_md:
+    with st.expander("Strategic Watch Brief全文を表示", expanded=False):
+      st.markdown(render_markdown_preview(artifacts.brief_md, max_chars=8000))
+    st.download_button(
+      label="Strategic Watch Brief全文をダウンロード",
+      data=artifacts.brief_md,
+      file_name="strategic_watch_brief.md",
+      mime="text/markdown",
+      key=f"{key_prefix}_download",
+    )
+  else:
+    st.info("strategic_watch_brief.md は not available です。")
+
+
 def render_strategic_watch_brief_markdown(artifacts: StrategicWatchUIArtifacts) -> None:
   st.subheader("Strategic Watch Brief Markdown")
   if artifacts.brief_md:
@@ -427,7 +449,11 @@ def render_strategic_watch_brief_markdown(artifacts: StrategicWatchUIArtifacts) 
     st.info("strategic_watch_brief.md は not available です。")
 
 
-def render_strategic_watch_section(artifacts: StrategicWatchUIArtifacts) -> None:
+def render_strategic_watch_section(
+  artifacts: StrategicWatchUIArtifacts,
+  *,
+  developer_mode: bool = False,
+) -> None:
   st.markdown("## Strategic Watch Brief")
   if artifacts.status == "missing":
     st.warning(MISSING_ARTIFACT_WARNING)
@@ -452,12 +478,19 @@ def render_strategic_watch_section(artifacts: StrategicWatchUIArtifacts) -> None
     st.warning("Strategic Watch Summary Cards の表示中に問題が発生しました。")
     st.caption(str(exc))
   render_top_strategic_watch_items(artifacts)
-  render_national_project_money_signals(artifacts)
-  render_ir_disclosure_signals(artifacts)
-  render_patent_paper_web_candidates(artifacts)
-  render_evidence_gaps_section(artifacts)
-  render_next_verification_actions_section(artifacts)
-  render_strategic_watch_brief_markdown(artifacts)
+
+  if developer_mode:
+    render_national_project_money_signals(artifacts)
+    render_ir_disclosure_signals(artifacts)
+    render_patent_paper_web_candidates(artifacts)
+    render_evidence_gaps_section(artifacts)
+    render_next_verification_actions_section(artifacts)
+    render_strategic_watch_brief_markdown(artifacts)
+  else:
+    render_strategic_watch_brief_compact(
+      artifacts,
+      key_prefix=f"sw_{artifacts.publication_number}",
+    )
 
   st.markdown(
     render_info_box(

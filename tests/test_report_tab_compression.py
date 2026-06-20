@@ -51,11 +51,19 @@ def test_developer_expander_contains_hidden_sections() -> None:
 
 def test_final_validation_brief_lines() -> None:
   lines = report_tab_ui.build_final_validation_brief_lines(
-    {"seed_count": 3, "completed_end_to_end_count": 3, "freeze_readiness": "freeze_ready"},
+    {
+      "seed_count": 3,
+      "completed_end_to_end_count": 3,
+      "freeze_readiness": "freeze_ready_after_cross_theme_end_to_end_validation",
+      "evidence_level": "cross_theme_end_to_end_with_actual_paper_web_data",
+    },
   )
   assert any("JP seed 3件" in line for line in lines)
-  assert any("Paper / Web" in line for line in lines)
+  assert any("MVPデモ可能" in line for line in lines)
   assert any("確認候補" in line for line in lines)
+  joined = "\n".join(lines)
+  assert "actual_data" not in joined
+  assert "freeze_ready_after" not in joined
 
 
 def test_validation_links_only_in_developer_mode() -> None:

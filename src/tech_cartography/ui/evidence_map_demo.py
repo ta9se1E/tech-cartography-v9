@@ -119,8 +119,9 @@ CLAIM_LINKS_NOTICE = (
   "最終判断には専門家レビューが必要です。"
 )
 
-EVIDENCE_TAB_CAUTION = (
-  "論文候補は証明ではありません。FTO、侵害、有効性判断はしません。専門家レビューが必要です。"
+CLAIM_ELEMENT_MISSING_GUIDANCE = (
+  "請求項要素の詳細テキストは未取得です。"
+  "現在はManual Claims由来の限定的な対応候補として、選定論文を表示しています。"
 )
 
 
@@ -229,6 +230,28 @@ def _format_cited_by_count(value: Any) -> str:
     return str(number)
   except (TypeError, ValueError):
     return str(value).strip() or NOT_AVAILABLE
+
+
+def _is_missing_claim_field(value: Any) -> bool:
+  if _is_empty_value(value):
+    return True
+  text = str(value).strip().lower()
+  return text in {NOT_AVAILABLE.lower(), "n/a", "none", "nan", "unknown", "(none)"}
+
+
+def filter_claim_paper_link_rows(df: pd.DataFrame | None) -> pd.DataFrame:
+  """Drop rows whose claim element fields are empty or not available (Phase 24.5F)."""
+  if df is None or df.empty:
+    return pd.DataFrame()
+  kept_rows: list[dict[str, Any]] = []
+  for _, row in df.iterrows():
+    row_dict = {str(k): _normalize_cell(v) for k, v in row.to_dict().items()}
+    if _is_missing_claim_field(row_dict.get("claim_element")):
+      continue
+    if _is_missing_claim_field(row_dict.get("claim_element_text")):
+      continue
+    kept_rows.append(row.to_dict())
+  return pd.DataFrame(kept_rows) if kept_rows else pd.DataFrame()
 
 
 def _format_display_value(value: Any, *, default: str = NOT_AVAILABLE) -> str:
@@ -596,14 +619,32 @@ def render_selected_evidence_papers(artifacts: EvidenceMapDemoArtifacts) -> None
   render_dataframe_stretch(display_df, hide_index=True)
 
 
-def render_claim_paper_links(artifacts: EvidenceMapDemoArtifacts) -> None:
+def render_claim_paper_links(artifacts: EvidenceMapDemoArtifacts, *, developer_mode: bool = False) -> None:
   st.subheader("Claim × Paper Candidate Links")
   st.markdown(render_caution_box(CLAIM_LINKS_NOTICE), unsafe_allow_html=True)
-  display_df = prepare_claim_paper_links_display_df(artifacts.claim_paper_links_df)
+  source_df = artifacts.claim_paper_links_df
+  if not developer_mode:
+    source_df = filter_claim_paper_link_rows(source_df)
+  display_df = prepare_claim_paper_links_display_df(source_df)
   if display_df.empty:
-    st.warning("Claim × Paper Candidate Links の成果物がまだありません。")
+    if not developer_mode and not artifacts.claim_paper_links_df.empty:
+      st.info(CLAIM_ELEMENT_MISSING_GUIDANCE)
+    else:
+      st.warning("Claim × Paper Candidate Links の成果物がまだありません。")
+    if developer_mode and not artifacts.claim_paper_links_df.empty:
+      with st.expander("開発者向け: raw Claim × Paper links", expanded=False):
+        render_dataframe_stretch(
+          prepare_claim_paper_links_display_df(artifacts.claim_paper_links_df),
+          hide_index=True,
+        )
     return
   render_dataframe_stretch(display_df, hide_index=True)
+  if developer_mode and not artifacts.claim_paper_links_df.empty:
+    with st.expander("開発者向け: raw Claim × Paper links", expanded=False):
+      render_dataframe_stretch(
+        prepare_claim_paper_links_display_df(artifacts.claim_paper_links_df),
+        hide_index=True,
+      )
 
 
 def render_evidence_gaps_section(artifacts: EvidenceMapDemoArtifacts) -> None:
@@ -667,11 +708,11 @@ def render_market_signal_demo_notice() -> None:
   st.markdown(render_info_box(MARKET_SIGNAL_NOTICE), unsafe_allow_html=True)
 
 
-def render_demo_evidence_tab(artifacts: EvidenceMapDemoArtifacts) -> None:
+def render_demo_evidence_tab(artifacts: EvidenceMapDemoArtifacts, *, developer_mode: bool = False) -> None:
   st.caption("論文候補は技術背景の確認候補です。FTO・侵害・有効性判断ではありません。")
   render_evidence_map_summary(artifacts)
   render_selected_evidence_papers(artifacts)
-  render_claim_paper_links(artifacts)
+  render_claim_paper_links(artifacts, developer_mode=developer_mode)
   render_evidence_gaps_and_next_actions(artifacts)
   if not artifacts.evidence_items_df.empty:
     with st.expander("Evidence Map Items"):
@@ -679,12 +720,12 @@ def render_demo_evidence_tab(artifacts: EvidenceMapDemoArtifacts) -> None:
 
 
 def render_demo_start_tab(artifacts: EvidenceMapDemoArtifacts) -> None:
-  from tech_cartography.ui.demo_safe_ui import render_usage_notices_expander
-
-  render_usage_notices_expander(key="demo_start_usage_notices")
   st.markdown(render_demo_story_cards(artifacts), unsafe_allow_html=True)
   st.markdown(render_three_minute_demo_guide(), unsafe_allow_html=True)
   st.caption(
     f"デモ成果物: {artifacts.publication_number} / "
     f"状態: {translate_label(_format_status_label(artifacts.status))}"
   )
+  from tech_cartography.ui.demo_safe_ui import render_usage_notices_expander
+
+  render_usage_notices_expander(key="demo_start_usage_notices", expanded=False)

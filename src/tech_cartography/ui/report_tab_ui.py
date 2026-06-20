@@ -90,17 +90,23 @@ def load_final_validation_brief(project_root: Path) -> dict[str, Any]:
 def build_final_validation_brief_lines(brief: dict[str, Any]) -> list[str]:
   if not brief:
     return ["Final Validation Summary はまだ生成されていません。"]
+  from tech_cartography.ui.label_renderer import translate_report_status
+
   seed_count = int(brief.get("seed_count") or 0)
   completed = int(brief.get("completed_end_to_end_count") or 0)
   freeze = str(brief.get("freeze_readiness") or "")
+  evidence_level = str(brief.get("evidence_level") or "")
   lines = [
     f"JP seed {seed_count}件で End-to-End 確認済み（{completed}/{seed_count} 完了）",
-    "Paper / Web 実データあり（actual_data）",
   ]
-  if freeze:
-    lines.append(f"freeze_readiness: MVPデモ可能（{freeze}）")
+  if evidence_level:
+    lines.append(translate_report_status(evidence_level))
   else:
-    lines.append("freeze_readiness: MVPデモ可能")
+    lines.append("Paper / Web 実データ取得状況は Final Validation Summary を参照")
+  if freeze:
+    lines.append(translate_report_status(freeze, default="MVPデモ可能"))
+  else:
+    lines.append("MVPデモ可能")
   lines.append("ただし、Paper / Web / Link / Watch は確認候補です")
   return lines
 

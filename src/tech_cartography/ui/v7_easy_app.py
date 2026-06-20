@@ -224,7 +224,6 @@ def _tab_start(
   demo_artifacts: Any = None,
   repro_artifacts: Any = None,
 ) -> None:
-  render_usage_notices_expander(key="start_usage_notices")
   if demo_mode and demo_artifacts is not None:
     render_demo_start_tab(demo_artifacts)
     return
@@ -261,6 +260,8 @@ def _tab_start(
           render_small_table(pd.DataFrame(stage_rows)[["段階", "状態", "説明"]])
   elif is_analyst_view() or is_developer_view():
     st.info("本番実行タブでテーマを入力してください。" if is_analyst_view() else "run を読み込むには開発者向けモードが必要です。")
+
+  render_usage_notices_expander(key="start_usage_notices", expanded=False)
 
 
 def _tab_patents(manifest: dict[str, Any], display_mode: str) -> None:
@@ -411,7 +412,7 @@ def _tab_evidence(
   repro_artifacts: Any = None,
 ) -> None:
   if demo_artifacts is not None:
-    render_demo_evidence_tab(demo_artifacts)
+    render_demo_evidence_tab(demo_artifacts, developer_mode=is_developer_view())
     return
   if is_analyst_view():
     case = _resolve_analyst_case()
@@ -632,7 +633,7 @@ def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> 
       PROJECT_ROOT,
       publication_number=publication,
     )
-    render_strategic_watch_section(strategic_watch_artifacts)
+    render_strategic_watch_section(strategic_watch_artifacts, developer_mode=is_developer_view())
     return
   if demo_mode:
     render_market_signal_demo_notice()
@@ -642,7 +643,7 @@ def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> 
 
   st.divider()
   strategic_watch_artifacts = load_strategic_watch_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
-  render_strategic_watch_section(strategic_watch_artifacts)
+  render_strategic_watch_section(strategic_watch_artifacts, developer_mode=is_developer_view())
 
   if not manifest:
     if not demo_mode:
