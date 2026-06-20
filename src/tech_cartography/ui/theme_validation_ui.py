@@ -1,4 +1,4 @@
-"""Streamlit UI for user theme validation (Phase 24.4A)."""
+"""Streamlit UI for user theme validation (Phase 24.4A / 24.4A.2)."""
 
 from __future__ import annotations
 
@@ -16,17 +16,21 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_warning_box,
 )
 from tech_cartography.validation.theme_validation import (
+  MANUAL_CLAIMS_EDITOR_NOTICES,
   THEME_VALIDATION_SAFETY_MESSAGES,
   ThemeValidationCase,
   ThemeValidationRunResult,
+  build_theme_id,
   build_theme_search_queries,
   create_manual_claims_template,
+  has_manual_claims,
+  manual_claims_json_path,
   parse_keyword_text,
   run_existing_outputs_validation,
   run_theme_patent_search,
   run_theme_validation_dry_run,
   save_theme_validation_result,
-  slugify_theme_id,
+  save_user_manual_claims,
   stage_status_display_class,
 )
 
@@ -51,6 +55,7 @@ def render_theme_validation_safety_messages() -> None:
 def _build_case_from_inputs(
   *,
   theme_name: str,
+  theme_id_override: str,
   description: str,
   core_text: str,
   application_text: str,
@@ -58,12 +63,17 @@ def _build_case_from_inputs(
   exclude_text: str,
   seed_text: str,
 ) -> ThemeValidationCase:
-  theme_id = slugify_theme_id(theme_name)
+  core_keywords = parse_keyword_text(core_text)
+  theme_id = build_theme_id(
+    theme_name,
+    theme_id_override=theme_id_override,
+    core_keywords=core_keywords,
+  )
   return ThemeValidationCase(
     theme_id=theme_id,
     theme_name=theme_name.strip(),
     description=description.strip(),
-    core_keywords=parse_keyword_text(core_text),
+    core_keywords=core_keywords,
     application_keywords=parse_keyword_text(application_text),
     material_or_process_keywords=parse_keyword_text(material_text),
     exclude_keywords=parse_keyword_text(exclude_text),
@@ -130,6 +140,152 @@ def render_theme_validation_stage_matrix(result: ThemeValidationRunResult | None
     for warning in result.warnings:
       st.markdown(render_info_box(warning), unsafe_allow_html=True)
 
+  fulltext_stage = next(
+    (stage for stage in (result.stages or []) if stage.stage == "fulltext_or_manual_claims_available"),
+    None,
+  )
+  evidence_stage = next(
+    (stage for stage in (result.stages or []) if stage.stage == "evidence_map_available_or_buildable"),
+    None,
+  )
+  if fulltext_stage and fulltext_stage.status == "pass" and evidence_stage and evidence_stage.status == "output_missing":
+    st.markdown(
+      render_info_box(
+        "Manual Claimsは保存されました。次はClaim Element抽出 / Evidence Map生成ルートを実行する必要があります。"
+      ),
+      unsafe_allow_html=True,
+    )
+
+
+def render_manual_claims_editor(
+  *,
+  case: ThemeValidationCase,
+  key_prefix: str,
+  on_revalidate: bool = False,
+) -> bool:
+  """Render Manual Claims editor. Returns True if re-validation was requested."""
+  st.markdown("#### Manual Claims入力 / Manual Claims Editor")
+  for notice in MANUAL_CLAIMS_EDITOR_NOTICES:
+    st.markdown(render_caution_box(notice), unsafe_allow_html=True)
+
+  seeds = list(case.seed_publication_numbers)
+  if seeds:
+    publication_number = st.selectbox(
+      "publication number",
+      options=seeds,
+      key=f"{key_prefix}_manual_claims_pub",
+    )
+  else:
+    publication_number = st.text_input(
+      "publication number",
+      value="",
+      key=f"{key_prefix}_manual_claims_pub_text",
+      placeholder="JP2022090764A",
+    )
+
+  claims_text = st.text_area(
+    "claims_text",
+    value="",
+    height=400,
+    key=f"{key_prefix}_manual_claims_text",
+    placeholder=(
+      "公報原文の請求項をここに貼り付けてください。"
+      "AIで作成した請求項や要約は入力しないでください。"
+    ),
+  )
+  source_url = st.text_input(
+    "source_url（任意）",
+    value="",
+    key=f"{key_prefix}_manual_claims_source_url",
+    placeholder="Google Patents / J-PlatPat URL",
+  )
+  source_note = st.text_area(
+    "source_note（任意）",
+    value="",
+    key=f"{key_prefix}_manual_claims_source_note",
+    placeholder="Google Patentsから請求項1〜10をコピー",
+  )
+  language = st.selectbox(
+    "language",
+    options=["ja", "en", "other"],
+    index=0,
+    key=f"{key_prefix}_manual_claims_language",
+  )
+
+  root = _project_root()
+  pub = str(publication_number or "").strip()
+  existing_path = manual_claims_json_path(root, pub) if pub else None
+  if existing_path and existing_path.exists():
+    st.warning(f"既存ファイルがあります: {existing_path}")
+    overwrite = st.checkbox(
+      "既存の Manual Claims ファイルを上書きする",
+      value=False,
+      key=f"{key_prefix}_manual_claims_overwrite",
+    )
+  else:
+    overwrite = True
+
+  save_claims_clicked = st.button(
+    "Manual Claimsを保存する",
+    key=f"{key_prefix}_manual_claims_save",
+  )
+  revalidate_clicked = st.button(
+    "保存後に既存outputs検証を再実行する",
+    key=f"{key_prefix}_manual_claims_revalidate",
+  )
+
+  if save_claims_clicked:
+    saved_path, warnings = save_user_manual_claims(
+      publication_number=pub,
+      claims_text=claims_text,
+      output_dir=root,
+      source_url=source_url,
+      source_note=source_note,
+      language=language,
+      overwrite=overwrite,
+    )
+    for warning in warnings:
+      if saved_path is None and "上書き" in warning:
+        st.warning(warning)
+      elif "短すぎる" in warning:
+        st.warning(warning)
+      else:
+        st.error(warning)
+    if saved_path is not None:
+      st.markdown(render_success_box("Manual Claims を保存しました。"), unsafe_allow_html=True)
+      st.code(str(saved_path))
+      st.markdown(
+        render_info_box(
+          "保存後、「既存outputs検証を再実行する」を押すと Stage 2（fulltext_or_manual_claims_available）が pass になるか確認できます。"
+        ),
+        unsafe_allow_html=True,
+      )
+
+  if revalidate_clicked or on_revalidate:
+    result = run_existing_outputs_validation(case, root)
+    st.session_state[STATE_THEME_VALIDATION_RESULT] = result
+    fulltext_stage = next(
+      (stage for stage in result.stages if stage.stage == "fulltext_or_manual_claims_available"),
+      None,
+    )
+    if fulltext_stage and fulltext_stage.status == "pass":
+      st.markdown(render_success_box("Stage 2（fulltext_or_manual_claims_available）が pass になりました。"), unsafe_allow_html=True)
+    else:
+      st.warning("Stage 2 はまだ pass ではありません。Manual Claims の保存内容を確認してください。")
+    evidence_stage = next(
+      (stage for stage in result.stages if stage.stage == "evidence_map_available_or_buildable"),
+      None,
+    )
+    if evidence_stage and evidence_stage.status == "output_missing":
+      st.markdown(
+        render_info_box(
+          "Manual Claimsは保存されました。次はClaim Element抽出 / Evidence Map生成ルートを実行する必要があります。"
+        ),
+        unsafe_allow_html=True,
+      )
+    return True
+  return False
+
 
 def render_theme_validation_intro_card() -> None:
   st.markdown(
@@ -166,13 +322,24 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
   render_theme_validation_safety_messages()
 
   theme_name = st.text_input("テーマ名", value="", key=f"{key_prefix}_theme_name")
-  description = st.text_area("テーマ説明", value="", key=f"{key_prefix}_description")
   core_text = st.text_area(
     "コアキーワード（カンマまたは改行区切り）",
     value="",
     key=f"{key_prefix}_core_keywords",
     placeholder="polymer film, heat treatment, crystallization",
   )
+  auto_theme_id = build_theme_id(
+    theme_name,
+    core_keywords=parse_keyword_text(core_text),
+  ) if theme_name.strip() else ""
+  theme_id_value = st.text_input(
+    "保存用テーマID",
+    value=auto_theme_id,
+    key=f"{key_prefix}_theme_id",
+    help="検証レポートの保存フォルダ名です。短すぎるID（例: pan）は避け、テーマ内容が分かるIDを推奨します。",
+    placeholder="pan_precursor_surface_internal_defects",
+  )
+  description = st.text_area("テーマ説明", value="", key=f"{key_prefix}_description")
   application_text = st.text_area(
     "用途キーワード",
     value="",
@@ -203,6 +370,7 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
 
   case = _build_case_from_inputs(
     theme_name=theme_name,
+    theme_id_override=theme_id_value,
     description=description,
     core_text=core_text,
     application_text=application_text,
@@ -211,6 +379,7 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
     seed_text=seed_text,
   )
   st.session_state[STATE_THEME_VALIDATION_CASE] = case
+  st.caption(f"theme_id: `{case.theme_id}`")
 
   col_a, col_b, col_c = st.columns(3)
   with col_a:
@@ -273,6 +442,8 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
       for path in created:
         st.code(path)
 
+  render_manual_claims_editor(case=case, key_prefix=key_prefix)
+
   if external_clicked:
     if not consent:
       st.warning("外部検索の同意チェックが必要です。")
@@ -295,7 +466,11 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
     if result is None:
       result = run_theme_validation_dry_run(case)
       st.session_state[STATE_THEME_VALIDATION_RESULT] = result
-    paths = save_theme_validation_result(result, _project_root() / "outputs" / "validation" / "theme_validation")
+    paths = save_theme_validation_result(
+      result,
+      _project_root() / "outputs" / "validation" / "theme_validation",
+      project_root=_project_root(),
+    )
     st.markdown(render_success_box("検証レポートを保存しました。"), unsafe_allow_html=True)
     for label, path in paths.items():
       st.caption(f"{label}: {path}")

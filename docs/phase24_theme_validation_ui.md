@@ -91,7 +91,9 @@ status: `pass`, `blocked`, `not_run`, `manual_input_required`, `external_api_req
    - seed なし: Stage 2 以降は `not_run` または `output_missing`
    - seed あり・成果物なし: `manual_input_required` / `output_missing` で停止理由を確認
 7. seed を指定して **D. Manual Claimsテンプレートを作成する** → テンプレート JSON のパスを確認
-8. **E. 検証レポートを保存する** → `outputs/validation/theme_validation/{theme_id}/` を確認
+8. **Manual Claims Editor** で claims_text を貼り付け **Manual Claimsを保存する**
+9. **保存後に既存outputs検証を再実行する** → Stage 2 が `pass` になることを確認
+10. **E. 検証レポートを保存する** → Manual Claims 状態が report に含まれることを確認
 
 レポートタブには保存済みレポートへのリンクと保存先パスのみ表示します。入力・検証の主導線は **別テーマ検証** タブです。
 
@@ -109,6 +111,38 @@ status: `pass`, `blocked`, `not_run`, `manual_input_required`, `external_api_req
 ## 旧手順（Phase 24.4A）
 
 ~~「レポート」タブでテーマ名・キーワードを入力~~ → 24.4A.1 以降は上記の **別テーマ検証** タブを使用してください。
+
+## Manual Claims Editor（Phase 24.4A.2）
+
+別テーマ検証タブ内の **Manual Claims入力 / Manual Claims Editor** で、公報原文からコピーした請求項を UI 上で保存できます。
+
+### 使い方
+
+1. seed publication numbers に対象特許を入力（例: `JP2022090764A, JP2023163084A, JP2018084002A`）
+2. **D. Manual Claimsテンプレートを作成する**（任意）
+3. **Manual Claims Editor** で publication number を選択し、`claims_text` に公報原文の請求項を貼り付け
+4. **Manual Claimsを保存する** → `outputs/manual_fulltext_inputs/{publication_number}.json`
+5. **保存後に既存outputs検証を再実行する** → Stage 2 が `pass` になることを確認
+6. Stage 3 以降は `output_missing` のまま（Evidence Map 生成は別 Phase）
+
+### 注意
+
+- **AIでClaimsを作成・補完しない**（ユーザーが公報原文からコピーした本文のみ）
+- claims_text が 200 文字未満の場合は警告（保存は可能）
+- 既存ファイルがある場合は上書き確認チェックボックスが必要
+- 本入力は FTO・侵害・有効性判断には使用しない
+
+### theme_id の考え方
+
+- 保存用テーマIDは編集可能（デフォルトはテーマ名＋キーワードから自動生成）
+- 短すぎる ID（例: `pan`）は避ける — 複数テーマで衝突しやすい
+- 推奨例: `pan_precursor_surface_internal_defects`
+- 既存の `pan` フォルダは手動で theme_id を `pan` に指定すれば後方互換で読めます
+
+### 今回の検証例
+
+- theme_id: `pan_precursor_surface_internal_defects`
+- seed: `JP2022090764A`, `JP2023163084A`, `JP2018084002A`
 
 ## 出力ファイル
 

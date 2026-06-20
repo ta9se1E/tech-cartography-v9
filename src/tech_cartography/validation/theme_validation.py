@@ -178,9 +178,8 @@ def find_theme_case(cases: list[ThemeValidationCase], theme_id: str) -> ThemeVal
 
 
 def _manual_exists(project_root: Path, publication_number: str) -> bool:
-  claims = project_root / "inputs" / "manual" / f"{publication_number}_claims.txt"
-  manual_json = project_root / "outputs" / "manual_fulltext_inputs" / f"{publication_number}.json"
-  return claims.exists() or manual_json.exists()
+  ok, _status = has_manual_claims(publication_number, project_root)
+  return ok
 
 
 def _web_signals_exist(project_root: Path) -> bool:
@@ -433,8 +432,151 @@ def parse_keyword_text(text: str) -> list[str]:
 
 
 def slugify_theme_id(theme_name: str, *, fallback: str = "custom_theme") -> str:
-  slug = re.sub(r"[^a-zA-Z0-9]+", "_", str(theme_name or "").strip().lower()).strip("_")
-  return slug or fallback
+  tokens = re.findall(r"[a-zA-Z0-9]+", str(theme_name or "").strip().lower())
+  if not tokens:
+    return fallback
+  return "_".join(tokens)
+
+
+MIN_THEME_ID_LENGTH = 12
+MIN_CLAIMS_TEXT_WARN_LENGTH = 200
+MANUAL_CLAIMS_USER_CAVEAT = (
+  "Claims text was manually provided by the user from a source document. "
+  "This file is not AI-generated."
+)
+MANUAL_CLAIMS_EDITOR_NOTICES = (
+  "Manual Claimsは、公報原文からユーザーがコピーした請求項本文を保存するためのものです。",
+  "AIで請求項を作成・補完しないでください。",
+  "保存後、既存outputs検証を再実行すると、Stage 2がpassになるか確認できます。",
+  "この入力はFTO、侵害、有効性判断には使用しません。",
+)
+
+
+def build_theme_id(
+  theme_name: str,
+  *,
+  theme_id_override: str = "",
+  core_keywords: list[str] | None = None,
+  fallback: str = "custom_theme",
+) -> str:
+  """Build a stable theme_id; avoid single short tokens like ``pan``."""
+  override = str(theme_id_override or "").strip()
+  if override:
+    slug = slugify_theme_id(override, fallback=fallback)
+  else:
+    slug = slugify_theme_id(theme_name, fallback=fallback)
+    if len(slug) < MIN_THEME_ID_LENGTH:
+      for keyword in core_keywords or []:
+        token = slugify_theme_id(keyword, fallback="")
+        if token and token not in slug.split("_"):
+          slug = f"{slug}_{token}" if slug else token
+        if len(slug) >= MIN_THEME_ID_LENGTH:
+          break
+    if len(slug) < MIN_THEME_ID_LENGTH:
+      slug = f"{slug}_theme_validation" if slug else fallback
+  return slug[:80].strip("_") or fallback
+
+
+def manual_claims_json_path(project_root: Path | str, publication_number: str) -> Path:
+  pub = str(publication_number).strip()
+  return Path(project_root) / "outputs" / "manual_fulltext_inputs" / f"{pub}.json"
+
+
+def manual_claims_template_path(project_root: Path | str, publication_number: str) -> Path:
+  pub = str(publication_number).strip()
+  return Path(project_root) / "outputs" / "manual_fulltext_inputs" / f"{pub}.template.json"
+
+
+def _read_manual_claims_text(path: Path) -> str:
+  if not path.exists():
+    return ""
+  try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+  except json.JSONDecodeError:
+    return ""
+  if isinstance(data, dict):
+    return str(data.get("claims_text", "")).strip()
+  return ""
+
+
+def has_manual_claims(publication_number: str, output_dir: Path | str) -> tuple[bool, str]:
+  """Return whether valid manual claims exist and a status label.
+
+  Status labels: ``saved``, ``template_only``, ``empty``, ``missing``.
+  """
+  root = Path(output_dir)
+  pub = str(publication_number).strip()
+  if not pub:
+    return False, "missing"
+
+  json_path = manual_claims_json_path(root, pub)
+  if json_path.exists():
+    claims_text = _read_manual_claims_text(json_path)
+    if claims_text:
+      return True, "saved"
+    return False, "empty"
+
+  if manual_claims_template_path(root, pub).exists():
+    return False, "template_only"
+
+  legacy_claims = root / "inputs" / "manual" / f"{pub}_claims.txt"
+  if legacy_claims.exists() and legacy_claims.read_text(encoding="utf-8").strip():
+    return True, "saved"
+
+  return False, "missing"
+
+
+def summarize_manual_claims_status(
+  publication_numbers: list[str],
+  output_dir: Path | str,
+) -> dict[str, str]:
+  return {pub: has_manual_claims(pub, output_dir)[1] for pub in publication_numbers}
+
+
+def save_user_manual_claims(
+  *,
+  publication_number: str,
+  claims_text: str,
+  output_dir: Path | str,
+  source_url: str = "",
+  source_note: str = "",
+  language: str = "ja",
+  overwrite: bool = False,
+) -> tuple[Path | None, list[str]]:
+  """Save user-provided manual claims JSON. Returns path and non-fatal warnings."""
+  warnings: list[str] = []
+  pub = str(publication_number).strip()
+  text = str(claims_text or "").strip()
+
+  if not pub:
+    warnings.append("publication_number が空のため保存しませんでした。")
+    return None, warnings
+  if not text:
+    warnings.append("claims_text が空のため保存しませんでした。")
+    return None, warnings
+  if len(text) < MIN_CLAIMS_TEXT_WARN_LENGTH:
+    warnings.append("請求項本文として短すぎる可能性があります（200文字未満）。")
+
+  path = manual_claims_json_path(output_dir, pub)
+  if path.exists() and not overwrite:
+    warnings.append("既存の Manual Claims ファイルがあります。上書きする場合は確認してください。")
+    return None, warnings
+
+  payload = {
+    "publication_number": pub,
+    "input_type": "manual_claims",
+    "claims_text": text,
+    "source_url": str(source_url or "").strip(),
+    "source_note": str(source_note or "").strip(),
+    "language": str(language or "ja").strip() or "ja",
+    "created_at": _utc_now_iso(),
+    "created_by": "streamlit_theme_validation_ui",
+    "verification_status": "user_provided_manual_claims",
+    "caveat": MANUAL_CLAIMS_USER_CAVEAT,
+  }
+  path.parent.mkdir(parents=True, exist_ok=True)
+  path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+  return path, warnings
 
 
 def build_theme_search_queries(case: ThemeValidationCase) -> list[str]:
@@ -589,6 +731,62 @@ def _check_patent_candidates(root: Path, seed_pubs: list[str]) -> ThemeValidatio
   )
 
 
+def _evaluate_fulltext_manual_claims_stage(root: Path, seed_pubs: list[str]) -> ThemeValidationStage:
+  if not seed_pubs:
+    return _ui_stage(
+      "fulltext_or_manual_claims_available",
+      status="not_run",
+      reason="seed publication number が未指定です。",
+      next_action="seed publication numbers を入力してください。",
+    )
+
+  per_pub: list[tuple[str, bool, str]] = [
+    (pub, *has_manual_claims(pub, root)) for pub in seed_pubs
+  ]
+  saved = [pub for pub, ok, _status in per_pub if ok]
+  if saved:
+    lines = ", ".join(f"{pub}: manual claims saved" for pub in saved)
+    missing = [pub for pub, ok, status in per_pub if not ok]
+    next_action = "成果物を確認してください。"
+    if missing:
+      next_action = (
+        f"未投入: {', '.join(missing)} — Claims本文を貼り付けて保存してください。"
+      )
+    return _ui_stage(
+      "fulltext_or_manual_claims_available",
+      status="pass",
+      reason=f"Manual Claims を検出しました（{lines}）。",
+      next_action=next_action,
+      output_path=str(manual_claims_json_path(root, saved[0])),
+    )
+
+  template_only = [pub for pub, _ok, status in per_pub if status == "template_only"]
+  empty = [pub for pub, _ok, status in per_pub if status == "empty"]
+  if template_only:
+    return _ui_stage(
+      "fulltext_or_manual_claims_available",
+      status="manual_input_required",
+      reason=f"テンプレートのみ: {', '.join(template_only)}",
+      next_action="Manual Claims Editor で claims_text を貼り付けて保存してください。",
+      output_path=str(manual_claims_template_path(root, template_only[0])),
+    )
+  if empty:
+    return _ui_stage(
+      "fulltext_or_manual_claims_available",
+      status="manual_input_required",
+      reason=f"claims_text が空のファイルがあります: {', '.join(empty)}",
+      next_action="Manual Claims Editor で claims_text を入力して保存してください。",
+      output_path=str(manual_claims_json_path(root, empty[0])),
+    )
+
+  return _ui_stage(
+    "fulltext_or_manual_claims_available",
+    status="manual_input_required",
+    reason=f"Manual Claims 未投入: {', '.join(seed_pubs)}",
+    next_action="Manual Claims Editor で公報原文から claims_text を貼り付けて保存してください。",
+  )
+
+
 def evaluate_existing_output_stages(
   *,
   project_root: Path | str,
@@ -623,6 +821,10 @@ def evaluate_existing_output_stages(
     return stages
 
   for stage_name, rel_template, missing_status, next_action in EXISTING_OUTPUT_CHECKS:
+    if stage_name == "fulltext_or_manual_claims_available":
+      stages.append(_evaluate_fulltext_manual_claims_stage(root, seed_pubs))
+      continue
+
     rel_path = rel_template.format(publication_number=primary_pub)
     path = root / rel_path
     if path.exists():
@@ -633,32 +835,6 @@ def evaluate_existing_output_stages(
           reason="既存 outputs を検出しました。",
           next_action="成果物を開いて内容を確認してください。",
           output_path=str(path),
-        ),
-      )
-      continue
-
-    manual_template = root / "outputs" / "manual_fulltext_inputs" / f"{primary_pub}.template.json"
-    if stage_name == "fulltext_or_manual_claims_available" and manual_template.exists():
-      stages.append(
-        _ui_stage(
-          stage_name,
-          status="manual_input_required",
-          reason="Manual Claims テンプレートがあります。Claims を貼り付けて .json として保存してください。",
-          next_action=f"{manual_template} を編集し {primary_pub}.json として保存してください。",
-          output_path=str(manual_template),
-        ),
-      )
-      continue
-
-    legacy_claims = root / "inputs" / "manual" / f"{primary_pub}_claims.txt"
-    if stage_name == "fulltext_or_manual_claims_available" and legacy_claims.exists():
-      stages.append(
-        _ui_stage(
-          stage_name,
-          status="pass",
-          reason="legacy manual claims テキストを検出しました。",
-          next_action="必要に応じて JSON 形式へ移行してください。",
-          output_path=str(legacy_claims),
         ),
       )
       continue
@@ -907,7 +1083,46 @@ def create_manual_claims_template(
   return path
 
 
-def render_theme_validation_markdown(result: ThemeValidationRunResult) -> str:
+def render_manual_claims_report_section(
+  result: ThemeValidationRunResult,
+  *,
+  project_root: Path | str = ".",
+) -> str:
+  root = Path(project_root)
+  seeds = list(result.case.seed_publication_numbers)
+  if not seeds:
+    return "- seed publication numbers: （未指定）"
+
+  lines = ["", "## Manual Claims status", ""]
+  statuses = summarize_manual_claims_status(seeds, root)
+  saved_any = any(status == "saved" for status in statuses.values())
+  for pub, status in statuses.items():
+    if status == "saved":
+      label = "manual claims saved"
+    elif status == "template_only":
+      label = "template only"
+    elif status == "empty":
+      label = "empty claims_text"
+    else:
+      label = "missing"
+    lines.append(f"- {pub}: {label}")
+
+  lines.extend(["", "### 次アクション", ""])
+  if not saved_any:
+    lines.append("- Manual Claims未投入: Claims本文を貼り付けて保存してください。")
+  else:
+    lines.append("- Manual Claims保存済み: Evidence Map生成ルートへ進む必要があります。")
+    lines.append(
+      "- Manual Claimsは保存されました。次はClaim Element抽出 / Evidence Map生成ルートを実行する必要があります。"
+    )
+  return "\n".join(lines)
+
+
+def render_theme_validation_markdown(
+  result: ThemeValidationRunResult,
+  *,
+  project_root: Path | str = ".",
+) -> str:
   lines = [
     f"# Theme Validation Report: {result.theme_id}",
     "",
@@ -925,6 +1140,8 @@ def render_theme_validation_markdown(result: ThemeValidationRunResult) -> str:
     lines.extend(["", "## Search plan", ""])
     for query in result.search_queries:
       lines.append(f"- `{query}`")
+
+  lines.append(render_manual_claims_report_section(result, project_root=project_root))
 
   lines.extend(["", "## Stage matrix", "", "| stage | status | reason | next_action | output_path |", "|---|---|---|---|---|"])
   for stage in result.stages:
@@ -953,7 +1170,18 @@ def render_theme_validation_markdown(result: ThemeValidationRunResult) -> str:
 def save_theme_validation_result(
   result: ThemeValidationRunResult,
   output_dir: Path | str,
+  *,
+  project_root: Path | str | None = None,
 ) -> dict[str, Path]:
+  root = Path(project_root) if project_root else Path(output_dir)
+  if not (root / "outputs").exists():
+    for _ in range(4):
+      if (root / "outputs").exists():
+        break
+      if root.parent == root:
+        break
+      root = root.parent
+
   out = Path(output_dir) / result.theme_id
   out.mkdir(parents=True, exist_ok=True)
   paths: dict[str, Path] = {
@@ -964,7 +1192,7 @@ def save_theme_validation_result(
   }
 
   paths["theme_validation_report_md"].write_text(
-    render_theme_validation_markdown(result),
+    render_theme_validation_markdown(result, project_root=root),
     encoding="utf-8",
   )
   paths["theme_validation_result_json"].write_text(

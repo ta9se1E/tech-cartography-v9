@@ -175,7 +175,10 @@ def test_existing_outputs_validation_detects_artifacts(tmp_path: Path) -> None:
   (ev / "evidence_map_synthesis.json").write_text("{}", encoding="utf-8")
   manual = tmp_path / "outputs" / "manual_fulltext_inputs"
   manual.mkdir(parents=True)
-  (manual / f"{pub}.json").write_text("{}", encoding="utf-8")
+  (manual / f"{pub}.json").write_text(
+    json.dumps({"claims_text": "independent claim text " * 20}),
+    encoding="utf-8",
+  )
 
   case = ThemeValidationCase(
     theme_id="existing",
@@ -267,7 +270,7 @@ def test_external_search_not_configured_without_bigquery(tmp_path: Path, monkeyp
   assert patent_stage.status == "external_search_not_configured"
 
 
-def test_render_theme_validation_markdown_includes_safety() -> None:
+def test_render_theme_validation_markdown_includes_safety(tmp_path: Path) -> None:
   case = ThemeValidationCase(
     theme_id="md",
     theme_name="MD",
@@ -280,6 +283,6 @@ def test_render_theme_validation_markdown_includes_safety() -> None:
     validation_goal="",
   )
   result = run_theme_validation_dry_run(case)
-  md = render_theme_validation_markdown(result)
+  md = render_theme_validation_markdown(result, project_root=tmp_path)
   assert "侵害" in md
   assert VALIDATION_CAUTION in md
