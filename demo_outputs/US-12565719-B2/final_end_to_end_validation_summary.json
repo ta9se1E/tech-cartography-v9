@@ -1,0 +1,123 @@
+{
+  "theme_id": "pan_precursor_surface_internal_defects",
+  "theme_name": "PAN系炭素繊維前駆体の表面・内部欠陥制御",
+  "created_at": "2026-06-20T08:32:03+00:00",
+  "seed_publications": [
+    "JP2022090764A",
+    "JP2023163084A",
+    "JP2018084002A"
+  ],
+  "seed_count": 3,
+  "stage2_pass_count": 3,
+  "stage3_pass_count": 3,
+  "stage4_paper_count": 3,
+  "stage5_web_count": 3,
+  "stage6_link_count": 3,
+  "stage7_watch_count": 3,
+  "stage8_digest_count": 3,
+  "completed_end_to_end_count": 3,
+  "completed_seed_publications": [
+    "JP2022090764A",
+    "JP2023163084A",
+    "JP2018084002A"
+  ],
+  "incomplete_seed_publications": [],
+  "evidence_level": "cross_theme_end_to_end_with_actual_paper_web_data",
+  "freeze_readiness": "freeze_ready_after_cross_theme_end_to_end_validation",
+  "caveats": [
+    "query_plan_ready は計画のみであり、実データ取得済み（pass）と混同しないでください。",
+    "論文候補は supporting evidence candidate であり、特許請求項の証明ではありません。",
+    "Webシグナルは signal candidate です。money/national_project/IR は原典確認が必要です。",
+    "Link Candidate は確認候補であり、直接関係の証明ではありません。",
+    "Strategic Watch は重点監視候補であり、最終結論ではありません。",
+    "Digest は preview only です。送信は行いません。",
+    "Paper/Web/Link/Watch/Digest は candidate / preview であり、最終結論・法的判断ではありません。",
+    "本サマリーは FTO（Freedom to Operate）、侵害、有効性の法的判断ではありません。原典確認と専門家レビューが必要です。",
+    "本チェーンは FTO、侵害、有効性の法的判断ではありません。Paper/Web/Link/Watch はすべて確認候補であり、最終結論ではありません。"
+  ],
+  "next_actions": [
+    "MVP Freeze: US デモ + JP 3件 E2E 検証完了を README/デモ台本に反映"
+  ],
+  "seed_statuses": [
+    {
+      "publication_number": "JP2022090764A",
+      "stage2": "pass",
+      "stage3": "pass",
+      "stage4": "pass",
+      "stage5": "pass",
+      "stage6": "pass",
+      "stage7": "pass",
+      "stage8": "pass",
+      "overall_status": "complete",
+      "paper_data_type": "actual_data",
+      "web_data_type": "actual_data",
+      "artifacts": {
+        "manual_claims": true,
+        "evidence_skeleton": true,
+        "paper_candidates_csv": false,
+        "selected_evidence_papers": true,
+        "paper_query_plan": true,
+        "web_signals_csv": true,
+        "web_signal_query_plan": true,
+        "link_candidates": true,
+        "strategic_watch_brief": true,
+        "digest_md": true,
+        "digest_html": true
+      }
+    },
+    {
+      "publication_number": "JP2023163084A",
+      "stage2": "pass",
+      "stage3": "pass",
+      "stage4": "pass",
+      "stage5": "pass",
+      "stage6": "pass",
+      "stage7": "pass",
+      "stage8": "pass",
+      "overall_status": "complete",
+      "paper_data_type": "actual_data",
+      "web_data_type": "actual_data",
+      "artifacts": {
+        "manual_claims": true,
+        "evidence_skeleton": true,
+        "paper_candidates_csv": true,
+        "selected_evidence_papers": true,
+        "paper_query_plan": true,
+        "web_signals_csv": true,
+        "web_signal_query_plan": true,
+        "link_candidates": true,
+        "strategic_watch_brief": true,
+        "digest_md": true,
+        "digest_html": true
+      }
+    },
+    {
+      "publication_number": "JP2018084002A",
+      "stage2": "pass",
+      "stage3": "pass",
+      "stage4": "pass",
+      "stage5": "pass",
+      "stage6": "pass",
+      "stage7": "pass",
+      "stage8": "pass",
+      "overall_status": "complete",
+      "paper_data_type": "actual_data",
+      "web_data_type": "actual_data",
+      "artifacts": {
+        "manual_claims": true,
+        "evidence_skeleton": true,
+        "paper_candidates_csv": true,
+        "selected_evidence_papers": true,
+        "paper_query_plan": true,
+        "web_signals_csv": true,
+        "web_signal_query_plan": true,
+        "link_candidates": true,
+        "strategic_watch_brief": true,
+        "digest_md": true,
+        "digest_html": true
+      }
+    }
+  ],
+  "stage4_query_plan_count": 0,
+  "stage5_query_plan_count": 0
+}

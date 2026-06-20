@@ -11,9 +11,37 @@ UI 再設計・分析ロジック変更・外部 API 自動実行は行わない
 |---------|------|
 | `Procfile` | Streamlit を `0.0.0.0:${PORT}` で起動 |
 | `runtime.txt` | Python 3.11（Cloud Run buildpacks） |
-| `.gcloudignore` | ソースアップロード時に secrets / 大量 outputs を除外し、US デモ bundle のみ同梱 |
+| `.gcloudignore` | secrets / ローカル `outputs/` を除外。**`demo_outputs/` は同梱** |
 | `.dockerignore` | Docker ビルド時も同様 |
+| `demo_outputs/US-12565719-B2/` | Cloud Run 提出用デモ成果物バンドル（git 追跡） |
+| `scripts/bundle_demo_outputs.py` | ローカル `outputs/` から bundle を再生成 |
 | `.env.example` | Cloud Run 用環境変数のテンプレ（**PORT は書かない**） |
+
+## Phase 24.6A — Evidence Map missing の原因と対処
+
+### 原因
+
+Cloud Run コンテナ内にはローカルの `outputs/` は存在しません。  
+Phase 24.6 当初の `.gcloudignore` では `outputs/**` を除外し `!outputs/...` で再包含しようとしましたが、**gcloud の upload 対象に demo 成果物が入らない** 状態でした。
+
+```bash
+gcloud meta list-files-for-upload | grep -E "US-12565719|evidence_map"
+# → demo_outputs も outputs も含まれない
+```
+
+その結果 Cloud Run 上で `Evidence Map missing` が表示されました。
+
+### 対処（24.6A）
+
+1. **`demo_outputs/US-12565719-B2/`** に必要最小ファイルをコピー（git 追跡）
+2. `.gcloudignore` で `outputs/` のみ除外し、**`demo_outputs/` は除外しない**
+3. Cloud Run 環境変数 **`DEMO_OUTPUTS_ROOT=demo_outputs`** でアプリが bundle を優先読込
+4. デプロイ前に upload 対象を確認:
+
+```bash
+gcloud meta list-files-for-upload | grep -E "demo_outputs|US-12565719|evidence_map|selected_evidence|claim_paper|openalex"
+python scripts/check_cloudrun_demo_ready.py
+```
 
 ## Cloud Run 用環境変数
 
@@ -21,6 +49,7 @@ UI 再設計・分析ロジック変更・外部 API 自動実行は行わない
 |------|--------|------|
 | `SHOW_DEVELOPER_MODE` | `false` | 開発者向けモード非表示 |
 | `APP_DEFAULT_MODE` | `demo` | 初期 UI を「デモを見る」に |
+| `DEMO_OUTPUTS_ROOT` | `demo_outputs` | 提出用デモ bundle のルート |
 | `DISABLE_EXTERNAL_API` | `true` | OpenAlex/Tavily/BigQuery UI 実行を無効 |
 | `DISABLE_EMAIL_SEND` | `true` | SMTP 送信を無効 |
 | `DISABLE_SCHEDULER` | `true` | scheduler / launchd / cron 表示を無効 |
@@ -28,18 +57,21 @@ UI 再設計・分析ロジック変更・外部 API 自動実行は行わない
 
 **注意:** `PORT` は Cloud Run が注入するため `--set-env-vars` や `.env.example` に固定値を書かない。
 
-## demo outputs の扱い
+## demo_outputs バンドル
 
-`outputs/` は `.gitignore` 対象だが、Cloud Run `--source .` アップロードでは `.gcloudignore` で **US-12565719-B2 デモ bundle のみ** を同梱する:
+`python scripts/bundle_demo_outputs.py` でローカル `outputs/` から再生成。
 
-- `outputs/evidence_map_synthesis/US-12565719-B2/**`
-- `outputs/openalex_limited_execution/**`
-- `outputs/strategic_watch_briefs/US-12565719-B2/**`
-- `outputs/web_signals/tavily_pan_carbon_fiber/**`
-- `outputs/validation/final_validation/**`
-- `outputs/delivery/*US-12565719-B2*` 等
+必須ファイル例:
 
-デプロイ前に `python scripts/check_cloudrun_demo_ready.py` で存在確認する。
+- `evidence_map_synthesis.md` / `.json` / `evidence_map_items.csv`
+- `selected_evidence_papers.csv` / `claim_paper_candidate_links.csv`
+- `paper_candidate_relevance_report.md` / `openalex_execution_summary.md`
+- `web_signal_review_pack.json` ほか Review Pack 関連
+- `strategic_watch_brief.md` / `top_strategic_watch_items.csv`
+- `weekly_digest_preview_US-12565719-B2.md` / `intelligence_report_US-12565719-B2.md`
+- `final_end_to_end_validation_summary.json`
+
+ローカル開発（`DEMO_OUTPUTS_ROOT` 未設定）では従来どおり `outputs/` を参照します。
 
 ## デプロイ例
 
@@ -50,7 +82,7 @@ gcloud run deploy tech-cartography-v7-demo \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars SHOW_DEVELOPER_MODE=false,APP_DEFAULT_MODE=demo,DISABLE_EXTERNAL_API=true,DISABLE_EMAIL_SEND=true,DISABLE_SCHEDULER=true
+  --set-env-vars SHOW_DEVELOPER_MODE=false,APP_DEFAULT_MODE=demo,DEMO_OUTPUTS_ROOT=demo_outputs,DISABLE_EXTERNAL_API=true,DISABLE_EMAIL_SEND=true,DISABLE_SCHEDULER=true
 ```
 
 ## ローカル Cloud Run 相当確認
@@ -59,6 +91,7 @@ gcloud run deploy tech-cartography-v7-demo \
 PORT=8080 \
 SHOW_DEVELOPER_MODE=false \
 APP_DEFAULT_MODE=demo \
+DEMO_OUTPUTS_ROOT=demo_outputs \
 DISABLE_EXTERNAL_API=true \
 DISABLE_EMAIL_SEND=true \
 DISABLE_SCHEDULER=true \
@@ -70,7 +103,7 @@ streamlit run app.py \
   --browser.gatherUsageStats=false
 ```
 
-`http://localhost:8080` でデモモード・開発者向け非表示・US デモ成果物表示を確認する。
+確認: `status: Evidence Map ready`、Selected Evidence Papers / Claim × Paper Links が空でないこと。
 
 ## 安全方針
 
@@ -81,4 +114,4 @@ streamlit run app.py \
 
 ## 前フェーズ
 
-Phase 24.5A〜F で Demo UI 安全化・ノイズ削減済み。本 Phase はデプロイ最小差分のみ。
+Phase 24.5A〜F で Demo UI 安全化・ノイズ削減済み。Phase 24.6 でデプロイ骨格、24.6A で demo bundle 同梱を修正。

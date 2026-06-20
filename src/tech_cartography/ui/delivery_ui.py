@@ -134,6 +134,14 @@ def collect_download_keys_for_artifacts(
 
 
 def _delivery_dir_for_pub(project_root: Path, publication_number: str) -> Path:
+  from tech_cartography.runtime.demo_output_paths import resolve_demo_data_dir
+
+  if publication_number == DEFAULT_PUB:
+    return resolve_demo_data_dir(
+      project_root,
+      legacy_relative_dir=DELIVERY_RELATIVE_DIR,
+      publication_number=publication_number,
+    )
   return project_root / DELIVERY_RELATIVE_DIR
 
 

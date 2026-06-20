@@ -73,7 +73,13 @@ def extract_markdown_section(md: str, *headings: str, max_chars: int = 1200) -> 
 
 
 def load_final_validation_brief(project_root: Path) -> dict[str, Any]:
-  path = project_root / "outputs" / "validation" / "final_validation" / FINAL_VALIDATION_JSON
+  from tech_cartography.runtime.demo_output_paths import resolve_bundle_or_legacy
+
+  path = resolve_bundle_or_legacy(
+    project_root,
+    "final_end_to_end_validation_summary.json",
+    f"outputs/validation/final_validation/{FINAL_VALIDATION_JSON}",
+  )
   data = _read_json(path)
   if not data:
     return {}

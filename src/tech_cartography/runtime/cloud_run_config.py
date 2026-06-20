@@ -5,6 +5,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from tech_cartography.runtime.demo_output_paths import (
+  DEFAULT_DEMO_OUTPUTS_ROOT,
+  DEMO_PUBLICATION_NUMBER,
+  REQUIRED_BUNDLE_FILES,
+  missing_bundle_files,
+  relative_upload_path,
+)
+
 APP_DEFAULT_MODE_ENV = "APP_DEFAULT_MODE"
 DISABLE_EXTERNAL_API_ENV = "DISABLE_EXTERNAL_API"
 DISABLE_EMAIL_SEND_ENV = "DISABLE_EMAIL_SEND"
@@ -12,20 +20,9 @@ DISABLE_SCHEDULER_ENV = "DISABLE_SCHEDULER"
 STREAMLIT_SERVER_HEADLESS_ENV = "STREAMLIT_SERVER_HEADLESS"
 
 DEFAULT_APP_MODE = "demo"
-DEMO_PUBLICATION_NUMBER = "US-12565719-B2"
 
-REQUIRED_DEMO_OUTPUT_PATHS: tuple[str, ...] = (
-  "outputs/evidence_map_synthesis/US-12565719-B2/evidence_map_synthesis.md",
-  "outputs/evidence_map_synthesis/US-12565719-B2/evidence_map_synthesis.json",
-  "outputs/evidence_map_synthesis/US-12565719-B2/evidence_map_items.csv",
-  "outputs/openalex_limited_execution/selected_evidence_papers.csv",
-  "outputs/openalex_limited_execution/claim_paper_candidate_links.csv",
-  "outputs/strategic_watch_briefs/US-12565719-B2/strategic_watch_brief.md",
-  "outputs/strategic_watch_briefs/US-12565719-B2/top_strategic_watch_items.csv",
-  "outputs/web_signals/tavily_pan_carbon_fiber/review_pack/web_signal_review_pack.json",
-  "outputs/validation/final_validation/final_end_to_end_validation_summary.json",
-  "outputs/delivery/weekly_digest_preview_US-12565719-B2.md",
-  "outputs/delivery/intelligence_report_US-12565719-B2.md",
+REQUIRED_DEMO_OUTPUT_PATHS: tuple[str, ...] = tuple(
+  relative_upload_path(filename) for filename in REQUIRED_BUNDLE_FILES
 )
 
 
@@ -57,8 +54,5 @@ def is_scheduler_disabled() -> bool:
 
 def missing_demo_output_paths(project_root: Path | str) -> list[str]:
   root = Path(project_root)
-  missing: list[str] = []
-  for relative in REQUIRED_DEMO_OUTPUT_PATHS:
-    if not (root / relative).exists():
-      missing.append(relative)
-  return missing
+  missing = missing_bundle_files(root)
+  return [f"{DEFAULT_DEMO_OUTPUTS_ROOT}/{DEMO_PUBLICATION_NUMBER}/{name}" for name in missing]

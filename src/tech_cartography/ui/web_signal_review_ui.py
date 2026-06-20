@@ -393,6 +393,14 @@ def get_web_signal_status_counts(
 
 
 def _resolve_review_pack_dir(project_root: Path, batch_dir: str | None) -> Path:
+  from tech_cartography.runtime.demo_output_paths import resolve_demo_data_dir, uses_demo_outputs_bundle
+
+  if uses_demo_outputs_bundle():
+    return resolve_demo_data_dir(
+      project_root,
+      legacy_relative_dir=f"{WEB_SIGNALS_RELATIVE_DIR}/{DEFAULT_BATCH_DIR}/review_pack",
+    )
+
   signals_root = project_root / WEB_SIGNALS_RELATIVE_DIR
   if batch_dir:
     return signals_root / batch_dir / "review_pack"

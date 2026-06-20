@@ -18,26 +18,5 @@ inputs/manual/*
 !inputs/manual/.gitkeep
 .DS_Store
 
-# Exclude most generated outputs; include US demo bundle only.
-outputs/**
-!outputs/evidence_map_synthesis/
-!outputs/evidence_map_synthesis/US-12565719-B2/
-!outputs/evidence_map_synthesis/US-12565719-B2/**
-!outputs/openalex_limited_execution/
-!outputs/openalex_limited_execution/**
-!outputs/strategic_watch_briefs/
-!outputs/strategic_watch_briefs/US-12565719-B2/
-!outputs/strategic_watch_briefs/US-12565719-B2/**
-!outputs/web_signals/
-!outputs/web_signals/tavily_pan_carbon_fiber/
-!outputs/web_signals/tavily_pan_carbon_fiber/**
-!outputs/validation/
-!outputs/validation/final_validation/
-!outputs/validation/final_validation/**
-!outputs/delivery/
-!outputs/delivery/weekly_digest_preview_US-12565719-B2.md
-!outputs/delivery/weekly_digest_preview_US-12565719-B2.html
-!outputs/delivery/intelligence_report_US-12565719-B2.md
-!outputs/delivery/digest_diff_US-12565719-B2.md
-!outputs/delivery/overview_page.md
-!outputs/delivery/tech_cartography_report_bundle_US-12565719-B2.zip
+# Local generated outputs are not uploaded; use tracked demo_outputs bundle instead.
+outputs/

@@ -467,17 +467,33 @@ def load_demo_evidence_map_artifacts(
   *,
   publication_number: str = DEMO_PUBLICATION_NUMBER,
 ) -> EvidenceMapDemoArtifacts:
+  from tech_cartography.runtime.demo_output_paths import (
+    LEGACY_EVIDENCE_MAP_PATHS,
+    resolve_bundle_or_legacy,
+  )
+
   base_dir = _resolve_project_root(project_root)
   missing: list[str] = []
   errors: list[str] = []
 
-  md_path = base_dir / ARTIFACT_RELATIVE_PATHS["evidence_map_synthesis_md"]
-  json_path = base_dir / ARTIFACT_RELATIVE_PATHS["evidence_map_synthesis_json"]
-  items_path = base_dir / ARTIFACT_RELATIVE_PATHS["evidence_map_items_csv"]
-  papers_path = base_dir / ARTIFACT_RELATIVE_PATHS["selected_evidence_papers_csv"]
-  links_path = base_dir / ARTIFACT_RELATIVE_PATHS["claim_paper_candidate_links_csv"]
-  relevance_path = base_dir / ARTIFACT_RELATIVE_PATHS["paper_candidate_relevance_report_md"]
-  openalex_path = base_dir / ARTIFACT_RELATIVE_PATHS["openalex_execution_summary_md"]
+  def _artifact_path(key: str, bundle_name: str) -> Path:
+    return resolve_bundle_or_legacy(
+      base_dir,
+      bundle_name,
+      LEGACY_EVIDENCE_MAP_PATHS[key],
+      publication_number=publication_number,
+    )
+
+  md_path = _artifact_path("evidence_map_synthesis_md", "evidence_map_synthesis.md")
+  json_path = _artifact_path("evidence_map_synthesis_json", "evidence_map_synthesis.json")
+  items_path = _artifact_path("evidence_map_items_csv", "evidence_map_items.csv")
+  papers_path = _artifact_path("selected_evidence_papers_csv", "selected_evidence_papers.csv")
+  links_path = _artifact_path("claim_paper_candidate_links_csv", "claim_paper_candidate_links.csv")
+  relevance_path = _artifact_path(
+    "paper_candidate_relevance_report_md",
+    "paper_candidate_relevance_report.md",
+  )
+  openalex_path = _artifact_path("openalex_execution_summary_md", "openalex_execution_summary.md")
 
   evidence_map_md, md_err = safe_read_text(md_path)
   if md_err:

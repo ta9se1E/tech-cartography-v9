@@ -21,22 +21,22 @@ def test_procfile_exists_and_uses_port_env() -> None:
 
 def test_gcloudignore_includes_demo_bundle() -> None:
   text = (PROJECT_ROOT / ".gcloudignore").read_text(encoding="utf-8")
-  assert "outputs/**" in text
-  assert "US-12565719-B2" in text
+  assert "outputs/" in text
+  assert "demo_outputs/" not in text
   assert ".env" in text
-  assert "tavily_pan_carbon_fiber" in text
 
 
 def test_dockerignore_exists() -> None:
   text = (PROJECT_ROOT / ".dockerignore").read_text(encoding="utf-8")
-  assert "outputs/**" in text
-  assert "US-12565719-B2" in text
+  assert "outputs" in text
+  assert "demo_outputs/" not in text
 
 
 def test_env_example_cloud_run_values_without_port() -> None:
   text = (PROJECT_ROOT / ".env.example").read_text(encoding="utf-8")
   assert "SHOW_DEVELOPER_MODE=false" in text
   assert "APP_DEFAULT_MODE=demo" in text
+  assert "DEMO_OUTPUTS_ROOT=demo_outputs" in text
   assert "DISABLE_EXTERNAL_API=true" in text
   assert "DISABLE_EMAIL_SEND=true" in text
   assert "DISABLE_SCHEDULER=true" in text

@@ -85,8 +85,14 @@ class StrategicWatchUIArtifacts:
 
 
 def _brief_dir_for_pub(project_root: Path, publication_number: str | None = None) -> Path:
+  from tech_cartography.runtime.demo_output_paths import resolve_demo_data_dir
+
   pub = publication_number or DEFAULT_BRIEF_PUB
-  return project_root / STRATEGIC_WATCH_RELATIVE_DIR / pub
+  return resolve_demo_data_dir(
+    project_root,
+    legacy_relative_dir=f"{STRATEGIC_WATCH_RELATIVE_DIR}/{pub}",
+    publication_number=pub,
+  )
 
 
 def _compute_loader_status(missing: list[str], items_df: pd.DataFrame) -> str:

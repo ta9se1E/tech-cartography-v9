@@ -83,7 +83,9 @@ def test_developer_mode_hidden_without_env() -> None:
 
 
 def test_demo_outputs_manifest_paths_exist() -> None:
-  missing = missing_demo_output_paths(PROJECT_ROOT)
+  from tech_cartography.runtime.demo_output_paths import missing_bundle_files
+
+  missing = missing_bundle_files(PROJECT_ROOT)
   assert not missing, missing
 
 
