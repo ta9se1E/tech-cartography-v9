@@ -41,5 +41,8 @@ def test_ui_has_manual_claims_editor_labels() -> None:
     "Evidence Map skeletonを生成する",
     "Seed別 検証進捗 / Seed Validation Progress",
     "Seed進捗を更新する",
+    "Seed進捗レポートを保存する",
+    "seed publication numbersを入力してください",
+    "### 次にやること",
   ):
     assert label in text

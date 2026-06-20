@@ -179,6 +179,19 @@ skeleton には英日の注意書きが入ります:
 
 保存先: `outputs/validation/theme_validation/{theme_id}/seed_progress_report.md`
 
+### UI表示の確認手順（Phase 24.4A.4.1）
+
+1. `streamlit run app.py --server.fileWatcherType none --server.port 8502`
+2. 別テーマ検証タブを開く
+3. seed publication numbers に以下を入力（テーマ名の前後どちらでも可）:
+   `JP2022090764A, JP2023163084A, JP2018084002A`
+4. **seed入力欄の直下**に「Seed別 検証進捗」セクションが表示される
+5. 「Seed進捗を更新する」「Seed進捗レポートを保存する」ボタンが**常に**表示される
+6. 進捗表と「次にやること」「完了済みseed」が表示される
+7. JP2022090764A が Stage 3 pass（skeleton保存済みの場合）
+8. JP2023163084A / JP2018084002A の next_action が表示される
+9. Manual Claims Editor / Evidence Map Builder で3件すべて選べる
+
 ## Manual Claims Editor（Phase 24.4A.2）
 
 別テーマ検証タブ内の **Manual Claims入力 / Manual Claims Editor** で、公報原文からコピーした請求項を UI 上で保存できます。

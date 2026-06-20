@@ -55,7 +55,9 @@ STATE_THEME_VALIDATION_CASE = "tc_theme_validation_case"
 STATE_MANUAL_CLAIMS_LOADED = "tc_manual_claims_loaded"
 STATE_CLAIM_ELEMENTS = "tc_claim_elements"
 STATE_EVIDENCE_SKELETON = "tc_evidence_skeleton"
-STATE_SEED_PROGRESS = "tc_seed_progress_list"
+STATE_SEED_PROGRESS = "theme_validation_seed_progress"
+STATE_SEED_PROGRESS_THEME_ID = "theme_validation_seed_progress_theme_id"
+STATE_SEED_PROGRESS_PUBLICATIONS = "theme_validation_seed_progress_publications"
 
 EVIDENCE_MAP_BUILDER_NOTICES = (
   "保存済みManual ClaimsからClaim Elementを抽出し、Evidence Map生成の準備を行います。",
@@ -184,9 +186,97 @@ def render_theme_validation_stage_matrix(result: ThemeValidationRunResult | None
     )
 
 
-def _get_seed_progress_list(case: ThemeValidationCase) -> list:
+def _get_seed_progress_list(seeds: list[str]) -> list:
   root = _project_root()
-  return inspect_seed_progress_many(case.seed_publication_numbers, root)
+  return inspect_seed_progress_many(seeds, root)
+
+
+def _sync_seed_progress_session(
+  *,
+  progress_list: list,
+  theme_id: str,
+  seeds: list[str],
+) -> None:
+  st.session_state[STATE_SEED_PROGRESS] = progress_list
+  st.session_state[STATE_SEED_PROGRESS_THEME_ID] = theme_id
+  st.session_state[STATE_SEED_PROGRESS_PUBLICATIONS] = list(seeds)
+
+
+def _render_seed_progress_actions(progress_list: list) -> None:
+  pending, completed = summarize_seed_progress_actions(progress_list)
+  st.markdown("### 次にやること")
+  if pending:
+    for row in pending:
+      st.markdown(render_warning_box(row), unsafe_allow_html=True)
+  else:
+    st.info("未完了の seed はありません。")
+
+  st.markdown("### 完了済みseed")
+  if completed:
+    for row in completed:
+      st.markdown(render_success_box(row), unsafe_allow_html=True)
+  else:
+    st.info("Stage 3 まで完了した seed はまだありません。")
+
+
+def render_seed_progress_dashboard(
+  *,
+  seeds: list[str],
+  theme_id: str,
+  key_prefix: str,
+) -> list:
+  st.markdown("#### Seed別 検証進捗 / Seed Validation Progress")
+  st.markdown(
+    render_info_box(
+      "seed publication numbersごとに、Manual Claims保存状況、Evidence Map skeleton有無、"
+      "Stage 2/3の状態を確認します。外部APIは実行しません。"
+    ),
+    unsafe_allow_html=True,
+  )
+
+  col_update, col_save = st.columns(2)
+  with col_update:
+    update_clicked = st.button("Seed進捗を更新する", key=f"{key_prefix}_seed_progress_update")
+  with col_save:
+    save_clicked = st.button("Seed進捗レポートを保存する", key=f"{key_prefix}_seed_progress_save")
+
+  if not seeds:
+    st.info("seed publication numbersを入力してください")
+    return []
+
+  root = _project_root()
+  seeds_key = tuple(seeds)
+  cached_pubs = tuple(st.session_state.get(STATE_SEED_PROGRESS_PUBLICATIONS, []))
+  progress_list = st.session_state.get(STATE_SEED_PROGRESS)
+
+  should_refresh = (
+    update_clicked
+    or progress_list is None
+    or cached_pubs != seeds_key
+    or st.session_state.get(STATE_SEED_PROGRESS_THEME_ID) != theme_id
+  )
+  if should_refresh:
+    progress_list = _get_seed_progress_list(seeds)
+    _sync_seed_progress_session(progress_list=progress_list, theme_id=theme_id, seeds=seeds)
+
+  if save_clicked:
+    progress_list = _get_seed_progress_list(seeds)
+    _sync_seed_progress_session(progress_list=progress_list, theme_id=theme_id, seeds=seeds)
+    report_theme_id = theme_id or "custom_theme"
+    paths = save_seed_progress_report(
+      progress_list,
+      root / "outputs" / "validation" / "theme_validation",
+      report_theme_id,
+    )
+    st.markdown(render_success_box("Seed進捗レポートを保存しました。"), unsafe_allow_html=True)
+    for label, path in paths.items():
+      st.code(str(path))
+
+  if progress_list:
+    render_small_table(progress_to_display_dataframe(progress_list), height=280)
+    _render_seed_progress_actions(progress_list)
+
+  return progress_list or []
 
 
 def _default_publication_with_manual_claims(
@@ -194,7 +284,7 @@ def _default_publication_with_manual_claims(
   root: Path,
   progress_list: list | None = None,
 ) -> str:
-  items = progress_list or _get_seed_progress_list(case)
+  items = progress_list or _get_seed_progress_list(case.seed_publication_numbers)
   preferred = preferred_publication_for_manual_claims(items)
   if preferred:
     return preferred
@@ -202,60 +292,6 @@ def _default_publication_with_manual_claims(
     if has_manual_claims(pub, root)[0]:
       return pub
   return case.seed_publication_numbers[0] if case.seed_publication_numbers else ""
-
-
-def render_seed_progress_dashboard(
-  *,
-  case: ThemeValidationCase,
-  key_prefix: str,
-) -> list:
-  st.markdown("#### Seed別 検証進捗 / Seed Validation Progress")
-  st.markdown(
-    render_info_box(
-      "複数seed特許の Manual Claims / Evidence Map skeleton / Stage 2・3 の状態を一覧表示します。"
-      " 外部APIは実行しません。Evidence Map skeletonは最終Evidence Mapではありません。"
-    ),
-    unsafe_allow_html=True,
-  )
-
-  seeds = list(case.seed_publication_numbers)
-  if not seeds:
-    st.info("seed publication numbers を入力すると進捗が表示されます。")
-    return []
-
-  update_clicked = st.button("Seed進捗を更新する", key=f"{key_prefix}_seed_progress_update")
-  save_clicked = st.button("Seed進捗レポートを保存する", key=f"{key_prefix}_seed_progress_save")
-
-  progress_list = st.session_state.get(STATE_SEED_PROGRESS)
-  if update_clicked or progress_list is None:
-    progress_list = _get_seed_progress_list(case)
-    st.session_state[STATE_SEED_PROGRESS] = progress_list
-
-  if save_clicked:
-    progress_list = _get_seed_progress_list(case)
-    st.session_state[STATE_SEED_PROGRESS] = progress_list
-    paths = save_seed_progress_report(
-      progress_list,
-      _project_root() / "outputs" / "validation" / "theme_validation",
-      case.theme_id,
-    )
-    st.markdown(render_success_box("Seed進捗レポートを保存しました。"), unsafe_allow_html=True)
-    for label, path in paths.items():
-      st.caption(f"{label}: {path}")
-
-  if progress_list:
-    render_small_table(progress_to_display_dataframe(progress_list), height=260)
-    pending, completed = summarize_seed_progress_actions(progress_list)
-    if pending:
-      st.markdown("**次に進めるseed:**")
-      for row in pending:
-        st.markdown(render_caution_box(row), unsafe_allow_html=True)
-    if completed:
-      st.markdown("**完了済みseed:**")
-      for row in completed:
-        st.markdown(render_success_box(row), unsafe_allow_html=True)
-
-  return progress_list or []
 
 
 def render_manual_claims_editor(
@@ -271,10 +307,15 @@ def render_manual_claims_editor(
     st.markdown(render_caution_box(notice), unsafe_allow_html=True)
 
   seeds = list(case.seed_publication_numbers)
+  root = _project_root()
+  items = progress_list or _get_seed_progress_list(seeds)
+  default_pub = _default_publication_with_manual_claims(case, root, items)
   if seeds:
+    default_index = seeds.index(default_pub) if default_pub in seeds else 0
     publication_number = st.selectbox(
       "publication number",
       options=seeds,
+      index=default_index,
       key=f"{key_prefix}_manual_claims_pub",
     )
   else:
@@ -415,7 +456,7 @@ def render_evidence_map_builder(
 
   root = _project_root()
   seeds = list(case.seed_publication_numbers)
-  items = progress_list or _get_seed_progress_list(case)
+  items = progress_list or _get_seed_progress_list(seeds)
   default_pub = preferred_publication_for_evidence_map(items) or _default_publication_with_manual_claims(case, root, items)
   if seeds:
     default_index = seeds.index(default_pub) if default_pub in seeds else 0
@@ -626,11 +667,44 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
     "seed publication numbers（カンマ区切り・任意）",
     value="",
     key=f"{key_prefix}_seed_publications",
-    placeholder="US-12565719-B2",
+    placeholder="JP2022090764A, JP2023163084A, JP2018084002A",
+  )
+
+  seed_publications = parse_keyword_text(seed_text)
+  progress_theme_id = build_theme_id(
+    theme_name or "custom_theme",
+    theme_id_override=theme_id_value,
+    core_keywords=parse_keyword_text(core_text),
+  )
+  progress_list = render_seed_progress_dashboard(
+    seeds=seed_publications,
+    theme_id=progress_theme_id,
+    key_prefix=key_prefix,
   )
 
   if not theme_name.strip():
-    st.caption("テーマ名を入力すると操作ボタンが有効になります。")
+    st.caption("テーマ名を入力すると dry-run などの操作ボタンが有効になります。")
+    if seed_publications:
+      placeholder_case = _build_case_from_inputs(
+        theme_name="（テーマ名未入力）",
+        theme_id_override=theme_id_value or progress_theme_id,
+        description=description,
+        core_text=core_text,
+        application_text=application_text,
+        material_text=material_text,
+        exclude_text=exclude_text,
+        seed_text=seed_text,
+      )
+      render_manual_claims_editor(
+        case=placeholder_case,
+        key_prefix=key_prefix,
+        progress_list=progress_list,
+      )
+      render_evidence_map_builder(
+        case=placeholder_case,
+        key_prefix=key_prefix,
+        progress_list=progress_list,
+      )
     return
 
   case = _build_case_from_inputs(
@@ -645,8 +719,6 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
   )
   st.session_state[STATE_THEME_VALIDATION_CASE] = case
   st.caption(f"theme_id: `{case.theme_id}`")
-
-  progress_list = render_seed_progress_dashboard(case=case, key_prefix=key_prefix)
 
   col_a, col_b, col_c = st.columns(3)
   with col_a:
