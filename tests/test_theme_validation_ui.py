@@ -37,5 +37,7 @@ def test_ui_has_manual_claims_editor_labels() -> None:
     "Manual Claimsを保存する",
     "保存後に既存outputs検証を再実行する",
     "保存用テーマID",
+    "Evidence Map生成準備 / Evidence Map Builder",
+    "Evidence Map skeletonを生成する",
   ):
     assert label in text

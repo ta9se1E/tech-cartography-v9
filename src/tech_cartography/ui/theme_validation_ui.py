@@ -1,4 +1,4 @@
-"""Streamlit UI for user theme validation (Phase 24.4A / 24.4A.2)."""
+"""Streamlit UI for user theme validation (Phase 24.4A / 24.4A.2 / 24.4A.3)."""
 
 from __future__ import annotations
 
@@ -14,6 +14,14 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_small_table,
   render_success_box,
   render_warning_box,
+)
+from tech_cartography.validation.manual_claims_evidence_builder import (
+  SKELETON_CAUTION_JA,
+  build_evidence_map_skeleton,
+  evidence_map_output_dir,
+  extract_claim_elements_from_text,
+  load_manual_claims,
+  save_evidence_map_skeleton,
 )
 from tech_cartography.validation.theme_validation import (
   MANUAL_CLAIMS_EDITOR_NOTICES,
@@ -36,6 +44,16 @@ from tech_cartography.validation.theme_validation import (
 
 STATE_THEME_VALIDATION_RESULT = "tc_theme_validation_result"
 STATE_THEME_VALIDATION_CASE = "tc_theme_validation_case"
+STATE_MANUAL_CLAIMS_LOADED = "tc_manual_claims_loaded"
+STATE_CLAIM_ELEMENTS = "tc_claim_elements"
+STATE_EVIDENCE_SKELETON = "tc_evidence_skeleton"
+
+EVIDENCE_MAP_BUILDER_NOTICES = (
+  "保存済みManual ClaimsからClaim Elementを抽出し、Evidence Map生成の準備を行います。",
+  "この処理では外部APIは実行しません。",
+  "論文候補やWebシグナルは確認候補であり、最終結論ではありません。",
+  "本ツールはFTO、侵害、有効性判断、法的見解には使用しません。",
+)
 
 
 def _project_root() -> Path:
@@ -287,6 +305,174 @@ def render_manual_claims_editor(
   return False
 
 
+def _default_publication_with_manual_claims(case: ThemeValidationCase, root: Path) -> str:
+  for pub in case.seed_publication_numbers:
+    if has_manual_claims(pub, root)[0]:
+      return pub
+  return case.seed_publication_numbers[0] if case.seed_publication_numbers else ""
+
+
+def _show_stage_delta(result: ThemeValidationRunResult | None) -> None:
+  if result is None:
+    return
+  stage_map = {stage.stage: stage for stage in result.stages}
+  for label, key in (
+    ("Stage 2", "fulltext_or_manual_claims_available"),
+    ("Stage 3", "evidence_map_available_or_buildable"),
+    ("Stage 4", "paper_candidates_available"),
+  ):
+    stage = stage_map.get(key)
+    if stage:
+      st.caption(f"{label} (`{key}`): **{stage.status}** — {stage.reason}")
+
+
+def render_evidence_map_builder(
+  *,
+  case: ThemeValidationCase,
+  key_prefix: str,
+) -> None:
+  st.markdown("#### Evidence Map生成準備 / Evidence Map Builder")
+  for notice in EVIDENCE_MAP_BUILDER_NOTICES:
+    st.markdown(render_caution_box(notice), unsafe_allow_html=True)
+
+  root = _project_root()
+  seeds = list(case.seed_publication_numbers)
+  default_pub = _default_publication_with_manual_claims(case, root)
+  if seeds:
+    default_index = seeds.index(default_pub) if default_pub in seeds else 0
+    publication_number = st.selectbox(
+      "publication number",
+      options=seeds,
+      index=default_index,
+      key=f"{key_prefix}_evidence_pub",
+    )
+  else:
+    publication_number = st.text_input(
+      "publication number",
+      value=default_pub,
+      key=f"{key_prefix}_evidence_pub_text",
+      placeholder="JP2022090764A",
+    )
+
+  pub = str(publication_number or "").strip()
+  claims_path = manual_claims_json_path(root, pub) if pub else None
+  if claims_path and claims_path.exists():
+    st.caption(f"manual claims file: `{claims_path}`")
+  else:
+    st.warning("Manual Claims ファイルが見つかりません。先に Manual Claims Editor で保存してください。")
+
+  evidence_map_mode = st.selectbox(
+    "evidence map mode",
+    options=["local_skeleton", "query_plan_only"],
+    index=0,
+    key=f"{key_prefix}_evidence_mode",
+  )
+
+  load_clicked = st.button("Manual Claimsを読み込む", key=f"{key_prefix}_evidence_load")
+  extract_clicked = st.button("Claim Elementを抽出する", key=f"{key_prefix}_evidence_extract")
+  skeleton_clicked = st.button(
+    "Evidence Map skeletonを生成する",
+    key=f"{key_prefix}_evidence_skeleton",
+  )
+  revalidate_clicked = st.button(
+    "生成後に既存outputs検証を再実行する",
+    key=f"{key_prefix}_evidence_revalidate",
+  )
+  save_report_clicked = st.button(
+    "検証レポートを保存する",
+    key=f"{key_prefix}_evidence_save_report",
+  )
+
+  if load_clicked and pub:
+    try:
+      payload = load_manual_claims(pub, root)
+      st.session_state[STATE_MANUAL_CLAIMS_LOADED] = payload
+      st.markdown(render_success_box("Manual Claims を読み込みました。"), unsafe_allow_html=True)
+      st.caption(f"claims_text length: {len(payload.get('claims_text', ''))}")
+    except (FileNotFoundError, ValueError) as exc:
+      st.error(str(exc))
+
+  loaded = st.session_state.get(STATE_MANUAL_CLAIMS_LOADED)
+  if extract_clicked and pub:
+    try:
+      if not loaded or str(loaded.get("publication_number", pub)) != pub:
+        loaded = load_manual_claims(pub, root)
+        st.session_state[STATE_MANUAL_CLAIMS_LOADED] = loaded
+      elements = extract_claim_elements_from_text(pub, str(loaded.get("claims_text", "")))
+      st.session_state[STATE_CLAIM_ELEMENTS] = [element.to_dict() for element in elements]
+      st.markdown(
+        render_success_box(f"Claim Element を {len(elements)} 件抽出しました（rule-based）。"),
+        unsafe_allow_html=True,
+      )
+      if elements:
+        render_small_table(
+          pd.DataFrame([element.to_dict() for element in elements])[
+            ["claim_number", "keywords", "material_terms", "process_terms", "property_terms"]
+          ],
+          height=240,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+      st.error(str(exc))
+
+  if skeleton_clicked and pub and claims_path and claims_path.exists():
+    try:
+      skeleton = build_evidence_map_skeleton(pub, claims_path)
+      if evidence_map_mode == "query_plan_only":
+        skeleton.evidence_gaps.append("local_skeleton mode not selected; only query_plan artifacts saved.")
+      paths = save_evidence_map_skeleton(skeleton, root)
+      st.session_state[STATE_EVIDENCE_SKELETON] = skeleton.to_dict()
+      st.session_state[STATE_CLAIM_ELEMENTS] = [element.to_dict() for element in skeleton.claim_elements]
+      st.markdown(
+        render_success_box("Manual ClaimsからClaim Element候補とEvidence Map skeletonを生成しました。"),
+        unsafe_allow_html=True,
+      )
+      for label, path in paths.items():
+        st.caption(f"{label}: {path}")
+      st.markdown(render_info_box(SKELETON_CAUTION_JA), unsafe_allow_html=True)
+      for message in (
+        "次に論文候補を取得するにはOpenAlex等の外部API実行が必要です。",
+        "次にWebシグナル候補を取得するにはTavily等の外部API実行が必要です。",
+        "この段階では、論文・Webシグナルによる裏取りは未完了です。",
+      ):
+        st.markdown(render_info_box(message), unsafe_allow_html=True)
+    except (FileNotFoundError, ValueError) as exc:
+      st.error(str(exc))
+
+  if revalidate_clicked:
+    result = run_existing_outputs_validation(case, root)
+    st.session_state[STATE_THEME_VALIDATION_RESULT] = result
+    evidence_stage = next(
+      (stage for stage in result.stages if stage.stage == "evidence_map_available_or_buildable"),
+      None,
+    )
+    if evidence_stage and evidence_stage.status == "pass":
+      st.markdown(
+        render_success_box("Stage 3（evidence_map_available_or_buildable）が pass になりました。"),
+        unsafe_allow_html=True,
+      )
+    else:
+      st.warning("Stage 3 はまだ pass ではありません。Evidence Map skeleton の生成を確認してください。")
+    _show_stage_delta(result)
+
+  if save_report_clicked:
+    result = st.session_state.get(STATE_THEME_VALIDATION_RESULT)
+    if result is None:
+      result = run_existing_outputs_validation(case, root)
+      st.session_state[STATE_THEME_VALIDATION_RESULT] = result
+    paths = save_theme_validation_result(
+      result,
+      root / "outputs" / "validation" / "theme_validation",
+      project_root=root,
+    )
+    st.markdown(render_success_box("検証レポートを保存しました。"), unsafe_allow_html=True)
+    for label, path in paths.items():
+      st.caption(f"{label}: {path}")
+
+  skeleton_json = evidence_map_output_dir(root, pub) / "evidence_map_skeleton.json" if pub else None
+  if skeleton_json and skeleton_json.exists():
+    st.caption(f"既存 skeleton: `{skeleton_json}`")
+
+
 def render_theme_validation_intro_card() -> None:
   st.markdown(
     render_info_box(
@@ -443,6 +629,7 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
         st.code(path)
 
   render_manual_claims_editor(case=case, key_prefix=key_prefix)
+  render_evidence_map_builder(case=case, key_prefix=key_prefix)
 
   if external_clicked:
     if not consent:

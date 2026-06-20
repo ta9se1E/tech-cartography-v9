@@ -166,7 +166,7 @@ def test_report_includes_manual_claims_status(tmp_path: Path) -> None:
   assert "## Manual Claims status" in md
   assert "JP2022090764A: manual claims saved" in md
   assert "JP2023163084A: missing" in md or "JP2023163084A: template only" in md
-  assert "Evidence Map生成ルート" in md
+  assert "Evidence Map Builder" in md or "skeleton" in md
 
 
 def test_ui_module_has_manual_claims_editor_copy() -> None:

@@ -20,6 +20,7 @@ from tech_cartography.validation.theme_validation import (
   run_theme_validation_dry_run,
   run_theme_validation_smoke,
   save_theme_validation_result,
+  save_user_manual_claims,
   THEME_VALIDATION_SAFETY_MESSAGES,
 )
 
@@ -196,6 +197,34 @@ def test_existing_outputs_validation_detects_artifacts(tmp_path: Path) -> None:
   assert statuses["evidence_map_available_or_buildable"] == "pass"
   assert statuses["fulltext_or_manual_claims_available"] == "pass"
   assert statuses["digest_available"] == "output_missing"
+
+
+def test_evidence_map_stage_passes_for_skeleton_only(tmp_path: Path) -> None:
+  pub = "JP2022090764A"
+  save_user_manual_claims(
+    publication_number=pub,
+    claims_text="【請求項1】" + ("PAN炭素繊維前駆体の乾燥熱履歴に関する記載。" * 20),
+    output_dir=tmp_path,
+  )
+  skel_dir = tmp_path / "outputs" / "evidence_map_synthesis" / pub
+  skel_dir.mkdir(parents=True)
+  (skel_dir / "evidence_map_skeleton.json").write_text('{"publication_number":"JP2022090764A"}', encoding="utf-8")
+
+  case = ThemeValidationCase(
+    theme_id="pan_precursor_surface_internal_defects",
+    theme_name="PAN",
+    description="",
+    core_keywords=["PAN"],
+    application_keywords=[],
+    material_or_process_keywords=[],
+    exclude_keywords=[],
+    seed_publication_numbers=[pub],
+    validation_goal="",
+  )
+  result = run_existing_outputs_validation(case, tmp_path)
+  stage = next(s for s in result.stages if s.stage == "evidence_map_available_or_buildable")
+  assert stage.status == "pass"
+  assert "skeleton" in stage.reason.lower()
 
 
 def test_existing_outputs_missing_manual_input_required(tmp_path: Path) -> None:

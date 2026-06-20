@@ -112,6 +112,40 @@ status: `pass`, `blocked`, `not_run`, `manual_input_required`, `external_api_req
 
 ~~「レポート」タブでテーマ名・キーワードを入力~~ → 24.4A.1 以降は上記の **別テーマ検証** タブを使用してください。
 
+## Evidence Map Builder（Phase 24.4A.3）
+
+Manual Claims 保存後、**Evidence Map生成準備 / Evidence Map Builder** で Claim Element 抽出と skeleton 生成を行います。
+
+### 使い方
+
+1. Manual Claims が保存済みであることを確認（例: `JP2022090764A`）
+2. **Manual Claimsを読み込む**
+3. **Claim Elementを抽出する**（ルールベース、外部API未実行）
+4. **Evidence Map skeletonを生成する**
+5. **生成後に既存outputs検証を再実行する** → Stage 3 が `pass` になることを確認
+6. **検証レポートを保存する**
+
+### skeleton と full evidence map の違い
+
+| 種類 | ファイル例 | 説明 |
+|------|-----------|------|
+| skeleton | `evidence_map_skeleton.json` | Manual Claims からの準備成果物。論文・Web未検証 |
+| full map | `evidence_map_synthesis.json` | パイプライン本番成果物（US-12565719-B2 デモ等） |
+
+skeleton には英日の注意書きが入ります:
+「最終的なEvidence Mapではありません。論文・Web evidenceは未検証です。」
+
+### Stage 3 が pass になる条件
+
+- `outputs/evidence_map_synthesis/{publication_number}/evidence_map_skeleton.json` が存在する
+- または `evidence_map_synthesis.json`（full map）が存在する
+
+### JP2022090764A の例
+
+- theme_id: `pan_precursor_surface_internal_defects`
+- seed: `JP2022090764A`
+- 出力: `outputs/evidence_map_synthesis/JP2022090764A/`
+
 ## Manual Claims Editor（Phase 24.4A.2）
 
 別テーマ検証タブ内の **Manual Claims入力 / Manual Claims Editor** で、公報原文からコピーした請求項を UI 上で保存できます。

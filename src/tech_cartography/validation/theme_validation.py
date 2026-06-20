@@ -787,6 +787,60 @@ def _evaluate_fulltext_manual_claims_stage(root: Path, seed_pubs: list[str]) -> 
   )
 
 
+def _evaluate_evidence_map_stage(
+  root: Path,
+  primary_pub: str,
+  seed_pubs: list[str],
+) -> ThemeValidationStage:
+  full_path = root / "outputs" / "evidence_map_synthesis" / primary_pub / "evidence_map_synthesis.json"
+  skeleton_path = root / "outputs" / "evidence_map_synthesis" / primary_pub / "evidence_map_skeleton.json"
+  claim_elements_path = root / "outputs" / "evidence_map_synthesis" / primary_pub / "claim_elements.csv"
+  query_plan_path = root / "outputs" / "evidence_map_synthesis" / primary_pub / "query_plan.json"
+
+  if full_path.exists():
+    return _ui_stage(
+      "evidence_map_available_or_buildable",
+      status="pass",
+      reason="Full evidence map exists",
+      next_action="成果物を開いて内容を確認してください。",
+      output_path=str(full_path),
+    )
+
+  if skeleton_path.exists():
+    artifacts = [str(skeleton_path)]
+    if claim_elements_path.exists():
+      artifacts.append(str(claim_elements_path))
+    if query_plan_path.exists():
+      artifacts.append(str(query_plan_path))
+    return _ui_stage(
+      "evidence_map_available_or_buildable",
+      status="pass",
+      reason="Evidence Map skeleton exists from manual claims",
+      next_action=(
+        "Paper/Web evidence は未検証です。OpenAlex / Tavily は明示同意後に別途実行してください。"
+      ),
+      output_path=artifacts[0],
+    )
+
+  manual_ready = any(has_manual_claims(pub, root)[0] for pub in seed_pubs)
+  if manual_ready:
+    return _ui_stage(
+      "evidence_map_available_or_buildable",
+      status="output_missing",
+      reason="Manual Claims は保存済みですが Evidence Map skeleton がありません。",
+      next_action="Evidence Map Builder で skeleton を生成してください。",
+      output_path=str(skeleton_path),
+    )
+
+  return _ui_stage(
+    "evidence_map_available_or_buildable",
+    status="output_missing",
+    reason=f"Evidence Map 成果物が見つかりません: {primary_pub}",
+    next_action="Manual Claims を保存後、Evidence Map skeleton を生成してください。",
+    output_path=str(full_path),
+  )
+
+
 def evaluate_existing_output_stages(
   *,
   project_root: Path | str,
@@ -823,6 +877,10 @@ def evaluate_existing_output_stages(
   for stage_name, rel_template, missing_status, next_action in EXISTING_OUTPUT_CHECKS:
     if stage_name == "fulltext_or_manual_claims_available":
       stages.append(_evaluate_fulltext_manual_claims_stage(root, seed_pubs))
+      continue
+
+    if stage_name == "evidence_map_available_or_buildable":
+      stages.append(_evaluate_evidence_map_stage(root, primary_pub, seed_pubs))
       continue
 
     rel_path = rel_template.format(publication_number=primary_pub)
@@ -1111,10 +1169,26 @@ def render_manual_claims_report_section(
   if not saved_any:
     lines.append("- Manual Claims未投入: Claims本文を貼り付けて保存してください。")
   else:
-    lines.append("- Manual Claims保存済み: Evidence Map生成ルートへ進む必要があります。")
-    lines.append(
-      "- Manual Claimsは保存されました。次はClaim Element抽出 / Evidence Map生成ルートを実行する必要があります。"
-    )
+    lines.append("- Manual Claims保存済み: Evidence Map Builder で skeleton を生成してください。")
+    skeleton_statuses: list[str] = []
+    for pub in seeds:
+      skel = root / "outputs" / "evidence_map_synthesis" / pub / "evidence_map_skeleton.json"
+      full = root / "outputs" / "evidence_map_synthesis" / pub / "evidence_map_synthesis.json"
+      if full.exists():
+        skeleton_statuses.append(f"{pub}: full evidence map")
+      elif skel.exists():
+        skeleton_statuses.append(f"{pub}: evidence map skeleton")
+      else:
+        skeleton_statuses.append(f"{pub}: skeleton missing")
+    lines.extend(["", "### Evidence Map status", ""])
+    for item in skeleton_statuses:
+      lines.append(f"- {item}")
+    if any("skeleton missing" in item for item in skeleton_statuses):
+      lines.append("- 次: Evidence Map Builder で skeleton を生成してください。")
+    else:
+      lines.append(
+        "- Manual Claimsは保存されました。次はClaim Element抽出 / Evidence Map生成ルートを実行する必要があります。"
+      )
   return "\n".join(lines)
 
 
