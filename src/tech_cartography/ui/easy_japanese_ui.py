@@ -277,10 +277,14 @@ def normalize_dataframe_row(row: Any) -> dict[str, Any]:
 def _render_dataframe_stretch(df: pd.DataFrame, **kwargs: Any) -> None:
   import streamlit as st
 
+  if df is None or df.empty:
+    st.info("表示するデータがありません。")
+    return
+  display_df = deduplicate_dataframe_columns(df)
   try:
-    st.dataframe(df, width="stretch", **kwargs)
+    st.dataframe(display_df, width="stretch", **kwargs)
   except TypeError:
-    st.dataframe(df, use_container_width=True, **kwargs)
+    st.dataframe(display_df, use_container_width=True, **kwargs)
 
 
 def render_dataframe_stretch(df: pd.DataFrame, **kwargs: Any) -> None:
@@ -289,9 +293,9 @@ def render_dataframe_stretch(df: pd.DataFrame, **kwargs: Any) -> None:
 
 
 def render_small_table(df: pd.DataFrame, height: int = 320) -> None:
-  import streamlit as st
-
   if df is None or df.empty:
+    import streamlit as st
+
     st.info("表示するデータがありません。")
     return
   _render_dataframe_stretch(df, hide_index=True, height=height)
@@ -579,8 +583,6 @@ DISPLAY_COLUMN_MAP = {
   "country": "国",
   "primary_cluster_id": "技術分類ID",
   "primary_cluster_japanese": "技術分類",
-  "final_score": "優先度スコア",
-  "total_score": "優先度スコア",
   "noise_score": "ノイズ度",
   "source_route": "全文確認ルートID",
   "source_route_japanese": "全文確認ルート",
@@ -596,6 +598,88 @@ DISPLAY_COLUMN_MAP = {
   "caveat_japanese": "注意書き",
 }
 
+PRIORITY_SCORE_SOURCE_COLUMNS: tuple[str, ...] = (
+  "final_score",
+  "total_score",
+  "priority_score",
+  "ranking_score",
+)
+PRIORITY_SCORE_LABEL = "優先度スコア"
+STRATEGIC_SCORE_LABEL = "戦略スコア"
+FULLTEXT_ROUTE_SCORE_LABEL = "全文ルートスコア"
+
+
+def unique_preserve_order(items: list[str]) -> list[str]:
+  seen: set[str] = set()
+  result: list[str] = []
+  for item in items:
+    if item not in seen:
+      result.append(item)
+      seen.add(item)
+  return result
+
+
+def _normalize_column_label(col: object) -> str:
+  if col is None:
+    return "column_none"
+  if isinstance(col, float) and pd.isna(col):
+    return "column_none"
+  text = str(col).strip()
+  return text if text else "column_empty"
+
+
+def deduplicate_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
+  """Return a copy with unique column names for Streamlit/PyArrow display."""
+  if df is None:
+    return pd.DataFrame()
+  if df.empty:
+    return df.copy()
+
+  out = df.copy()
+  seen: dict[str, int] = {}
+  new_columns: list[str] = []
+  for col in out.columns:
+    label = _normalize_column_label(col)
+    count = seen.get(label, 0) + 1
+    seen[label] = count
+    if count == 1:
+      new_columns.append(label)
+    else:
+      new_columns.append(f"{label}__{count}")
+  out.columns = new_columns
+  return out
+
+
+def _build_patent_rename_map(display: pd.DataFrame) -> dict[str, str]:
+  rename_map: dict[str, str] = {}
+  reserved_targets = {str(col) for col in display.columns}
+
+  if PRIORITY_SCORE_LABEL not in reserved_targets:
+    for src in PRIORITY_SCORE_SOURCE_COLUMNS:
+      if src in display.columns:
+        rename_map[src] = PRIORITY_SCORE_LABEL
+        reserved_targets.add(PRIORITY_SCORE_LABEL)
+        break
+
+  if "strategic_score" in display.columns and STRATEGIC_SCORE_LABEL not in reserved_targets:
+    rename_map["strategic_score"] = STRATEGIC_SCORE_LABEL
+    reserved_targets.add(STRATEGIC_SCORE_LABEL)
+
+  if "fulltext_route_score" in display.columns and FULLTEXT_ROUTE_SCORE_LABEL not in reserved_targets:
+    rename_map["fulltext_route_score"] = FULLTEXT_ROUTE_SCORE_LABEL
+    reserved_targets.add(FULLTEXT_ROUTE_SCORE_LABEL)
+
+  skip_sources = set(PRIORITY_SCORE_SOURCE_COLUMNS) | {"strategic_score", "fulltext_route_score"}
+  for key, value in DISPLAY_COLUMN_MAP.items():
+    if key in skip_sources or key in rename_map or key not in display.columns:
+      continue
+    if value in reserved_targets:
+      continue
+    rename_map[key] = value
+    reserved_targets.add(value)
+
+  return rename_map
+
 
 def prepare_patent_display_df(df: pd.DataFrame) -> pd.DataFrame:
   if df is None or df.empty:
@@ -609,14 +693,15 @@ def prepare_patent_display_df(df: pd.DataFrame) -> pd.DataFrame:
     display["source_route_japanese"] = display["source_route"].map(
       lambda value: translate_source_route(str(value)),
     )
-  if "final_score" not in display.columns and "total_score" in display.columns:
-    display["final_score"] = display["total_score"]
   if "noise_score" in display.columns and "attention_flag" not in display.columns:
     display["attention_flag"] = display["noise_score"].map(
       lambda value: "注意" if float(value or 0) >= 0.45 else "",
     )
-  rename_map = {key: value for key, value in DISPLAY_COLUMN_MAP.items() if key in display.columns}
-  return display.rename(columns=rename_map)
+
+  rename_map = _build_patent_rename_map(display)
+  display = display.rename(columns=rename_map)
+  display = deduplicate_dataframe_columns(display)
+  return display
 
 
 def summarize_stage_statuses(manifest: dict[str, Any] | None) -> list[dict[str, str]]:

@@ -4,7 +4,9 @@ import pandas as pd
 
 from tech_cartography.ui.easy_japanese_ui import (
   _coerce_mapping,
+  deduplicate_dataframe_columns,
   prepare_patent_display_df,
+  unique_preserve_order,
   render_acquisition_policy_summary,
   render_claims_paper_query_plan_card,
   render_claim_paper_candidate_map_card,
@@ -59,6 +61,97 @@ def test_prepare_patent_display_df_adds_japanese_columns() -> None:
   assert "公開番号" in display.columns
   assert "技術分類" in display.columns
   assert "全文確認ルート" in display.columns
+
+
+def test_deduplicate_dataframe_columns_resolves_duplicates() -> None:
+  df = pd.DataFrame([[1, 2, 3]], columns=["A", "A", "B"])
+  result = deduplicate_dataframe_columns(df)
+  assert list(result.columns) == ["A", "A__2", "B"]
+  assert list(df.columns) == ["A", "A", "B"]
+
+
+def test_deduplicate_dataframe_columns_handles_none_and_nan_names() -> None:
+  df = pd.DataFrame([[1, 2]], columns=[None, float("nan")])
+  result = deduplicate_dataframe_columns(df)
+  assert list(result.columns) == ["column_none", "column_none__2"]
+
+
+def test_deduplicate_dataframe_columns_empty_and_none() -> None:
+  assert deduplicate_dataframe_columns(pd.DataFrame()).empty
+  assert deduplicate_dataframe_columns(None).empty
+
+
+def test_deduplicate_dataframe_columns_does_not_mutate_source() -> None:
+  df = pd.DataFrame([[1, 2]], columns=["優先度スコア", "優先度スコア"])
+  original_columns = list(df.columns)
+  result = deduplicate_dataframe_columns(df)
+  assert list(df.columns) == original_columns
+  assert list(result.columns) == ["優先度スコア", "優先度スコア__2"]
+
+
+def test_unique_preserve_order() -> None:
+  assert unique_preserve_order(["a", "b", "a", "c", "b"]) == ["a", "b", "c"]
+
+
+def test_prepare_patent_display_df_no_duplicate_priority_score() -> None:
+  df = pd.DataFrame(
+    [
+      {
+        "publication_number": "US-2024-000001",
+        "title": "PAN carbon fiber",
+        "final_score": 0.9,
+        "total_score": 0.8,
+        "strategic_score": 0.7,
+      },
+    ],
+  )
+  display = prepare_patent_display_df(df)
+  assert list(display.columns).count("優先度スコア") == 1
+  assert "戦略スコア" in display.columns
+  assert "strategic_score" not in display.columns
+
+
+def test_prepare_patent_display_df_prefers_existing_japanese_priority_score() -> None:
+  df = pd.DataFrame(
+    [
+      {
+        "公開番号": "CN-2024-000001",
+        "優先度スコア": 0.95,
+        "strategic_score": 0.6,
+        "fulltext_route_score": 0.4,
+      },
+    ],
+  )
+  display = prepare_patent_display_df(df)
+  assert list(display.columns).count("優先度スコア") == 1
+  assert "戦略スコア" in display.columns
+  assert "全文ルートスコア" in display.columns
+
+
+def test_prepare_patent_display_df_latest_run_column_set() -> None:
+  columns = [
+    "公開番号",
+    "publication_date",
+    "発明の名称",
+    "abstract",
+    "出願人",
+    "国",
+    "url",
+    "優先度スコア",
+    "strategic_score",
+    "fulltext_route_score",
+    "rank_reason",
+    "recommended_action",
+    "順位",
+    "全文確認ルート",
+    "注意表示",
+  ]
+  df = pd.DataFrame([dict.fromkeys(columns, "x")])
+  display = prepare_patent_display_df(df)
+  deduped = deduplicate_dataframe_columns(display)
+  assert len(deduped.columns) == len(set(deduped.columns))
+  assert list(display.columns).count("優先度スコア") == 1
+  assert "戦略スコア" in display.columns
 
 
 def test_summarize_stage_statuses_japanese() -> None:
