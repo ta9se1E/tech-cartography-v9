@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from tech_cartography.delivery.email_outbox import (
+  STATUS_SENT,
+  build_email_draft_from_weekly_digest,
   load_email_draft_for_publication,
+  save_email_sent,
 )
 from tech_cartography.delivery.email_sender import can_send_email, send_email_smtp
 from tech_cartography.delivery.japanese_copy import ja_digest_subject, ja_status_message
@@ -25,6 +28,7 @@ from tech_cartography.delivery.send_log import (
   save_send_log,
 )
 from tech_cartography.delivery.store import build_delivery_package
+from tech_cartography.delivery.weekly_digest import build_weekly_digest
 from tech_cartography.web_signals.schema import utc_now_iso
 
 
@@ -61,9 +65,11 @@ def _make_send_log(
   message: str,
   recipient_group: str,
   draft_paths: dict[str, Path] | None = None,
+  sent_paths: dict[str, Path] | None = None,
   error_summary: str | None = None,
 ) -> EmailSendLog:
   draft_paths = draft_paths or {}
+  sent_paths = sent_paths or {}
   return EmailSendLog(
     log_id=f"sendlog-{uuid.uuid4().hex[:10]}",
     created_at=utc_now_iso(),
@@ -76,6 +82,9 @@ def _make_send_log(
     draft_path=str(draft_paths.get("email_draft_md", "")) or None,
     html_path=str(draft_paths.get("email_draft_html", "")) or None,
     json_path=str(draft_paths.get("email_draft_json", "")) or None,
+    sent_path=str(sent_paths.get("email_sent_md", "")) or None,
+    sent_html_path=str(sent_paths.get("email_sent_html", "")) or None,
+    sent_json_path=str(sent_paths.get("email_sent_json", "")) or None,
     error_summary=error_summary,
     recipient_group=recipient_group,
   )
@@ -199,7 +208,7 @@ def run_weekly_digest_send_test(
     result.send_log_paths = save_send_log(send_log, out)
     return result
 
-  # Explicit send path
+  # Explicit send path — use sent-mode body for actual SMTP delivery
   email_draft = delivery_result.email_draft if delivery_result else load_email_draft_for_publication(out, pub)
   if email_draft is None:
     send_log = _make_send_log(
@@ -232,25 +241,42 @@ def run_weekly_digest_send_test(
     result.send_log_paths = save_send_log(send_log, out)
     return result
 
-  send_result = send_email_smtp(email_draft)
+  diff = delivery_result.diff if delivery_result else None
+  snapshot = delivery_result.snapshot if delivery_result else None
+  sent_digest = build_weekly_digest(pub, root, diff=diff, snapshot=snapshot, mode="sent")
+  sent_draft = build_email_draft_from_weekly_digest(
+    sent_digest,
+    publication_number=pub,
+    to=to_list,
+    cc=cc_list,
+    subject_prefix=subject_prefix,
+    attachments=email_draft.attachments,
+    status=STATUS_SENT,
+    mode="sent",
+  )
+
+  send_result = send_email_smtp(sent_draft)
   result.email_send_result = send_result
 
+  sent_paths: dict[str, Path] = {}
   if send_result.get("ok"):
     log_status = LOG_SENT
     message = f"テストメールを送信しました（宛先 {send_result.get('recipient_count', 0)} 件）。"
+    sent_paths = save_email_sent(sent_draft, out)
   else:
     log_status = LOG_FAILED if send_result.get("status") == LOG_FAILED else str(send_result.get("status"))
     message = str(send_result.get("message", "送信に失敗しました。"))
 
   send_log = _make_send_log(
     publication_number=pub,
-    subject=email_draft.subject,
+    subject=sent_draft.subject,
     to_count=len(to_list),
     cc_count=len(cc_list),
     status=log_status,
     message=message,
     recipient_group=group,
     draft_paths=draft_paths,
+    sent_paths=sent_paths if send_result.get("ok") else None,
     error_summary=None if send_result.get("ok") else message,
   )
   result.send_log = send_log

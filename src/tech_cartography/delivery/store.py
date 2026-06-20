@@ -179,7 +179,23 @@ def build_delivery_package(
         previous = load_snapshot_file(existing[-1])
 
   diff = compare_digest_snapshots(previous, current_snapshot)
-  digest = build_weekly_digest(pub, root, diff=diff, snapshot=current_snapshot)
+
+  draft_mode = "preview"
+  draft_status = STATUS_PREVIEW_ONLY
+  if build_email_draft:
+    draft_status = STATUS_DRAFT_SAVED
+    if not email_to and not send_email:
+      draft_status = STATUS_PREVIEW_ONLY
+    draft_mode = "preview" if draft_status == STATUS_PREVIEW_ONLY else "draft"
+
+  digest = build_weekly_digest(
+    pub,
+    root,
+    diff=diff,
+    snapshot=current_snapshot,
+    mode=draft_mode,
+    send_status=draft_status,
+  )
 
   save_digest_snapshot(current_snapshot, out)
   paths = save_delivery_outputs(
@@ -196,10 +212,6 @@ def build_delivery_package(
   email_send_result: dict[str, Any] | None = None
 
   if build_email_draft:
-    draft_status = STATUS_DRAFT_SAVED
-    if not email_to and not send_email:
-      draft_status = STATUS_PREVIEW_ONLY
-
     email_draft = build_email_draft_from_weekly_digest(
       digest,
       publication_number=pub,
@@ -212,6 +224,7 @@ def build_delivery_package(
       ],
       status=draft_status,
       send_requested=send_email,
+      mode=draft_mode,
     )
 
     draft_paths = save_email_draft(email_draft, out)

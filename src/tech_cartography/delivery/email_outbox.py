@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from tech_cartography.delivery.japanese_copy import (
-  ja_caveats,
-  ja_email_draft_preamble,
+  ja_caveats_for_mode,
+  ja_email_preamble,
   ja_preview_only_notice_short,
   ja_status_description,
   ja_status_label,
@@ -19,11 +19,7 @@ from tech_cartography.delivery.japanese_copy import (
 from tech_cartography.delivery.weekly_digest import WeeklyDigest, markdown_to_simple_html
 from tech_cartography.web_signals.schema import utc_now_iso
 
-EMAIL_DRAFT_CAUTIONS = [
-  *ja_caveats(),
-  ja_preview_only_notice_short(),
-  ja_ui_send_disabled_notice(),
-]
+EMAIL_DRAFT_CAUTIONS = ja_caveats_for_mode("draft")
 
 STATUS_PREVIEW_ONLY = "preview_only"
 STATUS_DRAFT_SAVED = "draft_saved"
@@ -78,6 +74,15 @@ def _normalize_recipients(values: list[str] | str | None) -> list[str]:
   return [str(v).strip() for v in values if str(v).strip() and "@" in str(v)]
 
 
+def _status_to_mode(status: str) -> str:
+  key = str(status or "").strip().lower()
+  if key == STATUS_SENT:
+    return "sent"
+  if key in {STATUS_DRAFT_SAVED, STATUS_BLOCKED_MISSING_ADAPTER, STATUS_BLOCKED_MISSING_RECIPIENT}:
+    return "draft"
+  return "preview"
+
+
 def build_email_draft_from_weekly_digest(
   digest: WeeklyDigest,
   *,
@@ -88,6 +93,7 @@ def build_email_draft_from_weekly_digest(
   attachments: list[str] | None = None,
   status: str = STATUS_DRAFT_SAVED,
   send_requested: bool = False,
+  mode: str | None = None,
 ) -> EmailDraft:
   pub = str(publication_number).strip()
   recipients = _normalize_recipients(to)
@@ -104,25 +110,37 @@ def build_email_draft_from_weekly_digest(
   elif not recipients and resolved_status == STATUS_DRAFT_SAVED:
     resolved_status = STATUS_PREVIEW_ONLY
 
+  resolved_mode = mode or _status_to_mode(resolved_status)
   status_label = ja_status_label(resolved_status)
   status_desc = ja_status_description(resolved_status)
 
-  email_md_lines = [
+  header_lines = [
     f"宛先: {', '.join(recipients) if recipients else '（未設定）'}",
     f"CC: {', '.join(cc_list) if cc_list else '（なし）'}",
     f"件名: {subject}",
     "",
-    ja_email_draft_preamble(),
+    ja_email_preamble(resolved_mode),
     "",
     f"- 状態: {status_label}",
     f"- 説明: {status_desc}",
-    "- UIからの送信: 無効",
-    "- 送信方法: CLIで --send-email を明示した場合のみ",
-    "",
-    digest.markdown_body,
   ]
-  markdown_body = "\n".join(email_md_lines)
-  html_body = markdown_to_simple_html(markdown_body)
+  if resolved_mode != "sent":
+    header_lines.extend(
+      [
+        "- UIからの送信: 無効",
+        "- 送信方法: CLIで --send-email を明示した場合のみ",
+      ],
+    )
+  else:
+    header_lines.append("- 送信方法: CLIで --send-email を明示して送信されました。")
+  header_lines.extend(["", digest.markdown_body])
+
+  markdown_body = "\n".join(header_lines)
+  html_body = markdown_to_simple_html(markdown_body, mode=resolved_mode)
+
+  caveats = list(ja_caveats_for_mode(resolved_mode))
+  if resolved_mode != "sent":
+    caveats.append(ja_ui_send_disabled_notice())
 
   return EmailDraft(
     draft_id=f"draft-{uuid.uuid4().hex[:10]}",
@@ -135,7 +153,7 @@ def build_email_draft_from_weekly_digest(
     html_body=html_body,
     attachments=list(attachments or digest.attachments),
     status=resolved_status,
-    caveats=list(EMAIL_DRAFT_CAUTIONS),
+    caveats=caveats,
   )
 
 
@@ -166,6 +184,64 @@ def render_email_draft_summary_md(draft: EmailDraft) -> str:
   if len(draft.markdown_body) > 4000:
     lines.append("\n…（以下省略）")
   return "\n".join(lines)
+
+
+def render_email_sent_summary_md(draft: EmailDraft) -> str:
+  status_label = ja_status_label(draft.status)
+  lines = [
+    f"# 送信済みメール: {draft.publication_number}",
+    "",
+    f"- draft_id: {draft.draft_id}",
+    f"- 作成日時: {draft.created_at}",
+    f"- 状態: {status_label} ({draft.status})",
+    f"- 宛先: {', '.join(draft.to) if draft.to else '（未設定）'}",
+    f"- CC: {', '.join(draft.cc) if draft.cc else '（なし）'}",
+    f"- 件名: {draft.subject}",
+    "",
+    "## 添付候補",
+    "",
+  ]
+  if draft.attachments:
+    for path in draft.attachments:
+      lines.append(f"- {path}")
+  else:
+    lines.append("- （なし）")
+  lines.extend(["", "## 注意事項", ""])
+  for caveat in draft.caveats:
+    lines.append(f"- {caveat}")
+  lines.extend(["", "## 送信本文", "", draft.markdown_body[:4000]])
+  if len(draft.markdown_body) > 4000:
+    lines.append("\n…（以下省略）")
+  return "\n".join(lines)
+
+
+def save_email_sent(draft: EmailDraft, output_dir: Path | str) -> dict[str, Path]:
+  outbox_dir = Path(output_dir) / "email_outbox"
+  outbox_dir.mkdir(parents=True, exist_ok=True)
+  pub = draft.publication_number
+
+  paths = {
+    "email_sent_md": outbox_dir / f"email_sent_{pub}.md",
+    "email_sent_html": outbox_dir / f"email_sent_{pub}.html",
+    "email_sent_json": outbox_dir / f"email_sent_{pub}.json",
+    "outbox_index": outbox_dir / "outbox_index.json",
+  }
+
+  paths["email_sent_md"].write_text(render_email_sent_summary_md(draft), encoding="utf-8")
+  paths["email_sent_html"].write_text(draft.html_body, encoding="utf-8")
+  paths["email_sent_json"].write_text(
+    json.dumps(draft.to_dict(), indent=2, ensure_ascii=False),
+    encoding="utf-8",
+  )
+
+  index = _load_outbox_index(outbox_dir)
+  index.drafts = [d for d in index.drafts if d.publication_number != pub or d.status != STATUS_SENT]
+  index.drafts.append(draft)
+  paths["outbox_index"].write_text(
+    json.dumps(index.to_dict(), indent=2, ensure_ascii=False),
+    encoding="utf-8",
+  )
+  return paths
 
 
 def save_email_draft(draft: EmailDraft, output_dir: Path | str) -> dict[str, Path]:

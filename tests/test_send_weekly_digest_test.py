@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-from tech_cartography.delivery.send_log import STATUS_DRY_RUN, STATUS_BLOCKED_RECIPIENT_DISABLED
+from tech_cartography.delivery.send_log import STATUS_DRY_RUN, STATUS_BLOCKED_RECIPIENT_DISABLED, STATUS_SENT
 from tech_cartography.delivery.weekly_digest_send import run_weekly_digest_send_test
 
 from tests.test_digest_diff import _write_snapshot_fixture
@@ -150,6 +150,81 @@ def test_send_email_ready_with_smtp_only_env(monkeypatch, tmp_path: Path) -> Non
     )
   assert result.send_log is not None
   assert result.send_log.status != "blocked_missing_adapter"
+
+
+def test_send_success_saves_sent_outbox_files(monkeypatch, tmp_path: Path) -> None:
+  for key in (
+    "TC_SMTP_HOST", "TC_SMTP_PORT", "TC_SMTP_USER", "TC_SMTP_PASSWORD", "TC_SMTP_FROM",
+    "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_EMAIL",
+  ):
+    monkeypatch.delenv(key, raising=False)
+  monkeypatch.setenv("SMTP_HOST", "smtp.gmail.com")
+  monkeypatch.setenv("SMTP_PORT", "587")
+  monkeypatch.setenv("SMTP_USER", "user@gmail.com")
+  monkeypatch.setenv("SMTP_PASSWORD", "secret")
+  monkeypatch.setenv("SMTP_FROM_EMAIL", "user@gmail.com")
+
+  _write_snapshot_fixture(tmp_path)
+  config = tmp_path / "recipients.json"
+  config.write_text(
+    json.dumps({"default": {"to": ["reviewer@example.com"], "cc": [], "enabled": True}}),
+    encoding="utf-8",
+  )
+  out = tmp_path / "outputs" / "delivery"
+  with patch("tech_cartography.delivery.weekly_digest_send.send_email_smtp") as mock_send:
+    mock_send.return_value = {"ok": True, "status": "sent", "message": "sent", "recipient_count": 1}
+    result = run_weekly_digest_send_test(
+      publication_number="US-12565719-B2",
+      project_root=tmp_path,
+      output_dir=out,
+      recipient_config_path=config,
+      recipient_group="default",
+      build_draft=True,
+      send_email=True,
+    )
+  assert result.send_log is not None
+  assert result.send_log.status == STATUS_SENT
+  sent_md = out / "email_outbox" / "email_sent_US-12565719-B2.md"
+  assert sent_md.exists()
+  sent_text = sent_md.read_text(encoding="utf-8")
+  assert "送信済みメール" in sent_text
+  assert "下書き保存済み" not in sent_text
+  assert result.send_log.sent_path is not None
+
+
+def test_send_failure_does_not_create_sent_files(monkeypatch, tmp_path: Path) -> None:
+  for key in (
+    "TC_SMTP_HOST", "TC_SMTP_PORT", "TC_SMTP_USER", "TC_SMTP_PASSWORD", "TC_SMTP_FROM",
+    "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_EMAIL",
+  ):
+    monkeypatch.delenv(key, raising=False)
+  monkeypatch.setenv("SMTP_HOST", "smtp.gmail.com")
+  monkeypatch.setenv("SMTP_PORT", "587")
+  monkeypatch.setenv("SMTP_USER", "user@gmail.com")
+  monkeypatch.setenv("SMTP_PASSWORD", "secret")
+  monkeypatch.setenv("SMTP_FROM_EMAIL", "user@gmail.com")
+
+  _write_snapshot_fixture(tmp_path)
+  config = tmp_path / "recipients.json"
+  config.write_text(
+    json.dumps({"default": {"to": ["reviewer@example.com"], "cc": [], "enabled": True}}),
+    encoding="utf-8",
+  )
+  out = tmp_path / "outputs" / "delivery"
+  with patch("tech_cartography.delivery.weekly_digest_send.send_email_smtp") as mock_send:
+    mock_send.return_value = {"ok": False, "status": "failed", "message": "SMTP send failed"}
+    result = run_weekly_digest_send_test(
+      publication_number="US-12565719-B2",
+      project_root=tmp_path,
+      output_dir=out,
+      recipient_config_path=config,
+      recipient_group="default",
+      build_draft=True,
+      send_email=True,
+    )
+  assert result.send_log is not None
+  assert result.send_log.status == "failed"
+  assert not (out / "email_outbox" / "email_sent_US-12565719-B2.md").exists()
 
 
 def test_cli_dry_run_subprocess() -> None:

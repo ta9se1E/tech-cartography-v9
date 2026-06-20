@@ -35,6 +35,9 @@ class EmailSendLog:
   draft_path: str | None = None
   html_path: str | None = None
   json_path: str | None = None
+  sent_path: str | None = None
+  sent_html_path: str | None = None
+  sent_json_path: str | None = None
   error_summary: str | None = None
   recipient_group: str | None = None
 

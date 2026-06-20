@@ -1,9 +1,11 @@
-"""Japanese copy policy for Delivery Hub outputs (Phase 24.1.1)."""
+"""Japanese copy policy for Delivery Hub outputs (Phase 24.1.1 / 24.2.1)."""
 
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal
+
+DigestEmailMode = Literal["preview", "draft", "sent"]
 
 # Backward-compatible constant; prefer ja_preview_only_notice() in user-facing body.
 PREVIEW_ONLY_NOTICE_EN = "Preview only. Email sending is disabled in this phase."
@@ -27,7 +29,7 @@ _STATUS_MAP: dict[str, tuple[str, str]] = {
   ),
   "sent": (
     "送信済み",
-    "明示的な送信オプションにより送信されました。",
+    "CLIで --send-email が明示されたため送信されました。",
   ),
   "failed": (
     "送信失敗",
@@ -89,7 +91,7 @@ _NEXT_ACTION_MAP: dict[str, str] = {
   ),
 }
 
-_JA_CAVEATS: list[str] = [
+_JA_CAVEATS_BASE: list[str] = [
   "このレポートは最終結論ではありません。",
   "Webシグナルは「確認候補」であり、事実関係や特許との関係を断定するものではありません。",
   "論文候補は技術的な裏取りの参考情報であり、特許請求項を証明するものではありません。",
@@ -97,7 +99,21 @@ _JA_CAVEATS: list[str] = [
   "IR・決算資料・開示情報は、原典資料レベルでの確認が必要です。",
   "公的予算・国家プロジェクトに関する情報は、原典ページで事業名・実施者・期間・対象技術を確認してください。",
   "Synthetic demo signal は、必ず Synthetic demo signal と明記してください。",
-  "このPhaseではメール送信は行いません。表示・下書き保存のみです。",
+]
+
+_MODE_SEND_NOTICES: dict[str, str] = {
+  "preview": "この画面・このPhaseでは自動送信は行いません。表示・下書き保存のみです。",
+  "draft": "この画面・このPhaseでは自動送信は行いません。表示・下書き保存のみです。",
+  "sent": (
+    "このメールはCLIで明示的に送信されたものです。自動送信ではありません。"
+    "次回以降の自動スケジュール送信を行う場合も、宛先・送信ログ・差分内容を確認してください。"
+  ),
+}
+
+# Backward-compatible alias.
+_JA_CAVEATS: list[str] = [
+  *_JA_CAVEATS_BASE,
+  _MODE_SEND_NOTICES["preview"],
 ]
 
 _ENGLISH_NOTES: list[str] = [
@@ -156,6 +172,66 @@ def ja_source_quality_label(source_quality: str) -> str:
 
 def ja_caveats() -> list[str]:
   return list(_JA_CAVEATS)
+
+
+def ja_caveats_for_mode(mode: str) -> list[str]:
+  """Return caveats appropriate for preview / draft / sent."""
+  resolved = _resolve_digest_mode(mode)
+  items = list(_JA_CAVEATS_BASE)
+  notice = _MODE_SEND_NOTICES.get(resolved)
+  if notice:
+    items.append(notice)
+  return items
+
+
+def _resolve_digest_mode(mode: str) -> DigestEmailMode:
+  key = str(mode or "").strip().lower()
+  if key in {"sent", "status_sent"}:
+    return "sent"
+  if key in {"draft", "draft_saved", "status_draft_saved"}:
+    return "draft"
+  return "preview"
+
+
+def ja_digest_status_line(mode: str) -> str:
+  resolved = _resolve_digest_mode(mode)
+  if resolved == "sent":
+    return "送信済み。CLIで --send-email が明示されたため送信されました。"
+  if resolved == "draft":
+    return "下書き保存済み。送信前に内容を確認してください。"
+  return "プレビューのみ。メール送信は行いません。"
+
+
+def ja_email_preamble(mode: str) -> str:
+  resolved = _resolve_digest_mode(mode)
+  if resolved == "sent":
+    return (
+      "このメールは Tech Cartography により生成・送信された週次インテリジェンスDigestです。\n"
+      "特許・論文候補・Webシグナル・Strategic Watch候補の差分をまとめています。\n"
+      "内容は最終結論ではなく、次に確認すべき候補です。"
+    )
+  if resolved == "draft":
+    return (
+      "このメールは送信前の下書きです。\n"
+      "送信前に人間が内容を確認してください。"
+    )
+  return (
+    "プレビューのみ：この画面ではメール送信されません。\n"
+    "送信前に内容を確認してください。"
+  )
+
+
+def ja_email_mode_notice_banner(mode: str) -> str:
+  """Short banner for HTML email header."""
+  resolved = _resolve_digest_mode(mode)
+  if resolved == "sent":
+    return (
+      "このメールは Tech Cartography により生成・送信された週次インテリジェンスDigestです。"
+      "内容は最終結論ではなく、次に確認すべき候補です。"
+    )
+  if resolved == "draft":
+    return "このメールは送信前の下書きです。送信前に人間が内容を確認してください。"
+  return ja_preview_only_notice()
 
 
 def ja_preview_only_notice() -> str:
@@ -218,6 +294,14 @@ def _agency_from_domain(domain: str) -> str:
     if key in lowered:
       return label
   return ""
+
+
+def agency_from_domain(domain: str) -> str:
+  return _agency_from_domain(domain)
+
+
+def agency_from_text(text: str) -> str:
+  return _agency_from_text(text)
 
 
 def _agency_from_text(text: str) -> str:
@@ -309,9 +393,13 @@ def ja_evidence_basis(text: str) -> str:
   return joined
 
 
-def render_japanese_important_caveats(*, include_english_notes: bool = False) -> str:
+def render_japanese_important_caveats(
+  *,
+  include_english_notes: bool = False,
+  mode: str = "preview",
+) -> str:
   lines = ["## 重要な注意事項", ""]
-  for caveat in ja_caveats():
+  for caveat in ja_caveats_for_mode(mode):
     lines.append(f"- {caveat}")
   if include_english_notes:
     lines.extend(["", "## English Notes", ""])
@@ -324,11 +412,8 @@ def ja_digest_subject(publication_number: str, date_label: str) -> str:
   return f"[Tech Cartography] 週次インテリジェンスDigest - {publication_number} - {date_label}"
 
 
-def ja_email_draft_preamble() -> str:
-  return (
-    "このメールは Tech Cartography による週次インテリジェンスDigestの下書きです。\n"
-    "このPhaseでは自動送信は行わず、送信前に人間が内容を確認する前提です。"
-  )
+def ja_email_draft_preamble(mode: str = "draft") -> str:
+  return ja_email_preamble(mode)
 
 
 def ja_ui_send_disabled_notice() -> str:

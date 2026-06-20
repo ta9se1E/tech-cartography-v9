@@ -13,17 +13,25 @@ from typing import Any
 from tech_cartography.delivery.digest_diff import (
   DigestDiff,
   WeeklyDigestSnapshot,
+  deduplicate_bullets_or_lines,
   render_digest_diff_short_summary,
 )
 from tech_cartography.delivery.japanese_copy import (
   PREVIEW_ONLY_NOTICE_EN,
+  DigestEmailMode,
+  agency_from_domain,
+  agency_from_text,
   build_digest_item_title,
-  ja_caveats,
+  clean_digest_title,
+  ja_caveats_for_mode,
+  ja_digest_status_line,
   ja_digest_subject,
+  ja_email_mode_notice_banner,
   ja_evidence_basis,
   ja_next_action,
   ja_preview_only_notice,
   ja_preview_only_notice_short,
+  ja_source_quality_label,
   ja_watch_priority_label,
   ja_watch_type_label,
   ja_why_it_matters,
@@ -37,7 +45,7 @@ import pandas as pd
 # Backward-compatible exports for tests / legacy imports.
 PREVIEW_ONLY_NOTICE = PREVIEW_ONLY_NOTICE_EN
 PREVIEW_ONLY_NOTICE_JA = ja_preview_only_notice_short()
-DIGEST_CAUTIONS_JA = ja_caveats()
+DIGEST_CAUTIONS_JA = ja_caveats_for_mode("preview")
 
 _PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
@@ -241,6 +249,60 @@ def _load_watch_items(root: Path, pub: str) -> list[dict[str, str]]:
   return [_row_to_watch_item(row) for _, row in df.iterrows()]
 
 
+def _resolve_digest_mode(mode: str | None, send_status: str | None = None) -> DigestEmailMode:
+  if mode:
+    key = str(mode).strip().lower()
+    if key in {"preview", "draft", "sent"}:
+      return key  # type: ignore[return-value]
+  status = str(send_status or "preview_only").strip().lower()
+  if status == "sent":
+    return "sent"
+  if status in {"draft_saved", "blocked_missing_adapter", "blocked_missing_recipient"}:
+    return "draft"
+  return "preview"
+
+
+_UNCHANGED_DIFF_MSG = "前回Snapshotから大きな変化は検出されませんでした。"
+
+
+def summarize_link_candidates_for_digest(
+  links: list[dict[str, Any]],
+  *,
+  max_items: int = 5,
+) -> list[str]:
+  """Group link rows by web signal title and summarize for digest body."""
+  if not links:
+    return []
+
+  groups: dict[str, list[dict[str, Any]]] = {}
+  for link in links:
+    title = str(
+      link.get("web_signal_title")
+      or link.get("related_web_signal_title")
+      or link.get("link_summary")
+      or "",
+    ).strip()
+    if not title:
+      title = "（リンク不明）"
+    groups.setdefault(title, []).append(link)
+
+  sorted_groups = sorted(groups.items(), key=lambda item: (-len(item[1]), item[0]))
+  lines: list[str] = []
+  for title, items in sorted_groups[:max_items]:
+    cleaned = clean_digest_title(title)
+    sample = items[0]
+    domain = str(sample.get("web_signal_domain") or sample.get("related_web_signal_domain") or "").strip()
+    agency = agency_from_domain(domain) or agency_from_text(title)
+    quality = str(sample.get("source_quality") or "").strip()
+    count = len(items)
+    label = f"{agency}: {cleaned}" if agency else cleaned
+    suffix = f" — 関連リンク候補 {count}件"
+    if quality:
+      suffix += f"（ソース品質: {ja_source_quality_label(quality)}）"
+    lines.append(f"{label}{suffix}")
+  return lines
+
+
 def _render_diff_section(diff: DigestDiff) -> list[str]:
   lines = ["## 1. 今週の差分", ""]
   short = render_digest_diff_short_summary(diff)
@@ -259,8 +321,8 @@ def _render_diff_section(diff: DigestDiff) -> list[str]:
     )
     return lines
 
-  if diff.unchanged_summary:
-    lines.append("- 前回Snapshotから大きな変化は検出されませんでした。")
+  if diff.unchanged_summary and _UNCHANGED_DIFF_MSG not in short:
+    lines.append(f"- {_UNCHANGED_DIFF_MSG}")
 
   if diff.added_watch_items:
     lines.append(f"- 新規の重点監視候補: {len(diff.added_watch_items)}件")
@@ -365,12 +427,9 @@ def _render_signals_section(root: Path, pub: str) -> list[str]:
   if link_df.empty:
     lines.append("- （なし）")
   else:
-    for _, row in link_df.head(5).iterrows():
-      title = truncate_at_sentence_boundary(
-        str(row.get("web_signal_title", "") or row.get("link_summary", "") or ""),
-        max_chars=100,
-      )
-      lines.append(f"- {title or '（リンク不明）'}")
+    link_rows = [row.to_dict() for _, row in link_df.iterrows()]
+    for summary_line in summarize_link_candidates_for_digest(link_rows, max_items=5):
+      lines.append(f"- {summary_line}")
   lines.append("")
   return lines
 
@@ -380,12 +439,22 @@ def build_weekly_digest(
   project_root: Path | str,
   diff: DigestDiff | None = None,
   snapshot: WeeklyDigestSnapshot | None = None,
+  *,
+  mode: str | None = None,
+  send_status: str | None = None,
 ) -> WeeklyDigest:
   root = Path(project_root)
   pub = str(publication_number).strip()
   created_at = utc_now_iso()
   date_label = _format_date_label(created_at)
   subject = ja_digest_subject(pub, date_label)
+
+  resolved_mode = _resolve_digest_mode(mode, send_status)
+  resolved_send_status = send_status or {
+    "preview": "preview_only",
+    "draft": "draft_saved",
+    "sent": "sent",
+  }[resolved_mode]
 
   diff = diff or DigestDiff(is_initial=True)
   all_items = _load_watch_items(root, pub)
@@ -396,7 +465,7 @@ def build_weekly_digest(
     "",
     f"- 対象特許: {pub}",
     f"- 作成日時: {created_at}",
-    f"- ステータス: {ja_preview_only_notice_short()}",
+    f"- ステータス: {ja_digest_status_line(resolved_mode)}",
     "",
   ]
   lines.extend(_render_diff_section(diff))
@@ -416,7 +485,7 @@ def build_weekly_digest(
       f"- {ja_next_action('Confirm claim element / paper / web signal terminology alignment.')}",
       f"- {ja_next_action('Do not use for FTO, infringement, or validity conclusions.')}",
       "",
-      render_japanese_important_caveats(include_english_notes=False),
+      render_japanese_important_caveats(include_english_notes=False, mode=resolved_mode),
       "",
       "## 7. 参照した成果物",
       "",
@@ -427,7 +496,7 @@ def build_weekly_digest(
     ],
   )
 
-  markdown_body = "\n".join(lines)
+  markdown_body = "\n".join(deduplicate_bullets_or_lines(lines))
   diff_summary = render_digest_diff_short_summary(diff)
 
   return WeeklyDigest(
@@ -435,18 +504,18 @@ def build_weekly_digest(
     created_at=created_at,
     subject=subject,
     markdown_body=markdown_body,
-    html_body=markdown_to_simple_html(markdown_body),
+    html_body=markdown_to_simple_html(markdown_body, mode=resolved_mode),
     diff_summary=diff_summary,
     attachments=[
       f"intelligence_report_{pub}.md",
       f"digest_diff_{pub}.md",
     ],
-    caveats=ja_caveats(),
-    send_status="preview_only",
+    caveats=ja_caveats_for_mode(resolved_mode),
+    send_status=resolved_send_status,
   )
 
 
-def markdown_to_simple_html(markdown_text: str) -> str:
+def markdown_to_simple_html(markdown_text: str, mode: str = "preview") -> str:
   lines = markdown_text.splitlines()
   html_parts: list[str] = [
     "<!DOCTYPE html><html><head><meta charset='utf-8'>",
@@ -454,7 +523,7 @@ def markdown_to_simple_html(markdown_text: str) -> str:
     "<style>body{font-family:sans-serif;max-width:800px;margin:2em auto;line-height:1.5;}",
     "h1,h2,h3{color:#1e3a5f;} .notice{background:#fff3cd;padding:12px;border-radius:6px;}</style>",
     "</head><body>",
-    f"<p class='notice'><strong>{html.escape(ja_preview_only_notice())}</strong></p>",
+    f"<p class='notice'><strong>{html.escape(ja_email_mode_notice_banner(mode))}</strong></p>",
   ]
   for line in lines:
     stripped = line.strip()

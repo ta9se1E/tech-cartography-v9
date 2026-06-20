@@ -141,3 +141,41 @@ status 例:
 - Webシグナルは確認候補です
 - high confidence の自動付与なし
 - Gmail API / OAuth / スケジューラーはこの Phase では未実装
+
+## Phase 24.2.1 — Sent mail copy polish
+
+実送信メール（`--send-email` 成功時）では、下書き・プレビュー向けの文言を出さず、送信済みとして自然な文面に切り替えます。
+
+### preview / draft / sent の違い
+
+| mode | 用途 | 冒頭・ステータス |
+|------|------|------------------|
+| `preview` | UIプレビュー / 宛先未設定 | 「プレビューのみ。メール送信は行いません。」 |
+| `draft` | Outbox下書き保存（`--build-draft`） | 「送信前の下書きです」「下書き保存済み」 |
+| `sent` | CLI明示送信成功時 | 「生成・送信された週次Digest」「送信済み」 |
+
+- `sent` では「このPhaseではメール送信は行いません」「Preview only」は表示しません
+- FTO / 侵害 / 有効性ではない注意、Webシグナルは確認候補、論文は証明ではない注意は維持します
+
+### sent版 Outbox ファイル
+
+送信成功時に `outputs/delivery/email_outbox/` に保存:
+
+| ファイル | 内容 |
+|---------|------|
+| `email_draft_{pub}.md/html/json` | 送信前の下書き（draft mode） |
+| `email_sent_{pub}.md/html/json` | 実際に送信した本文（sent mode） |
+
+送信ログ `send_log_latest_{pub}.json` には `sent_path` / `sent_html_path` / `sent_json_path` も記録されます。
+
+### 重複表示の抑制
+
+- Digest差分: 「前回Snapshotから大きな変化は検出されませんでした。」は1回のみ
+- リンク候補: 同一 Web Signal タイトルは件数付きで1行に集約（例: `NEDO: … — 関連リンク候補 5件`）
+
+### 送信ログの確認
+
+```bash
+cat outputs/delivery/email_send_logs/send_log_latest_US-12565719-B2.json
+cat outputs/delivery/email_outbox/email_sent_US-12565719-B2.md
+```

@@ -8,10 +8,12 @@ from tech_cartography.delivery.email_outbox import (
   STATUS_BLOCKED_MISSING_RECIPIENT,
   STATUS_DRAFT_SAVED,
   STATUS_PREVIEW_ONLY,
+  STATUS_SENT,
   build_email_draft_from_weekly_digest,
   load_email_draft,
   render_email_draft_summary_md,
   save_email_draft,
+  save_email_sent,
 )
 from tech_cartography.delivery.japanese_copy import ja_status_label
 from tech_cartography.delivery.weekly_digest import WeeklyDigest
@@ -81,6 +83,33 @@ def test_save_and_load_email_draft(tmp_path: Path) -> None:
   assert loaded.to == ["reviewer@example.com"]
 
 
+def test_sent_draft_does_not_include_preview_only_phrase() -> None:
+  digest = _sample_digest()
+  digest.markdown_body = digest.markdown_body.replace("プレビューのみ", "送信済み")
+  draft = build_email_draft_from_weekly_digest(
+    digest,
+    publication_number="US-1",
+    to="reviewer@example.com",
+    status=STATUS_SENT,
+    mode="sent",
+  )
+  assert "このPhaseではメール送信は行いません" not in draft.markdown_body
+  assert "送信済み" in draft.markdown_body
+
+
+def test_save_email_sent_creates_sent_files(tmp_path: Path) -> None:
+  draft = build_email_draft_from_weekly_digest(
+    _sample_digest(),
+    publication_number="US-12565719-B2",
+    to="reviewer@example.com",
+    status=STATUS_SENT,
+    mode="sent",
+  )
+  paths = save_email_sent(draft, tmp_path)
+  assert (tmp_path / "email_outbox" / "email_sent_US-12565719-B2.md").exists()
+  assert (tmp_path / "email_outbox" / "email_sent_US-12565719-B2.json").exists()
+
+
 def test_email_draft_summary_md_japanese_status() -> None:
   draft = build_email_draft_from_weekly_digest(
     _sample_digest(),
@@ -91,4 +120,4 @@ def test_email_draft_summary_md_japanese_status() -> None:
   summary = render_email_draft_summary_md(draft)
   assert "メール下書き" in summary
   assert "下書き保存済み" in summary
-  assert "週次インテリジェンスDigestの下書き" in draft.markdown_body
+  assert "送信前の下書き" in draft.markdown_body

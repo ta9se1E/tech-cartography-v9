@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -236,6 +237,26 @@ def compare_digest_snapshots(
   )
   diff.diff_markdown = render_digest_diff_markdown(diff, current.publication_number)
   return diff
+
+
+def deduplicate_bullets_or_lines(lines: list[str]) -> list[str]:
+  """Remove consecutive or repeated bullet lines while preserving order."""
+  seen: set[str] = set()
+  result: list[str] = []
+  for line in lines:
+    normalized = str(line or "").strip()
+    if not normalized:
+      if result and result[-1] != "":
+        result.append("")
+      continue
+    key = re.sub(r"^\s*[-*]\s*", "", normalized)
+    if key in seen:
+      continue
+    seen.add(key)
+    result.append(normalized)
+  while result and result[-1] == "":
+    result.pop()
+  return result
 
 
 def render_digest_diff_short_summary(diff: DigestDiff) -> str:
