@@ -247,7 +247,7 @@ def _tab_patents(manifest: dict[str, Any], display_mode: str) -> None:
 
   delivery_artifacts = load_delivery_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
   st.divider()
-  render_delivery_section(delivery_artifacts, compact_overview=True)
+  render_delivery_section(delivery_artifacts, compact_overview=True, key_prefix="start_delivery")
   ranked_df = _load_csv_artifact(manifest, "ranked_patents_csv")
   top20_df = _load_csv_artifact(manifest, "top20_patents_csv")
   cluster_df = _load_csv_artifact(manifest, "cluster_summary_csv")
@@ -606,7 +606,7 @@ def _tab_reports(
   repro_artifacts: Any = None,
 ) -> None:
   delivery_artifacts = load_delivery_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
-  render_delivery_section(delivery_artifacts)
+  render_delivery_section(delivery_artifacts, key_prefix="reports_delivery")
   st.divider()
 
   if demo_artifacts is not None:
