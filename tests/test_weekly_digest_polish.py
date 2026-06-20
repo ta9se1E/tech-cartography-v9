@@ -1,10 +1,10 @@
-"""Tests for weekly digest polish (Phase 24.1)."""
+"""Tests for weekly digest polish (Phase 24.1 / 24.1.1)."""
 
 from __future__ import annotations
 
+from tech_cartography.delivery.japanese_copy import build_digest_item_title
 from tech_cartography.delivery.weekly_digest import (
   PREVIEW_ONLY_NOTICE,
-  build_digest_item_title,
   select_diverse_top_watch_items,
   truncate_at_sentence_boundary,
 )
@@ -86,5 +86,5 @@ def test_build_digest_item_title_distinguishes_similar_themes() -> None:
   assert len(set(titles)) == 3
 
 
-def test_preview_only_notice_constant() -> None:
+def test_preview_only_notice_constant_legacy() -> None:
   assert "Preview only" in PREVIEW_ONLY_NOTICE

@@ -1,4 +1,4 @@
-"""Weekly digest preview generation — email-ready Japanese body (Phase 24.1)."""
+"""Weekly digest preview generation — stakeholder-ready Japanese copy (Phase 24.1.1)."""
 
 from __future__ import annotations
 
@@ -15,36 +15,31 @@ from tech_cartography.delivery.digest_diff import (
   WeeklyDigestSnapshot,
   render_digest_diff_short_summary,
 )
-from tech_cartography.delivery.overview import DELIVERY_CAUTION
-from tech_cartography.delivery.report_bundle import REPORT_CAUTION
+from tech_cartography.delivery.japanese_copy import (
+  PREVIEW_ONLY_NOTICE_EN,
+  build_digest_item_title,
+  ja_caveats,
+  ja_digest_subject,
+  ja_evidence_basis,
+  ja_next_action,
+  ja_preview_only_notice,
+  ja_preview_only_notice_short,
+  ja_watch_priority_label,
+  ja_watch_type_label,
+  ja_why_it_matters,
+  render_japanese_important_caveats,
+)
 from tech_cartography.reports.project_export import load_records_csv
 from tech_cartography.web_signals.schema import utc_now_iso
 
 import pandas as pd
 
-PREVIEW_ONLY_NOTICE = (
-  "Preview only. Email sending is disabled in this phase."
-)
-PREVIEW_ONLY_NOTICE_JA = (
-  "プレビューのみ。この段階ではメール送信は行いません。"
-)
-
-DIGEST_CAUTIONS_JA = [
-  "本レポートは FTO・侵害・有効性の判断ではありません。",
-  "Web signals are signal candidates, not final conclusions.",
-  "Papers are supporting evidence candidates, not proof of patent claims.",
-  "Strategic Watch items are monitoring candidates, not final conclusions.",
-  "Synthetic demo signals must be clearly labeled before use.",
-  "金額の断定表示は行いません。",
-  "high confidence の自動付与は行いません。",
-]
+# Backward-compatible exports for tests / legacy imports.
+PREVIEW_ONLY_NOTICE = PREVIEW_ONLY_NOTICE_EN
+PREVIEW_ONLY_NOTICE_JA = ja_preview_only_notice_short()
+DIGEST_CAUTIONS_JA = ja_caveats()
 
 _PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
-_AGENCY_PATTERNS = (
-  ("NEDO", ("nedo", "新エネルギー")),
-  ("JST", ("jst", "科学技術振興機構")),
-  ("METI", ("meti", "経済産業省")),
-)
 
 
 @dataclass
@@ -197,35 +192,6 @@ def select_diverse_top_watch_items(items: list[dict[str, str]], top_n: int = 3) 
   return selected[:top_n]
 
 
-def _extract_agency_label(web_title: str, domain: str) -> str:
-  combined = f"{web_title} {domain}".lower()
-  for label, tokens in _AGENCY_PATTERNS:
-    if any(token in combined for token in tokens):
-      return label
-  return ""
-
-
-def build_digest_item_title(item: dict[str, str]) -> str:
-  """Build a distinctive digest heading using source title when themes repeat."""
-  web_title = str(item.get("related_web_signal_title") or "").strip()
-  domain = str(item.get("related_web_signal_domain") or "").strip()
-  theme = str(item.get("watch_theme") or "").strip()
-  watch_type = str(item.get("watch_type") or "").strip()
-  paper = str(item.get("related_paper_title") or "").strip()
-
-  agency = _extract_agency_label(web_title, domain)
-  if web_title:
-    short = truncate_at_sentence_boundary(web_title, 80)
-    if agency:
-      return f"{agency}: {short}"
-    return short
-  if paper:
-    return truncate_at_sentence_boundary(paper, 80)
-  if theme and watch_type:
-    return f"{theme} ({watch_type})"
-  return theme or "(テーマ不明)"
-
-
 def _safe_read_csv(path: Path) -> pd.DataFrame:
   if not path.exists():
     return pd.DataFrame()
@@ -245,20 +211,22 @@ def _format_date_label(created_at: str) -> str:
 
 
 def _row_to_watch_item(row: pd.Series) -> dict[str, str]:
+  watch_type = str(row.get("watch_type", "") or "").strip()
   return {
     "watch_theme": str(row.get("watch_theme", "") or "").strip(),
-    "watch_type": str(row.get("watch_type", "") or "").strip(),
+    "watch_type": watch_type,
     "watch_priority": str(row.get("watch_priority", "") or "").strip(),
-    "why_it_matters": truncate_at_sentence_boundary(str(row.get("why_it_matters", "") or "")),
-    "next_verification_action": truncate_at_sentence_boundary(
+    "why_it_matters": ja_why_it_matters(str(row.get("why_it_matters", "") or ""), watch_type),
+    "next_verification_action": ja_next_action(
       str(row.get("next_verification_action", "") or ""),
-      max_chars=180,
+      watch_type,
     ),
     "related_web_signal_title": str(row.get("related_web_signal_title", "") or "").strip(),
     "related_web_signal_domain": str(row.get("related_web_signal_domain", "") or "").strip(),
     "related_paper_title": str(row.get("related_paper_title", "") or "").strip(),
-    "evidence_basis": truncate_at_sentence_boundary(str(row.get("evidence_basis", "") or ""), max_chars=180),
+    "evidence_basis": ja_evidence_basis(str(row.get("evidence_basis", "") or "")),
     "link_score": str(row.get("link_score", "") or "").strip(),
+    "link_type": str(row.get("link_type", "") or "").strip(),
   }
 
 
@@ -273,51 +241,45 @@ def _load_watch_items(root: Path, pub: str) -> list[dict[str, str]]:
   return [_row_to_watch_item(row) for _, row in df.iterrows()]
 
 
-def _priority_label_ja(priority: str) -> str:
-  mapping = {"high": "高", "medium": "中", "low": "低"}
-  return mapping.get(str(priority or "").strip().lower(), priority or "不明")
-
-
 def _render_diff_section(diff: DigestDiff) -> list[str]:
-  lines = ["## 今週の差分", ""]
+  lines = ["## 1. 今週の差分", ""]
   short = render_digest_diff_short_summary(diff)
   lines.append(f"- {short}")
 
   if diff.is_initial:
     lines.extend(
       [
-        f"- 初回ベースライン: Strategic Watch {len(diff.added_watch_items)} 件",
-        f"- Web Signals: {len(diff.added_web_signals)} 件",
-        f"- Link Candidates: {len(diff.added_links)} 件",
-        f"- Paper Evidence: {len(diff.added_papers)} 件",
-        "",
-        "_English supplement: Initial digest baseline created._",
+        "- 初回ベースラインを作成しました。次回以降は、このSnapshotとの差分を中心に通知します。",
+        f"- 現在の重点監視候補: {len(diff.added_watch_items)}件",
+        f"- Webシグナル候補: {len(diff.added_web_signals)}件",
+        f"- 特許×論文×Webリンク候補: {len(diff.added_links)}件",
+        f"- 論文候補: {len(diff.added_papers)}件",
         "",
       ],
     )
     return lines
 
   if diff.unchanged_summary:
-    lines.append("- サマリーハッシュに変更なし（No Major Changes）")
+    lines.append("- 前回Snapshotから大きな変化は検出されませんでした。")
 
   if diff.added_watch_items:
-    lines.append(f"- **追加** Strategic Watch Items: {len(diff.added_watch_items)} 件")
+    lines.append(f"- 新規の重点監視候補: {len(diff.added_watch_items)}件")
     for item in diff.added_watch_items[:5]:
       lines.append(f"  - {item}")
   if diff.removed_watch_items:
-    lines.append(f"- **削除** Strategic Watch Items: {len(diff.removed_watch_items)} 件")
+    lines.append(f"- 削除された重点監視候補: {len(diff.removed_watch_items)}件")
   if diff.added_web_signals:
-    lines.append(f"- **追加** Web Signals: {len(diff.added_web_signals)} 件")
+    lines.append(f"- 新規のWebシグナル候補: {len(diff.added_web_signals)}件")
     for item in diff.added_web_signals[:5]:
       lines.append(f"  - {item}")
   if diff.added_links:
-    lines.append(f"- **追加** Link Candidates: {len(diff.added_links)} 件")
+    lines.append(f"- 新規のリンク候補: {len(diff.added_links)}件")
     for item in diff.added_links[:5]:
       lines.append(f"  - {item}")
   if diff.added_papers:
-    lines.append(f"- **追加** Paper Evidence: {len(diff.added_papers)} 件")
+    lines.append(f"- 新規の論文候補: {len(diff.added_papers)}件")
   if diff.changed_statuses:
-    lines.append("- **変更** ステータス:")
+    lines.append(f"- 状態変化: {len(diff.changed_statuses)}件")
     for item in diff.changed_statuses[:5]:
       lines.append(f"  - {item}")
 
@@ -331,20 +293,18 @@ def _render_diff_section(diff: DigestDiff) -> list[str]:
       diff.changed_statuses,
     ],
   ) and not diff.unchanged_summary:
-    lines.append("- 今週の主要な変更はありません（No Major Changes）")
+    lines.append("- 今週の主要な変更はありません。")
 
-  lines.extend(["", "_English supplement: What changed this week._", ""])
+  lines.append("")
   return lines
 
 
 def _render_top_watch_section(top_items: list[dict[str, str]]) -> list[str]:
-  lines = ["## 今週の重点監視候補 Top 3", ""]
+  lines = ["## 2. 今週の重点監視候補 Top 3", ""]
   if not top_items:
     lines.extend(
       [
         "- （なし — Strategic Watch Brief を先に生成してください）",
-        "",
-        "_English supplement: Top 3 Watch Items — none available._",
         "",
       ],
     )
@@ -352,56 +312,56 @@ def _render_top_watch_section(top_items: list[dict[str, str]]) -> list[str]:
 
   for index, item in enumerate(top_items, start=1):
     title = build_digest_item_title(item)
-    priority = _priority_label_ja(item.get("watch_priority", ""))
+    priority = ja_watch_priority_label(item.get("watch_priority", ""))
+    type_label = ja_watch_type_label(item.get("watch_type", ""))
     lines.extend(
       [
-        f"### {index}. {title} [優先度: {priority}]",
+        f"### {index}. {title}",
         "",
-        f"- **テーマ**: {item.get('watch_theme') or '—'}",
-        f"- **種別 (watch_type)**: {item.get('watch_type') or '—'}",
-        f"- **なぜ見るべきか**: {item.get('why_it_matters') or '—'}",
-        f"- **根拠**: {item.get('evidence_basis') or '—'}",
-        f"- **次に確認すること**: {item.get('next_verification_action') or '—'}",
-        "- **注意**: 最終結論ではありません。手動確認が必要です。",
+        f"- 優先度: {priority}",
+        f"- 種別: {type_label}",
+        f"- なぜ見るべきか: {item.get('why_it_matters') or '—'}",
+        f"- 根拠: {item.get('evidence_basis') or '—'}",
+        f"- 次に確認すること: {item.get('next_verification_action') or '—'}",
+        "- 注意: これは重点監視候補であり、対象特許との直接関係を断定するものではありません。",
         "",
       ],
     )
-  lines.extend(["_English supplement: Top 3 Watch Items._", ""])
   return lines
 
 
 def _render_signals_section(root: Path, pub: str) -> list[str]:
-  lines = ["## 新規・更新シグナル", ""]
+  lines = ["## 3. 新規・更新シグナル", ""]
 
   web_path = (
     root / "outputs" / "web_signals" / "tavily_pan_carbon_fiber" / "review_pack"
     / "high_priority_web_signals.csv"
   )
   web_df = _safe_read_csv(web_path)
-  lines.append("### Web Signal")
+  lines.append("### Webシグナル候補")
   if web_df.empty:
     lines.append("- （なし）")
   else:
     title_col = "source_title" if "source_title" in web_df.columns else "title"
     for _, row in web_df.head(5).iterrows():
       title = truncate_at_sentence_boundary(str(row.get(title_col, "") or ""), max_chars=100)
-      lines.append(f"- {title or '(title n/a)'}")
+      lines.append(f"- {title or '（タイトル不明）'}")
   lines.append("")
 
   paper_path = root / "outputs" / "openalex_limited_execution" / "selected_evidence_papers.csv"
   paper_df = _safe_read_csv(paper_path)
-  lines.append("### Paper Evidence")
+  lines.append("### 論文候補")
   if paper_df.empty:
     lines.append("- （なし）")
   else:
     for _, row in paper_df.head(5).iterrows():
       title = truncate_at_sentence_boundary(str(row.get("title", "") or ""), max_chars=100)
-      lines.append(f"- {title or '(title n/a)'}")
+      lines.append(f"- {title or '（タイトル不明）'}")
   lines.append("")
 
   link_path = root / "outputs" / "web_signal_links" / pub / "high_priority_web_signal_links.csv"
   link_df = _safe_read_csv(link_path)
-  lines.append("### Patent × Paper × Web Link")
+  lines.append("### 特許×論文×Webリンク候補")
   if link_df.empty:
     lines.append("- （なし）")
   else:
@@ -410,7 +370,7 @@ def _render_signals_section(root: Path, pub: str) -> list[str]:
         str(row.get("web_signal_title", "") or row.get("link_summary", "") or ""),
         max_chars=100,
       )
-      lines.append(f"- {title or '(link n/a)'}")
+      lines.append(f"- {title or '（リンク不明）'}")
   lines.append("")
   return lines
 
@@ -425,19 +385,18 @@ def build_weekly_digest(
   pub = str(publication_number).strip()
   created_at = utc_now_iso()
   date_label = _format_date_label(created_at)
-  subject = f"[Tech Cartography] Weekly Intelligence Digest - {pub} - {date_label}"
+  subject = ja_digest_subject(pub, date_label)
 
   diff = diff or DigestDiff(is_initial=True)
   all_items = _load_watch_items(root, pub)
   top_items = select_diverse_top_watch_items(all_items, top_n=3)
 
   lines = [
-    "# Tech Cartography Weekly Digest",
+    "# Tech Cartography 週次インテリジェンスDigest",
     "",
     f"- 対象特許: {pub}",
     f"- 作成日時: {created_at}",
-    f"- ステータス: {PREVIEW_ONLY_NOTICE_JA}",
-    f"- _Status (EN): {PREVIEW_ONLY_NOTICE}_",
+    f"- ステータス: {ja_preview_only_notice_short()}",
     "",
   ]
   lines.extend(_render_diff_section(diff))
@@ -445,35 +404,21 @@ def build_weekly_digest(
   lines.extend(_render_signals_section(root, pub))
   lines.extend(
     [
-      "## Evidence Gaps",
+      "## 4. Evidence Gap / まだ確認できていない点",
       "",
       "- 対象特許の description / examples が不完全な場合があります。",
-      "- Web signal と特許の直接リンクは未確認です。",
-      "- Papers are supporting evidence candidates, not proof of patent claims.",
+      "- Webシグナルと特許の直接リンクは未確認です。",
+      "- 論文候補は技術的な裏取りの参考情報であり、特許請求項を証明するものではありません。",
       "",
-      "## Next Verification Actions",
+      "## 5. 次に確認すること",
       "",
-      "- 元URLを開き、一次情報を確認してください。",
-      "- claim element / paper / web signal の用語整合を確認してください。",
-      "- FTO・侵害・有効性の結論には使用しないでください。",
+      f"- {ja_next_action('Open source URLs and verify original documents.')}",
+      f"- {ja_next_action('Confirm claim element / paper / web signal terminology alignment.')}",
+      f"- {ja_next_action('Do not use for FTO, infringement, or validity conclusions.')}",
       "",
-      "## Important Caveats",
+      render_japanese_important_caveats(include_english_notes=False),
       "",
-    ],
-  )
-  for caveat in DIGEST_CAUTIONS_JA:
-    lines.append(f"- {caveat}")
-  lines.extend(
-    [
-      "",
-      REPORT_CAUTION,
-      "",
-      DELIVERY_CAUTION,
-      "",
-      PREVIEW_ONLY_NOTICE_JA,
-      PREVIEW_ONLY_NOTICE,
-      "",
-      "## Links / Source Artifacts",
+      "## 7. 参照した成果物",
       "",
       f"- outputs/strategic_watch_briefs/{pub}/",
       f"- outputs/web_signal_links/{pub}/",
@@ -496,7 +441,7 @@ def build_weekly_digest(
       f"intelligence_report_{pub}.md",
       f"digest_diff_{pub}.md",
     ],
-    caveats=[*DIGEST_CAUTIONS_JA, REPORT_CAUTION, PREVIEW_ONLY_NOTICE, DELIVERY_CAUTION],
+    caveats=ja_caveats(),
     send_status="preview_only",
   )
 
@@ -505,12 +450,11 @@ def markdown_to_simple_html(markdown_text: str) -> str:
   lines = markdown_text.splitlines()
   html_parts: list[str] = [
     "<!DOCTYPE html><html><head><meta charset='utf-8'>",
-    "<title>Tech Cartography Weekly Digest</title>",
+    "<title>Tech Cartography 週次インテリジェンスDigest</title>",
     "<style>body{font-family:sans-serif;max-width:800px;margin:2em auto;line-height:1.5;}",
     "h1,h2,h3{color:#1e3a5f;} .notice{background:#fff3cd;padding:12px;border-radius:6px;}</style>",
     "</head><body>",
-    f"<p class='notice'><strong>{html.escape(PREVIEW_ONLY_NOTICE_JA)}</strong></p>",
-    f"<p class='notice'><em>{html.escape(PREVIEW_ONLY_NOTICE)}</em></p>",
+    f"<p class='notice'><strong>{html.escape(ja_preview_only_notice())}</strong></p>",
   ]
   for line in lines:
     stripped = line.strip()
@@ -526,8 +470,6 @@ def markdown_to_simple_html(markdown_text: str) -> str:
       text = stripped[2:]
       text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html.escape(text))
       html_parts.append(f"<li>{text}</li>")
-    elif stripped.startswith("_") and stripped.endswith("_"):
-      html_parts.append(f"<p><em>{html.escape(stripped.strip('_'))}</em></p>")
     else:
       html_parts.append(f"<p>{html.escape(stripped)}</p>")
   html_parts.append("</body></html>")

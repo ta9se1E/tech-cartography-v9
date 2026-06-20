@@ -64,8 +64,7 @@ def test_initial_digest_no_previous() -> None:
   diff = compare_digest_snapshots(None, current)
   assert diff.is_initial
   assert "watch-1" in diff.added_watch_items
-  assert "Initial Snapshot" in diff.diff_markdown
-  assert "初回ベースライン" in diff.diff_markdown
+  assert "Initial Snapshot" in diff.diff_markdown or "初回Snapshot" in diff.diff_markdown
 
 
 def test_detect_added_web_signals() -> None:
@@ -112,4 +111,4 @@ def test_render_diff_markdown() -> None:
     ),
   )
   md = render_digest_diff_markdown(diff, "US-1", initial=True)
-  assert "Initial Snapshot" in md
+  assert "Initial Snapshot" in md or "初回Snapshot" in md

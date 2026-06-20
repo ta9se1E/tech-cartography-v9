@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tech_cartography.delivery.store import build_delivery_package
+from tech_cartography.delivery.japanese_copy import ja_ui_send_disabled_notice
 from tech_cartography.ui.delivery_ui import (
   collect_download_keys_for_artifacts,
   load_delivery_artifacts,
@@ -34,7 +35,7 @@ def test_loader_reads_package(tmp_path: Path) -> None:
   assert artifacts.status in {"ready", "partial"}
   assert artifacts.intelligence_report_md
   assert artifacts.weekly_digest_md
-  assert "Preview only" in (artifacts.weekly_digest_md or "")
+  assert "プレビューのみ" in (artifacts.weekly_digest_md or "")
 
 
 def test_loader_missing_zip_graceful(tmp_path: Path) -> None:
@@ -123,3 +124,10 @@ def test_loader_reads_email_draft(tmp_path: Path) -> None:
   assert artifacts.email_draft is not None
   assert artifacts.email_draft_md
   assert artifacts.email_draft.status == "draft_saved"
+
+
+def test_ui_japanese_send_disabled_notice() -> None:
+  notice = ja_ui_send_disabled_notice()
+  assert "メール下書きプレビュー" not in notice
+  assert "UIからのメール送信は無効" in notice
+  assert "--send-email" in notice

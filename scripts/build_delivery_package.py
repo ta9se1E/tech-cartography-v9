@@ -13,6 +13,7 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
   sys.path.insert(0, str(SRC_ROOT))
 
+from tech_cartography.delivery.japanese_copy import ja_status_description, ja_status_label, ja_status_message
 from tech_cartography.delivery.store import build_delivery_package, dry_run_delivery_package
 
 
@@ -68,6 +69,9 @@ def main() -> int:
     payload["email_draft"] = {
       "draft_id": result.email_draft.draft_id,
       "status": result.email_draft.status,
+      "status_label": ja_status_label(result.email_draft.status),
+      "message": ja_status_message(result.email_draft.status),
+      "human_readable_summary": ja_status_description(result.email_draft.status),
       "to": result.email_draft.to,
       "subject": result.email_draft.subject,
     }

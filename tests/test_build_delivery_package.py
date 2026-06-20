@@ -81,6 +81,32 @@ def test_build_email_draft_creates_outbox_files(tmp_path: Path) -> None:
   outbox = out / "email_outbox"
   assert (outbox / "email_draft_US-12565719-B2.json").exists()
   assert (outbox / "email_draft_US-12565719-B2.md").exists()
+  assert "下書き保存済み" in (outbox / "email_draft_US-12565719-B2.md").read_text(encoding="utf-8")
+
+
+def test_cli_email_draft_status_label_subprocess() -> None:
+  proc = subprocess.run(
+    [
+      sys.executable,
+      str(SCRIPT),
+      "--publication-number",
+      "US-12565719-B2",
+      "--output-dir",
+      "outputs/delivery",
+      "--no-include-zip",
+      "--build-email-draft",
+      "--email-to",
+      "reviewer@example.com",
+    ],
+    cwd=PROJECT_ROOT,
+    capture_output=True,
+    text=True,
+    check=False,
+  )
+  assert proc.returncode == 0
+  payload = json.loads(proc.stdout)
+  assert payload["email_draft"]["status_label"] == "下書き保存済み"
+  assert "メール草稿" in payload["email_draft"]["message"]
 
 
 def test_send_email_without_smtp_blocked(tmp_path: Path, monkeypatch) -> None:

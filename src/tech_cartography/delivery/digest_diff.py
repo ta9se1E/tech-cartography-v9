@@ -243,10 +243,10 @@ def render_digest_diff_short_summary(diff: DigestDiff) -> str:
   if diff.is_initial:
     return (
       "初回ベースラインを作成しました。"
-      f"監視候補 {len(diff.added_watch_items)} 件 / "
-      f"Webシグナル {len(diff.added_web_signals)} 件 / "
-      f"リンク {len(diff.added_links)} 件 / "
-      f"論文 {len(diff.added_papers)} 件"
+      f"重点監視候補 {len(diff.added_watch_items)}件 / "
+      f"Webシグナル候補 {len(diff.added_web_signals)}件 / "
+      f"リンク候補 {len(diff.added_links)}件 / "
+      f"論文候補 {len(diff.added_papers)}件"
     )
 
   has_changes = any(
@@ -261,23 +261,23 @@ def render_digest_diff_short_summary(diff: DigestDiff) -> str:
     ],
   )
   if diff.unchanged_summary and not has_changes:
-    return "今週の主要な変更はありません（No Major Changes）。"
+    return "前回Snapshotから大きな変化は検出されませんでした。"
 
   parts: list[str] = []
   if diff.added_watch_items:
-    parts.append(f"新規Watch Item {len(diff.added_watch_items)} 件")
+    parts.append(f"新規の重点監視候補 {len(diff.added_watch_items)}件")
   if diff.removed_watch_items:
-    parts.append(f"削除Watch Item {len(diff.removed_watch_items)} 件")
+    parts.append(f"削除された重点監視候補 {len(diff.removed_watch_items)}件")
   if diff.added_web_signals:
-    parts.append(f"新規Web Signal {len(diff.added_web_signals)} 件")
+    parts.append(f"新規のWebシグナル候補 {len(diff.added_web_signals)}件")
   if diff.added_links:
-    parts.append(f"新規Link Candidate {len(diff.added_links)} 件")
+    parts.append(f"新規のリンク候補 {len(diff.added_links)}件")
   if diff.added_papers:
-    parts.append(f"新規Paper Evidence {len(diff.added_papers)} 件")
+    parts.append(f"新規の論文候補 {len(diff.added_papers)}件")
   if diff.changed_statuses:
-    parts.append(f"状態変化 {len(diff.changed_statuses)} 件")
+    parts.append(f"状態変化 {len(diff.changed_statuses)}件")
 
-  return " / ".join(parts) if parts else "今週の主要な変更はありません（No Major Changes）。"
+  return " / ".join(parts) if parts else "前回Snapshotから大きな変化は検出されませんでした。"
 
 
 def render_digest_diff_markdown(
@@ -287,7 +287,7 @@ def render_digest_diff_markdown(
   initial: bool = False,
 ) -> str:
   lines = [
-    f"# Digest Diff: {publication_number}",
+    f"# Digest差分: {publication_number}",
     "",
     f"**要約**: {render_digest_diff_short_summary(diff)}",
     "",
@@ -295,15 +295,14 @@ def render_digest_diff_markdown(
   if initial or diff.is_initial:
     lines.extend(
       [
-        "## Initial Snapshot / 初回ベースライン",
+        "## 初回Snapshot",
         "",
-        "初回の Digest Snapshot です。現在の項目をすべてベースラインとして記録しました。",
-        "This is the first digest snapshot. All current items are treated as baseline.",
+        "これは初回のDigest Snapshotです。今回の内容をベースラインとして保存し、次回以降は差分を中心に表示します。",
         "",
-        f"- Strategic Watch Items（監視候補）: {len(diff.added_watch_items)}",
-        f"- Web Signals（Webシグナル）: {len(diff.added_web_signals)}",
-        f"- Paper Evidence（論文候補）: {len(diff.added_papers)}",
-        f"- Link Candidates（リンク候補）: {len(diff.added_links)}",
+        f"- 重点監視候補: {len(diff.added_watch_items)}件",
+        f"- Webシグナル候補: {len(diff.added_web_signals)}件",
+        f"- 論文候補: {len(diff.added_papers)}件",
+        f"- 特許×論文×Webリンク候補: {len(diff.added_links)}件",
         "",
       ],
     )
@@ -312,51 +311,51 @@ def render_digest_diff_markdown(
   if diff.unchanged_summary:
     lines.extend(
       [
-        "## No Major Changes / 主要な変更なし",
+        "## 大きな差分はありません",
         "",
-        "前回 Snapshot からサマリーハッシュに変更はありません。",
-        "Summary hash unchanged since previous snapshot.",
+        "前回Snapshotから大きな変化は検出されませんでした。",
         "",
       ],
     )
 
-  def _section(title_en: str, title_ja: str, items: list[str], label: str) -> None:
-    lines.extend([f"## {title_en} / {title_ja}", ""])
+  def _section(title_ja: str, items: list[str], label: str) -> None:
+    lines.extend([f"## {title_ja}", ""])
     if items:
       for item in items[:20]:
         lines.append(f"- **{label}**: {item}")
     else:
-      lines.append("- （なし / none）")
+      lines.append("- （なし）")
     lines.append("")
 
-  _section("New Strategic Watch Items", "新規監視候補", diff.added_watch_items, "追加")
+  _section("新規の重点監視候補", diff.added_watch_items, "追加")
   if diff.removed_watch_items:
-    lines.extend(["## Removed Strategic Watch Items / 削除された監視候補", ""])
+    lines.extend(["## 削除された重点監視候補", ""])
     for item in diff.removed_watch_items[:10]:
       lines.append(f"- **削除**: {item}")
     lines.append("")
 
-  _section("New Web Signals", "新規Webシグナル", diff.added_web_signals, "追加")
+  _section("新規のWebシグナル候補", diff.added_web_signals, "追加")
   if diff.removed_web_signals:
-    lines.extend(["## Removed Web Signals / 削除されたWebシグナル", ""])
+    lines.extend(["## 削除されたWebシグナル候補", ""])
     for item in diff.removed_web_signals[:10]:
       lines.append(f"- **削除**: {item}")
     lines.append("")
 
-  _section("New Patent × Paper × Web Links", "新規リンク候補", diff.added_links, "追加")
-  _section("New Paper Evidence Candidates", "新規論文候補", diff.added_papers, "追加")
+  _section("新規の特許×論文×Webリンク候補", diff.added_links, "追加")
+  _section("新規の論文候補", diff.added_papers, "追加")
 
   if diff.changed_statuses:
-    lines.extend(["## Status Changes / ステータス変化", ""])
+    lines.extend(["## ステータス変化", ""])
     for item in diff.changed_statuses:
       lines.append(f"- **変更**: {item}")
     lines.append("")
 
   lines.extend(
     [
-      "## Still Needs Manual Review",
+      "## 手動確認が必要な項目",
       "",
-      "All web signals, link candidates, and strategic watch items require human verification.",
+      "すべてのWebシグナル、リンク候補、重点監視候補は人手による確認が必要です。",
+      "これらは最終結論ではなく、次に確認すべき候補です。",
       "",
       DELIVERY_CAUTION,
       "",

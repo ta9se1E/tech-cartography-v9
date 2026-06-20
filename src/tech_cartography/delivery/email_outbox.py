@@ -1,4 +1,4 @@
-"""Email outbox — draft storage before explicit SMTP send (Phase 24.1)."""
+"""Email outbox — draft storage before explicit SMTP send (Phase 24.1.1)."""
 
 from __future__ import annotations
 
@@ -8,22 +8,21 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from tech_cartography.delivery.overview import DELIVERY_CAUTION
-from tech_cartography.delivery.weekly_digest import (
-  DIGEST_CAUTIONS_JA,
-  PREVIEW_ONLY_NOTICE,
-  PREVIEW_ONLY_NOTICE_JA,
-  WeeklyDigest,
-  markdown_to_simple_html,
+from tech_cartography.delivery.japanese_copy import (
+  ja_caveats,
+  ja_email_draft_preamble,
+  ja_preview_only_notice_short,
+  ja_status_description,
+  ja_status_label,
+  ja_ui_send_disabled_notice,
 )
+from tech_cartography.delivery.weekly_digest import WeeklyDigest, markdown_to_simple_html
 from tech_cartography.web_signals.schema import utc_now_iso
 
 EMAIL_DRAFT_CAUTIONS = [
-  *DIGEST_CAUTIONS_JA,
-  PREVIEW_ONLY_NOTICE_JA,
-  PREVIEW_ONLY_NOTICE,
-  DELIVERY_CAUTION,
-  "Email sending is disabled from the UI. Use CLI with --send-email for explicit sending.",
+  *ja_caveats(),
+  ja_preview_only_notice_short(),
+  ja_ui_send_disabled_notice(),
 ]
 
 STATUS_PREVIEW_ONLY = "preview_only"
@@ -105,10 +104,20 @@ def build_email_draft_from_weekly_digest(
   elif not recipients and resolved_status == STATUS_DRAFT_SAVED:
     resolved_status = STATUS_PREVIEW_ONLY
 
+  status_label = ja_status_label(resolved_status)
+  status_desc = ja_status_description(resolved_status)
+
   email_md_lines = [
-    f"To: {', '.join(recipients) if recipients else '(未設定)'}",
-    f"CC: {', '.join(cc_list) if cc_list else '(なし)'}",
-    f"Subject: {subject}",
+    f"宛先: {', '.join(recipients) if recipients else '（未設定）'}",
+    f"CC: {', '.join(cc_list) if cc_list else '（なし）'}",
+    f"件名: {subject}",
+    "",
+    ja_email_draft_preamble(),
+    "",
+    f"- 状態: {status_label}",
+    f"- 説明: {status_desc}",
+    "- UIからの送信: 無効",
+    "- 送信方法: CLIで --send-email を明示した場合のみ",
     "",
     digest.markdown_body,
   ]
@@ -131,28 +140,29 @@ def build_email_draft_from_weekly_digest(
 
 
 def render_email_draft_summary_md(draft: EmailDraft) -> str:
+  status_label = ja_status_label(draft.status)
   lines = [
-    f"# Email Draft: {draft.publication_number}",
+    f"# メール下書き: {draft.publication_number}",
     "",
     f"- draft_id: {draft.draft_id}",
-    f"- created_at: {draft.created_at}",
-    f"- status: {draft.status}",
-    f"- to: {', '.join(draft.to) if draft.to else '(none)'}",
-    f"- cc: {', '.join(draft.cc) if draft.cc else '(none)'}",
-    f"- subject: {draft.subject}",
+    f"- 作成日時: {draft.created_at}",
+    f"- 状態: {status_label} ({draft.status})",
+    f"- 宛先: {', '.join(draft.to) if draft.to else '（未設定）'}",
+    f"- CC: {', '.join(draft.cc) if draft.cc else '（なし）'}",
+    f"- 件名: {draft.subject}",
     "",
-    "## Attachments",
+    "## 添付候補",
     "",
   ]
   if draft.attachments:
     for path in draft.attachments:
       lines.append(f"- {path}")
   else:
-    lines.append("- (none)")
-  lines.extend(["", "## Caveats", ""])
+    lines.append("- （なし）")
+  lines.extend(["", "## 注意事項", ""])
   for caveat in draft.caveats:
     lines.append(f"- {caveat}")
-  lines.extend(["", "## Body Preview", "", draft.markdown_body[:4000]])
+  lines.extend(["", "## 本文プレビュー", "", draft.markdown_body[:4000]])
   if len(draft.markdown_body) > 4000:
     lines.append("\n…（以下省略）")
   return "\n".join(lines)

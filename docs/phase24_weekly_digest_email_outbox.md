@@ -132,3 +132,10 @@ python scripts/build_delivery_package.py \
 - Synthetic demo signal must be clearly labeled
 - 金額の断定表示なし
 - high confidence の自動付与なし
+
+## Phase 24.1.1 — 日本語文面ポリッシュ
+
+- 出力本文は日本語中心（status / caveat / next_action / Top 3 タイトル）
+- 英語 caveat は本文から除去し、必要時のみ `English Notes` セクションへ退避
+- 関係者向けに「候補」「未確認」「次に確認すること」を明確化
+- モジュール: `src/tech_cartography/delivery/japanese_copy.py`

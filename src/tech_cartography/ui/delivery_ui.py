@@ -13,13 +13,19 @@ from tech_cartography.delivery.email_outbox import (
   EmailDraft,
   load_email_draft_for_publication,
 )
+from tech_cartography.delivery.japanese_copy import (
+  ja_preview_only_notice_short,
+  ja_status_description,
+  ja_status_label,
+  ja_ui_send_disabled_notice,
+)
 from tech_cartography.delivery.overview import (
   DELIVERY_CAUTION,
   TabOverviewItem,
   build_tab_overviews,
   render_overview_page_md,
 )
-from tech_cartography.delivery.weekly_digest import PREVIEW_ONLY_NOTICE as DIGEST_PREVIEW_NOTICE
+
 from tech_cartography.ui.easy_japanese_ui import (
   render_caution_box,
   render_info_box,
@@ -203,7 +209,7 @@ def render_delivery_caution_card() -> None:
     render_caution_box(
       "Strategic Watch Brief は重点監視候補であり、最終結論ではありません。"
       "FTO、侵害、有効性判断ではありません。"
-      f" {DIGEST_PREVIEW_NOTICE}"
+      f" {ja_preview_only_notice_short()}"
     ),
     unsafe_allow_html=True,
   )
@@ -258,15 +264,15 @@ def render_weekly_digest_preview_section(
   *,
   key_prefix: str = "delivery",
 ) -> None:
-  st.subheader("Weekly Digest Preview")
+  st.subheader("週次Digestプレビュー")
   st.markdown(
-    render_warning_box(f"<strong>{DIGEST_PREVIEW_NOTICE}</strong>"),
+    render_warning_box(f"<strong>{ja_preview_only_notice_short()}</strong>"),
     unsafe_allow_html=True,
   )
   file_pub = artifacts.publication_number if artifacts.publication_number != "unknown" else DEFAULT_PUB
 
   if artifacts.digest_diff_md:
-    with st.expander("What changed this week (Diff)", expanded=True):
+    with st.expander("今週の差分（Digest差分）", expanded=True):
       st.markdown(render_markdown_preview(artifacts.digest_diff_md, max_chars=4000))
     diff_key = make_download_key(
       f"{key_prefix}_dl_digest_diff",
@@ -274,7 +280,7 @@ def render_weekly_digest_preview_section(
       artifacts.digest_diff_path,
     )
     st.download_button(
-      label="Download digest_diff.md",
+      label="digest_diff.md をダウンロード",
       data=artifacts.digest_diff_md,
       file_name=f"digest_diff_{file_pub}.md",
       mime="text/markdown",
@@ -282,7 +288,7 @@ def render_weekly_digest_preview_section(
     )
 
   if artifacts.weekly_digest_md:
-    with st.expander("Digest Markdown Preview"):
+    with st.expander("Markdown本文プレビュー"):
       st.markdown(render_markdown_preview(artifacts.weekly_digest_md, max_chars=6000))
     digest_md_key = make_download_key(
       f"{key_prefix}_dl_weekly_digest_md",
@@ -290,7 +296,7 @@ def render_weekly_digest_preview_section(
       artifacts.weekly_digest_md_path,
     )
     st.download_button(
-      label="Download weekly_digest_preview.md",
+      label="weekly_digest_preview.md をダウンロード",
       data=artifacts.weekly_digest_md,
       file_name=f"weekly_digest_preview_{file_pub}.md",
       mime="text/markdown",
@@ -304,14 +310,14 @@ def render_weekly_digest_preview_section(
       artifacts.weekly_digest_html_path,
     )
     st.download_button(
-      label="Download weekly_digest_preview.html",
+      label="HTML本文をダウンロード",
       data=artifacts.weekly_digest_html,
       file_name=f"weekly_digest_preview_{file_pub}.html",
       mime="text/html",
       key=digest_html_key,
     )
   elif not artifacts.weekly_digest_md:
-    st.info("Weekly Digest Preview がまだありません。初回は initial snapshot として生成されます。")
+    st.info("週次Digestプレビューがまだありません。初回は初回Snapshotとして生成されます。")
 
 
 def render_email_draft_preview_section(
@@ -319,12 +325,9 @@ def render_email_draft_preview_section(
   *,
   key_prefix: str = "delivery",
 ) -> None:
-  st.subheader("Email Draft Preview")
+  st.subheader("メール下書きプレビュー")
   st.markdown(
-    render_warning_box(
-      "<strong>Email sending is disabled from the UI. "
-      "Use CLI with --send-email for explicit sending.</strong>"
-    ),
+    render_warning_box(f"<strong>{ja_ui_send_disabled_notice()}</strong>"),
     unsafe_allow_html=True,
   )
 
@@ -332,17 +335,19 @@ def render_email_draft_preview_section(
   file_pub = artifacts.publication_number if artifacts.publication_number != "unknown" else DEFAULT_PUB
 
   if draft:
-    st.markdown(f"**Status**: `{draft.status}`")
-    st.markdown(f"**To**: {', '.join(draft.to) if draft.to else '(未設定)'}")
-    st.markdown(f"**CC**: {', '.join(draft.cc) if draft.cc else '(なし)'}")
-    st.markdown(f"**Subject**: {draft.subject}")
+    status_label = ja_status_label(draft.status)
+    st.markdown(f"**状態**: {status_label} (`{draft.status}`)")
+    st.caption(ja_status_description(draft.status))
+    st.markdown(f"**宛先**: {', '.join(draft.to) if draft.to else '（未設定）'}")
+    st.markdown(f"**CC**: {', '.join(draft.cc) if draft.cc else '（なし）'}")
+    st.markdown(f"**件名**: {draft.subject}")
     if draft.caveats:
-      with st.expander("Caveats", expanded=False):
+      with st.expander("注意事項", expanded=False):
         for caveat in draft.caveats[:8]:
           st.caption(caveat)
 
   if artifacts.email_draft_md:
-    with st.expander("Email Draft Markdown Preview", expanded=True):
+    with st.expander("Markdown本文プレビュー", expanded=True):
       st.markdown(render_markdown_preview(artifacts.email_draft_md, max_chars=6000))
     md_key = make_download_key(
       f"{key_prefix}_dl_email_draft_md",
@@ -350,7 +355,7 @@ def render_email_draft_preview_section(
       artifacts.email_draft_md_path,
     )
     st.download_button(
-      label="Download email_draft.md",
+      label="email_draft.md をダウンロード",
       data=artifacts.email_draft_md,
       file_name=f"email_draft_{file_pub}.md",
       mime="text/markdown",
@@ -364,7 +369,7 @@ def render_email_draft_preview_section(
       artifacts.email_draft_html_path,
     )
     st.download_button(
-      label="Download email_draft.html",
+      label="HTML本文をダウンロード",
       data=artifacts.email_draft_html,
       file_name=f"email_draft_{file_pub}.html",
       mime="text/html",
@@ -378,7 +383,7 @@ def render_email_draft_preview_section(
       artifacts.email_draft_json_path,
     )
     st.download_button(
-      label="Download email_draft.json",
+      label="下書きJSONをダウンロード",
       data=artifacts.email_draft_json,
       file_name=f"email_draft_{file_pub}.json",
       mime="application/json",
@@ -386,7 +391,7 @@ def render_email_draft_preview_section(
     )
   elif not artifacts.email_draft_md:
     st.info(
-      "Email Draft がまだありません。"
+      "メール下書きがまだありません。"
       " `--build-email-draft --email-to reviewer@example.com` で生成してください。"
     )
 
