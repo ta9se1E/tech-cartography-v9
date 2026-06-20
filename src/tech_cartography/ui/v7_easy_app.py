@@ -98,7 +98,6 @@ from tech_cartography.ui.evidence_map_demo import (
 )
 from tech_cartography.ui.reproducibility_smoke_ui import (
   load_reproducibility_smoke_artifacts,
-  render_reproducibility_brief_section,
   render_reproducibility_smoke_section,
 )
 from tech_cartography.ui.web_signal_review_ui import (
@@ -228,8 +227,6 @@ def _tab_start(
   render_usage_notices_expander(key="start_usage_notices")
   if demo_mode and demo_artifacts is not None:
     render_demo_start_tab(demo_artifacts)
-    if repro_artifacts is not None:
-      render_reproducibility_brief_section(repro_artifacts)
     return
   if is_analyst_view():
     st.markdown(
@@ -263,7 +260,7 @@ def _tab_start(
         if stage_rows:
           render_small_table(pd.DataFrame(stage_rows)[["段階", "状態", "説明"]])
   elif is_analyst_view() or is_developer_view():
-    st.info("本番実行タブでテーマを入力するか、開発者向けモードで run を読み込んでください。")
+    st.info("本番実行タブでテーマを入力してください。" if is_analyst_view() else "run を読み込むには開発者向けモードが必要です。")
 
 
 def _tab_patents(manifest: dict[str, Any], display_mode: str) -> None:
@@ -415,9 +412,6 @@ def _tab_evidence(
 ) -> None:
   if demo_artifacts is not None:
     render_demo_evidence_tab(demo_artifacts)
-    if repro_artifacts is not None:
-      st.divider()
-      render_reproducibility_brief_section(repro_artifacts)
     return
   if is_analyst_view():
     case = _resolve_analyst_case()
@@ -936,7 +930,11 @@ def render_tabbed_easy_app(
 
   root = pipeline_root or default_pipeline_root()
   demo_artifacts = load_demo_evidence_map_artifacts(PROJECT_ROOT) if demo_mode else None
-  repro_artifacts = load_reproducibility_smoke_artifacts(PROJECT_ROOT) if demo_mode else None
+  repro_artifacts = (
+    load_reproducibility_smoke_artifacts(PROJECT_ROOT)
+    if demo_mode and developer_mode
+    else None
+  )
   if demo_mode and demo_artifacts is not None:
     render_demo_mode_banner(demo_artifacts)
 

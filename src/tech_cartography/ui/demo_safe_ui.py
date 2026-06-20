@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from tech_cartography.ui.easy_japanese_ui import render_info_box, render_warning_box
+from tech_cartography.ui.developer_mode_visibility import is_show_developer_mode_enabled
 from tech_cartography.ui.japanese_labels import translate_tab_name
 from tech_cartography.ui.streamlit_session import (
   DISPLAY_MODE_OPTIONS,
@@ -66,11 +67,24 @@ SCHEDULER_POST_MVP_NOTICE = (
 )
 
 
+def visible_ui_mode_options() -> tuple[str, ...]:
+  if is_show_developer_mode_enabled():
+    return UI_MODE_OPTIONS
+  return (UI_MODE_DEMO, UI_MODE_ANALYST)
+
+
+def normalize_ui_mode(mode: str | None) -> str:
+  candidate = str(mode or UI_MODE_DEMO)
+  visible = visible_ui_mode_options()
+  if candidate in visible:
+    return candidate
+  return UI_MODE_DEMO
+
+
 def get_ui_mode() -> str:
   import streamlit as st
 
-  mode = str(st.session_state.get(STATE_UI_MODE, UI_MODE_DEMO))
-  return mode if mode in UI_MODE_OPTIONS else UI_MODE_DEMO
+  return normalize_ui_mode(st.session_state.get(STATE_UI_MODE, UI_MODE_DEMO))
 
 
 def is_demo_view() -> bool:
@@ -82,6 +96,8 @@ def is_analyst_view() -> bool:
 
 
 def is_developer_view() -> bool:
+  if not is_show_developer_mode_enabled():
+    return False
   return get_ui_mode() == UI_MODE_DEVELOPER
 
 
@@ -301,15 +317,19 @@ def render_app_sidebar(
   st.divider()
   st.header("表示モード")
 
-  current_ui_mode = get_ui_mode()
-  mode_index = UI_MODE_OPTIONS.index(current_ui_mode) if current_ui_mode in UI_MODE_OPTIONS else 0
+  current_ui_mode = normalize_ui_mode(get_ui_mode())
+  visible_options = visible_ui_mode_options()
+  if st.session_state.get(STATE_UI_MODE) != current_ui_mode:
+    st.session_state[STATE_UI_MODE] = current_ui_mode
+  mode_index = visible_options.index(current_ui_mode) if current_ui_mode in visible_options else 0
   ui_mode_input = st.radio(
     "モード選択",
-    list(UI_MODE_OPTIONS),
+    list(visible_options),
     index=mode_index,
     format_func=lambda m: UI_MODE_LABELS.get(m, m),
     key=WIDGET_UI_MODE,
   )
+  ui_mode_input = normalize_ui_mode(ui_mode_input)
 
   prev_mode = st.session_state.get("_prev_ui_mode", current_ui_mode)
   if ui_mode_input != prev_mode:
@@ -326,7 +346,7 @@ def render_app_sidebar(
   st.markdown("**次にやること**")
   st.caption(sidebar_next_steps_text(ui_mode_input, project_root=project_root))
 
-  if ui_mode_input == UI_MODE_DEVELOPER:
+  if ui_mode_input == UI_MODE_DEVELOPER and is_show_developer_mode_enabled():
     pipeline_root = str(st.session_state.get(STATE_PIPELINE_ROOT, project_root / "outputs" / "pipeline_runs"))
     run_id = str(st.session_state.get(STATE_SELECTED_RUN_ID, "") or user.get("last_run_id") or "")
     render_developer_info_expander(

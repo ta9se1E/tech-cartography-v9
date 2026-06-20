@@ -27,10 +27,12 @@ def test_where_to_look_card_content() -> None:
 
 
 def test_ui_mode_guide_card() -> None:
-  html = render_ui_mode_guide_card()
+  html = render_ui_mode_guide_card(include_developer_mode=True)
   assert "デモを見る" in html
   assert "本番実行" in html
   assert "開発者向け" in html
+  hidden = render_ui_mode_guide_card(include_developer_mode=False)
+  assert "開発者向け" not in hidden
 
 
 def test_deep_dive_replaced_in_story_cards() -> None:

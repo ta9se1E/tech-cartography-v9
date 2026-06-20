@@ -395,14 +395,24 @@ def render_where_to_look_card() -> str:
   )
 
 
-def render_ui_mode_guide_card() -> str:
+def render_ui_mode_guide_card(*, include_developer_mode: bool | None = None) -> str:
+  if include_developer_mode is None:
+    from tech_cartography.ui.developer_mode_visibility import is_show_developer_mode_enabled
+
+    include_developer_mode = is_show_developer_mode_enabled()
+  items = [
+    "<li><strong>デモを見る</strong>: 完成済み成果物を読むだけ（デフォルト）</li>",
+    "<li><strong>本番実行</strong>: 新しいテーマでテーマ入力・Manual Claims・E2E Chain</li>",
+  ]
+  if include_developer_mode:
+    items.append(
+      "<li><strong>開発者向け</strong>: 実行ID・paths・validation 参照（折りたたみ内）</li>"
+    )
   return (
     '<div class="tc-card-box">'
     "<strong>表示モードの違い</strong><ul>"
-    "<li><strong>デモを見る</strong>: 完成済み成果物を読むだけ（デフォルト）</li>"
-    "<li><strong>本番実行</strong>: 新しいテーマでテーマ入力・Manual Claims・E2E Chain</li>"
-    "<li><strong>開発者向け</strong>: 実行ID・paths・validation 参照（折りたたみ内）</li>"
-    "</ul></div>"
+    + "".join(items)
+    + "</ul></div>"
   )
 
 

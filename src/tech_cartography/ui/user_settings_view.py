@@ -7,6 +7,10 @@ from typing import Any
 
 import streamlit as st
 
+from tech_cartography.ui.developer_mode_visibility import (
+  developer_mode_hidden_notice,
+  is_show_developer_mode_enabled,
+)
 from tech_cartography.ui.easy_japanese_ui import (
   render_caution_box,
   render_info_box,
@@ -137,7 +141,7 @@ def render_user_settings_tab(
     st.session_state[STATE_WEEKLY_EMAIL_ENABLED] = weekly_enabled
     st.markdown(render_ok_box(translate_weekly_email_status(weekly_enabled)), unsafe_allow_html=True)
 
-  if developer_mode and current_run_id:
+  if developer_mode and is_show_developer_mode_enabled() and current_run_id:
     st.caption(f"現在表示中の run_id: {current_run_id}")
     if st.button("この run_id をユーザーに保存", key="save_last_run"):
       updated = set_last_run_id(user["user_id"], current_run_id)
@@ -149,12 +153,15 @@ def render_user_settings_tab(
       )
       st.success(f"last_run_id を {current_run_id} に保存しました。")
 
-  if developer_mode:
+  if developer_mode and is_show_developer_mode_enabled():
     from tech_cartography.ui.report_tab_ui import render_cloud_run_ready_checklist
 
     st.divider()
     with st.expander("Cloud Run 前チェックリスト", expanded=False):
       render_cloud_run_ready_checklist(Path(__file__).resolve().parents[3])
+  elif not is_show_developer_mode_enabled():
+    st.divider()
+    st.caption(developer_mode_hidden_notice())
 
   if st.button("セッションをリセット", key="reset_session"):
     preserved_user = st.session_state.get(STATE_CURRENT_USER)

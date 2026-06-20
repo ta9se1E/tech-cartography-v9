@@ -36,7 +36,7 @@ def test_sidebar_shows_progress_and_next_steps() -> None:
 
 def test_run_id_not_in_normal_sidebar() -> None:
   section = _sidebar_fn_text()
-  normal_part = section.split("if ui_mode_input == UI_MODE_DEVELOPER:", 1)[0]
+  normal_part = section.split("if ui_mode_input == UI_MODE_DEVELOPER and is_show_developer_mode_enabled():", 1)[0]
   assert "run_id" not in normal_part
   assert "latest_run を読み込む" not in normal_part
   assert "デモ成果物を読み込む" not in normal_part

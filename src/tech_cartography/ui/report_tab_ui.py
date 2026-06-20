@@ -20,6 +20,7 @@ from tech_cartography.ui.delivery_ui import (
   render_weekly_schedule_section,
 )
 from tech_cartography.ui.demo_safe_ui import format_display_path
+from tech_cartography.ui.developer_mode_visibility import is_show_developer_mode_enabled
 from tech_cartography.ui.easy_japanese_ui import (
   DEMO_DEEP_DIVE_PUBLICATION,
   render_info_box,
@@ -322,7 +323,10 @@ def render_compressed_report_tab(
   artifacts = delivery_artifacts or load_delivery_artifacts(root, publication_number=DEFAULT_PUB)
 
   st.markdown("## レポート（概要）")
-  st.caption("審査員・初見ユーザー向けの短いまとめです。詳細は開発者向け expander をご利用ください。")
+  if is_show_developer_mode_enabled():
+    st.caption("審査員・初見ユーザー向けの短いまとめです。詳細は開発者向け expander をご利用ください。")
+  else:
+    st.caption("審査員・初見ユーザー向けの短いまとめです。")
 
   st.subheader("Executive Summary")
   if artifacts.intelligence_report_md:
