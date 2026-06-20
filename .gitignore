@@ -13,3 +13,4 @@ data/cache/
 credentials/
 *.jsonl
 config/email_recipients.json
+config/theme_validation_cases.json

@@ -130,6 +130,17 @@ def test_loader_scheduler_missing_without_crash(tmp_path: Path) -> None:
   artifacts = load_delivery_artifacts(tmp_path, publication_number="US-12565719-B2")
   assert artifacts.scheduler_readme_md is None
   assert artifacts.wrapper_script_path is None
+  assert artifacts.core_validation_summary_md is None
+
+
+def test_loader_core_validation_without_crash(tmp_path: Path) -> None:
+  validation_dir = tmp_path / "outputs" / "validation" / "core_validation"
+  validation_dir.mkdir(parents=True, exist_ok=True)
+  (validation_dir / "core_validation_summary.md").write_text("# summary", encoding="utf-8")
+  (validation_dir / "freeze_readiness_judgement.md").write_text("# freeze", encoding="utf-8")
+  artifacts = load_delivery_artifacts(tmp_path, publication_number="US-12565719-B2")
+  assert artifacts.core_validation_summary_md is not None
+  assert artifacts.freeze_readiness_md is not None
 
 
 def test_loader_send_log_without_crash(tmp_path: Path) -> None:

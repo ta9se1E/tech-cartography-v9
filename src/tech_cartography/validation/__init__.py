@@ -1,1 +1,1 @@
-"""Validation helpers for evidence pipeline readiness checks."""
+"""Validation helpers for evidence pipeline readiness and freeze gate checks."""

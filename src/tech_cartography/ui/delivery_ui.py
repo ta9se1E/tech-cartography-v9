@@ -69,6 +69,10 @@ class DeliveryUIArtifacts:
   wrapper_script_path: Path | None = None
   launchd_plist_path: Path | None = None
   cron_sample_path: Path | None = None
+  core_validation_summary_md: str | None = None
+  core_validation_summary_path: Path | None = None
+  freeze_readiness_md: str | None = None
+  freeze_readiness_path: Path | None = None
   tab_overviews: list[TabOverviewItem] = field(default_factory=list)
   missing_artifacts: list[str] = field(default_factory=list)
 
@@ -197,6 +201,10 @@ def load_delivery_artifacts(
   launchd_plist_path = sched_dir / "com.techcartography.weeklydigest.plist"
   cron_sample_path = sched_dir / "weekly_digest_cron_sample.txt"
 
+  validation_dir = root / "outputs" / "validation" / "core_validation"
+  core_validation_summary_path = validation_dir / "core_validation_summary.md"
+  freeze_readiness_path = validation_dir / "freeze_readiness_judgement.md"
+
   return DeliveryUIArtifacts(
     publication_number=pub_for_key,
     status=status,
@@ -226,6 +234,10 @@ def load_delivery_artifacts(
     wrapper_script_path=wrapper_script_path if wrapper_script_path.exists() else None,
     launchd_plist_path=launchd_plist_path if launchd_plist_path.exists() else None,
     cron_sample_path=cron_sample_path if cron_sample_path.exists() else None,
+    core_validation_summary_md=_safe_read_text(core_validation_summary_path) if core_validation_summary_path.exists() else None,
+    core_validation_summary_path=core_validation_summary_path if core_validation_summary_path.exists() else None,
+    freeze_readiness_md=_safe_read_text(freeze_readiness_path) if freeze_readiness_path.exists() else None,
+    freeze_readiness_path=freeze_readiness_path if freeze_readiness_path.exists() else None,
     tab_overviews=build_tab_overviews(),
     missing_artifacts=missing,
   )
@@ -423,6 +435,54 @@ def render_email_draft_preview_section(
     )
 
 
+def render_core_validation_section(
+  artifacts: DeliveryUIArtifacts,
+  *,
+  key_prefix: str = "delivery",
+) -> None:
+  st.subheader("Core Validation Pack（参照のみ）")
+  st.caption(
+    "Freeze前の検証レポートです。実行ボタンはありません。"
+    " `python scripts/build_core_validation_pack.py` で生成してください。"
+  )
+
+  if artifacts.core_validation_summary_md:
+    with st.expander("core_validation_summary.md", expanded=False):
+      st.markdown(render_markdown_preview(artifacts.core_validation_summary_md, max_chars=8000))
+    summary_key = make_download_key(
+      f"{key_prefix}_dl_core_validation_summary",
+      artifacts.publication_number,
+      artifacts.core_validation_summary_path,
+    )
+    st.download_button(
+      label="core_validation_summary.md をダウンロード",
+      data=artifacts.core_validation_summary_md,
+      file_name="core_validation_summary.md",
+      mime="text/markdown",
+      key=summary_key,
+    )
+    if artifacts.core_validation_summary_path:
+      st.markdown(f"**パス**: `{artifacts.core_validation_summary_path}`")
+  else:
+    st.info("Core Validation Pack がまだありません。build_core_validation_pack.py を実行してください。")
+
+  if artifacts.freeze_readiness_md:
+    with st.expander("freeze_readiness_judgement.md", expanded=True):
+      st.markdown(render_markdown_preview(artifacts.freeze_readiness_md, max_chars=6000))
+    freeze_key = make_download_key(
+      f"{key_prefix}_dl_freeze_readiness",
+      artifacts.publication_number,
+      artifacts.freeze_readiness_path,
+    )
+    st.download_button(
+      label="freeze_readiness_judgement.md をダウンロード",
+      data=artifacts.freeze_readiness_md,
+      file_name="freeze_readiness_judgement.md",
+      mime="text/markdown",
+      key=freeze_key,
+    )
+
+
 def render_weekly_schedule_section(
   artifacts: DeliveryUIArtifacts,
   *,
@@ -565,6 +625,8 @@ def render_delivery_section(
   render_email_draft_preview_section(artifacts, key_prefix=key_prefix)
   st.divider()
   render_send_log_section(artifacts)
+  st.divider()
+  render_core_validation_section(artifacts, key_prefix=key_prefix)
   st.divider()
   render_weekly_schedule_section(artifacts, key_prefix=key_prefix)
   st.divider()

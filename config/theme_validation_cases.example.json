@@ -1,0 +1,24 @@
+{
+  "cases": [
+    {
+      "theme_id": "pan_carbon_fiber_reference",
+      "theme_name": "PAN carbon fiber reference",
+      "description": "Existing reference theme for US-12565719-B2",
+      "core_keywords": ["PAN", "carbon fiber", "stabilization", "carbonization"],
+      "application_keywords": ["CFRP", "hydrogen tank", "pressure vessel"],
+      "exclude_keywords": [],
+      "seed_publication_numbers": ["US-12565719-B2"],
+      "validation_goal": "reference complete demo"
+    },
+    {
+      "theme_id": "my_original_theme_template",
+      "theme_name": "TODO: your original theme",
+      "description": "TODO: describe your theme",
+      "core_keywords": ["TODO"],
+      "application_keywords": [],
+      "exclude_keywords": [],
+      "seed_publication_numbers": [],
+      "validation_goal": "cross-theme smoke test"
+    }
+  ]
+}
