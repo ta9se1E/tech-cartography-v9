@@ -95,9 +95,10 @@ from tech_cartography.ui.strategic_watch_ui import (
   load_strategic_watch_artifacts,
   render_strategic_watch_section,
 )
-from tech_cartography.ui.delivery_ui import (
-  load_delivery_artifacts,
-  render_delivery_section,
+from tech_cartography.ui.delivery_ui import load_delivery_artifacts, render_delivery_section
+from tech_cartography.ui.report_tab_ui import (
+  render_compressed_report_tab,
+  render_developer_report_expander,
 )
 from tech_cartography.ui.streamlit_session import (
   DISPLAY_MODE_OPTIONS,
@@ -633,9 +634,17 @@ def _tab_reports_final_validation_summary_links(*, developer_mode: bool = False)
   summary_md = final_root / "final_end_to_end_validation_summary.md"
   freeze_md = final_root / "freeze_readiness_final.md"
   reviewer_md = final_root / "reviewer_response_final.md"
+  summary_json = final_root / "final_end_to_end_validation_summary.json"
+  seed_csv = final_root / "seed_end_to_end_status.csv"
   st.markdown("**Final End-to-End Validation Summary（Phase 24.4D — 開発者向け）**")
   st.caption(f"保存先: `{format_display_path(final_root, project_root=PROJECT_ROOT)}`")
-  if not summary_md.exists() and not freeze_md.exists() and not reviewer_md.exists():
+  if (
+    not summary_md.exists()
+    and not freeze_md.exists()
+    and not reviewer_md.exists()
+    and not summary_json.exists()
+    and not seed_csv.exists()
+  ):
     st.info(
       "Final Validation Summary はまだ生成されていません。"
       "`python scripts/build_final_validation_summary.py` で生成できます。"
@@ -645,10 +654,17 @@ def _tab_reports_final_validation_summary_links(*, developer_mode: bool = False)
     ("final_end_to_end_validation_summary.md", summary_md),
     ("freeze_readiness_final.md", freeze_md),
     ("reviewer_response_final.md", reviewer_md),
+    ("final_end_to_end_validation_summary.json", summary_json),
+    ("seed_end_to_end_status.csv", seed_csv),
   ):
     if path.exists():
       with st.expander(label, expanded=label == "final_end_to_end_validation_summary.md"):
-        st.markdown(render_markdown_preview(path.read_text(encoding="utf-8")))
+        if path.suffix == ".json":
+          st.code(path.read_text(encoding="utf-8")[:6000], language="json")
+        elif path.suffix == ".csv":
+          st.code(path.read_text(encoding="utf-8")[:4000], language="text")
+        else:
+          st.markdown(render_markdown_preview(path.read_text(encoding="utf-8")))
         st.caption(format_display_path(path, project_root=PROJECT_ROOT))
 
 
@@ -688,48 +704,46 @@ def _tab_reports(
   developer_mode: bool = False,
 ) -> None:
   delivery_artifacts = load_delivery_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
-  render_delivery_section(
-    delivery_artifacts,
-    key_prefix="reports_delivery",
-    developer_mode=developer_mode,
+  render_compressed_report_tab(
+    project_root=PROJECT_ROOT,
+    delivery_artifacts=delivery_artifacts,
+    demo_artifacts=demo_artifacts,
+    key_prefix="reports_brief",
   )
-  if developer_mode:
-    st.divider()
-    _tab_reports_core_validation_summary_links(developer_mode=True)
-    st.divider()
-    _tab_reports_final_validation_summary_links(developer_mode=True)
-    st.divider()
-    _tab_reports_theme_validation_links(developer_mode=True)
-    st.divider()
 
-  if demo_artifacts is not None:
-    render_evidence_map_report(demo_artifacts)
+  def _full_evidence_report() -> None:
+    if demo_artifacts is not None:
+      render_evidence_map_report(demo_artifacts)
+      return
+    if not manifest:
+      st.info("パイプライン manifest レポートは未読み込みです。")
+      return
+    reports = [
+      ("carbon_fiber_evidence_map_report_md", "Carbon Fiber Evidence Map"),
+      ("evidence_map_synthesis_md", "Evidence Map Synthesis"),
+      ("final_report_md", "Synthesis Report"),
+    ]
+    for key, label in reports:
+      md = _load_text_artifact(manifest, key)
+      if md:
+        with st.expander(label, expanded=False):
+          st.markdown(render_markdown_preview(md[:8000]))
+
+  def _repro_section() -> None:
     if repro_artifacts is not None:
-      st.divider()
       render_reproducibility_smoke_section(repro_artifacts)
-    return
 
-  if not manifest:
-    st.info("レポートがまだありません。パイプラインを実行してください。")
-    return
-  reports = [
-    ("carbon_fiber_evidence_map_report_md", "Carbon Fiber Evidence Map"),
-    ("fulltext_evidence_report_md", "Full Text Evidence"),
-    ("evidence_validation_report_md", "Evidence Validation"),
-    ("evidence_map_synthesis_md", "Evidence Map Synthesis"),
-    ("final_report_md", "Synthesis Report"),
-    ("carbon_fiber_evidence_map_v1_md", "Evidence Map v1"),
-  ]
-  found = False
-  for key, label in reports:
-    md = _load_text_artifact(manifest, key)
-    if md:
-      found = True
-      with st.expander(label):
-        st.markdown(render_markdown_preview(md))
-        st.text_area(f"{label}（コピー用）", value=md[:4000], height=200, key=f"copy_{key}")
-  if not found:
-    st.info("レポートがまだありません。パイプラインを実行してください。")
+  render_developer_report_expander(
+    project_root=PROJECT_ROOT,
+    delivery_artifacts=delivery_artifacts,
+    developer_mode=developer_mode,
+    render_core_validation_links=_tab_reports_core_validation_summary_links,
+    render_final_validation_links=_tab_reports_final_validation_summary_links,
+    render_theme_validation_links=_tab_reports_theme_validation_links,
+    render_full_evidence_report=_full_evidence_report,
+    render_repro_section=_repro_section,
+    key_prefix="reports_dev",
+  )
 
 
 def _main_tab_labels(*, ui_mode: str | None = None) -> list[str]:

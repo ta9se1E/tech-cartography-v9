@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import streamlit as st
@@ -147,6 +148,13 @@ def render_user_settings_tab(
         {"last_run_id": current_run_id},
       )
       st.success(f"last_run_id を {current_run_id} に保存しました。")
+
+  if developer_mode:
+    from tech_cartography.ui.report_tab_ui import render_cloud_run_ready_checklist
+
+    st.divider()
+    with st.expander("Cloud Run 前チェックリスト", expanded=False):
+      render_cloud_run_ready_checklist(Path(__file__).resolve().parents[3])
 
   if st.button("セッションをリセット", key="reset_session"):
     preserved_user = st.session_state.get(STATE_CURRENT_USER)
