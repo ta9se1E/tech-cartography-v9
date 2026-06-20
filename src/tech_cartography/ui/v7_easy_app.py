@@ -632,6 +632,30 @@ def _tab_reports_core_validation_summary_links() -> None:
         st.caption(str(path))
 
 
+def _tab_reports_final_validation_summary_links() -> None:
+  final_root = PROJECT_ROOT / "outputs" / "validation" / "final_validation"
+  summary_md = final_root / "final_end_to_end_validation_summary.md"
+  freeze_md = final_root / "freeze_readiness_final.md"
+  reviewer_md = final_root / "reviewer_response_final.md"
+  st.markdown("**Final End-to-End Validation Summary（Phase 24.4D）**")
+  st.caption(f"保存先: `{final_root}`")
+  if not summary_md.exists() and not freeze_md.exists() and not reviewer_md.exists():
+    st.info(
+      "Final Validation Summary はまだ生成されていません。"
+      "`python scripts/build_final_validation_summary.py` で生成できます。"
+    )
+    return
+  for label, path in (
+    ("final_end_to_end_validation_summary.md", summary_md),
+    ("freeze_readiness_final.md", freeze_md),
+    ("reviewer_response_final.md", reviewer_md),
+  ):
+    if path.exists():
+      with st.expander(label, expanded=label == "final_end_to_end_validation_summary.md"):
+        st.markdown(render_markdown_preview(path.read_text(encoding="utf-8")))
+        st.caption(str(path))
+
+
 def _tab_reports_theme_validation_links() -> None:
   validation_root = PROJECT_ROOT / "outputs" / "validation" / "theme_validation"
   st.markdown(
@@ -673,6 +697,8 @@ def _tab_reports(
   render_delivery_section(delivery_artifacts, key_prefix="reports_delivery")
   st.divider()
   _tab_reports_core_validation_summary_links()
+  st.divider()
+  _tab_reports_final_validation_summary_links()
   st.divider()
   _tab_reports_theme_validation_links()
   st.divider()
