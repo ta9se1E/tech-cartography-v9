@@ -105,9 +105,10 @@ def _validation_output_dir(theme_id: str) -> Path:
 
 
 def render_theme_validation_safety_messages() -> None:
-  st.markdown("#### 安全上の注意")
-  for message in THEME_VALIDATION_SAFETY_MESSAGES:
-    st.markdown(render_caution_box(message), unsafe_allow_html=True)
+  st.caption(
+    "利用上の注意は「はじめに」タブの「利用上の注意」を参照してください。"
+    " 外部API実行時のみ、下記ボタン付近で同意確認があります。"
+  )
 
 
 def _build_case_from_inputs(
@@ -929,8 +930,7 @@ def render_end_to_end_chain_section(
 def render_theme_validation_intro_card() -> None:
   st.markdown(
     render_info_box(
-      "別テーマ検証: 炭素繊維以外のテーマでも、キーワード入力から検索計画・既存 outputs 検証まで確認できます。"
-      " トップレベルタブ「別テーマ検証」から操作してください。"
+      "本番実行: 新しいテーマで分析する場合は「本番実行」タブからテーマ入力・Manual Claims・E2E Chain を利用してください。"
     ),
     unsafe_allow_html=True,
   )
@@ -939,24 +939,15 @@ def render_theme_validation_intro_card() -> None:
 def render_theme_validation_tab_intro() -> None:
   st.markdown(
     render_info_box(
-      "ここでは、炭素繊維以外の独自テーマでもTech Cartographyの流れが動くかを確認できます。"
+      "新しいテーマで Tech Cartography の流れ（検索計画・Manual Claims・Evidence Map・E2E Chain）を実行します。"
+      " まずは dry-run で検索計画のみ作成してください。"
     ),
-    unsafe_allow_html=True,
-  )
-  st.markdown(
-    render_caution_box(
-      "まずはdry-runで検索計画だけを作成してください。外部APIは実行されません。"
-    ),
-    unsafe_allow_html=True,
-  )
-  st.markdown(
-    render_caution_box("社外秘・未公開情報を入力しないでください。"),
     unsafe_allow_html=True,
   )
 
 
 def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> None:
-  st.subheader("別テーマ検証 / Theme Validation")
+  st.subheader("本番実行 / Theme Validation")
   render_theme_validation_tab_intro()
   render_theme_validation_safety_messages()
 

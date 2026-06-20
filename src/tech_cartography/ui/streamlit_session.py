@@ -9,6 +9,7 @@ from typing import Any
 WIDGET_PIPELINE_ROOT = "easy_pipeline_root_input"
 WIDGET_SELECTED_RUN_ID = "selected_run_id_input"
 WIDGET_DISPLAY_MODE = "easy_display_mode_input"
+WIDGET_UI_MODE = "easy_ui_mode_input"
 WIDGET_WEEKLY_EMAIL = "weekly_email_checkbox"
 WIDGET_WEEKLY_DAY = "weekly_email_day_input"
 WIDGET_WEEKLY_TIME = "weekly_email_time_input"
@@ -28,6 +29,7 @@ STATE_WEEKLY_EMAIL_ENABLED = "weekly_email_enabled"
 STATE_PENDING_SELECTED_RUN_ID = "pending_selected_run_id"
 STATE_DEMO_MODE = "demo_mode_enabled"
 STATE_DEMO_PUBLICATION_NUMBER = "demo_publication_number"
+STATE_UI_MODE = "ui_view_mode"
 
 DEMO_RUN_ID = "demo_us_12565719_b2"
 DEMO_PUBLICATION_NUMBER = "US-12565719-B2"
@@ -37,6 +39,7 @@ WIDGET_KEYS = frozenset(
     WIDGET_PIPELINE_ROOT,
     WIDGET_SELECTED_RUN_ID,
     WIDGET_DISPLAY_MODE,
+    WIDGET_UI_MODE,
     WIDGET_WEEKLY_EMAIL,
     WIDGET_WEEKLY_DAY,
     WIDGET_WEEKLY_TIME,
@@ -59,6 +62,7 @@ INTERNAL_KEYS = frozenset(
     STATE_PENDING_SELECTED_RUN_ID,
     STATE_DEMO_MODE,
     STATE_DEMO_PUBLICATION_NUMBER,
+    STATE_UI_MODE,
   },
 )
 
@@ -101,11 +105,16 @@ def default_app_session_state(
     STATE_WEEKLY_EMAIL_ENABLED: False,
     STATE_DEMO_MODE: False,
     STATE_DEMO_PUBLICATION_NUMBER: "",
+    STATE_UI_MODE: "demo",
   }
   if user:
     if user.get("last_run_id"):
       state[STATE_SELECTED_RUN_ID] = str(user["last_run_id"])
     state[STATE_WEEKLY_EMAIL_ENABLED] = bool(user.get("weekly_email_enabled"))
+  if state[STATE_UI_MODE] == "demo":
+    state[STATE_DEMO_MODE] = True
+    state[STATE_DEMO_PUBLICATION_NUMBER] = DEMO_PUBLICATION_NUMBER
+    state[STATE_SELECTED_RUN_ID] = DEMO_RUN_ID
   return state
 
 
@@ -131,6 +140,8 @@ def prime_widget_keys_from_internal(state: dict[str, Any]) -> dict[str, Any]:
     updates[WIDGET_SELECTED_RUN_ID] = state[STATE_SELECTED_RUN_ID]
   if STATE_DISPLAY_MODE in state:
     updates[WIDGET_DISPLAY_MODE] = state[STATE_DISPLAY_MODE]
+  if STATE_UI_MODE in state:
+    updates[WIDGET_UI_MODE] = state[STATE_UI_MODE]
   return updates
 
 

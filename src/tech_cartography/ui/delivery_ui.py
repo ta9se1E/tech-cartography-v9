@@ -602,6 +602,7 @@ def render_delivery_section(
   show_overview: bool = True,
   compact_overview: bool = False,
   key_prefix: str = "delivery",
+  developer_mode: bool = False,
 ) -> None:
   st.markdown("## Intelligence Delivery / Export")
 
@@ -612,7 +613,10 @@ def render_delivery_section(
       " 下記はタブ説明のみ表示します。"
     )
 
-  render_delivery_caution_card()
+  if not developer_mode:
+    st.caption("Digest は preview only です。メール送信・スケジューラ登録は行いません。")
+  else:
+    render_delivery_caution_card()
 
   if show_overview:
     render_tab_overview_section(artifacts, compact=compact_overview)
@@ -621,14 +625,17 @@ def render_delivery_section(
   render_intelligence_report_section(artifacts, key_prefix=key_prefix)
   st.divider()
   render_weekly_digest_preview_section(artifacts, key_prefix=key_prefix)
-  st.divider()
-  render_email_draft_preview_section(artifacts, key_prefix=key_prefix)
-  st.divider()
-  render_send_log_section(artifacts)
-  st.divider()
-  render_core_validation_section(artifacts, key_prefix=key_prefix)
-  st.divider()
-  render_weekly_schedule_section(artifacts, key_prefix=key_prefix)
+
+  if developer_mode:
+    st.divider()
+    render_email_draft_preview_section(artifacts, key_prefix=key_prefix)
+    st.divider()
+    render_send_log_section(artifacts)
+    st.divider()
+    render_core_validation_section(artifacts, key_prefix=key_prefix)
+    st.divider()
+    render_weekly_schedule_section(artifacts, key_prefix=key_prefix)
+
   st.divider()
   render_report_bundle_zip_section(artifacts, key_prefix=key_prefix)
 

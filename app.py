@@ -13,28 +13,19 @@ if str(_SRC) not in sys.path:
 
 import streamlit as st
 
-from tech_cartography.orchestration.latest_outputs import read_latest_run_pointer
-from tech_cartography.ui.easy_japanese_ui import inject_easy_ui_css, render_warning_box
-from tech_cartography.ui.login_view import logout_user, render_logged_in_header, require_login
+from tech_cartography.ui.demo_safe_ui import render_app_sidebar
+from tech_cartography.ui.easy_japanese_ui import inject_easy_ui_css
+from tech_cartography.ui.login_view import require_login
 from tech_cartography.ui.streamlit_session import (
-  DISPLAY_MODE_OPTIONS,
   STATE_CURRENT_USER,
   STATE_DISPLAY_MODE,
-  STATE_MANIFEST_PATH,
-  STATE_PENDING_SELECTED_RUN_ID,
   STATE_PIPELINE_ROOT,
   STATE_SELECTED_RUN_ID,
-  WIDGET_DISPLAY_MODE,
-  WIDGET_PIPELINE_ROOT,
-  WIDGET_SELECTED_RUN_ID,
-  activate_evidence_map_demo_state,
+  DISPLAY_MODE_OPTIONS,
   apply_pending_widget_state_updates,
-  deactivate_demo_mode_state,
   init_app_session_state,
-  sync_internal_from_widget_values,
 )
-from tech_cartography.ui.v7_easy_app import DEFAULT_PIPELINE_ROOT, render_tabbed_easy_app
-from tech_cartography.users.user_store import set_last_run_id
+from tech_cartography.ui.v7_easy_app import DEFAULT_PIPELINE_ROOT, PROJECT_ROOT, render_tabbed_easy_app
 
 st.set_page_config(page_title="Tech Cartography v7", layout="wide", initial_sidebar_state="expanded")
 st.markdown(inject_easy_ui_css(), unsafe_allow_html=True)
@@ -46,6 +37,7 @@ if not user:
 init_app_session_state(user)
 apply_pending_widget_state_updates()
 
+
 def _sidebar_button(label: str, **kwargs: Any) -> bool:
   try:
     return st.button(label, width="stretch", **kwargs)
@@ -54,80 +46,7 @@ def _sidebar_button(label: str, **kwargs: Any) -> bool:
 
 
 with st.sidebar:
-  st.header("ユーザー")
-  render_logged_in_header(user)
-  if user.get("company_name"):
-    st.caption(f"会社: {user['company_name']}")
-  if _sidebar_button("ログアウト", key="logout_button"):
-    logout_user()
-    st.rerun()
-
-  st.divider()
-  st.header("実行結果")
-
-  pipeline_root_input = st.text_input(
-    "実行結果フォルダ",
-    key=WIDGET_PIPELINE_ROOT,
-    help="outputs など、実行結果が保存されているフォルダを指定します。",
-  )
-
-  run_id_input = st.text_input(
-    "run_id",
-    key=WIDGET_SELECTED_RUN_ID,
-    help="outputs配下のrun_idを指定します。latest_runまたはデモモードから自動設定できます。",
-  )
-  if run_id_input and str(run_id_input).strip():
-    st.session_state[STATE_SELECTED_RUN_ID] = str(run_id_input).strip()
-
-  if _sidebar_button("latest_run を読み込む", key="load_latest_run_button"):
-    for key, value in deactivate_demo_mode_state().items():
-      st.session_state[key] = value
-    pointer = read_latest_run_pointer(pipeline_root_input)
-    if pointer and pointer.get("run_id"):
-      run_id = str(pointer["run_id"])
-      st.session_state[STATE_SELECTED_RUN_ID] = run_id
-      st.session_state[STATE_PENDING_SELECTED_RUN_ID] = run_id
-      st.session_state[STATE_MANIFEST_PATH] = pointer.get("manifest_path", "")
-      updated_user = set_last_run_id(user["user_id"], run_id)
-      st.session_state[STATE_CURRENT_USER] = updated_user
-      st.success(f"最新 run: {run_id}")
-      st.rerun()
-    else:
-      st.warning("latest_run.json が見つかりません。")
-
-  if _sidebar_button(
-    "デモモードで読み込む：US-12565719-B2 Evidence Map",
-    key="load_demo_evidence_map_button",
-  ):
-    for key, value in activate_evidence_map_demo_state().items():
-      st.session_state[key] = value
-    st.success("デモモードで Evidence Map を読み込みました。")
-    st.rerun()
-
-  current_mode = st.session_state.get(STATE_DISPLAY_MODE, DISPLAY_MODE_OPTIONS[0])
-  mode_index = DISPLAY_MODE_OPTIONS.index(current_mode) if current_mode in DISPLAY_MODE_OPTIONS else 0
-  display_mode_input = st.radio(
-    "表示モード",
-    list(DISPLAY_MODE_OPTIONS),
-    index=mode_index,
-    key=WIDGET_DISPLAY_MODE,
-  )
-
-  internal_updates = sync_internal_from_widget_values(
-    pipeline_root=pipeline_root_input,
-    selected_run_id=run_id_input,
-    display_mode=display_mode_input,
-  )
-  for key, value in internal_updates.items():
-    st.session_state[key] = value
-
-  st.markdown(
-    render_warning_box(
-      "BigQuery・OpenAlex・全文取得は有料/外部実行の可能性があります。"
-      "この画面からは自動実行しません。"
-    ),
-    unsafe_allow_html=True,
-  )
+  render_app_sidebar(user, project_root=PROJECT_ROOT, sidebar_button=_sidebar_button)
 
 render_tabbed_easy_app(
   user,

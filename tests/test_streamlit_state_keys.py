@@ -37,16 +37,24 @@ def test_widget_and_internal_keys_do_not_collide() -> None:
 
 
 def test_default_app_session_state_initializes() -> None:
+  from tech_cartography.ui.streamlit_session import DEMO_RUN_ID, STATE_DEMO_MODE, STATE_UI_MODE
+
   state = default_app_session_state()
   assert STATE_PIPELINE_ROOT in state
-  assert state[STATE_SELECTED_RUN_ID] == ""
+  assert state[STATE_UI_MODE] == "demo"
+  assert state[STATE_DEMO_MODE] is True
+  assert state[STATE_SELECTED_RUN_ID] == DEMO_RUN_ID
   assert state[STATE_DISPLAY_MODE] == "かんたん表示"
   assert state[STATE_WEEKLY_EMAIL_ENABLED] is False
 
 
 def test_default_session_state_uses_user_last_run_id() -> None:
+  from tech_cartography.ui.streamlit_session import DEMO_RUN_ID, STATE_DEMO_MODE, STATE_UI_MODE
+
   state = default_app_session_state({"last_run_id": "20260616_163006", "weekly_email_enabled": True})
-  assert state[STATE_SELECTED_RUN_ID] == "20260616_163006"
+  assert state[STATE_UI_MODE] == "demo"
+  assert state[STATE_DEMO_MODE] is True
+  assert state[STATE_SELECTED_RUN_ID] == DEMO_RUN_ID
   assert state[STATE_WEEKLY_EMAIL_ENABLED] is True
 
 
@@ -120,14 +128,15 @@ def test_sync_internal_from_widget_values_is_widget_to_internal_only() -> None:
 
 def test_app_py_does_not_assign_widget_selected_run_id_directly() -> None:
   app_text = Path("app.py").read_text(encoding="utf-8")
+  sidebar_text = Path("src/tech_cartography/ui/demo_safe_ui.py").read_text(encoding="utf-8")
   assert "st.session_state[WIDGET_SELECTED_RUN_ID] =" not in app_text
-  assert "STATE_PENDING_SELECTED_RUN_ID" in app_text
+  assert "STATE_PENDING_SELECTED_RUN_ID" in sidebar_text
   assert "apply_pending_widget_state_updates" in app_text
 
 
 def test_app_py_latest_run_uses_pending_selected_run_id() -> None:
-  app_text = Path("app.py").read_text(encoding="utf-8")
-  assert "st.session_state[STATE_PENDING_SELECTED_RUN_ID]" in app_text
-  assert "st.session_state[STATE_SELECTED_RUN_ID]" in app_text
-  assert "load_latest_run_button" in app_text
-  assert "apply_pending_widget_state_updates()" in app_text
+  sidebar_text = Path("src/tech_cartography/ui/demo_safe_ui.py").read_text(encoding="utf-8")
+  assert "st.session_state[STATE_PENDING_SELECTED_RUN_ID]" in sidebar_text
+  assert "st.session_state[STATE_SELECTED_RUN_ID]" in sidebar_text
+  assert "load_latest_run_button" in sidebar_text
+  assert "apply_pending_widget_state_updates()" in Path("app.py").read_text(encoding="utf-8")

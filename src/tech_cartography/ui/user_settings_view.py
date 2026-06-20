@@ -43,7 +43,12 @@ WEEKDAY_OPTIONS = {
 }
 
 
-def render_user_settings_tab(user: dict[str, Any], *, current_run_id: str | None = None) -> None:
+def render_user_settings_tab(
+  user: dict[str, Any],
+  *,
+  current_run_id: str | None = None,
+  developer_mode: bool = False,
+) -> None:
   st.markdown(render_info_box(explain_watch_profile()), unsafe_allow_html=True)
   watch = get_active_watch_profile(user["user_id"])
   st.markdown(render_watch_profile_card(watch), unsafe_allow_html=True)
@@ -131,7 +136,7 @@ def render_user_settings_tab(user: dict[str, Any], *, current_run_id: str | None
     st.session_state[STATE_WEEKLY_EMAIL_ENABLED] = weekly_enabled
     st.markdown(render_ok_box(translate_weekly_email_status(weekly_enabled)), unsafe_allow_html=True)
 
-  if current_run_id:
+  if developer_mode and current_run_id:
     st.caption(f"現在表示中の run_id: {current_run_id}")
     if st.button("この run_id をユーザーに保存", key="save_last_run"):
       updated = set_last_run_id(user["user_id"], current_run_id)

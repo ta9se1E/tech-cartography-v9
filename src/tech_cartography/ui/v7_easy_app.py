@@ -58,12 +58,20 @@ from tech_cartography.ui.theme_validation_ui import (
   render_theme_validation_intro_card,
   render_theme_validation_section,
 )
+from tech_cartography.ui.demo_safe_ui import (
+  format_display_path,
+  get_ui_mode,
+  is_analyst_view,
+  is_demo_view,
+  is_developer_view,
+  render_usage_notices_expander,
+  tab_ids_for_ui_mode,
+  tab_labels_for_ui_mode,
+)
 from tech_cartography.ui.japanese_labels import (
   explain_cost_guard_status,
   explain_fulltext_scope,
-  explain_watch_profile,
   translate_fulltext_scope,
-  translate_tab_name,
 )
 from tech_cartography.ui.user_settings_view import render_user_settings_tab
 from tech_cartography.ui.evidence_map_demo import (
@@ -100,7 +108,6 @@ from tech_cartography.ui.streamlit_session import (
   STATE_PIPELINE_ROOT,
   STATE_SAVED_RUN_ID,
   STATE_SELECTED_RUN_ID,
-  activate_evidence_map_demo_state,
   default_pipeline_root,
 )
 from tech_cartography.users.user_store import set_last_run_id
@@ -184,13 +191,6 @@ def _resolve_manifest(
   return None
 
 
-def _render_demo_mode_load_button(*, key: str) -> None:
-  if st.button("デモモードで読み込む：US-12565719-B2 Evidence Map", key=key):
-    for state_key, value in activate_evidence_map_demo_state().items():
-      st.session_state[state_key] = value
-    st.rerun()
-
-
 def _tab_start(
   user: dict[str, Any],
   watch: dict[str, Any],
@@ -201,50 +201,37 @@ def _tab_start(
   demo_artifacts: Any = None,
   repro_artifacts: Any = None,
 ) -> None:
+  render_usage_notices_expander(key="start_usage_notices")
   if demo_mode and demo_artifacts is not None:
     render_demo_start_tab(demo_artifacts)
     if repro_artifacts is not None:
       render_reproducibility_brief_section(repro_artifacts)
     return
-  _render_demo_mode_load_button(key="start_tab_demo_evidence_map_button")
-  render_theme_validation_intro_card()
+  if is_analyst_view() or is_developer_view():
+    render_theme_validation_intro_card()
   st.markdown(render_demo_story_cards(), unsafe_allow_html=True)
   st.markdown(render_ok_box("このアプリでできること: 特許候補の整理、全文確認計画、技術の裏取り候補の確認"), unsafe_allow_html=True)
-  st.markdown(
-    render_caution_box(
-      "ご利用上の注意: 特許の有効性・侵害・FTOは判断しません。"
-      "論文候補は裏取り候補であり証明ではありません。"
-      "BigQuery/OpenAlexの実行はこの画面からは自動では行いません。"
-    ),
-    unsafe_allow_html=True,
-  )
   st.markdown(render_watch_profile_card(watch), unsafe_allow_html=True)
-  st.markdown(render_info_box(explain_watch_profile()), unsafe_allow_html=True)
   weekly = "ON" if user.get("weekly_email_enabled") else "OFF"
-  st.markdown(
-    render_info_box(
-      f"週次メール設定: {weekly}（送信先: {user.get('email', '')}）。"
-      "まだ送信は行いません。設定タブで変更できます。"
-    ),
-    unsafe_allow_html=True,
-  )
+  st.caption(f"週次メール設定: {weekly}（送信は行いません。設定タブで変更できます）")
   if manifest:
     acquisition = _load_json_artifact(manifest, "acquisition_policy_summary_json")
     weekly_md = _load_text_artifact(manifest, "weekly_digest_preview_md")
     weekly_json = _load_json_artifact(manifest, "weekly_digest_preview_json")
     st.markdown(render_acquisition_policy_summary(acquisition), unsafe_allow_html=True)
     st.markdown(render_weekly_digest_preview_block(weekly_json, weekly_md), unsafe_allow_html=True)
-    if debug_mode:
+    if debug_mode and is_developer_view():
       internal_summary = _load_json_artifact(manifest, "internal_cost_summary_json")
       ledger = (internal_summary or {}).get("ledger_summary")
       if ledger:
         st.markdown(render_cost_ledger_debug(ledger), unsafe_allow_html=True)
-    with st.expander("実行状況の詳細"):
-      stage_rows = summarize_stage_statuses(manifest)
-      if stage_rows:
-        render_small_table(pd.DataFrame(stage_rows)[["段階", "状態", "説明"]])
-  else:
-    st.info("sidebar で run_id を指定するか、「latest_run を読み込む」を押してください。")
+    if is_developer_view():
+      with st.expander("実行状況の詳細"):
+        stage_rows = summarize_stage_statuses(manifest)
+        if stage_rows:
+          render_small_table(pd.DataFrame(stage_rows)[["段階", "状態", "説明"]])
+  elif is_analyst_view() or is_developer_view():
+    st.info("本番実行タブでテーマを入力するか、開発者向けモードで run を読み込んでください。")
 
 
 def _tab_patents(manifest: dict[str, Any], display_mode: str) -> None:
@@ -252,7 +239,12 @@ def _tab_patents(manifest: dict[str, Any], display_mode: str) -> None:
 
   delivery_artifacts = load_delivery_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
   st.divider()
-  render_delivery_section(delivery_artifacts, compact_overview=True, key_prefix="start_delivery")
+  render_delivery_section(
+    delivery_artifacts,
+    compact_overview=True,
+    key_prefix="start_delivery",
+    developer_mode=is_developer_view(),
+  )
   ranked_df = _load_csv_artifact(manifest, "ranked_patents_csv")
   top20_df = _load_csv_artifact(manifest, "top20_patents_csv")
   cluster_df = _load_csv_artifact(manifest, "cluster_summary_csv")
@@ -399,7 +391,7 @@ def _tab_evidence(
     st.info("実行結果を読み込んでください。")
     return
 
-  st.markdown(render_caution_box("論文候補は証明ではありません。専門家レビューが必要です。"), unsafe_allow_html=True)
+  st.caption("Paper候補は supporting evidence candidate です。最終判断には専門家レビューが必要です。")
 
   demo_bundle = _load_demo_evidence_bundle(manifest, PROJECT_ROOT)
   st.subheader("Evidence Map")
@@ -608,13 +600,15 @@ def _tab_theme_validation() -> None:
   render_theme_validation_section(key_prefix="theme_validation_tab")
 
 
-def _tab_reports_core_validation_summary_links() -> None:
+def _tab_reports_core_validation_summary_links(*, developer_mode: bool = False) -> None:
+  if not developer_mode:
+    return
   core_root = PROJECT_ROOT / "outputs" / "validation" / "core_validation"
   summary_md = core_root / "cross_theme_core_validation_summary.md"
   freeze_md = core_root / "freeze_readiness_judgement.md"
   reviewer_md = core_root / "reviewer_response_notes.md"
-  st.markdown("**Core Validation Summary（Phase 24.4B）**")
-  st.caption(f"保存先: `{core_root}`")
+  st.markdown("**Core Validation Summary（Phase 24.4B — 開発者向け）**")
+  st.caption(f"保存先: `{format_display_path(core_root, project_root=PROJECT_ROOT)}`")
   if not summary_md.exists() and not freeze_md.exists() and not reviewer_md.exists():
     st.info(
       "Core Validation Summary はまだ生成されていません。"
@@ -629,16 +623,18 @@ def _tab_reports_core_validation_summary_links() -> None:
     if path.exists():
       with st.expander(label, expanded=label == "cross_theme_core_validation_summary.md"):
         st.markdown(render_markdown_preview(path.read_text(encoding="utf-8")))
-        st.caption(str(path))
+        st.caption(format_display_path(path, project_root=PROJECT_ROOT))
 
 
-def _tab_reports_final_validation_summary_links() -> None:
+def _tab_reports_final_validation_summary_links(*, developer_mode: bool = False) -> None:
+  if not developer_mode:
+    return
   final_root = PROJECT_ROOT / "outputs" / "validation" / "final_validation"
   summary_md = final_root / "final_end_to_end_validation_summary.md"
   freeze_md = final_root / "freeze_readiness_final.md"
   reviewer_md = final_root / "reviewer_response_final.md"
-  st.markdown("**Final End-to-End Validation Summary（Phase 24.4D）**")
-  st.caption(f"保存先: `{final_root}`")
+  st.markdown("**Final End-to-End Validation Summary（Phase 24.4D — 開発者向け）**")
+  st.caption(f"保存先: `{format_display_path(final_root, project_root=PROJECT_ROOT)}`")
   if not summary_md.exists() and not freeze_md.exists() and not reviewer_md.exists():
     st.info(
       "Final Validation Summary はまだ生成されていません。"
@@ -653,18 +649,15 @@ def _tab_reports_final_validation_summary_links() -> None:
     if path.exists():
       with st.expander(label, expanded=label == "final_end_to_end_validation_summary.md"):
         st.markdown(render_markdown_preview(path.read_text(encoding="utf-8")))
-        st.caption(str(path))
+        st.caption(format_display_path(path, project_root=PROJECT_ROOT))
 
 
-def _tab_reports_theme_validation_links() -> None:
+def _tab_reports_theme_validation_links(*, developer_mode: bool = False) -> None:
+  if not developer_mode:
+    return
   validation_root = PROJECT_ROOT / "outputs" / "validation" / "theme_validation"
-  st.markdown(
-    render_info_box(
-      "テーマ検証の入力・dry-run・既存 outputs 検証は、トップレベルタブ「別テーマ検証」で行ってください。"
-    ),
-    unsafe_allow_html=True,
-  )
-  st.caption(f"保存先: `{validation_root}`")
+  st.markdown("**Theme Validation Reports（開発者向け）**")
+  st.caption(f"保存先: `{format_display_path(validation_root, project_root=PROJECT_ROOT)}`")
   if not validation_root.exists():
     st.info("保存済みの theme validation report はまだありません。")
     return
@@ -680,9 +673,9 @@ def _tab_reports_theme_validation_links() -> None:
       with st.expander(f"Theme validation: {theme_dir.name}", expanded=False):
         if report_md.exists():
           st.markdown(render_markdown_preview(report_md.read_text(encoding="utf-8")))
-          st.caption(str(report_md))
+          st.caption(format_display_path(report_md, project_root=PROJECT_ROOT))
         if report_json.exists():
-          st.caption(f"JSON: {report_json}")
+          st.caption(f"JSON: {format_display_path(report_json, project_root=PROJECT_ROOT)}")
   if not found:
     st.info("保存済みの theme validation report はまだありません。")
 
@@ -692,16 +685,22 @@ def _tab_reports(
   *,
   demo_artifacts: Any = None,
   repro_artifacts: Any = None,
+  developer_mode: bool = False,
 ) -> None:
   delivery_artifacts = load_delivery_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
-  render_delivery_section(delivery_artifacts, key_prefix="reports_delivery")
-  st.divider()
-  _tab_reports_core_validation_summary_links()
-  st.divider()
-  _tab_reports_final_validation_summary_links()
-  st.divider()
-  _tab_reports_theme_validation_links()
-  st.divider()
+  render_delivery_section(
+    delivery_artifacts,
+    key_prefix="reports_delivery",
+    developer_mode=developer_mode,
+  )
+  if developer_mode:
+    st.divider()
+    _tab_reports_core_validation_summary_links(developer_mode=True)
+    st.divider()
+    _tab_reports_final_validation_summary_links(developer_mode=True)
+    st.divider()
+    _tab_reports_theme_validation_links(developer_mode=True)
+    st.divider()
 
   if demo_artifacts is not None:
     render_evidence_map_report(demo_artifacts)
@@ -733,17 +732,66 @@ def _tab_reports(
     st.info("レポートがまだありません。パイプラインを実行してください。")
 
 
-def _main_tab_labels() -> list[str]:
-  return [
-    translate_tab_name("start"),
-    translate_tab_name("patents"),
-    translate_tab_name("fulltext"),
-    translate_tab_name("evidence"),
-    translate_tab_name("market"),
-    translate_tab_name("theme_validation"),
-    translate_tab_name("reports"),
-    translate_tab_name("settings"),
-  ]
+def _main_tab_labels(*, ui_mode: str | None = None) -> list[str]:
+  return tab_labels_for_ui_mode(ui_mode)
+
+
+def _render_tab_by_id(
+  tab_id: str,
+  *,
+  user: dict[str, Any],
+  watch: dict[str, Any],
+  manifest: dict[str, Any] | None,
+  display_mode: str,
+  debug_mode: bool,
+  demo_mode: bool,
+  demo_artifacts: Any,
+  repro_artifacts: Any,
+  developer_mode: bool,
+) -> None:
+  if tab_id == "start":
+    _tab_start(
+      user,
+      watch,
+      manifest,
+      debug_mode=debug_mode,
+      demo_mode=demo_mode,
+      demo_artifacts=demo_artifacts,
+      repro_artifacts=repro_artifacts,
+    )
+  elif tab_id == "patents":
+    if manifest:
+      _tab_patents(manifest, display_mode)
+    else:
+      st.info("特許候補を表示するには run を読み込んでください（開発者向けモード）。")
+  elif tab_id == "fulltext":
+    if manifest:
+      _tab_fulltext(manifest, display_mode, debug_mode=debug_mode and developer_mode)
+    else:
+      st.info("全文確認を表示するには run を読み込んでください（開発者向けモード）。")
+  elif tab_id == "evidence":
+    _tab_evidence(
+      manifest,
+      demo_artifacts=demo_artifacts if demo_mode else None,
+      repro_artifacts=repro_artifacts if demo_mode else None,
+    )
+  elif tab_id == "market":
+    _tab_market(manifest, demo_mode=demo_mode)
+  elif tab_id == "theme_validation":
+    _tab_theme_validation()
+  elif tab_id == "reports":
+    _tab_reports(
+      manifest,
+      demo_artifacts=demo_artifacts if demo_mode else None,
+      repro_artifacts=repro_artifacts if demo_mode else None,
+      developer_mode=developer_mode,
+    )
+  elif tab_id == "settings":
+    render_user_settings_tab(
+      user,
+      current_run_id=(manifest or {}).get("run_id"),
+      developer_mode=developer_mode,
+    )
 
 
 def render_tabbed_easy_app(
@@ -755,6 +803,9 @@ def render_tabbed_easy_app(
 ) -> None:
   st.markdown(inject_easy_ui_css(), unsafe_allow_html=True)
   watch = get_active_watch_profile(user["user_id"])
+  ui_mode = get_ui_mode()
+  developer_mode = is_developer_view()
+  demo_mode = is_demo_view() or bool(st.session_state.get(STATE_DEMO_MODE))
   st.markdown(
     render_main_title("Tech Cartography v7", "炭素繊維 技術地図 — 特許・論文・企業情報から、読むべき技術候補を整理します"),
     unsafe_allow_html=True,
@@ -763,12 +814,14 @@ def render_tabbed_easy_app(
   with header_cols[0]:
     st.markdown(render_user_badge(user), unsafe_allow_html=True)
   with header_cols[1]:
-    st.caption(f"Watch: {watch.get('theme', '')[:40]}…" if len(str(watch.get("theme", ""))) > 40 else f"Watch: {watch.get('theme', '')}")
+    theme_text = str(watch.get("theme", ""))
+    watch_label = f"Watch: {theme_text[:40]}…" if len(theme_text) > 40 else f"Watch: {theme_text}"
+    st.caption(watch_label)
   with header_cols[2]:
-    st.caption(f"run_id: {run_id or user.get('last_run_id') or '未選択'}")
+    if developer_mode:
+      st.caption(f"run_id: {run_id or user.get('last_run_id') or '未選択'}")
 
   root = pipeline_root or default_pipeline_root()
-  demo_mode = bool(st.session_state.get(STATE_DEMO_MODE))
   demo_artifacts = load_demo_evidence_map_artifacts(PROJECT_ROOT) if demo_mode else None
   repro_artifacts = load_reproducibility_smoke_artifacts(PROJECT_ROOT) if demo_mode else None
   if demo_mode and demo_artifacts is not None:
@@ -785,58 +838,23 @@ def render_tabbed_easy_app(
       refreshed["last_run_id"] = rid
       st.session_state[STATE_CURRENT_USER] = refreshed
 
-  if not manifest and not demo_mode:
-    st.markdown(
-      render_info_box(
-        "実行結果を読み込んでください。sidebar で run_id を指定するか latest_run を読み込みます。"
-        " 別テーマ検証タブは run_id なしでも利用できます。"
-      ),
-      unsafe_allow_html=True,
-    )
-
-  tabs = st.tabs(_main_tab_labels())
-  with tabs[0]:
-    _tab_start(
-      user,
-      watch,
-      manifest,
-      debug_mode=debug_mode,
-      demo_mode=demo_mode,
-      demo_artifacts=demo_artifacts,
-      repro_artifacts=repro_artifacts,
-    )
-  with tabs[1]:
-    if demo_mode:
-      st.info("デモモード: 「技術の裏取り」タブで Evidence Map をご覧ください。")
-    elif manifest:
-      _tab_patents(manifest, display_mode)
-    else:
-      st.info("特許候補を表示するには、sidebar で run_id を読み込んでください。")
-  with tabs[2]:
-    if demo_mode:
-      st.info("デモモード: 全文確認は Manual Claims Route のデモ成果物を Evidence Map で確認できます。")
-    elif manifest:
-      _tab_fulltext(manifest, display_mode, debug_mode=debug_mode)
-    else:
-      st.info("全文確認を表示するには、sidebar で run_id を読み込んでください。")
-  with tabs[3]:
-    _tab_evidence(
-      manifest,
-      demo_artifacts=demo_artifacts if demo_mode else None,
-      repro_artifacts=repro_artifacts if demo_mode else None,
-    )
-  with tabs[4]:
-    _tab_market(manifest, demo_mode=demo_mode)
-  with tabs[5]:
-    _tab_theme_validation()
-  with tabs[6]:
-    _tab_reports(
-      manifest,
-      demo_artifacts=demo_artifacts if demo_mode else None,
-      repro_artifacts=repro_artifacts if demo_mode else None,
-    )
-  with tabs[7]:
-    render_user_settings_tab(user, current_run_id=(manifest or {}).get("run_id"))
+  tab_ids = tab_ids_for_ui_mode(ui_mode)
+  tab_labels = tab_labels_for_ui_mode(ui_mode)
+  tabs = st.tabs(tab_labels)
+  for tab_id, tab in zip(tab_ids, tabs, strict=True):
+    with tab:
+      _render_tab_by_id(
+        tab_id,
+        user=user,
+        watch=watch,
+        manifest=manifest,
+        display_mode=display_mode,
+        debug_mode=debug_mode,
+        demo_mode=demo_mode,
+        demo_artifacts=demo_artifacts,
+        repro_artifacts=repro_artifacts,
+        developer_mode=developer_mode,
+      )
 
   st.markdown(render_caveat_footer(), unsafe_allow_html=True)
 
@@ -850,7 +868,8 @@ def render_easy_japanese_app() -> None:
   pipeline_root = st.session_state.get(STATE_PIPELINE_ROOT, default_pipeline_root())
   run_id = st.session_state.get(STATE_SELECTED_RUN_ID, "")
   display_mode = st.session_state.get(STATE_DISPLAY_MODE, DISPLAY_MODE_OPTIONS[0])
-  st.sidebar.checkbox("デバッグモード（開発者向け cost ledger）", key="tc_debug_mode", value=False)
+  if is_developer_view():
+    st.sidebar.checkbox("デバッグモード（開発者向け cost ledger）", key="tc_debug_mode", value=False)
   render_tabbed_easy_app(user, pipeline_root=pipeline_root, run_id=run_id, display_mode=display_mode)
 
 

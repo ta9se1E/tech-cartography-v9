@@ -19,29 +19,32 @@ def test_app_py_uses_render_tabbed_easy_app() -> None:
   assert "render_tabbed_easy_app" in text
 
 
-def test_main_tab_labels_include_theme_validation() -> None:
-  labels = v7_easy_app._main_tab_labels()
-  assert "別テーマ検証" in labels
-  assert labels.index("別テーマ検証") < labels.index("レポート")
+def test_main_tab_labels_use_demo_safe_ui() -> None:
+  demo_labels = v7_easy_app._main_tab_labels(ui_mode="demo")
+  assert "本番実行" not in demo_labels
+  assert "別テーマ検証" not in demo_labels
+  assert "はじめる" in demo_labels
+  analyst_labels = v7_easy_app._main_tab_labels(ui_mode="analyst")
+  assert "本番実行" in analyst_labels
   assert translate_tab_name("theme_validation") == "別テーマ検証"
   assert TAB_LABELS["theme_validation"] == "別テーマ検証"
 
 
 def test_v7_easy_app_wires_theme_validation_tab() -> None:
   text = V7_EASY_APP.read_text(encoding="utf-8")
-  assert 'translate_tab_name("theme_validation")' in text
   assert "def _tab_theme_validation" in text
   assert "_tab_theme_validation()" in text
   assert "render_theme_validation_section" in text
   assert "render_theme_validation_section(key_prefix=\"theme_validation_tab\")" in text
-  assert "tabs = st.tabs(_main_tab_labels())" in text
-  assert "_tab_start(user, watch, None, debug_mode=debug_mode, demo_mode=False)" not in text
+  assert "tab_ids_for_ui_mode" in text
+  assert "_render_tab_by_id" in text
+  assert "tabs = st.tabs(_main_tab_labels())" not in text
 
 
 def test_reports_tab_points_to_theme_validation_tab() -> None:
   text = V7_EASY_APP.read_text(encoding="utf-8")
   assert "_tab_reports_theme_validation_links" in text
-  assert "別テーマ検証" in text
+  assert "developer_mode" in text.split("def _tab_reports_theme_validation_links", 1)[1].split("def _tab_reports", 1)[0]
   assert "render_theme_validation_section(key_prefix=\"reports_theme_validation\")" not in text
 
 
@@ -68,8 +71,8 @@ def test_theme_validation_ui_has_action_buttons() -> None:
 
 def test_theme_validation_ui_has_tab_intro_copy() -> None:
   text = THEME_VALIDATION_UI.read_text(encoding="utf-8")
-  assert "炭素繊維以外の独自テーマでもTech Cartographyの流れが動くかを確認できます" in text
-  assert "まずはdry-runで検索計画だけを作成してください" in text
+  assert "新しいテーマで Tech Cartography の流れ" in text
+  assert "dry-run" in text
 
 
 def test_theme_validation_ui_has_no_mail_or_scheduler_buttons() -> None:
