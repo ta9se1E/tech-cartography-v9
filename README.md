@@ -691,3 +691,14 @@ streamlit run app.py
 - First screen: email login
 - After login: tabbed Easy Japanese View
 - CLI / pipeline unchanged (`scripts/run_carbon_fiber_evidence_map.py` etc.)
+
+### Phase 24.4A — 別テーマ検証 UI
+
+Streamlit の **レポート** タブに「別テーマ検証 / Theme Validation」セクションがあります。
+
+- 独自テーマのキーワード入力 → 検索計画 dry-run（外部 API 未実行）
+- 既存 `outputs/` の Stage 検証（Evidence Map / Link Candidate / Strategic Watch / Digest）
+- 明示同意後のみ特許候補の BigQuery 検索（未設定時は `external_search_not_configured`）
+- Manual Claims テンプレート生成と検証レポート保存
+
+詳細: `docs/phase24_theme_validation_ui.md`

@@ -54,6 +54,10 @@ from tech_cartography.ui.easy_japanese_ui import (
   render_warning_box,
   summarize_stage_statuses,
 )
+from tech_cartography.ui.theme_validation_ui import (
+  render_theme_validation_intro_card,
+  render_theme_validation_section,
+)
 from tech_cartography.ui.japanese_labels import (
   explain_cost_guard_status,
   explain_fulltext_scope,
@@ -203,6 +207,7 @@ def _tab_start(
       render_reproducibility_brief_section(repro_artifacts)
     return
   _render_demo_mode_load_button(key="start_tab_demo_evidence_map_button")
+  render_theme_validation_intro_card()
   st.markdown(render_demo_story_cards(), unsafe_allow_html=True)
   st.markdown(render_ok_box("このアプリでできること: 特許候補の整理、全文確認計画、技術の裏取り候補の確認"), unsafe_allow_html=True)
   st.markdown(
@@ -607,6 +612,8 @@ def _tab_reports(
 ) -> None:
   delivery_artifacts = load_delivery_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
   render_delivery_section(delivery_artifacts, key_prefix="reports_delivery")
+  st.divider()
+  render_theme_validation_section(key_prefix="reports_theme_validation")
   st.divider()
 
   if demo_artifacts is not None:
