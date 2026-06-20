@@ -31,6 +31,20 @@ from tech_cartography.validation.manual_claims_evidence_builder import (
   load_manual_claims,
   save_evidence_map_skeleton,
 )
+from tech_cartography.validation.end_to_end_chain import (
+  CHAIN_CAUTION,
+  EndToEndChainConfig,
+  EndToEndChainResult,
+  end_to_end_output_dir,
+  inspect_end_to_end_status,
+  run_digest_step,
+  run_link_candidate_step,
+  run_paper_candidate_step,
+  run_selected_chain_steps,
+  run_strategic_watch_step,
+  run_web_signal_candidate_step,
+  save_end_to_end_chain_result,
+)
 from tech_cartography.validation.theme_validation import (
   MANUAL_CLAIMS_EDITOR_NOTICES,
   THEME_VALIDATION_SAFETY_MESSAGES,
@@ -58,6 +72,17 @@ STATE_EVIDENCE_SKELETON = "tc_evidence_skeleton"
 STATE_SEED_PROGRESS = "theme_validation_seed_progress"
 STATE_SEED_PROGRESS_THEME_ID = "theme_validation_seed_progress_theme_id"
 STATE_SEED_PROGRESS_PUBLICATIONS = "theme_validation_seed_progress_publications"
+STATE_END_TO_END_RESULT = "theme_validation_end_to_end_result"
+
+END_TO_END_UI_NOTICES = (
+  "JP Seed End-to-End Chain: Evidence Map skeleton 以降の Paper / Web / Link / Watch / Digest をつなげます。",
+  "Paper候補は supporting evidence candidate であり、特許請求項の証明ではありません。",
+  "Webシグナルは signal candidate です。直接関係を断定しません。",
+  "Link Candidate は確認候補であり、直接リンクの証明ではありません。",
+  "Strategic Watch は重点監視候補であり、最終結論ではありません。",
+  "Digest は preview only です。outbound email は行いません。",
+  "本ツールはFTO、侵害、有効性判断、法的見解には使用しません。",
+)
 
 EVIDENCE_MAP_BUILDER_NOTICES = (
   "保存済みManual ClaimsからClaim Elementを抽出し、Evidence Map生成の準備を行います。",
@@ -593,6 +618,214 @@ def render_evidence_map_builder(
     st.caption(f"既存 skeleton: `{skeleton_json}`")
 
 
+def _end_to_end_display_dataframe(result: EndToEndChainResult) -> pd.DataFrame:
+  rows: list[dict[str, str]] = []
+  for seed in result.seed_statuses:
+    rows.append(
+      {
+        "publication_number": seed.publication_number,
+        "Stage 2": seed.stage2_manual_claims,
+        "Stage 3": seed.stage3_evidence_skeleton,
+        "Stage 4 Paper": seed.stage4_paper_candidates,
+        "Stage 5 Web": seed.stage5_web_signals,
+        "Stage 6 Link": seed.stage6_link_candidates,
+        "Stage 7 Watch": seed.stage7_strategic_watch,
+        "Stage 8 Digest": seed.stage8_digest,
+        "overall_status": seed.overall_status,
+        "next_action": seed.next_action,
+      },
+    )
+  return pd.DataFrame(rows)
+
+
+def render_end_to_end_chain_section(
+  *,
+  case: ThemeValidationCase,
+  key_prefix: str,
+  progress_list: list | None = None,
+) -> None:
+  st.markdown("#### JP Seed End-to-End Chain / 最後までつなぐ検証")
+  for notice in END_TO_END_UI_NOTICES:
+    st.markdown(render_caution_box(notice), unsafe_allow_html=True)
+
+  root = _project_root()
+  seeds = list(case.seed_publication_numbers)
+  items = progress_list or _get_seed_progress_list(seeds)
+  stage3_ready = [item.publication_number for item in items if item.stage3_status == "pass"]
+  default_selection = stage3_ready or seeds
+
+  selected_pubs = st.multiselect(
+    "publication numbers",
+    options=seeds or default_selection,
+    default=default_selection,
+    key=f"{key_prefix}_e2e_pubs",
+  )
+  col1, col2, col3 = st.columns(3)
+  with col1:
+    max_papers = st.number_input("max_papers", min_value=1, max_value=20, value=5, key=f"{key_prefix}_e2e_max_papers")
+  with col2:
+    max_web_signals = st.number_input(
+      "max_web_signals", min_value=1, max_value=20, value=10, key=f"{key_prefix}_e2e_max_web",
+    )
+  with col3:
+    cache_first = st.checkbox("cache_first", value=True, key=f"{key_prefix}_e2e_cache")
+
+  dry_run = st.checkbox("dry_run", value=True, key=f"{key_prefix}_e2e_dry_run")
+  allow_external_api = st.checkbox(
+    "allow_external_api",
+    value=False,
+    key=f"{key_prefix}_e2e_allow_api",
+    help="チェックしない限り OpenAlex/Tavily/BigQuery は実行しません。",
+  )
+  run_openalex = st.checkbox("run_openalex", value=False, key=f"{key_prefix}_e2e_openalex")
+  run_tavily = st.checkbox("run_tavily", value=False, key=f"{key_prefix}_e2e_tavily")
+  run_bigquery = st.checkbox("run_bigquery", value=False, key=f"{key_prefix}_e2e_bigquery")
+
+  st.markdown(
+    render_warning_box(
+      "OpenAlex/Tavily/BigQueryを実行する場合、入力キーワードやクエリが外部サービスに送信されます。"
+      "社外秘情報を含めないでください。"
+    ),
+    unsafe_allow_html=True,
+  )
+
+  if not selected_pubs:
+    st.info("seed publication numbers を選択してください。")
+    return
+
+  config = EndToEndChainConfig(
+    theme_id=case.theme_id,
+    theme_name=case.theme_name,
+    publication_numbers=selected_pubs,
+    output_root=str(root),
+    max_papers=int(max_papers),
+    max_web_signals=int(max_web_signals),
+    run_openalex=run_openalex,
+    run_tavily=run_tavily,
+    run_bigquery=run_bigquery,
+    cache_first=cache_first,
+    dry_run=dry_run,
+    allow_external_api=allow_external_api,
+    created_by="streamlit_ui",
+  )
+
+  btn_cols = st.columns(5)
+  with btn_cols[0]:
+    inspect_clicked = st.button("End-to-End状態を確認する", key=f"{key_prefix}_e2e_inspect")
+  with btn_cols[1]:
+    paper_plan_clicked = st.button("Paper Query Planを作る", key=f"{key_prefix}_e2e_paper_plan")
+  with btn_cols[2]:
+    paper_fetch_clicked = st.button("Paper候補を取得する", key=f"{key_prefix}_e2e_paper_fetch")
+  with btn_cols[3]:
+    web_plan_clicked = st.button("Web Signal Query Planを作る", key=f"{key_prefix}_e2e_web_plan")
+  with btn_cols[4]:
+    web_fetch_clicked = st.button("Web Signal候補を取得する", key=f"{key_prefix}_e2e_web_fetch")
+
+  btn_cols2 = st.columns(5)
+  with btn_cols2[0]:
+    link_clicked = st.button("Link Candidateを生成する", key=f"{key_prefix}_e2e_link")
+  with btn_cols2[1]:
+    watch_clicked = st.button("Strategic Watch Briefを生成する", key=f"{key_prefix}_e2e_watch")
+  with btn_cols2[2]:
+    digest_clicked = st.button("Digest Previewを生成する", key=f"{key_prefix}_e2e_digest")
+  with btn_cols2[3]:
+    all_steps_clicked = st.button("選択したseedの全ステップを実行する", key=f"{key_prefix}_e2e_all")
+  with btn_cols2[4]:
+    save_report_clicked = st.button("End-to-Endレポートを保存する", key=f"{key_prefix}_e2e_save")
+
+  result: EndToEndChainResult | None = st.session_state.get(STATE_END_TO_END_RESULT)
+
+  if inspect_clicked:
+    result = inspect_end_to_end_status(config)
+    st.session_state[STATE_END_TO_END_RESULT] = result
+    st.markdown(render_success_box("End-to-End 状態を更新しました。"), unsafe_allow_html=True)
+
+  if paper_plan_clicked:
+    for pub in selected_pubs:
+      run_paper_candidate_step(config, pub, query_plan_only=True)
+    result = inspect_end_to_end_status(config)
+    st.session_state[STATE_END_TO_END_RESULT] = result
+    st.markdown(render_success_box("Paper Query Plan を保存しました（外部API未実行）。"), unsafe_allow_html=True)
+
+  if paper_fetch_clicked:
+    for pub in selected_pubs:
+      run_paper_candidate_step(config, pub, query_plan_only=False)
+    result = inspect_end_to_end_status(config)
+    st.session_state[STATE_END_TO_END_RESULT] = result
+    if allow_external_api and run_openalex and not dry_run:
+      st.markdown(render_success_box("Paper 候補取得を実行しました。"), unsafe_allow_html=True)
+    else:
+      st.markdown(render_info_box("外部API未実行: query_plan のみ生成しました。"), unsafe_allow_html=True)
+
+  if web_plan_clicked:
+    for pub in selected_pubs:
+      run_web_signal_candidate_step(config, pub, query_plan_only=True)
+    result = inspect_end_to_end_status(config)
+    st.session_state[STATE_END_TO_END_RESULT] = result
+    st.markdown(render_success_box("Web Signal Query Plan を保存しました。"), unsafe_allow_html=True)
+
+  if web_fetch_clicked:
+    for pub in selected_pubs:
+      run_web_signal_candidate_step(config, pub, query_plan_only=False)
+    result = inspect_end_to_end_status(config)
+    st.session_state[STATE_END_TO_END_RESULT] = result
+    if allow_external_api and run_tavily and not dry_run:
+      st.markdown(render_success_box("Web Signal 候補取得を実行しました。"), unsafe_allow_html=True)
+    else:
+      st.markdown(render_info_box("外部API未実行: query_plan のみ生成しました。"), unsafe_allow_html=True)
+
+  if link_clicked:
+    for pub in selected_pubs:
+      run_link_candidate_step(config, pub)
+    result = inspect_end_to_end_status(config)
+    st.session_state[STATE_END_TO_END_RESULT] = result
+    st.markdown(render_success_box("Link Candidate 生成を試行しました。"), unsafe_allow_html=True)
+
+  if watch_clicked:
+    for pub in selected_pubs:
+      run_strategic_watch_step(config, pub)
+    result = inspect_end_to_end_status(config)
+    st.session_state[STATE_END_TO_END_RESULT] = result
+    st.markdown(render_success_box("Strategic Watch Brief を生成しました。"), unsafe_allow_html=True)
+
+  if digest_clicked:
+    for pub in selected_pubs:
+      run_digest_step(config, pub)
+    result = inspect_end_to_end_status(config)
+    st.session_state[STATE_END_TO_END_RESULT] = result
+    st.markdown(render_success_box("Digest Preview を生成しました（送信なし）。"), unsafe_allow_html=True)
+
+  if all_steps_clicked:
+    steps = [
+      "paper_query_plan",
+      "paper_candidates",
+      "web_signal_query_plan",
+      "web_signals",
+      "link_candidates",
+      "strategic_watch",
+      "digest",
+    ]
+    result = run_selected_chain_steps(config, steps)
+    st.session_state[STATE_END_TO_END_RESULT] = result
+    st.markdown(render_success_box("選択 seed の全ステップを実行しました。"), unsafe_allow_html=True)
+
+  if save_report_clicked:
+    result = st.session_state.get(STATE_END_TO_END_RESULT) or inspect_end_to_end_status(config)
+    out_dir = end_to_end_output_dir(root, case.theme_id)
+    paths = save_end_to_end_chain_result(result, out_dir)
+    st.session_state[STATE_END_TO_END_RESULT] = result
+    st.markdown(render_success_box("End-to-End レポートを保存しました。"), unsafe_allow_html=True)
+    for label, path in paths.items():
+      st.caption(f"{label}: {path}")
+
+  result = st.session_state.get(STATE_END_TO_END_RESULT)
+  if result is not None:
+    st.markdown("**End-to-End Stage 表**")
+    st.dataframe(_end_to_end_display_dataframe(result), use_container_width=True, hide_index=True)
+    st.caption(f"保存先: `{end_to_end_output_dir(root, case.theme_id)}`")
+    st.caption(CHAIN_CAUTION)
+
+
 def render_theme_validation_intro_card() -> None:
   st.markdown(
     render_info_box(
@@ -705,6 +938,11 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
         key_prefix=key_prefix,
         progress_list=progress_list,
       )
+      render_end_to_end_chain_section(
+        case=placeholder_case,
+        key_prefix=key_prefix,
+        progress_list=progress_list,
+      )
     return
 
   case = _build_case_from_inputs(
@@ -783,6 +1021,7 @@ def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> 
 
   render_manual_claims_editor(case=case, key_prefix=key_prefix, progress_list=progress_list)
   render_evidence_map_builder(case=case, key_prefix=key_prefix, progress_list=progress_list)
+  render_end_to_end_chain_section(case=case, key_prefix=key_prefix, progress_list=progress_list)
 
   if external_clicked:
     if not consent:
