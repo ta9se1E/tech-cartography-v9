@@ -83,6 +83,10 @@ from tech_cartography.ui.strategic_watch_ui import (
   load_strategic_watch_artifacts,
   render_strategic_watch_section,
 )
+from tech_cartography.ui.delivery_ui import (
+  load_delivery_artifacts,
+  render_delivery_section,
+)
 from tech_cartography.ui.streamlit_session import (
   DISPLAY_MODE_OPTIONS,
   STATE_CURRENT_USER,
@@ -240,6 +244,10 @@ def _tab_start(
 
 def _tab_patents(manifest: dict[str, Any], display_mode: str) -> None:
   st.markdown(render_info_box("中国候補を除外しているわけではありません。US全文候補と戦略監視候補は別枠です。"), unsafe_allow_html=True)
+
+  delivery_artifacts = load_delivery_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
+  st.divider()
+  render_delivery_section(delivery_artifacts, compact_overview=True)
   ranked_df = _load_csv_artifact(manifest, "ranked_patents_csv")
   top20_df = _load_csv_artifact(manifest, "top20_patents_csv")
   cluster_df = _load_csv_artifact(manifest, "cluster_summary_csv")
@@ -597,6 +605,10 @@ def _tab_reports(
   demo_artifacts: Any = None,
   repro_artifacts: Any = None,
 ) -> None:
+  delivery_artifacts = load_delivery_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
+  render_delivery_section(delivery_artifacts)
+  st.divider()
+
   if demo_artifacts is not None:
     render_evidence_map_report(demo_artifacts)
     if repro_artifacts is not None:

@@ -32,6 +32,14 @@
 - 「NEDO/JST/METI の公的シグナルは National Project セクションで、論文・Webとの横断は Patent×Paper×Web セクションで見せます」
 - 「中小企業ユーザーにとって、特許1件の深掘りのあと『何をウォッチすべきか』が明確になります」
 
+**Intelligence Delivery Hub（Phase 24.0）**:
+
+- 「**まとめページ**で各タブの意味を説明し、初見ユーザーが迷わないようにします」
+- 「**Intelligence Report** を Markdown で一括ダウンロードし、チーム共有に使えます」
+- 「**Weekly Digest Preview** で前回からの差分だけを強調します（初回は initial snapshot）」
+- 「**メール送信は Preview only** — この Phase では実送信しません」
+- 「ZIP bundle で report + digest + diff をまとめて持ち出せます」
+
 **Patent × Paper × Web Signal Link（Phase 23.4 / 23.4.1）**:
 
 - 「Review Pack で見た NEDO / JST シグナルを、US-12565719-B2 の Claim Element / 論文候補と **link candidate** として横断整理できます」
