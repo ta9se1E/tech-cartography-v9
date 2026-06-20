@@ -488,6 +488,11 @@ def render_weekly_schedule_section(
   *,
   key_prefix: str = "delivery",
 ) -> None:
+  from tech_cartography.runtime.cloud_run_config import is_scheduler_disabled
+
+  if is_scheduler_disabled():
+    st.caption("Cloud Run デモ環境では scheduler / launchd / cron 設定は表示しません。")
+    return
   st.subheader("週次スケジュール設定（参照のみ）")
   st.markdown(
     render_warning_box(

@@ -95,6 +95,10 @@ def format_smtp_missing_message(missing_fields: list[str]) -> str:
 
 def can_send_email() -> tuple[bool, str]:
   """Return whether SMTP is configured (no secrets in message)."""
+  from tech_cartography.runtime.cloud_run_config import is_email_send_disabled
+
+  if is_email_send_disabled():
+    return False, "Cloud Run デモ環境ではメール送信は無効です（DISABLE_EMAIL_SEND=true）。"
   settings = resolve_smtp_settings()
   missing = [field for field in SMTP_FIELD_CANDIDATES if not settings.get(field)]
   if missing:

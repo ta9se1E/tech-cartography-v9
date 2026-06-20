@@ -725,31 +725,40 @@ def render_end_to_end_chain_section(
     key=f"{key_prefix}_e2e_dry_run",
     disabled=not seeds_ready,
   )
+  from tech_cartography.runtime.cloud_run_config import is_external_api_disabled
+
+  external_api_locked = is_external_api_disabled()
   allow_external_api = st.checkbox(
     "allow_external_api",
     value=False,
     key=f"{key_prefix}_e2e_allow_api",
     help="チェックしない限り OpenAlex/Tavily/BigQuery は実行しません。",
-    disabled=not seeds_ready,
+    disabled=not seeds_ready or external_api_locked,
   )
   run_openalex = st.checkbox(
     "run_openalex",
     value=False,
     key=f"{key_prefix}_e2e_openalex",
-    disabled=not seeds_ready,
+    disabled=not seeds_ready or external_api_locked,
   )
   run_tavily = st.checkbox(
     "run_tavily",
     value=False,
     key=f"{key_prefix}_e2e_tavily",
-    disabled=not seeds_ready,
+    disabled=not seeds_ready or external_api_locked,
   )
   run_bigquery = st.checkbox(
     "run_bigquery",
     value=False,
     key=f"{key_prefix}_e2e_bigquery",
-    disabled=not seeds_ready,
+    disabled=not seeds_ready or external_api_locked,
   )
+  if external_api_locked:
+    allow_external_api = False
+    run_openalex = False
+    run_tavily = False
+    run_bigquery = False
+    st.caption("Cloud Run デモ環境では外部API実行は無効です（DISABLE_EXTERNAL_API=true）。")
 
   st.markdown(
     render_warning_box(

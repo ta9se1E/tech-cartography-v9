@@ -95,7 +95,10 @@ def default_app_session_state(
   *,
   default_pipeline_root: str | None = None,
 ) -> dict[str, Any]:
+  from tech_cartography.runtime.cloud_run_config import default_app_mode
+
   root = default_pipeline_root or default_pipeline_root_path()
+  ui_mode = default_app_mode()
   state: dict[str, Any] = {
     STATE_PIPELINE_ROOT: root,
     STATE_SELECTED_RUN_ID: "",
@@ -105,13 +108,13 @@ def default_app_session_state(
     STATE_WEEKLY_EMAIL_ENABLED: False,
     STATE_DEMO_MODE: False,
     STATE_DEMO_PUBLICATION_NUMBER: "",
-    STATE_UI_MODE: "demo",
+    STATE_UI_MODE: ui_mode,
   }
   if user:
     if user.get("last_run_id"):
       state[STATE_SELECTED_RUN_ID] = str(user["last_run_id"])
     state[STATE_WEEKLY_EMAIL_ENABLED] = bool(user.get("weekly_email_enabled"))
-  if state[STATE_UI_MODE] == "demo":
+  if ui_mode == "demo":
     state[STATE_DEMO_MODE] = True
     state[STATE_DEMO_PUBLICATION_NUMBER] = DEMO_PUBLICATION_NUMBER
     state[STATE_SELECTED_RUN_ID] = DEMO_RUN_ID
