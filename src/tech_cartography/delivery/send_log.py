@@ -53,6 +53,8 @@ def sanitize_log_message(message: str) -> str:
     text = re.sub(rf"({token}\s*[=:]\s*)(\S+)", r"\1***", text, flags=re.IGNORECASE)
   if "TC_SMTP_PASSWORD" in text:
     text = text.replace("TC_SMTP_PASSWORD", "TC_SMTP_PASSWORD(非表示)")
+  if "SMTP_PASSWORD" in text:
+    text = text.replace("SMTP_PASSWORD", "SMTP_PASSWORD(非表示)")
   return text
 
 

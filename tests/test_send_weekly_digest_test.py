@@ -88,7 +88,10 @@ def test_send_email_without_flag_does_not_call_smtp(tmp_path: Path) -> None:
 
 
 def test_send_email_smtp_missing_blocked(tmp_path: Path, monkeypatch) -> None:
-  for key in ("TC_SMTP_HOST", "TC_SMTP_PORT", "TC_SMTP_USER", "TC_SMTP_PASSWORD", "TC_SMTP_FROM"):
+  for key in (
+    "TC_SMTP_HOST", "TC_SMTP_PORT", "TC_SMTP_USER", "TC_SMTP_PASSWORD", "TC_SMTP_FROM",
+    "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_EMAIL",
+  ):
     monkeypatch.delenv(key, raising=False)
   _write_snapshot_fixture(tmp_path)
   config = tmp_path / "recipients.json"
@@ -108,6 +111,45 @@ def test_send_email_smtp_missing_blocked(tmp_path: Path, monkeypatch) -> None:
   )
   assert result.send_log is not None
   assert result.send_log.status == "blocked_missing_adapter"
+
+
+def test_send_email_ready_with_smtp_only_env(monkeypatch, tmp_path: Path) -> None:
+  for key in (
+    "TC_SMTP_HOST", "TC_SMTP_PORT", "TC_SMTP_USER", "TC_SMTP_PASSWORD", "TC_SMTP_FROM",
+    "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_EMAIL",
+  ):
+    monkeypatch.delenv(key, raising=False)
+  monkeypatch.setenv("SMTP_HOST", "smtp.gmail.com")
+  monkeypatch.setenv("SMTP_PORT", "587")
+  monkeypatch.setenv("SMTP_USER", "user@gmail.com")
+  monkeypatch.setenv("SMTP_PASSWORD", "secret")
+  monkeypatch.setenv("SMTP_FROM_EMAIL", "user@gmail.com")
+
+  from tech_cartography.delivery.email_sender import can_send_email
+
+  ready, _ = can_send_email()
+  assert ready is True
+
+  _write_snapshot_fixture(tmp_path)
+  config = tmp_path / "recipients.json"
+  config.write_text(
+    json.dumps({"default": {"to": ["reviewer@example.com"], "cc": [], "enabled": True}}),
+    encoding="utf-8",
+  )
+  out = tmp_path / "outputs" / "delivery"
+  with patch("tech_cartography.delivery.weekly_digest_send.send_email_smtp") as mock_send:
+    mock_send.return_value = {"ok": True, "status": "sent", "message": "sent", "recipient_count": 1}
+    result = run_weekly_digest_send_test(
+      publication_number="US-12565719-B2",
+      project_root=tmp_path,
+      output_dir=out,
+      recipient_config_path=config,
+      recipient_group="default",
+      build_draft=True,
+      send_email=True,
+    )
+  assert result.send_log is not None
+  assert result.send_log.status != "blocked_missing_adapter"
 
 
 def test_cli_dry_run_subprocess() -> None:

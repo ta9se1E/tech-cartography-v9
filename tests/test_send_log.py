@@ -34,7 +34,8 @@ def test_save_and_load_send_log(tmp_path: Path) -> None:
 
 
 def test_sanitize_log_message_masks_password() -> None:
-  raw = "SMTP failed password=secret123 TC_SMTP_PASSWORD=abc"
+  raw = "SMTP failed password=secret123 TC_SMTP_PASSWORD=abc SMTP_PASSWORD=xyz"
   cleaned = sanitize_log_message(raw)
   assert "secret123" not in cleaned
   assert "TC_SMTP_PASSWORD(非表示)" in cleaned or "***" in cleaned
+  assert "SMTP_PASSWORD(非表示)" in cleaned

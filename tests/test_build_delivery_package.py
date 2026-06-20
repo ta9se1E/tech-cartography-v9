@@ -110,7 +110,10 @@ def test_cli_email_draft_status_label_subprocess() -> None:
 
 
 def test_send_email_without_smtp_blocked(tmp_path: Path, monkeypatch) -> None:
-  for key in ("TC_SMTP_HOST", "TC_SMTP_PORT", "TC_SMTP_USER", "TC_SMTP_PASSWORD", "TC_SMTP_FROM"):
+  for key in (
+    "TC_SMTP_HOST", "TC_SMTP_PORT", "TC_SMTP_USER", "TC_SMTP_PASSWORD", "TC_SMTP_FROM",
+    "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_EMAIL",
+  ):
     monkeypatch.delenv(key, raising=False)
   _write_snapshot_fixture(tmp_path)
   out = tmp_path / "outputs" / "delivery"

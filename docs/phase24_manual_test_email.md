@@ -86,15 +86,28 @@ python scripts/send_weekly_digest_test.py \
 
 ## SMTP 環境変数
 
+推奨 `.env` 例（`source .env` 後に利用）:
+
 ```
-TC_SMTP_HOST
-TC_SMTP_PORT
-TC_SMTP_USER
-TC_SMTP_PASSWORD
-TC_SMTP_FROM
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_gmail@gmail.com
+SMTP_PASSWORD=your_app_password
+SMTP_FROM_EMAIL=your_gmail@gmail.com
+TEST_TO_EMAIL=your_gmail@gmail.com
 ```
 
-**注意**: `TC_SMTP_PASSWORD` の値はログ・JSON 出力に保存しません。
+| 項目 | 優先順位（左が優先） |
+|------|---------------------|
+| host | `TC_SMTP_HOST` → `SMTP_HOST` |
+| port | `TC_SMTP_PORT` → `SMTP_PORT` |
+| user | `TC_SMTP_USER` → `SMTP_USER` |
+| password | `TC_SMTP_PASSWORD` → `SMTP_PASSWORD` |
+| from | `TC_SMTP_FROM` → `SMTP_FROM` → `SMTP_FROM_EMAIL` → `SMTP_USER` |
+
+`TC_SMTP_*` は後方互換として引き続き利用可能です。
+
+**注意**: `SMTP_PASSWORD` / `TC_SMTP_PASSWORD` の値はログ・JSON 出力に保存しません。
 
 ## 送信ログ
 
