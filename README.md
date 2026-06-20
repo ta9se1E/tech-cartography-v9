@@ -694,7 +694,7 @@ streamlit run app.py
 
 ### Phase 24.4A — 別テーマ検証 UI
 
-Streamlit の **レポート** タブに「別テーマ検証 / Theme Validation」セクションがあります。
+Streamlit の **別テーマ検証** トップレベルタブで操作します（レポートタブ内ではありません）。
 
 - 独自テーマのキーワード入力 → 検索計画 dry-run（外部 API 未実行）
 - 既存 `outputs/` の Stage 検証（Evidence Map / Link Candidate / Strategic Watch / Digest）

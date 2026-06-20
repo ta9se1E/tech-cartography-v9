@@ -80,15 +80,35 @@ seed publication 指定時に以下を生成します。
 
 status: `pass`, `blocked`, `not_run`, `manual_input_required`, `external_api_required`, `external_search_not_configured`, `output_missing`, `failed`
 
-## 独自テーマでのテスト手順
+## 独自テーマでのテスト手順（Phase 24.4A.1 更新）
 
 1. `streamlit run app.py` で起動
-2. 「はじめる」タブで別テーマ検証の案内を確認
-3. 「レポート」タブでテーマ名・キーワードを入力
-4. **A** で dry-run → 検索クエリと Stage 0–1 を確認
-5. seed を入れ **B** で既存 outputs 検証
-6. 必要なら **D** で Manual Claims テンプレート作成
-7. **E** でレポート保存
+2. メールでログイン
+3. トップレベルタブ **「別テーマ検証」** を開く（run_id 未読み込みでも表示されます）
+4. **テーマ名** と **コアキーワード** を入力
+5. **A. 検索計画を作成する（dry-run）** を押す → Stage Matrix と検索クエリ案を確認（外部 API 未実行）
+6. **B. 既存outputsだけで検証する** を押す
+   - seed なし: Stage 2 以降は `not_run` または `output_missing`
+   - seed あり・成果物なし: `manual_input_required` / `output_missing` で停止理由を確認
+7. seed を指定して **D. Manual Claimsテンプレートを作成する** → テンプレート JSON のパスを確認
+8. **E. 検証レポートを保存する** → `outputs/validation/theme_validation/{theme_id}/` を確認
+
+レポートタブには保存済みレポートへのリンクと保存先パスのみ表示します。入力・検証の主導線は **別テーマ検証** タブです。
+
+## タブ構成
+
+1. はじめる
+2. 特許候補
+3. 全文確認
+4. 技術の裏取り
+5. 企業・市場シグナル
+6. **別テーマ検証**（入力・dry-run・検証の主画面）
+7. レポート
+8. 設定
+
+## 旧手順（Phase 24.4A）
+
+~~「レポート」タブでテーマ名・キーワードを入力~~ → 24.4A.1 以降は上記の **別テーマ検証** タブを使用してください。
 
 ## 出力ファイル
 

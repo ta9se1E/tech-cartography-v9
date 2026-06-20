@@ -343,6 +343,7 @@ TAB_LABELS: dict[str, str] = {
   "fulltext": "全文確認",
   "evidence": "技術の裏取り",
   "market": "企業・市場シグナル",
+  "theme_validation": "別テーマ検証",
   "reports": "レポート",
   "settings": "設定",
 }

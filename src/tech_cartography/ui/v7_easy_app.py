@@ -604,6 +604,41 @@ def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> 
       render_small_table(company_df.head(15))
 
 
+def _tab_theme_validation() -> None:
+  render_theme_validation_section(key_prefix="theme_validation_tab")
+
+
+def _tab_reports_theme_validation_links() -> None:
+  validation_root = PROJECT_ROOT / "outputs" / "validation" / "theme_validation"
+  st.markdown(
+    render_info_box(
+      "テーマ検証の入力・dry-run・既存 outputs 検証は、トップレベルタブ「別テーマ検証」で行ってください。"
+    ),
+    unsafe_allow_html=True,
+  )
+  st.caption(f"保存先: `{validation_root}`")
+  if not validation_root.exists():
+    st.info("保存済みの theme validation report はまだありません。")
+    return
+
+  found = False
+  for theme_dir in sorted(validation_root.iterdir()):
+    if not theme_dir.is_dir():
+      continue
+    report_md = theme_dir / "theme_validation_report.md"
+    report_json = theme_dir / "theme_validation_result.json"
+    if report_md.exists() or report_json.exists():
+      found = True
+      with st.expander(f"Theme validation: {theme_dir.name}", expanded=False):
+        if report_md.exists():
+          st.markdown(render_markdown_preview(report_md.read_text(encoding="utf-8")))
+          st.caption(str(report_md))
+        if report_json.exists():
+          st.caption(f"JSON: {report_json}")
+  if not found:
+    st.info("保存済みの theme validation report はまだありません。")
+
+
 def _tab_reports(
   manifest: dict[str, Any] | None,
   *,
@@ -613,7 +648,7 @@ def _tab_reports(
   delivery_artifacts = load_delivery_artifacts(PROJECT_ROOT, publication_number=DEMO_DEEP_DIVE_PUBLICATION)
   render_delivery_section(delivery_artifacts, key_prefix="reports_delivery")
   st.divider()
-  render_theme_validation_section(key_prefix="reports_theme_validation")
+  _tab_reports_theme_validation_links()
   st.divider()
 
   if demo_artifacts is not None:
@@ -644,6 +679,19 @@ def _tab_reports(
         st.text_area(f"{label}（コピー用）", value=md[:4000], height=200, key=f"copy_{key}")
   if not found:
     st.info("レポートがまだありません。パイプラインを実行してください。")
+
+
+def _main_tab_labels() -> list[str]:
+  return [
+    translate_tab_name("start"),
+    translate_tab_name("patents"),
+    translate_tab_name("fulltext"),
+    translate_tab_name("evidence"),
+    translate_tab_name("market"),
+    translate_tab_name("theme_validation"),
+    translate_tab_name("reports"),
+    translate_tab_name("settings"),
+  ]
 
 
 def render_tabbed_easy_app(
@@ -686,22 +734,15 @@ def render_tabbed_easy_app(
       st.session_state[STATE_CURRENT_USER] = refreshed
 
   if not manifest and not demo_mode:
-    st.markdown(render_info_box("実行結果を読み込んでください。sidebar で run_id を指定するか latest_run を読み込みます。"), unsafe_allow_html=True)
-    _tab_start(user, watch, None, debug_mode=debug_mode, demo_mode=False)
-    st.markdown(render_caveat_footer(), unsafe_allow_html=True)
-    return
+    st.markdown(
+      render_info_box(
+        "実行結果を読み込んでください。sidebar で run_id を指定するか latest_run を読み込みます。"
+        " 別テーマ検証タブは run_id なしでも利用できます。"
+      ),
+      unsafe_allow_html=True,
+    )
 
-  tabs = st.tabs(
-    [
-      translate_tab_name("start"),
-      translate_tab_name("patents"),
-      translate_tab_name("fulltext"),
-      translate_tab_name("evidence"),
-      translate_tab_name("market"),
-      translate_tab_name("reports"),
-      translate_tab_name("settings"),
-    ],
-  )
+  tabs = st.tabs(_main_tab_labels())
   with tabs[0]:
     _tab_start(
       user,
@@ -717,11 +758,15 @@ def render_tabbed_easy_app(
       st.info("デモモード: 「技術の裏取り」タブで Evidence Map をご覧ください。")
     elif manifest:
       _tab_patents(manifest, display_mode)
+    else:
+      st.info("特許候補を表示するには、sidebar で run_id を読み込んでください。")
   with tabs[2]:
     if demo_mode:
       st.info("デモモード: 全文確認は Manual Claims Route のデモ成果物を Evidence Map で確認できます。")
     elif manifest:
       _tab_fulltext(manifest, display_mode, debug_mode=debug_mode)
+    else:
+      st.info("全文確認を表示するには、sidebar で run_id を読み込んでください。")
   with tabs[3]:
     _tab_evidence(
       manifest,
@@ -731,12 +776,14 @@ def render_tabbed_easy_app(
   with tabs[4]:
     _tab_market(manifest, demo_mode=demo_mode)
   with tabs[5]:
+    _tab_theme_validation()
+  with tabs[6]:
     _tab_reports(
       manifest,
       demo_artifacts=demo_artifacts if demo_mode else None,
       repro_artifacts=repro_artifacts if demo_mode else None,
     )
-  with tabs[6]:
+  with tabs[7]:
     render_user_settings_tab(user, current_run_id=(manifest or {}).get("run_id"))
 
   st.markdown(render_caveat_footer(), unsafe_allow_html=True)

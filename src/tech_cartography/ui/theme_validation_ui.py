@@ -135,14 +135,34 @@ def render_theme_validation_intro_card() -> None:
   st.markdown(
     render_info_box(
       "別テーマ検証: 炭素繊維以外のテーマでも、キーワード入力から検索計画・既存 outputs 検証まで確認できます。"
-      " レポートタブの詳細UIから操作してください。"
+      " トップレベルタブ「別テーマ検証」から操作してください。"
     ),
+    unsafe_allow_html=True,
+  )
+
+
+def render_theme_validation_tab_intro() -> None:
+  st.markdown(
+    render_info_box(
+      "ここでは、炭素繊維以外の独自テーマでもTech Cartographyの流れが動くかを確認できます。"
+    ),
+    unsafe_allow_html=True,
+  )
+  st.markdown(
+    render_caution_box(
+      "まずはdry-runで検索計画だけを作成してください。外部APIは実行されません。"
+    ),
+    unsafe_allow_html=True,
+  )
+  st.markdown(
+    render_caution_box("社外秘・未公開情報を入力しないでください。"),
     unsafe_allow_html=True,
   )
 
 
 def render_theme_validation_section(*, key_prefix: str = "theme_validation") -> None:
   st.subheader("別テーマ検証 / Theme Validation")
+  render_theme_validation_tab_intro()
   render_theme_validation_safety_messages()
 
   theme_name = st.text_input("テーマ名", value="", key=f"{key_prefix}_theme_name")
