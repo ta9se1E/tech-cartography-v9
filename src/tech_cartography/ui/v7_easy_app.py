@@ -804,6 +804,9 @@ def _tab_reports(
 
     render_live_digest_preview_reports_section(project_root=PROJECT_ROOT)
     render_watch_profile_draft_reports_section(project_root=PROJECT_ROOT)
+    from tech_cartography.ui.live_next_cycle_search_ui import render_live_next_cycle_search_reports_section
+
+    render_live_next_cycle_search_reports_section(project_root=PROJECT_ROOT)
   if is_analyst_view() and demo_artifacts is None:
     case = _resolve_analyst_case()
     snapshot = compute_analyst_workflow_snapshot(case, project_root=PROJECT_ROOT)

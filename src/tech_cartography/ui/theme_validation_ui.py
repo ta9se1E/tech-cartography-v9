@@ -1242,6 +1242,9 @@ def render_analyst_input_execution_section(*, key_prefix: str = ANALYST_INPUT_KE
   from tech_cartography.ui.live_watch_expansion_ui import render_live_watch_expansion_section
 
   render_live_watch_expansion_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_watch_expansion")
+  from tech_cartography.ui.live_next_cycle_search_ui import render_live_next_cycle_search_section
+
+  render_live_next_cycle_search_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_next_cycle_search")
   render_pan_theme_loader_button(key_prefix=key_prefix)
   render_theme_validation_safety_messages()
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pre-deploy checks for Cloud Run live beta (Phase 25C–25I)."""
+"""Pre-deploy checks for Cloud Run live beta (Phase 25C–25J)."""
 
 from __future__ import annotations
 
@@ -72,6 +72,10 @@ def main() -> int:
   draft_service = PROJECT_ROOT / "src/tech_cartography/services/watch_profile_draft.py"
   expansion_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_watch_expansion_ui.py"
   expansion_docs = PROJECT_ROOT / "docs/phase25i_human_approved_watch_expansion_proposal.md"
+  next_cycle_plan = PROJECT_ROOT / "src/tech_cartography/services/live_next_cycle_search_plan.py"
+  next_cycle_runner = PROJECT_ROOT / "src/tech_cartography/services/live_next_cycle_tavily_runner.py"
+  next_cycle_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_next_cycle_search_ui.py"
+  next_cycle_docs = PROJECT_ROOT / "docs/phase25j_watch_profile_driven_next_cycle_search.md"
 
   for path in (
     module_path,
@@ -98,6 +102,10 @@ def main() -> int:
     draft_service,
     expansion_ui,
     expansion_docs,
+    next_cycle_plan,
+    next_cycle_runner,
+    next_cycle_ui,
+    next_cycle_docs,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -168,6 +176,21 @@ def main() -> int:
     failures.append("live_watch_expansion_proposal が live_artifact_paths を使っていません")
   if "live_artifact_paths" not in _read(draft_service):
     failures.append("watch_profile_draft が live_artifact_paths を使っていません")
+  next_cycle_ui_text = _read(next_cycle_ui)
+  if "render_live_next_cycle_search_section" not in analyst_ui:
+    failures.append("theme_validation_ui に next cycle search UI がありません")
+  if "次回検索クエリ候補を作成" not in next_cycle_ui_text:
+    failures.append("live_next_cycle_search_ui に plan 作成ボタンがありません")
+  if "選択したクエリでTavily検索" not in next_cycle_ui_text:
+    failures.append("live_next_cycle_search_ui に Tavily 実行ボタンがありません")
+  if "render_live_next_cycle_search_reports_section" not in market_ui:
+    failures.append("v7_easy_app reports タブに next cycle pack セクションがありません")
+  if "live_artifact_paths" not in _read(next_cycle_plan):
+    failures.append("live_next_cycle_search_plan が live_artifact_paths を使っていません")
+  if "live_artifact_paths" not in _read(next_cycle_runner):
+    failures.append("live_next_cycle_tavily_runner が live_artifact_paths を使っていません")
+  if "source_type" not in _read(digest_service):
+    failures.append("live_digest_preview が source_type 対応していません")
   if "CONFIRMATION_TEXT" not in email_ui_text and "SEND TO MYSELF" not in email_ui_text:
     failures.append("live_email_send_ui に確認テキスト要件がありません")
   if "SMTP_PASSWORD" in email_ui_text and "os.environ" in email_ui_text:
@@ -307,6 +330,8 @@ def main() -> int:
   print(f"live artifact paths: {'yes' if artifact_paths.exists() else 'no'}")
   print(f"live watch expansion: {'yes' if expansion_service.exists() else 'no'}")
   print(f"watch profile draft: {'yes' if draft_service.exists() else 'no'}")
+  print(f"next cycle search plan: {'yes' if next_cycle_plan.exists() else 'no'}")
+  print(f"next cycle tavily runner: {'yes' if next_cycle_runner.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

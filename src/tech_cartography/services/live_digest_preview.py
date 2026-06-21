@@ -14,10 +14,50 @@ from tech_cartography.runtime.live_artifact_paths import (
   get_live_digest_preview_dir,
 )
 from tech_cartography.services.live_web_signal_pack import (
+  SOURCE_TYPE_LIVE,
   find_latest_live_web_signal_pack_path,
   load_latest_live_web_signal_pack,
   load_live_web_signal_pack,
 )
+
+def resolve_latest_web_signal_pack(
+  output_root: Path | str,
+) -> tuple[dict[str, Any] | None, Path | None, str | None]:
+  """Return newest pack from live or next-cycle directories."""
+  from tech_cartography.services.live_next_cycle_tavily_runner import (
+    SOURCE_TYPE as NEXT_CYCLE_SOURCE_TYPE,
+    find_latest_next_cycle_web_signal_pack_path,
+    load_next_cycle_web_signal_pack,
+  )
+
+  options: list[tuple[Path, dict[str, Any], str]] = []
+  live_path = find_latest_live_web_signal_pack_path(output_root)
+  if live_path is not None:
+    live_pack = load_live_web_signal_pack(live_path)
+    if live_pack:
+      source_type = str(live_pack.get("source_type") or SOURCE_TYPE_LIVE)
+      options.append((live_path, live_pack, source_type))
+
+  next_path = find_latest_next_cycle_web_signal_pack_path(output_root)
+  if next_path is not None:
+    next_pack = load_next_cycle_web_signal_pack(next_path)
+    if next_pack:
+      source_type = str(next_pack.get("source_type") or NEXT_CYCLE_SOURCE_TYPE)
+      options.append((next_path, next_pack, source_type))
+
+  if not options:
+    return None, None, None
+
+  pack_path, pack, source_type = max(options, key=lambda row: row[0].stat().st_mtime)
+  merged = dict(pack)
+  merged["source_type"] = source_type
+  return merged, pack_path, source_type
+
+
+def load_latest_web_signal_pack_for_digest(output_root: Path | str) -> tuple[dict[str, Any] | None, Path | None]:
+  pack, path, _source_type = resolve_latest_web_signal_pack(output_root)
+  return pack, path
+
 
 MAX_KEY_SIGNALS = 3
 PREVIEW_ONLY_LABEL = "preview_only_no_send"
@@ -316,6 +356,7 @@ def generate_live_digest_preview(
     "recipient_group_name": recipient_group_name,
     "user_note": user_note,
     "source_pack_path": source_pack_path,
+    "source_type": str(pack.get("source_type") or SOURCE_TYPE_LIVE),
     "preview_mode": PREVIEW_ONLY_LABEL,
   }
 
@@ -332,6 +373,7 @@ def _assert_no_sensitive_material(serialized: str) -> None:
 def build_save_payload(preview: dict[str, Any]) -> dict[str, Any]:
   return {
     "source_pack_path": preview.get("source_pack_path"),
+    "source_type": preview.get("source_type"),
     "theme_name": preview.get("theme_name"),
     "subject": preview.get("subject"),
     "body": preview.get("plain_text_body"),
@@ -420,15 +462,20 @@ def create_live_digest_preview_from_latest_pack(
   if login_required and str(auth_role or "member") != "admin":
     return {"ok": False, "error": "admin_required", "message": "管理者のみ実行できます。"}
 
-  pack_path = find_latest_live_web_signal_pack_path(output_root)
+  pack, resolved_path, source_type = resolve_latest_web_signal_pack(output_root)
+  pack_path = resolved_path
   if pack_path is None:
     return {
       "ok": False,
       "error": "missing_source_pack",
-      "message": "latest live_web_signal_pack がありません。先に Web Signal Pack を作成してください。",
+      "message": "latest web signal pack がありません。先に Web Signal Pack または Next Cycle Pack を作成してください。",
     }
 
-  pack = load_live_web_signal_pack(pack_path)
+  pack = pack or load_live_web_signal_pack(pack_path)
+  if not pack and pack_path is not None:
+    from tech_cartography.services.live_next_cycle_tavily_runner import load_next_cycle_web_signal_pack
+
+    pack = load_next_cycle_web_signal_pack(pack_path)
   if not pack:
     return {
       "ok": False,
@@ -455,4 +502,5 @@ def create_live_digest_preview_from_latest_pack(
     "preview": preview,
     "saved_paths": saved_paths,
     "email_send_disabled": email_send_is_disabled(),
+    "source_type": source_type or preview.get("source_type"),
   }

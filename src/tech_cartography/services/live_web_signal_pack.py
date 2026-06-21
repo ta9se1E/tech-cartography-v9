@@ -33,6 +33,7 @@ LIVE_SIGNAL_TYPES: frozenset[str] = frozenset(
 CONFIDENCE_LABELS: frozenset[str] = frozenset({"high", "medium", "low"})
 REVIEW_STATUS = "needs_human_review"
 SAFETY_LABEL = "Web Signal candidate"
+SOURCE_TYPE_LIVE = "live_web_signal_pack"
 
 SAFETY_NOTICE = (
   "These are Web Signal candidates for human review. "
@@ -169,6 +170,7 @@ def build_live_web_signal_pack(
 ) -> dict[str, Any]:
   return {
     "theme_name": theme_name,
+    "source_type": SOURCE_TYPE_LIVE,
     "query": query,
     "fetched_at": fetched_at or _utc_now_iso(),
     "provider": provider,

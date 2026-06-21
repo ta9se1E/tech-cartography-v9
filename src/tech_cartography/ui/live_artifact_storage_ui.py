@@ -72,7 +72,9 @@ def render_live_artifact_storage_expander(
       f"digest_previews={counts['digest_previews']}, "
       f"email_send_logs={counts['email_send_logs']}, "
       f"watch_expansion_proposals={counts['watch_expansion_proposals']}, "
-      f"watch_profile_drafts={counts['watch_profile_drafts']}"
+      f"watch_profile_drafts={counts['watch_profile_drafts']}, "
+      f"next_cycle_search_plans={counts['next_cycle_search_plans']}, "
+      f"next_cycle_web_signal_packs={counts['next_cycle_web_signal_packs']}"
     )
 
     for label, ok in status["writable"].items():
