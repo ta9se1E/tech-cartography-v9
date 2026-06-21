@@ -102,3 +102,21 @@ def resolve_allow_external_api(
   if reasons:
     return False, reasons
   return True, []
+
+
+def check_live_tavily_smoke_allowed(
+  *,
+  login_required: bool,
+  is_authenticated: bool,
+  auth_role: str,
+) -> tuple[bool, str | None]:
+  """Guard for admin-only live Tavily smoke test."""
+  if login_required and not is_authenticated:
+    return False, "login_required"
+  if login_required and str(auth_role or "member") != "admin":
+    return False, "admin_required"
+
+  allowed, _missing, reason = check_service_external_api("tavily")
+  if not allowed:
+    return False, reason
+  return True, None

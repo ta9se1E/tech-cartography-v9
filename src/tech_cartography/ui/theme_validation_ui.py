@@ -1227,6 +1227,9 @@ def render_analyst_input_execution_section(*, key_prefix: str = ANALYST_INPUT_KE
   st.caption(
     "新しい技術テーマとseed公報を入力し、Manual ClaimsからEvidence Map、Paper/Web、Link、Watch、Digestまで順番に生成します。"
   )
+  from tech_cartography.ui.live_tavily_search_ui import render_live_tavily_smoke_test_section
+
+  render_live_tavily_smoke_test_section(project_root=_project_root(), key_prefix=f"{key_prefix}_tavily_smoke")
   render_pan_theme_loader_button(key_prefix=key_prefix)
   render_theme_validation_safety_messages()
 

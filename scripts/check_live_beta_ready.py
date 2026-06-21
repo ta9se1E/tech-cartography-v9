@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pre-deploy checks for Cloud Run live beta (Phase 25C)."""
+"""Pre-deploy checks for Cloud Run live beta (Phase 25C / 25D)."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ from tech_cartography.runtime.cloud_run_config import (  # noqa: E402
   DISABLE_EXTERNAL_API_ENV,
   is_external_api_disabled,
 )
+from tech_cartography.runtime.external_api_guard import check_live_tavily_smoke_allowed  # noqa: E402
+from tech_cartography.services.live_tavily_search import clamp_max_results  # noqa: E402
 
 
 def _read(path: Path) -> str:
@@ -37,8 +39,11 @@ def main() -> int:
   guard_path = PROJECT_ROOT / "src/tech_cartography/runtime/external_api_guard.py"
   ui_path = PROJECT_ROOT / "src/tech_cartography/ui/api_secret_status_ui.py"
   docs_path = PROJECT_ROOT / "docs/phase25c_live_api_secret_foundation.md"
+  tavily_service = PROJECT_ROOT / "src/tech_cartography/services/live_tavily_search.py"
+  tavily_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_tavily_search_ui.py"
+  tavily_docs = PROJECT_ROOT / "docs/phase25d_live_tavily_web_search_smoke_test.md"
 
-  for path in (module_path, guard_path, ui_path, docs_path):
+  for path in (module_path, guard_path, ui_path, docs_path, tavily_service, tavily_ui, tavily_docs):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
 
@@ -62,6 +67,15 @@ def main() -> int:
     failures.append("user_settings_view に admin API status UI がありません")
   if "render_api_secret_status_expander" not in sidebar_ui:
     failures.append("demo_safe_ui sidebar に admin API status UI がありません")
+
+  analyst_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/theme_validation_ui.py")
+  tavily_ui_text = _read(tavily_ui)
+  if "render_live_tavily_smoke_test_section" not in analyst_ui:
+    failures.append("theme_validation_ui に live Tavily smoke test UI がありません")
+  if "Tavilyで1回検索" not in tavily_ui_text:
+    failures.append("live_tavily_search_ui に smoke test ボタンがありません")
+  if clamp_max_results(99) != 3:
+    failures.append("live Tavily max_results が 3 を超えてしまいます")
 
   saved_disable = os.environ.get(DISABLE_EXTERNAL_API_ENV)
   try:
@@ -95,6 +109,16 @@ def main() -> int:
 
     if any(secret_value in serialized for secret_value in ("configured-test-value", "placeholder")):
       failures.append("初期 get_api_secret_status が secret 値を含んでいます")
+
+    allowed_smoke, smoke_reason = check_live_tavily_smoke_allowed(
+      login_required=True,
+      is_authenticated=True,
+      auth_role="admin",
+    )
+    if allowed_smoke:
+      failures.append("DISABLE_EXTERNAL_API=true でも live Tavily smoke が許可されています")
+    if smoke_reason != "disabled_by_env":
+      failures.append(f"live Tavily smoke block reason が不正: {smoke_reason}")
   finally:
     if saved_disable is None:
       os.environ.pop(DISABLE_EXTERNAL_API_ENV, None)
@@ -109,6 +133,7 @@ def main() -> int:
   print(f"api_secret_config: {'yes' if module_path.exists() else 'no'}")
   print(f"external_api_guard: {'yes' if guard_path.exists() else 'no'}")
   print(f"admin status UI: {'yes' if ui_path.exists() else 'no'}")
+  print(f"live tavily smoke: {'yes' if tavily_service.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")
