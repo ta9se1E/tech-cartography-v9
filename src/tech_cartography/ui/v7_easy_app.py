@@ -799,6 +799,9 @@ def _tab_reports(
   developer_mode: bool = False,
 ) -> None:
   if demo_artifacts is None:
+    from tech_cartography.ui.live_operation_console_ui import render_live_operation_console_section
+
+    render_live_operation_console_section(project_root=PROJECT_ROOT, key_prefix="reports_live_operation_console")
     from tech_cartography.ui.live_digest_preview_ui import render_live_digest_preview_reports_section
     from tech_cartography.ui.live_watch_expansion_ui import render_watch_profile_draft_reports_section
 

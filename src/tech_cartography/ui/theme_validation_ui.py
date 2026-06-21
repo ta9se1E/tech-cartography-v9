@@ -1227,6 +1227,9 @@ def render_analyst_input_execution_section(*, key_prefix: str = ANALYST_INPUT_KE
   st.caption(
     "新しい技術テーマとseed公報を入力し、Manual ClaimsからEvidence Map、Paper/Web、Link、Watch、Digestまで順番に生成します。"
   )
+  from tech_cartography.ui.live_operation_console_ui import render_live_operation_console_section
+
+  render_live_operation_console_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_operation_console")
   from tech_cartography.ui.live_web_signal_pack_ui import render_live_web_signal_pack_section
 
   render_live_web_signal_pack_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_web_signal_pack")

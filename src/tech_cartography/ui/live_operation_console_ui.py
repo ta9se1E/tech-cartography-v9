@@ -1,0 +1,132 @@
+"""Live Operation Console UI — manual weekly operation panel (Phase 25K)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+import streamlit as st
+
+from tech_cartography.auth.basic_auth import is_login_required
+from tech_cartography.services.live_operation_status import (
+  SAFETY_NOTICE,
+  STEP_GUIDANCE,
+  STEP_ORDER,
+  build_and_save_operation_cycle_status,
+  build_operation_cycle_status,
+)
+from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_warning_box
+from tech_cartography.ui.login_ui import can_use_admin_features
+
+
+def should_show_live_operation_console_ui() -> bool:
+  return is_login_required() and can_use_admin_features()
+
+
+def _step_label(step: str) -> str:
+  labels = {
+    "web_signal_pack": "Web Signal Pack",
+    "digest_preview": "Digest Preview",
+    "self_only_email": "Self-only Email",
+    "watch_expansion_proposal": "Watch Expansion",
+    "watch_profile_draft": "Watch Profile Draft",
+    "next_cycle_search_plan": "Next Cycle Search Plan",
+    "next_cycle_web_signal_pack": "Next Cycle Web Signal Pack",
+  }
+  return labels.get(step, step)
+
+
+def render_live_operation_console_section(
+  *,
+  project_root: Path | str,
+  key_prefix: str = "live_operation_console",
+  save_on_load: bool = True,
+) -> None:
+  if not should_show_live_operation_console_ui():
+    return
+
+  with st.expander("Live Operation Console（手動週次運用）", expanded=True):
+    st.markdown(
+      render_caution_box(
+        "Live 成果物の週次サイクル状態を<strong>一覧表示</strong>します。"
+        " 自動実行・scheduler・一斉送信はありません。"
+        " 各操作は下の既存 expander から手動で行ってください。"
+      ),
+      unsafe_allow_html=True,
+    )
+
+    if st.button("状態を更新して保存", key=f"{key_prefix}_refresh", type="secondary"):
+      st.session_state.pop(f"{key_prefix}_status", None)
+
+    status: dict[str, Any] | None = st.session_state.get(f"{key_prefix}_status")
+    saved_paths: dict[str, str] | None = st.session_state.get(f"{key_prefix}_saved_paths")
+    save_error: str | None = st.session_state.get(f"{key_prefix}_save_error")
+
+    if status is None:
+      if save_on_load:
+        status, saved_paths, save_error = build_and_save_operation_cycle_status(project_root)
+      else:
+        status = build_operation_cycle_status(project_root)
+        saved_paths = None
+        save_error = None
+      st.session_state[f"{key_prefix}_status"] = status
+      st.session_state[f"{key_prefix}_saved_paths"] = saved_paths
+      st.session_state[f"{key_prefix}_save_error"] = save_error
+
+    st.markdown(f"**active storage root:** `{status.get('active_storage_root')}`")
+    st.caption(f"LIVE_OUTPUTS_ROOT: {status.get('live_outputs_root_env')}")
+
+    runtime = status.get("runtime_flags") or {}
+    flag_rows = [
+      {
+        "flag": "DISABLE_EXTERNAL_API",
+        "active": runtime.get("external_api_disabled"),
+        "meaning": "Tavily 等の外部API",
+      },
+      {
+        "flag": "DISABLE_EMAIL_SEND",
+        "active": runtime.get("email_send_disabled"),
+        "meaning": "メール送信",
+      },
+      {
+        "flag": "DISABLE_SCHEDULER",
+        "active": runtime.get("scheduler_disabled"),
+        "meaning": "scheduler",
+      },
+    ]
+    st.dataframe(flag_rows, use_container_width=True, hide_index=True)
+
+    step_rows = []
+    for index, step in enumerate(STEP_ORDER, start=1):
+      info = (status.get("step_statuses") or {}).get(step) or {}
+      step_rows.append(
+        {
+          "step": f"{index}. {_step_label(step)}",
+          "status": info.get("status"),
+          "count": info.get("count"),
+          "latest_created_at": info.get("latest_created_at"),
+          "latest_path": info.get("latest_path"),
+        },
+      )
+    st.dataframe(step_rows, use_container_width=True, hide_index=True)
+
+    st.markdown(f"**next recommended action:** {status.get('next_recommended_action')}")
+
+    warnings = status.get("warnings") or []
+    if warnings:
+      for warning in warnings:
+        st.markdown(render_warning_box(warning), unsafe_allow_html=True)
+
+    st.markdown("**各機能への案内**")
+    for step in STEP_ORDER:
+      guidance = STEP_GUIDANCE.get(step)
+      if guidance:
+        st.markdown(f"- {guidance}")
+
+    if saved_paths:
+      st.caption(f"status saved: {saved_paths.get('json')}")
+    elif save_error:
+      st.warning(f"状態ファイルの保存に失敗: {save_error}")
+
+    st.markdown(render_info_box(str(status.get("safety_notice") or SAFETY_NOTICE)), unsafe_allow_html=True)

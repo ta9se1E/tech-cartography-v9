@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pre-deploy checks for Cloud Run live beta (Phase 25C–25J)."""
+"""Pre-deploy checks for Cloud Run live beta (Phase 25C–25K)."""
 
 from __future__ import annotations
 
@@ -76,6 +76,9 @@ def main() -> int:
   next_cycle_runner = PROJECT_ROOT / "src/tech_cartography/services/live_next_cycle_tavily_runner.py"
   next_cycle_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_next_cycle_search_ui.py"
   next_cycle_docs = PROJECT_ROOT / "docs/phase25j_watch_profile_driven_next_cycle_search.md"
+  operation_status = PROJECT_ROOT / "src/tech_cartography/services/live_operation_status.py"
+  operation_console_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_operation_console_ui.py"
+  operation_docs = PROJECT_ROOT / "docs/phase25k_manual_weekly_operation_console.md"
 
   for path in (
     module_path,
@@ -106,6 +109,9 @@ def main() -> int:
     next_cycle_runner,
     next_cycle_ui,
     next_cycle_docs,
+    operation_status,
+    operation_console_ui,
+    operation_docs,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -195,6 +201,15 @@ def main() -> int:
     failures.append("live_next_cycle_tavily_runner が live_artifact_paths を使っていません")
   if "source_type" not in _read(digest_service):
     failures.append("live_digest_preview が source_type 対応していません")
+  operation_console_text = _read(operation_console_ui)
+  if "render_live_operation_console_section" not in analyst_ui:
+    failures.append("theme_validation_ui に live operation console UI がありません")
+  if "Live Operation Console（手動週次運用）" not in operation_console_text:
+    failures.append("live_operation_console_ui にコンソールタイトルがありません")
+  if "build_operation_cycle_status" not in _read(operation_status):
+    failures.append("live_operation_status が build_operation_cycle_status を提供していません")
+  if "get_live_operation_status_dir" not in _read(artifact_paths):
+    failures.append("live_artifact_paths に get_live_operation_status_dir がありません")
   if "CONFIRMATION_TEXT" not in email_ui_text and "SEND TO MYSELF" not in email_ui_text:
     failures.append("live_email_send_ui に確認テキスト要件がありません")
   if "SMTP_PASSWORD" in email_ui_text and "os.environ" in email_ui_text:
@@ -336,6 +351,7 @@ def main() -> int:
   print(f"watch profile draft: {'yes' if draft_service.exists() else 'no'}")
   print(f"next cycle search plan: {'yes' if next_cycle_plan.exists() else 'no'}")
   print(f"next cycle tavily runner: {'yes' if next_cycle_runner.exists() else 'no'}")
+  print(f"live operation console: {'yes' if operation_status.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")
