@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pre-deploy checks for Cloud Run live beta (Phase 25C–25E)."""
+"""Pre-deploy checks for Cloud Run live beta (Phase 25C–25F)."""
 
 from __future__ import annotations
 
@@ -18,9 +18,12 @@ from tech_cartography.runtime.api_secret_config import (  # noqa: E402
   is_secret_present,
 )
 from tech_cartography.runtime.cloud_run_config import (  # noqa: E402
+  DISABLE_EMAIL_SEND_ENV,
   DISABLE_EXTERNAL_API_ENV,
+  is_email_send_disabled,
   is_external_api_disabled,
 )
+from tech_cartography.services.live_digest_preview import can_create_live_digest_preview  # noqa: E402
 from tech_cartography.runtime.external_api_guard import check_live_tavily_smoke_allowed  # noqa: E402
 from tech_cartography.services.live_tavily_search import clamp_max_results  # noqa: E402
 
@@ -45,6 +48,9 @@ def main() -> int:
   pack_service = PROJECT_ROOT / "src/tech_cartography/services/live_web_signal_pack.py"
   pack_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_web_signal_pack_ui.py"
   pack_docs = PROJECT_ROOT / "docs/phase25e_live_tavily_web_signal_pack_integration.md"
+  digest_service = PROJECT_ROOT / "src/tech_cartography/services/live_digest_preview.py"
+  digest_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_digest_preview_ui.py"
+  digest_docs = PROJECT_ROOT / "docs/phase25f_live_digest_mail_preview.md"
 
   for path in (
     module_path,
@@ -57,6 +63,9 @@ def main() -> int:
     pack_service,
     pack_ui,
     pack_docs,
+    digest_service,
+    digest_ui,
+    digest_docs,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -86,6 +95,7 @@ def main() -> int:
   tavily_ui_text = _read(tavily_ui)
   pack_ui_text = _read(pack_ui)
   market_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v7_easy_app.py")
+  digest_ui_text = _read(digest_ui)
   if "render_live_tavily_smoke_test_section" in analyst_ui and "render_live_web_signal_pack_section" not in analyst_ui:
     failures.append("theme_validation_ui が live web signal pack UI に更新されていません")
   if "render_live_web_signal_pack_section" not in analyst_ui:
@@ -94,6 +104,14 @@ def main() -> int:
     failures.append("live_web_signal_pack_ui に pack 作成ボタンがありません")
   if "render_live_web_signal_candidates_section" not in market_ui:
     failures.append("v7_easy_app market タブに live candidates セクションがありません")
+  if "render_live_digest_preview_section" not in analyst_ui:
+    failures.append("theme_validation_ui に live digest preview UI がありません")
+  if "メール下書きを作成" not in digest_ui_text:
+    failures.append("live_digest_preview_ui に preview 作成ボタンがありません")
+  if "send_email" in digest_ui_text.lower():
+    failures.append("live_digest_preview_ui が send_email を参照しています")
+  if "render_live_digest_preview_reports_section" not in market_ui:
+    failures.append("v7_easy_app reports タブに live digest preview セクションがありません")
   if clamp_max_results(99) != 3:
     failures.append("live Tavily max_results が 3 を超えてしまいます")
 
@@ -139,6 +157,20 @@ def main() -> int:
       failures.append("DISABLE_EXTERNAL_API=true でも live Tavily smoke が許可されています")
     if smoke_reason != "disabled_by_env":
       failures.append(f"live Tavily smoke block reason が不正: {smoke_reason}")
+
+    saved_email_disable = os.environ.get(DISABLE_EMAIL_SEND_ENV)
+    os.environ[DISABLE_EMAIL_SEND_ENV] = "true"
+    if not is_email_send_disabled():
+      failures.append("DISABLE_EMAIL_SEND=true が有効になりません")
+    allowed_preview, preview_reason = can_create_live_digest_preview()
+    if not allowed_preview:
+      failures.append("DISABLE_EMAIL_SEND=true でも digest preview が不可です")
+    if "preview" not in preview_reason.lower():
+      failures.append(f"digest preview reason が不正: {preview_reason}")
+    if saved_email_disable is None:
+      os.environ.pop(DISABLE_EMAIL_SEND_ENV, None)
+    else:
+      os.environ[DISABLE_EMAIL_SEND_ENV] = saved_email_disable
   finally:
     if saved_disable is None:
       os.environ.pop(DISABLE_EXTERNAL_API_ENV, None)
@@ -155,6 +187,7 @@ def main() -> int:
   print(f"admin status UI: {'yes' if ui_path.exists() else 'no'}")
   print(f"live tavily smoke: {'yes' if tavily_service.exists() else 'no'}")
   print(f"live web signal pack: {'yes' if pack_service.exists() else 'no'}")
+  print(f"live digest preview: {'yes' if digest_service.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

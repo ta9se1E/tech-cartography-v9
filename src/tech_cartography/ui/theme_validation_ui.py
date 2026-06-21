@@ -1230,6 +1230,9 @@ def render_analyst_input_execution_section(*, key_prefix: str = ANALYST_INPUT_KE
   from tech_cartography.ui.live_web_signal_pack_ui import render_live_web_signal_pack_section
 
   render_live_web_signal_pack_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_web_signal_pack")
+  from tech_cartography.ui.live_digest_preview_ui import render_live_digest_preview_section
+
+  render_live_digest_preview_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_digest_preview")
   render_pan_theme_loader_button(key_prefix=key_prefix)
   render_theme_validation_safety_messages()
 
