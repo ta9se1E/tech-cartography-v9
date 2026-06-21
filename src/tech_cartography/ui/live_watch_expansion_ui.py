@@ -20,7 +20,7 @@ from tech_cartography.services.live_web_signal_pack import find_latest_live_web_
 from tech_cartography.services.watch_profile_draft import (
   DRAFT_SAFETY_NOTICE,
   apply_human_watch_expansion_decisions,
-  load_latest_watch_profile_draft,
+  resolve_watch_profile_draft_status,
 )
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_warning_box
 from tech_cartography.ui.login_ui import (
@@ -209,45 +209,111 @@ def render_live_watch_expansion_section(
     else:
       st.warning(str(decision_result.get("message") or "保存に失敗しました。"))
 
+  render_watch_profile_draft_reports_section(
+    project_root=project_root,
+    key_prefix=f"{key_prefix}_approved_draft",
+  )
+
+
+def _render_watch_profile_draft_body(
+  *,
+  draft: dict[str, Any],
+  source_path: str | None,
+) -> None:
+  st.markdown(
+    render_caution_box(
+      "これは人間承認済みの Watch Profile Draft です。"
+      " 本番 Watch Profile は自動更新されていません。"
+    ),
+    unsafe_allow_html=True,
+  )
+  if source_path:
+    st.caption(f"source file path: {source_path}")
+  st.markdown(f"**theme_name:** {draft.get('theme_name')}")
+  st.caption(f"approved_by: {draft.get('approved_by')} | approved_at: {draft.get('approved_at')}")
+
+  for label, title in (
+    ("approved_keywords", "approved keywords"),
+    ("approved_companies", "approved companies"),
+    ("approved_public_projects", "approved public projects"),
+    ("approved_technology_terms", "approved technology terms"),
+    ("approved_market_applications", "approved market applications"),
+  ):
+    items = draft.get(label) or []
+    st.markdown(f"**{title}**")
+    if items:
+      for item in items:
+        st.markdown(f"- {item}")
+    else:
+      st.caption("(none)")
+
+  queries = draft.get("next_monitoring_query_candidates") or []
+  st.markdown("**next monitoring query候補**")
+  if queries:
+    for query in queries:
+      st.markdown(f"- `{query}`")
+  else:
+    st.caption("(none)")
+
+  st.markdown(render_info_box(str(draft.get("safety_notice") or DRAFT_SAFETY_NOTICE)), unsafe_allow_html=True)
+
+
+def render_watch_profile_draft_debug_expander(
+  *,
+  project_root: Path | str,
+  key_prefix: str,
+) -> None:
+  if not should_show_live_watch_expansion_ui():
+    return
+
+  status = resolve_watch_profile_draft_status(project_root)
+  with st.expander("Watch Profile Draft Storage（管理者向け）", expanded=False):
+    st.markdown(
+      render_info_box(
+        "Approved Watch Profile Draft の探索・読み込み状態です。"
+        " Secret 値は表示しません。"
+      ),
+      unsafe_allow_html=True,
+    )
+    st.markdown(f"**LIVE_OUTPUTS_ROOT:** `{status.get('live_outputs_root_env')}`")
+    st.markdown(f"**active storage root:** `{status.get('active_storage_root')}`")
+    st.caption(f"env override: {'yes' if status.get('using_env_override') else 'no (local fallback)'}")
+    for directory in status.get("live_watch_profiles_dirs") or []:
+      st.caption(f"live_watch_profiles dir: {directory}")
+    st.markdown(f"**found draft file count:** {status.get('draft_file_count', 0)}")
+    st.markdown(f"**latest draft path:** `{status.get('latest_path') or '(none)'}`")
+    st.markdown(f"**load status:** `{status.get('load_status')}`")
+    if status.get("load_message"):
+      st.caption(str(status["load_message"]))
+
 
 def render_watch_profile_draft_reports_section(
   *,
   project_root: Path | str,
   key_prefix: str = "reports_watch_profile_draft",
+  show_admin_debug: bool = True,
 ) -> None:
-  """Show latest human-approved Watch Profile Draft on reports/settings (analyst/live)."""
-  draft = load_latest_watch_profile_draft(project_root)
-  if not draft:
-    return
+  """Show latest human-approved Watch Profile Draft; never silently hide load failures."""
+  status = resolve_watch_profile_draft_status(project_root)
+  draft = status.get("draft")
+  load_status = str(status.get("load_status") or "missing")
+  latest_path = status.get("latest_path")
 
-  with st.expander("Approved Watch Profile Draft（人間承認済み）", expanded=False):
-    st.markdown(
-      render_caution_box(
-        "これは人間承認済みの Watch Profile Draft です。"
-        " 本番 Watch Profile は自動更新されていません。"
-      ),
-      unsafe_allow_html=True,
-    )
-    st.markdown(f"**theme_name:** {draft.get('theme_name')}")
-    st.caption(f"approved_by: {draft.get('approved_by')} | approved_at: {draft.get('approved_at')}")
+  with st.expander("Approved Watch Profile Draft（人間承認済み）", expanded=bool(draft)):
+    if load_status == "ok" and isinstance(draft, dict):
+      _render_watch_profile_draft_body(draft=draft, source_path=str(latest_path) if latest_path else None)
+    elif load_status == "missing":
+      st.info("保存済み Watch Profile Draft がありません。Watch Expansion で承認してください。")
+    else:
+      st.markdown(
+        render_warning_box(
+          f"Watch Profile Draft の読み込みに失敗しました（{load_status}）。"
+          f" {status.get('load_message') or ''}".strip()
+        ),
+        unsafe_allow_html=True,
+      )
+      if latest_path:
+        st.caption(f"latest draft path: {latest_path}")
 
-    for label, title in (
-      ("approved_keywords", "approved keywords"),
-      ("approved_companies", "approved companies"),
-      ("approved_public_projects", "approved public projects"),
-      ("approved_technology_terms", "approved technology terms"),
-      ("approved_market_applications", "approved market applications"),
-    ):
-      items = draft.get(label) or []
-      if items:
-        st.markdown(f"**{title}**")
-        for item in items:
-          st.markdown(f"- {item}")
-
-    queries = draft.get("next_monitoring_query_candidates") or []
-    if queries:
-      st.markdown("**next monitoring query候補**")
-      for query in queries:
-        st.markdown(f"- `{query}`")
-
-    st.markdown(render_info_box(str(draft.get("safety_notice") or DRAFT_SAFETY_NOTICE)), unsafe_allow_html=True)
+  if show_admin_debug:
+    render_watch_profile_draft_debug_expander(project_root=project_root, key_prefix=f"{key_prefix}_debug")

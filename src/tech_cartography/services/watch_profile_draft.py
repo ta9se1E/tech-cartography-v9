@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -215,34 +216,160 @@ def save_watch_profile_draft(
   return {"json": str(json_path), "markdown": str(md_path)}
 
 
-def find_latest_watch_profile_draft_path(output_root: Path | str) -> Path | None:
-  out_dir = get_live_watch_profiles_dir(output_root)
-  if not out_dir.exists():
+WATCH_PROFILE_DRAFT_GLOB = "watch_profile_draft_*.json"
+WATCH_PROFILE_DRAFT_PREFIX = "watch_profile_draft_"
+
+
+def _draft_filename_slug(path: Path) -> str:
+  name = path.name
+  if name.startswith(WATCH_PROFILE_DRAFT_PREFIX) and name.endswith(".json"):
+    return name[len(WATCH_PROFILE_DRAFT_PREFIX) : -5]
+  return name
+
+
+def _draft_path_sort_key(path: Path) -> tuple[str, float]:
+  slug = _draft_filename_slug(path)
+  try:
+    mtime = float(path.stat().st_mtime)
+  except OSError:
+    mtime = 0.0
+  return slug, mtime
+
+
+def iter_watch_profile_draft_search_dirs(project_root: Path | str | None = None) -> list[Path]:
+  """Primary LIVE_OUTPUTS_ROOT dir plus local outputs fallback when different."""
+  primary = get_live_watch_profiles_dir(project_root)
+  directories = [primary]
+  if project_root is not None:
+    fallback = Path(project_root).resolve() / "outputs" / "live_watch_profiles"
+    if fallback not in directories:
+      directories.append(fallback)
+  return directories
+
+
+def list_watch_profile_draft_json_paths(project_root: Path | str | None = None) -> list[Path]:
+  """List draft JSON files only (never .md). Search all configured dirs."""
+  found: list[Path] = []
+  seen: set[str] = set()
+  for directory in iter_watch_profile_draft_search_dirs(project_root):
+    try:
+      if not directory.is_dir():
+        continue
+      for path in directory.glob(WATCH_PROFILE_DRAFT_GLOB):
+        if path.suffix.lower() != ".json":
+          continue
+        key = str(path.resolve())
+        if key in seen:
+          continue
+        seen.add(key)
+        found.append(path)
+    except OSError:
+      continue
+  return found
+
+
+def find_latest_watch_profile_draft_path(output_root: Path | str | None = None) -> Path | None:
+  paths = list_watch_profile_draft_json_paths(output_root)
+  if not paths:
     return None
-  files = sorted(
-    out_dir.glob("watch_profile_draft_*.json"),
-    key=lambda path: path.stat().st_mtime,
-    reverse=True,
-  )
-  return files[0] if files else None
+  return max(paths, key=_draft_path_sort_key)
 
 
 def load_watch_profile_draft(path: Path | str) -> dict[str, Any] | None:
+  draft, status, _message = load_watch_profile_draft_with_status(path)
+  if status == "ok":
+    return draft
+  return None
+
+
+def load_watch_profile_draft_with_status(
+  path: Path | str,
+) -> tuple[dict[str, Any] | None, str, str | None]:
+  """Return (draft, load_status, message). Never raises."""
   target = Path(path)
   if not target.exists():
-    return None
+    return None, "missing", f"draft file not found: {target}"
+  if target.suffix.lower() != ".json":
+    return None, "read_error", f"expected JSON draft file: {target}"
   try:
-    data = json.loads(target.read_text(encoding="utf-8"))
-  except (json.JSONDecodeError, OSError):
-    return None
-  return data if isinstance(data, dict) else None
+    raw = target.read_text(encoding="utf-8")
+  except OSError as exc:
+    return None, "read_error", f"cannot read draft file ({type(exc).__name__})"
+  try:
+    data = json.loads(raw)
+  except json.JSONDecodeError as exc:
+    return None, "parse_error", f"invalid JSON in draft file ({exc.msg})"
+  if not isinstance(data, dict):
+    return None, "parse_error", "draft JSON root must be an object"
+  return data, "ok", None
 
 
-def load_latest_watch_profile_draft(output_root: Path | str) -> dict[str, Any] | None:
+def describe_watch_profile_draft_storage(project_root: Path | str | None = None) -> dict[str, Any]:
+  """Admin-safe storage summary for Watch Profile Draft visibility."""
+  from tech_cartography.runtime.live_artifact_paths import (
+    LIVE_OUTPUTS_ROOT_ENV,
+    get_live_outputs_root,
+    using_live_outputs_root_env,
+  )
+
+  search_dirs = [str(path) for path in iter_watch_profile_draft_search_dirs(project_root)]
+  json_paths = list_watch_profile_draft_json_paths(project_root)
+  latest_path = find_latest_watch_profile_draft_path(project_root)
+  env_value = str(os.environ.get(LIVE_OUTPUTS_ROOT_ENV, "") or "").strip()
+
+  status = "missing"
+  message: str | None = "no watch_profile_draft JSON files found"
+  draft: dict[str, Any] | None = None
+  if latest_path is not None:
+    draft, status, message = load_watch_profile_draft_with_status(latest_path)
+
+  return {
+    "live_outputs_root_env": env_value or "(unset — local outputs fallback)",
+    "using_env_override": using_live_outputs_root_env(),
+    "active_storage_root": str(get_live_outputs_root(project_root)),
+    "live_watch_profiles_dirs": search_dirs,
+    "draft_file_count": len(json_paths),
+    "latest_draft_path": str(latest_path) if latest_path else None,
+    "load_status": status,
+    "load_message": message,
+    "draft": draft,
+  }
+
+
+def resolve_watch_profile_draft_status(project_root: Path | str | None = None) -> dict[str, Any]:
+  """Resolved latest draft plus load diagnostics for UI."""
+  info = describe_watch_profile_draft_storage(project_root)
+  return {
+    "draft": info.get("draft"),
+    "latest_path": info.get("latest_draft_path"),
+    "load_status": info.get("load_status"),
+    "load_message": info.get("load_message"),
+    "draft_file_count": info.get("draft_file_count", 0),
+    "live_watch_profiles_dirs": info.get("live_watch_profiles_dirs") or [],
+    "live_outputs_root_env": info.get("live_outputs_root_env"),
+    "using_env_override": info.get("using_env_override"),
+    "active_storage_root": info.get("active_storage_root"),
+  }
+
+
+def load_latest_watch_profile_draft(output_root: Path | str | None = None) -> dict[str, Any] | None:
   latest = find_latest_watch_profile_draft_path(output_root)
   if latest is None:
     return None
-  return load_watch_profile_draft(latest)
+  draft, status, _message = load_watch_profile_draft_with_status(latest)
+  if status == "ok":
+    return draft
+  return None
+
+
+def load_latest_watch_profile_draft_with_path(
+  output_root: Path | str | None = None,
+) -> tuple[dict[str, Any] | None, Path | None, str, str | None]:
+  latest = find_latest_watch_profile_draft_path(output_root)
+  if latest is None:
+    return None, None, "missing", "no watch_profile_draft JSON files found"
+  draft, status, message = load_watch_profile_draft_with_status(latest)
+  return draft, latest, status, message
 
 
 def apply_human_watch_expansion_decisions(

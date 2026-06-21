@@ -172,6 +172,10 @@ def main() -> int:
     failures.append("v7_easy_app reports タブに watch profile draft セクションがありません")
   if "render_watch_profile_draft_reports_section" not in settings_ui:
     failures.append("user_settings_view に watch profile draft セクションがありません")
+  if "resolve_watch_profile_draft_status" not in _read(draft_service):
+    failures.append("watch_profile_draft が resolve_watch_profile_draft_status を提供していません")
+  if "Watch Profile Draft Storage（管理者向け）" not in expansion_ui_text:
+    failures.append("live_watch_expansion_ui に watch profile draft debug UI がありません")
   if "live_artifact_paths" not in _read(expansion_service):
     failures.append("live_watch_expansion_proposal が live_artifact_paths を使っていません")
   if "live_artifact_paths" not in _read(draft_service):

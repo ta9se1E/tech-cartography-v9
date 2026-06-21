@@ -155,3 +155,51 @@ def test_pending_review_status_on_source_proposals(proposals_document: dict) -> 
 def test_build_expansion_proposals_returns_list() -> None:
   pack = build_live_web_signal_pack(theme_name="T", query="PAN CFRP", candidates=[], fetched_at="2026-06-18T00:00:00+00:00")
   assert isinstance(build_expansion_proposals(pack=pack), list)
+
+
+def test_list_drafts_under_live_outputs_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+  live_root = tmp_path / "live_root"
+  profiles_dir = live_root / "live_watch_profiles"
+  profiles_dir.mkdir(parents=True)
+  older = profiles_dir / "watch_profile_draft_20260620T120000+0000.json"
+  newer = profiles_dir / "watch_profile_draft_20260621T150932+0000.json"
+  payload = {"theme_name": "Theme", "approved_keywords": ["PAN"], "approved_by": "admin", "approved_at": "t"}
+  older.write_text(json.dumps({**payload, "approved_keywords": ["old"]}), encoding="utf-8")
+  newer.write_text(json.dumps(payload), encoding="utf-8")
+  monkeypatch.setenv(LIVE_OUTPUTS_ROOT_ENV, str(live_root))
+
+  from tech_cartography.services.watch_profile_draft import (
+    find_latest_watch_profile_draft_path,
+    list_watch_profile_draft_json_paths,
+    resolve_watch_profile_draft_status,
+  )
+
+  paths = list_watch_profile_draft_json_paths(tmp_path / "project")
+  assert len(paths) == 2
+  latest = find_latest_watch_profile_draft_path(tmp_path / "project")
+  assert latest == newer
+  status = resolve_watch_profile_draft_status(tmp_path / "project")
+  assert status["load_status"] == "ok"
+  assert status["draft"]["approved_keywords"] == ["PAN"]
+
+
+def test_missing_draft_returns_safe_status(tmp_path: Path) -> None:
+  from tech_cartography.services.watch_profile_draft import resolve_watch_profile_draft_status
+
+  status = resolve_watch_profile_draft_status(tmp_path)
+  assert status["load_status"] == "missing"
+  assert status["draft"] is None
+
+
+def test_corrupt_json_does_not_raise(tmp_path: Path) -> None:
+  profiles_dir = tmp_path / "outputs" / "live_watch_profiles"
+  profiles_dir.mkdir(parents=True)
+  bad = profiles_dir / "watch_profile_draft_20260621T150932+0000.json"
+  bad.write_text("{not-json", encoding="utf-8")
+
+  from tech_cartography.services.watch_profile_draft import load_watch_profile_draft_with_status
+
+  draft, status, message = load_watch_profile_draft_with_status(bad)
+  assert draft is None
+  assert status == "parse_error"
+  assert message

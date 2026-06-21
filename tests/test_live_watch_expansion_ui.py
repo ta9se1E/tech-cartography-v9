@@ -17,9 +17,11 @@ def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
   monkeypatch.setenv("APP_DEFAULT_MODE", "demo")
 
 
-def test_analyst_input_wires_watch_expansion_ui() -> None:
-  text = Path("src/tech_cartography/ui/theme_validation_ui.py").read_text(encoding="utf-8")
-  assert "render_live_watch_expansion_section" in text
+def test_analyst_input_wires_draft_visibility_after_expansion() -> None:
+  analyst = Path("src/tech_cartography/ui/theme_validation_ui.py").read_text(encoding="utf-8")
+  expansion = Path("src/tech_cartography/ui/live_watch_expansion_ui.py").read_text(encoding="utf-8")
+  assert "render_live_watch_expansion_section" in analyst
+  assert "render_watch_profile_draft_reports_section" in expansion
 
 
 def test_reports_and_settings_wire_draft_section() -> None:
@@ -34,6 +36,9 @@ def test_watch_expansion_ui_is_admin_only_without_secrets() -> None:
   assert "Watch Expansion Proposals（承認前）" in text
   assert "監視範囲の拡張候補を作成" in text
   assert "Approved Watch Profile Draft（人間承認済み）" in text
+  assert "Watch Profile Draft Storage（管理者向け）" in text
+  assert "resolve_watch_profile_draft_status" in text
+  assert "source file path" in text
   assert "os.environ" not in text
   assert "SMTP_PASSWORD" not in text
   assert "infringement confirmed" not in text.lower()
