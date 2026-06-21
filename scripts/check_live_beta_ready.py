@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pre-deploy checks for Cloud Run live beta (Phase 25C / 25D)."""
+"""Pre-deploy checks for Cloud Run live beta (Phase 25C–25E)."""
 
 from __future__ import annotations
 
@@ -42,8 +42,22 @@ def main() -> int:
   tavily_service = PROJECT_ROOT / "src/tech_cartography/services/live_tavily_search.py"
   tavily_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_tavily_search_ui.py"
   tavily_docs = PROJECT_ROOT / "docs/phase25d_live_tavily_web_search_smoke_test.md"
+  pack_service = PROJECT_ROOT / "src/tech_cartography/services/live_web_signal_pack.py"
+  pack_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_web_signal_pack_ui.py"
+  pack_docs = PROJECT_ROOT / "docs/phase25e_live_tavily_web_signal_pack_integration.md"
 
-  for path in (module_path, guard_path, ui_path, docs_path, tavily_service, tavily_ui, tavily_docs):
+  for path in (
+    module_path,
+    guard_path,
+    ui_path,
+    docs_path,
+    tavily_service,
+    tavily_ui,
+    tavily_docs,
+    pack_service,
+    pack_ui,
+    pack_docs,
+  ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
 
@@ -70,10 +84,16 @@ def main() -> int:
 
   analyst_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/theme_validation_ui.py")
   tavily_ui_text = _read(tavily_ui)
-  if "render_live_tavily_smoke_test_section" not in analyst_ui:
-    failures.append("theme_validation_ui に live Tavily smoke test UI がありません")
-  if "Tavilyで1回検索" not in tavily_ui_text:
-    failures.append("live_tavily_search_ui に smoke test ボタンがありません")
+  pack_ui_text = _read(pack_ui)
+  market_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v7_easy_app.py")
+  if "render_live_tavily_smoke_test_section" in analyst_ui and "render_live_web_signal_pack_section" not in analyst_ui:
+    failures.append("theme_validation_ui が live web signal pack UI に更新されていません")
+  if "render_live_web_signal_pack_section" not in analyst_ui:
+    failures.append("theme_validation_ui に live web signal pack UI がありません")
+  if "Web Signal Packを作成" not in pack_ui_text:
+    failures.append("live_web_signal_pack_ui に pack 作成ボタンがありません")
+  if "render_live_web_signal_candidates_section" not in market_ui:
+    failures.append("v7_easy_app market タブに live candidates セクションがありません")
   if clamp_max_results(99) != 3:
     failures.append("live Tavily max_results が 3 を超えてしまいます")
 
@@ -134,6 +154,7 @@ def main() -> int:
   print(f"external_api_guard: {'yes' if guard_path.exists() else 'no'}")
   print(f"admin status UI: {'yes' if ui_path.exists() else 'no'}")
   print(f"live tavily smoke: {'yes' if tavily_service.exists() else 'no'}")
+  print(f"live web signal pack: {'yes' if pack_service.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

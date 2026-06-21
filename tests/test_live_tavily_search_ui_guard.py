@@ -53,9 +53,9 @@ def test_check_live_tavily_smoke_requires_login(monkeypatch: pytest.MonkeyPatch)
   assert reason == "login_required"
 
 
-def test_analyst_input_tab_wires_smoke_test_ui() -> None:
+def test_analyst_input_tab_wires_live_tavily_flow() -> None:
   text = Path("src/tech_cartography/ui/theme_validation_ui.py").read_text(encoding="utf-8")
-  assert "render_live_tavily_smoke_test_section" in text
+  assert "render_live_web_signal_pack_section" in text
 
 
 def test_live_tavily_ui_module_has_admin_notice() -> None:

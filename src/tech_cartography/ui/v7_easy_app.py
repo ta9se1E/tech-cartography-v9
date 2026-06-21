@@ -619,10 +619,19 @@ def _tab_evidence(
 
 
 def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> None:
+  if not demo_mode:
+    from tech_cartography.services.live_web_signal_pack import load_latest_live_web_signal_pack
+    from tech_cartography.ui.live_web_signal_pack_ui import render_live_web_signal_candidates_section
+
+    render_live_web_signal_candidates_section(project_root=PROJECT_ROOT)
+
   if is_analyst_view() and not demo_mode:
     case = _resolve_analyst_case()
-    if not case or not analyst_has_market_outputs(case, PROJECT_ROOT):
-      st.info(ANALYST_EMPTY_ARTIFACT_MESSAGE)
+    has_case_outputs = bool(case and analyst_has_market_outputs(case, PROJECT_ROOT))
+    has_live_pack = load_latest_live_web_signal_pack(PROJECT_ROOT) is not None if not demo_mode else False
+    if not has_case_outputs:
+      if not has_live_pack:
+        st.info(ANALYST_EMPTY_ARTIFACT_MESSAGE)
       return
     publication = preferred_analyst_publication(case, PROJECT_ROOT) or case.seed_publication_numbers[0]
     render_market_signal_demo_notice()
