@@ -4,66 +4,50 @@
 
 Cloud Run 上で本番実行機能を解放する前に、Streamlit アプリ内で **ユーザー名・パスワード** による簡易ログインを追加する。IAP / OAuth / DB は使わない。
 
-## 認証方式
+## 認証方式（優先順）
 
-- 環境変数 `TECH_CARTOGRAPHY_USERS_JSON` にユーザー一覧（bcrypt `password_hash`）を設定
-- `bcrypt` で平文パスワードを照合（平文は保存しない）
-- ログイン成功後 `session_state` に `authenticated` / `username` / `role` / `display_name` を保存
+### 1. Simple env login（Cloud Run live 推奨）
 
-## 環境変数
+| 変数 | 説明 |
+|------|------|
+| `REQUIRE_LOGIN` | `true` でログインゲート有効 |
+| `TECH_CARTOGRAPHY_LOGIN_USERNAME` | ログイン username |
+| `TECH_CARTOGRAPHY_LOGIN_PASSWORD` | ログイン password（Cloud Run env / Secret で設定） |
 
-| 変数 | 例 | 説明 |
-|------|-----|------|
-| `REQUIRE_LOGIN` | `false` / `true` | `true` のとき username/password ゲートを有効化 |
-| `TECH_CARTOGRAPHY_USERS_JSON` | JSON 配列 | ユーザー定義（bcrypt hash のみ） |
+`TECH_CARTOGRAPHY_LOGIN_PASSWORD` が設定されている場合、**bcrypt JSON より優先**して単純照合します。
 
-### ユーザー JSON 例
+成功時:
 
-```json
-[
-  {
-    "username": "admin",
-    "password_hash": "<bcrypt_hash>",
-    "role": "admin",
-    "display_name": "Admin"
-  }
-]
-```
+- `authenticated=True`
+- `username` = env username
+- `role=admin`
+- `display_name=username`
 
-## パスワードハッシュ生成
+### 2. bcrypt JSON fallback
+
+`TECH_CARTOGRAPHY_LOGIN_PASSWORD` が **未設定** の場合のみ、`TECH_CARTOGRAPHY_USERS_JSON`（bcrypt hash）を使用。
 
 ```bash
-python scripts/generate_password_hash.py
-# または
 python scripts/generate_password_hash.py --password "your-password"
 ```
-
-出力された bcrypt hash のみを `TECH_CARTOGRAPHY_USERS_JSON` に設定する。平文パスワードは git に含めない。
 
 ## REQUIRE_LOGIN の挙動
 
 | 値 | 挙動 |
 |----|------|
-| 未設定 / `false` | 既存のメールアドレスログイン（Phase 24 までどおり）。Cloud Run **demo** はこの設定 |
-| `true` | username/password ログイン画面のみ表示。成功後に本体 UI。live 想定 |
+| 未設定 / `false` | 既存のメールアドレスログイン。Cloud Run **demo** はこの設定 |
+| `true` | 未ログイン時はログイン画面のみ。成功後に本体 UI |
 
 ## 本番実行系ガード（ログイン後のみ）
 
-- 本番実行タブ（テーマ入力・E2E Chain）
-- 外部 API 実行チェックボックス
-- Watch Profile / 週次メール設定の更新
-- scheduler 設定（**admin** のみ）
-
-`DISABLE_EXTERNAL_API=true` 等の Cloud Run 安全フラグは従来どおり優先。
-
-## role
-
-- `member`: 通常利用者（本番実行系はログイン後に利用可）
-- `admin`: 管理者（scheduler 参照・開発者向けモード切替時に admin 必須）
+- 本番実行タブ / 外部 API チェックボックス
+- Watch Profile / 週次メール設定
+- メール下書きプレビュー
+- scheduler（admin のみ）
 
 ## Cloud Run 設定例
 
-### Demo（既存）
+### Demo
 
 ```bash
 REQUIRE_LOGIN=false
@@ -71,18 +55,24 @@ APP_DEFAULT_MODE=demo
 DEMO_OUTPUTS_ROOT=demo_outputs
 ```
 
-### Live beta
+### Live beta（simple login）
 
 ```bash
 REQUIRE_LOGIN=true
 APP_DEFAULT_MODE=analyst
-TECH_CARTOGRAPHY_USERS_JSON='[{"username":"admin","password_hash":"<bcrypt_hash>","role":"admin","display_name":"Admin"}]'
+TECH_CARTOGRAPHY_LOGIN_USERNAME=admin
+TECH_CARTOGRAPHY_LOGIN_PASSWORD=<set-in-cloud-run-env-or-secret>
+DISABLE_EXTERNAL_API=true
+DISABLE_EMAIL_SEND=true
+DISABLE_SCHEDULER=true
 ```
+
+**注意:** パスワードをコードや git に含めない。画面・ログに password 値を出さない。
 
 ## モジュール
 
-- `src/tech_cartography/auth/basic_auth.py` — 認証ロジック
-- `src/tech_cartography/ui/login_ui.py` — ログイン UI / ガード
+- `src/tech_cartography/auth/basic_auth.py`
+- `src/tech_cartography/ui/login_ui.py`
 
 ## テスト
 

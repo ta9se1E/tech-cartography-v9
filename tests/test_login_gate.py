@@ -70,5 +70,13 @@ def test_env_example_documents_login_gate() -> None:
   text = Path(".env.example").read_text(encoding="utf-8")
   assert "REQUIRE_LOGIN=false" in text
   assert "REQUIRE_LOGIN=true" in text
+  assert "TECH_CARTOGRAPHY_LOGIN_USERNAME=admin" in text
+  assert "TECH_CARTOGRAPHY_LOGIN_PASSWORD=" in text
   assert "TECH_CARTOGRAPHY_USERS_JSON" in text
-  assert "<bcrypt_hash>" in text
+
+
+def test_login_ui_uses_simple_login_error_message() -> None:
+  text = Path("src/tech_cartography/ui/login_ui.py").read_text(encoding="utf-8")
+  assert "Tech Cartography Live Beta" in text
+  assert "ユーザー名またはパスワードが違います" in text
+  assert "TECH_CARTOGRAPHY_LOGIN_PASSWORD" not in text.split("render_warning_box", 1)[0]

@@ -114,7 +114,7 @@ def build_app_user_from_basic_auth(auth: dict[str, Any]) -> dict[str, Any]:
 
 def render_basic_login_screen() -> None:
   st.markdown(inject_easy_ui_css(), unsafe_allow_html=True)
-  st.markdown('<div class="tc-main-title">Tech Cartography v7</div>', unsafe_allow_html=True)
+  st.markdown('<div class="tc-main-title">Tech Cartography Live Beta</div>', unsafe_allow_html=True)
   st.markdown(
     '<div class="tc-main-subtitle">職場内ベータ版 — ユーザー名とパスワードでログイン</div>',
     unsafe_allow_html=True,
@@ -130,21 +130,21 @@ def render_basic_login_screen() -> None:
   if is_login_required() and not users_configured():
     st.markdown(
       render_warning_box(
-        "認証設定（TECH_CARTOGRAPHY_USERS_JSON）が未設定または不正です。"
-        "管理者に連絡してください。"
+        "認証設定（TECH_CARTOGRAPHY_LOGIN_USERNAME / TECH_CARTOGRAPHY_LOGIN_PASSWORD "
+        "または TECH_CARTOGRAPHY_USERS_JSON）が未設定です。管理者に連絡してください。"
       ),
       unsafe_allow_html=True,
     )
 
   with st.form("basic_login_form", clear_on_submit=False):
-    username = st.text_input("ユーザー名", placeholder="username")
-    password = st.text_input("パスワード", type="password", placeholder="password")
+    username = st.text_input("username", placeholder="username")
+    password = st.text_input("password", type="password", placeholder="password")
     submitted = st.form_submit_button("ログイン", type="primary", use_container_width=True)
 
   if submitted:
     auth_user = authenticate(username, password)
     if auth_user is None:
-      st.markdown(render_warning_box("ユーザー名またはパスワードが正しくありません。"), unsafe_allow_html=True)
+      st.markdown(render_warning_box("ユーザー名またはパスワードが違います。"), unsafe_allow_html=True)
       return
     set_basic_auth_session(auth_user)
     st.rerun()
