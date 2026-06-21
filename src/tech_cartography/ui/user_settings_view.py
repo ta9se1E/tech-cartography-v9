@@ -179,6 +179,12 @@ def render_user_settings_tab(
   if is_login_required() and can_use_admin_features():
     st.divider()
     render_api_secret_status_expander(key="settings_api_secret_status")
+    from tech_cartography.ui.live_artifact_storage_ui import render_live_artifact_storage_expander
+
+    render_live_artifact_storage_expander(
+      project_root=Path(__file__).resolve().parents[3],
+      key="settings_live_artifact_storage",
+    )
 
   if st.button("セッションをリセット", key="reset_session"):
     preserved_user = st.session_state.get(STATE_CURRENT_USER)

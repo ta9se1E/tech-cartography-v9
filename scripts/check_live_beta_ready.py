@@ -29,6 +29,12 @@ from tech_cartography.runtime.email_send_config import (  # noqa: E402
 )
 from tech_cartography.services.live_digest_preview import can_create_live_digest_preview  # noqa: E402
 from tech_cartography.runtime.external_api_guard import check_live_tavily_smoke_allowed  # noqa: E402
+from tech_cartography.runtime.live_artifact_paths import (  # noqa: E402
+  describe_live_artifact_storage,
+  ensure_live_artifact_dirs,
+  get_live_outputs_root,
+  using_live_outputs_root_env,
+)
 from tech_cartography.services.live_tavily_search import clamp_max_results  # noqa: E402
 
 
@@ -59,6 +65,9 @@ def main() -> int:
   email_sender = PROJECT_ROOT / "src/tech_cartography/services/live_email_sender.py"
   email_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_email_send_ui.py"
   email_docs = PROJECT_ROOT / "docs/phase25g_self_only_live_digest_email_send_test.md"
+  artifact_paths = PROJECT_ROOT / "src/tech_cartography/runtime/live_artifact_paths.py"
+  artifact_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_artifact_storage_ui.py"
+  artifact_docs = PROJECT_ROOT / "docs/phase25h_live_artifact_persistence_cloud_storage.md"
 
   for path in (
     module_path,
@@ -78,6 +87,9 @@ def main() -> int:
     email_sender,
     email_ui,
     email_docs,
+    artifact_paths,
+    artifact_ui,
+    artifact_docs,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -91,6 +103,8 @@ def main() -> int:
   ):
     if token not in env_example:
       failures.append(f".env.example に {token!r} がありません")
+  if "LIVE_OUTPUTS_ROOT" not in env_example:
+    failures.append(".env.example に LIVE_OUTPUTS_ROOT がありません")
 
   ui_text = _read(ui_path)
   if "APIキー本体は表示しません" not in ui_text:
@@ -102,6 +116,8 @@ def main() -> int:
     failures.append("user_settings_view に admin API status UI がありません")
   if "render_api_secret_status_expander" not in sidebar_ui:
     failures.append("demo_safe_ui sidebar に admin API status UI がありません")
+  if "render_live_artifact_storage_expander" not in settings_ui:
+    failures.append("user_settings_view に live artifact storage UI がありません")
 
   analyst_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/theme_validation_ui.py")
   tavily_ui_text = _read(tavily_ui)
@@ -127,6 +143,8 @@ def main() -> int:
     failures.append("v7_easy_app reports タブに live digest preview セクションがありません")
   if "render_live_email_send_section" not in analyst_ui:
     failures.append("theme_validation_ui に live email send UI がありません")
+  if "render_live_artifact_storage_expander" not in analyst_ui:
+    failures.append("theme_validation_ui に live artifact storage UI がありません")
   if "CONFIRMATION_TEXT" not in email_ui_text and "SEND TO MYSELF" not in email_ui_text:
     failures.append("live_email_send_ui に確認テキスト要件がありません")
   if "SMTP_PASSWORD" in email_ui_text and "os.environ" in email_ui_text:
@@ -220,6 +238,41 @@ def main() -> int:
   if not demo_ready.exists():
     warnings.append("check_cloudrun_demo_ready.py がありません")
 
+  artifact_ui_text = _read(artifact_ui)
+  if "Live Artifact Storage（管理者向け）" not in artifact_ui_text:
+    failures.append("live_artifact_storage_ui に管理者向けタイトルがありません")
+  if "SMTP_PASSWORD" in artifact_ui_text or "API_KEY" in artifact_ui_text:
+    failures.append("live_artifact_storage_ui が secret 名を露出しています")
+
+  pack_service_text = _read(pack_service)
+  if "live_artifact_paths" not in pack_service_text:
+    failures.append("live_web_signal_pack が live_artifact_paths を使っていません")
+  if "live_artifact_paths" not in _read(digest_service):
+    failures.append("live_digest_preview が live_artifact_paths を使っていません")
+  if "live_artifact_paths" not in _read(email_sender):
+    failures.append("live_email_sender が live_artifact_paths を使っていません")
+
+  if using_live_outputs_root_env():
+    print(f"live artifact storage: LIVE_OUTPUTS_ROOT configured")
+    ok_dirs, dir_message = ensure_live_artifact_dirs(PROJECT_ROOT)
+    if not ok_dirs:
+      failures.append(f"live artifact dirs: {dir_message}")
+    storage = describe_live_artifact_storage(PROJECT_ROOT)
+    for label, is_writable in storage["writable"].items():
+      if not is_writable:
+        detail = storage["writable_messages"].get(label) or label
+        failures.append(f"live artifact not writable: {detail}")
+  else:
+    print("live artifact storage: local outputs fallback (LIVE_OUTPUTS_ROOT unset)")
+    fallback_root = get_live_outputs_root(PROJECT_ROOT)
+    if fallback_root.name != "outputs":
+      failures.append("LIVE_OUTPUTS_ROOT 未設定時の fallback root が outputs ではありません")
+    storage = describe_live_artifact_storage(PROJECT_ROOT)
+    serialized = json.dumps(storage)
+    for secret_token in ("SMTP_PASSWORD", "OPENAI_API_KEY", "TAVILY_API_KEY", "configured-test-value"):
+      if secret_token in serialized:
+        failures.append("describe_live_artifact_storage が secret 値を含んでいます")
+
   print(f"Project: {PROJECT_ROOT}")
   print(f"api_secret_config: {'yes' if module_path.exists() else 'no'}")
   print(f"external_api_guard: {'yes' if guard_path.exists() else 'no'}")
@@ -228,6 +281,7 @@ def main() -> int:
   print(f"live web signal pack: {'yes' if pack_service.exists() else 'no'}")
   print(f"live digest preview: {'yes' if digest_service.exists() else 'no'}")
   print(f"live email send: {'yes' if email_sender.exists() else 'no'}")
+  print(f"live artifact paths: {'yes' if artifact_paths.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

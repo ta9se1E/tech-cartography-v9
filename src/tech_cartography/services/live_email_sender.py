@@ -17,6 +17,10 @@ from tech_cartography.runtime.email_send_config import (
   resolve_live_smtp_settings,
   self_only_block_message,
 )
+from tech_cartography.runtime.live_artifact_paths import (
+  check_directory_writable,
+  get_live_email_send_dir,
+)
 from tech_cartography.services.live_digest_preview import (
   find_latest_live_digest_preview_path,
   load_latest_live_digest_preview,
@@ -266,9 +270,10 @@ def save_live_email_send_log(
   subject: str,
   output_root: Path | str,
 ) -> dict[str, str]:
-  root = Path(output_root)
-  out_dir = root / "outputs" / "live_email_send"
-  out_dir.mkdir(parents=True, exist_ok=True)
+  out_dir = get_live_email_send_dir(output_root)
+  writable, message = check_directory_writable(out_dir)
+  if not writable:
+    raise ValueError(message or f"Cannot write live email send log to {out_dir}")
 
   sent_at = str(result.get("sent_at") or _utc_now_iso())
   slug = _timestamp_slug(sent_at)

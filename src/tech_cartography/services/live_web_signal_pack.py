@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from tech_cartography.runtime.live_artifact_paths import (
+  check_directory_writable,
+  get_live_web_signals_dir,
+)
 from tech_cartography.services.live_tavily_search import (
   PROVIDER,
   clamp_max_results,
@@ -223,9 +227,10 @@ def save_live_web_signal_pack(
   pack: dict[str, Any],
   output_root: Path | str,
 ) -> dict[str, str]:
-  root = Path(output_root)
-  out_dir = root / "outputs" / "live_web_signals"
-  out_dir.mkdir(parents=True, exist_ok=True)
+  out_dir = get_live_web_signals_dir(output_root)
+  writable, message = check_directory_writable(out_dir)
+  if not writable:
+    raise ValueError(message or f"Cannot write live web signal pack to {out_dir}")
 
   fetched_at = str(pack.get("fetched_at") or _utc_now_iso())
   slug = _timestamp_slug(fetched_at)
@@ -252,7 +257,7 @@ def save_live_web_signal_pack(
 
 
 def live_web_signals_dir(output_root: Path | str) -> Path:
-  return Path(output_root) / "outputs" / "live_web_signals"
+  return get_live_web_signals_dir(output_root)
 
 
 def find_latest_live_web_signal_pack_path(output_root: Path | str) -> Path | None:

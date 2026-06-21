@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from tech_cartography.runtime.live_artifact_paths import (
+  check_directory_writable,
+  get_live_digest_preview_dir,
+)
 from tech_cartography.services.live_web_signal_pack import (
   find_latest_live_web_signal_pack_path,
   load_latest_live_web_signal_pack,
@@ -346,9 +350,10 @@ def save_live_digest_preview(
   preview: dict[str, Any],
   output_root: Path | str,
 ) -> dict[str, str]:
-  root = Path(output_root)
-  out_dir = root / "outputs" / "live_digest_preview"
-  out_dir.mkdir(parents=True, exist_ok=True)
+  out_dir = get_live_digest_preview_dir(output_root)
+  writable, message = check_directory_writable(out_dir)
+  if not writable:
+    raise ValueError(message or f"Cannot write live digest preview to {out_dir}")
 
   created_at = str(preview.get("created_at") or _utc_now_iso())
   slug = _timestamp_slug(created_at)
@@ -367,7 +372,7 @@ def save_live_digest_preview(
 
 
 def live_digest_preview_dir(output_root: Path | str) -> Path:
-  return Path(output_root) / "outputs" / "live_digest_preview"
+  return get_live_digest_preview_dir(output_root)
 
 
 def find_latest_live_digest_preview_path(output_root: Path | str) -> Path | None:
