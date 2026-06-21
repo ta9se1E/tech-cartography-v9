@@ -79,6 +79,9 @@ def main() -> int:
   operation_status = PROJECT_ROOT / "src/tech_cartography/services/live_operation_status.py"
   operation_console_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_operation_console_ui.py"
   operation_docs = PROJECT_ROOT / "docs/phase25k_manual_weekly_operation_console.md"
+  release_pack_service = PROJECT_ROOT / "src/tech_cartography/services/live_beta_release_pack.py"
+  release_pack_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_beta_release_pack_ui.py"
+  release_pack_docs = PROJECT_ROOT / "docs/phase25l_live_beta_release_pack.md"
 
   for path in (
     module_path,
@@ -112,6 +115,9 @@ def main() -> int:
     operation_status,
     operation_console_ui,
     operation_docs,
+    release_pack_service,
+    release_pack_ui,
+    release_pack_docs,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -210,6 +216,23 @@ def main() -> int:
     failures.append("live_operation_status が build_operation_cycle_status を提供していません")
   if "get_live_operation_status_dir" not in _read(artifact_paths):
     failures.append("live_artifact_paths に get_live_operation_status_dir がありません")
+  if "get_live_release_pack_dir" not in _read(artifact_paths):
+    failures.append("live_artifact_paths に get_live_release_pack_dir がありません")
+  release_pack_ui_text = _read(release_pack_ui)
+  if "render_live_beta_release_pack_section" not in market_ui:
+    failures.append("v7_easy_app reports タブに live beta release pack UI がありません")
+  if "render_live_beta_release_pack_section" not in settings_ui:
+    failures.append("user_settings_view に live beta release pack UI がありません")
+  if "Live Beta Release Pack（共有用）" not in release_pack_ui_text:
+    failures.append("live_beta_release_pack_ui に共有パックタイトルがありません")
+  if "共有パックを作成" not in release_pack_ui_text:
+    failures.append("live_beta_release_pack_ui に作成ボタンがありません")
+  if "build_live_beta_release_pack" not in _read(release_pack_service):
+    failures.append("live_beta_release_pack が build_live_beta_release_pack を提供していません")
+  if "live_artifact_paths" not in _read(release_pack_service):
+    failures.append("live_beta_release_pack が live_artifact_paths を使っていません")
+  if "find_latest_operation_status_path" not in _read(operation_status):
+    failures.append("live_operation_status が find_latest_operation_status_path を提供していません")
   if "CONFIRMATION_TEXT" not in email_ui_text and "SEND TO MYSELF" not in email_ui_text:
     failures.append("live_email_send_ui に確認テキスト要件がありません")
   if "SMTP_PASSWORD" in email_ui_text and "os.environ" in email_ui_text:
@@ -306,6 +329,8 @@ def main() -> int:
   artifact_ui_text = _read(artifact_ui)
   if "Live Artifact Storage（管理者向け）" not in artifact_ui_text:
     failures.append("live_artifact_storage_ui に管理者向けタイトルがありません")
+  if "live_release_packs" not in artifact_ui_text:
+    failures.append("live_artifact_storage_ui に live_release_packs 件数がありません")
   if "SMTP_PASSWORD" in artifact_ui_text or "API_KEY" in artifact_ui_text:
     failures.append("live_artifact_storage_ui が secret 名を露出しています")
 
@@ -352,6 +377,7 @@ def main() -> int:
   print(f"next cycle search plan: {'yes' if next_cycle_plan.exists() else 'no'}")
   print(f"next cycle tavily runner: {'yes' if next_cycle_runner.exists() else 'no'}")
   print(f"live operation console: {'yes' if operation_status.exists() else 'no'}")
+  print(f"live beta release pack: {'yes' if release_pack_service.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

@@ -67,6 +67,11 @@ def render_live_artifact_storage_expander(
         "path": status["operation_status_dir"],
         "writable": status["writable"]["operation_status_dir"],
       },
+      {
+        "kind": "release_pack_dir",
+        "path": status["release_pack_dir"],
+        "writable": status["writable"]["release_pack_dir"],
+      },
     ]
     st.dataframe(rows, use_container_width=True, hide_index=True)
 
@@ -80,7 +85,8 @@ def render_live_artifact_storage_expander(
       f"watch_profile_drafts={counts['watch_profile_drafts']}, "
       f"next_cycle_search_plans={counts['next_cycle_search_plans']}, "
       f"next_cycle_web_signal_packs={counts['next_cycle_web_signal_packs']}, "
-      f"operation_status_snapshots={counts['operation_status_snapshots']}"
+      f"operation_status_snapshots={counts['operation_status_snapshots']}, "
+      f"live_release_packs={counts['live_release_packs']}"
     )
 
     for label, ok in status["writable"].items():

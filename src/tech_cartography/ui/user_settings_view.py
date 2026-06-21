@@ -191,6 +191,13 @@ def render_user_settings_tab(
       project_root=Path(__file__).resolve().parents[3],
       key_prefix="settings_watch_profile_draft",
     )
+    from tech_cartography.ui.live_beta_release_pack_ui import render_live_beta_release_pack_section
+
+    render_live_beta_release_pack_section(
+      project_root=Path(__file__).resolve().parents[3],
+      key_prefix="settings_live_beta_release_pack",
+      expanded=False,
+    )
 
   if st.button("セッションをリセット", key="reset_session"):
     preserved_user = st.session_state.get(STATE_CURRENT_USER)

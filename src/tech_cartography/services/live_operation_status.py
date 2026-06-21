@@ -486,6 +486,21 @@ def save_operation_cycle_status(
   return {"json": str(json_path), "markdown": str(md_path)}
 
 
+def find_latest_operation_status_path(project_root: Path | str | None = None) -> Path | None:
+  directory = get_live_operation_status_dir(project_root)
+  if not directory.is_dir():
+    return None
+  files = sorted(directory.glob("live_operation_status_*.json"), key=_path_sort_key, reverse=True)
+  return files[0] if files else None
+
+
+def load_latest_operation_status(project_root: Path | str | None = None) -> dict[str, Any] | None:
+  latest = find_latest_operation_status_path(project_root)
+  if latest is None:
+    return None
+  return _load_json_safe(latest)
+
+
 def build_and_save_operation_cycle_status(
   project_root: Path | str | None = None,
 ) -> tuple[dict[str, Any], dict[str, str] | None, str | None]:

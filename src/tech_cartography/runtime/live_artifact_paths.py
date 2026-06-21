@@ -17,6 +17,7 @@ LIVE_WATCH_PROFILES_SUBDIR = "live_watch_profiles"
 LIVE_NEXT_CYCLE_SEARCH_SUBDIR = "live_next_cycle_search"
 LIVE_NEXT_CYCLE_WEB_SIGNALS_SUBDIR = "live_next_cycle_web_signals"
 LIVE_OPERATION_STATUS_SUBDIR = "live_operation_status"
+LIVE_RELEASE_PACK_SUBDIR = "live_release_pack"
 
 LOCAL_OUTPUTS_DIRNAME = "outputs"
 
@@ -85,6 +86,10 @@ def get_live_operation_status_dir(project_root: Path | str | None = None) -> Pat
   return get_live_outputs_root(project_root) / LIVE_OPERATION_STATUS_SUBDIR
 
 
+def get_live_release_pack_dir(project_root: Path | str | None = None) -> Path:
+  return get_live_outputs_root(project_root) / LIVE_RELEASE_PACK_SUBDIR
+
+
 def _count_json_artifacts(directory: Path, pattern: str) -> int:
   if not directory.exists():
     return 0
@@ -113,6 +118,7 @@ def ensure_live_artifact_dirs(project_root: Path | str | None = None) -> tuple[b
     get_live_next_cycle_search_dir(project_root),
     get_live_next_cycle_web_signals_dir(project_root),
     get_live_operation_status_dir(project_root),
+    get_live_release_pack_dir(project_root),
   ):
     ok, message = check_directory_writable(directory)
     if not ok:
@@ -131,6 +137,7 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
   next_cycle_search_dir = get_live_next_cycle_search_dir(project_root)
   next_cycle_web_signals_dir = get_live_next_cycle_web_signals_dir(project_root)
   operation_status_dir = get_live_operation_status_dir(project_root)
+  release_pack_dir = get_live_release_pack_dir(project_root)
 
   root_ok, root_message = check_directory_writable(root)
   web_ok, web_message = check_directory_writable(web_dir)
@@ -141,6 +148,7 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
   next_cycle_search_ok, next_cycle_search_message = check_directory_writable(next_cycle_search_dir)
   next_cycle_web_ok, next_cycle_web_message = check_directory_writable(next_cycle_web_signals_dir)
   operation_status_ok, operation_status_message = check_directory_writable(operation_status_dir)
+  release_pack_ok, release_pack_message = check_directory_writable(release_pack_dir)
 
   env_value = _env_live_outputs_root()
   return {
@@ -155,6 +163,7 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
     "next_cycle_search_dir": str(next_cycle_search_dir),
     "next_cycle_web_signals_dir": str(next_cycle_web_signals_dir),
     "operation_status_dir": str(operation_status_dir),
+    "release_pack_dir": str(release_pack_dir),
     "writable": {
       "active_storage_root": root_ok,
       "web_signal_dir": web_ok,
@@ -165,6 +174,7 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
       "next_cycle_search_dir": next_cycle_search_ok,
       "next_cycle_web_signals_dir": next_cycle_web_ok,
       "operation_status_dir": operation_status_ok,
+      "release_pack_dir": release_pack_ok,
     },
     "writable_messages": {
       "active_storage_root": root_message,
@@ -176,6 +186,7 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
       "next_cycle_search_dir": next_cycle_search_message,
       "next_cycle_web_signals_dir": next_cycle_web_message,
       "operation_status_dir": operation_status_message,
+      "release_pack_dir": release_pack_message,
     },
     "artifact_counts": {
       "web_signal_packs": _count_json_artifacts(web_dir, "live_web_signal_pack_*.json"),
@@ -197,6 +208,10 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
       "operation_status_snapshots": _count_json_artifacts(
         operation_status_dir,
         "live_operation_status_*.json",
+      ),
+      "live_release_packs": _count_json_artifacts(
+        release_pack_dir,
+        "live_beta_release_pack_*.json",
       ),
     },
   }
