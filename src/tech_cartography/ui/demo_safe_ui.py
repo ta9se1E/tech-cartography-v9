@@ -396,3 +396,11 @@ def render_app_sidebar(
       render_info_box("本番実行モード: テーマ入力・Manual Claims・E2E Chain を利用できます。"),
       unsafe_allow_html=True,
     )
+
+  from tech_cartography.auth.basic_auth import is_login_required
+  from tech_cartography.ui.api_secret_status_ui import render_api_secret_status_expander
+  from tech_cartography.ui.login_ui import can_use_admin_features
+
+  if is_login_required() and can_use_admin_features():
+    st.divider()
+    render_api_secret_status_expander(key="sidebar_api_secret_status")

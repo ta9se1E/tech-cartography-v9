@@ -28,6 +28,7 @@ from tech_cartography.strategic_watch.brief_builder import build_strategic_watch
 from tech_cartography.strategic_watch.store import save_strategic_watch_brief
 from tech_cartography.validation.manual_claims_evidence_builder import evidence_map_output_dir
 from tech_cartography.validation.seed_progress import inspect_seed_progress
+from tech_cartography.runtime.external_api_guard import check_service_external_api
 from tech_cartography.validation.theme_validation import has_manual_claims
 from tech_cartography.web_signals.linker import (
   LinkScoringConfig,
@@ -64,6 +65,17 @@ STAGE_LABELS = {
   "output_missing": "output_missing",
   "blocked": "blocked",
 }
+
+
+def _external_api_block_message(service: str) -> str | None:
+  allowed, missing, reason = check_service_external_api(service)
+  if allowed:
+    return None
+  if reason == "disabled_by_env":
+    return "外部API無効化中（DISABLE_EXTERNAL_API=true）"
+  if reason == "missing_keys" and missing:
+    return f"APIキー未設定: {', '.join(missing)}"
+  return "外部API実行条件を満たしていません"
 
 
 @dataclass
@@ -416,6 +428,13 @@ def run_paper_candidate_step(
     status.next_action = "allow_external_api=true かつ run_openalex=true で Paper 候補を取得できます"
     return status
 
+  block_message = _external_api_block_message("openalex")
+  if block_message:
+    status = _inspect_seed_status(config, pub)
+    status.stage4_paper_candidates = "external_api_required"
+    status.next_action = block_message
+    return status
+
   candidates = plan_payload.get("openalex_query_candidates") or []
   max_queries = min(3, max(1, config.max_papers // 2))
   oa_config = OpenAlexExecutionConfig(
@@ -521,6 +540,16 @@ def run_web_signal_candidate_step(
     status = _inspect_seed_status(config, pub)
     status.stage5_web_signals = "query_plan_ready" if query_plan_only else "external_api_required"
     status.next_action = "allow_external_api=true かつ run_tavily=true で Web Signal 候補を取得できます"
+    return status
+
+  block_message = _external_api_block_message("tavily")
+  if block_message:
+    status = _inspect_seed_status(config, pub)
+    if block_message.startswith("APIキー未設定"):
+      status.stage5_web_signals = "blocked_missing_tavily_config"
+    else:
+      status.stage5_web_signals = "external_api_required"
+    status.next_action = block_message
     return status
 
   if not get_tavily_api_key():

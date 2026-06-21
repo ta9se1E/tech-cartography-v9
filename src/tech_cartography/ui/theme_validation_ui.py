@@ -726,6 +726,7 @@ def render_end_to_end_chain_section(
     disabled=not seeds_ready,
   )
   from tech_cartography.runtime.cloud_run_config import is_external_api_disabled
+  from tech_cartography.runtime.external_api_guard import external_api_ui_messages, resolve_allow_external_api
   from tech_cartography.ui.login_ui import can_use_production_features
 
   external_api_locked = is_external_api_disabled() or not can_use_production_features()
@@ -756,12 +757,21 @@ def render_end_to_end_chain_section(
   )
   if external_api_locked and not is_external_api_disabled():
     st.caption("外部API実行はログイン後に利用できます。")
+  for message in external_api_ui_messages():
+    st.caption(message)
   if external_api_locked and is_external_api_disabled():
     allow_external_api = False
     run_openalex = False
     run_tavily = False
     run_bigquery = False
-    st.caption("Cloud Run デモ環境では外部API実行は無効です（DISABLE_EXTERNAL_API=true）。")
+  effective_allow_external_api, _guard_reasons = resolve_allow_external_api(
+    allow_checkbox=allow_external_api,
+    run_openalex=run_openalex,
+    run_tavily=run_tavily,
+    run_bigquery=run_bigquery,
+  )
+  if allow_external_api and not effective_allow_external_api:
+    allow_external_api = False
 
   st.markdown(
     render_warning_box(
@@ -857,7 +867,7 @@ def render_end_to_end_chain_section(
     run_bigquery=run_bigquery,
     cache_first=cache_first,
     dry_run=dry_run,
-    allow_external_api=allow_external_api,
+    allow_external_api=effective_allow_external_api,
     created_by="streamlit_ui",
   )
 

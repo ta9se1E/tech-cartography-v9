@@ -172,6 +172,14 @@ def render_user_settings_tab(
     st.divider()
     st.caption(developer_mode_hidden_notice())
 
+  from tech_cartography.auth.basic_auth import is_login_required
+  from tech_cartography.ui.api_secret_status_ui import render_api_secret_status_expander
+  from tech_cartography.ui.login_ui import can_use_admin_features
+
+  if is_login_required() and can_use_admin_features():
+    st.divider()
+    render_api_secret_status_expander(key="settings_api_secret_status")
+
   if st.button("セッションをリセット", key="reset_session"):
     preserved_user = st.session_state.get(STATE_CURRENT_USER)
     for key in list(st.session_state.keys()):

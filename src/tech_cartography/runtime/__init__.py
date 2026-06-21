@@ -1,5 +1,12 @@
 """Runtime deployment flags for Cloud Run demo."""
 
+from tech_cartography.runtime.api_secret_config import (
+  KNOWN_API_SECRETS,
+  can_use_external_api,
+  get_api_secret_status,
+  is_external_api_enabled,
+  is_secret_present,
+)
 from tech_cartography.runtime.cloud_run_config import (
   APP_DEFAULT_MODE_ENV,
   DEFAULT_APP_MODE,
@@ -32,13 +39,18 @@ __all__ = [
   "DISABLE_EMAIL_SEND_ENV",
   "DISABLE_EXTERNAL_API_ENV",
   "DISABLE_SCHEDULER_ENV",
+  "KNOWN_API_SECRETS",
   "REQUIRED_BUNDLE_FILES",
   "REQUIRED_DEMO_OUTPUT_PATHS",
+  "can_use_external_api",
   "default_app_mode",
   "demo_bundle_dir",
+  "get_api_secret_status",
   "is_email_send_disabled",
   "is_external_api_disabled",
+  "is_external_api_enabled",
   "is_scheduler_disabled",
+  "is_secret_present",
   "missing_bundle_files",
   "missing_demo_output_paths",
   "relative_upload_path",
