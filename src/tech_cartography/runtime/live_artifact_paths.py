@@ -12,6 +12,8 @@ LIVE_OUTPUTS_ROOT_ENV = "LIVE_OUTPUTS_ROOT"
 LIVE_WEB_SIGNALS_SUBDIR = "live_web_signals"
 LIVE_DIGEST_PREVIEW_SUBDIR = "live_digest_preview"
 LIVE_EMAIL_SEND_SUBDIR = "live_email_send"
+LIVE_WATCH_EXPANSION_SUBDIR = "live_watch_expansion"
+LIVE_WATCH_PROFILES_SUBDIR = "live_watch_profiles"
 
 LOCAL_OUTPUTS_DIRNAME = "outputs"
 
@@ -60,6 +62,14 @@ def get_live_email_send_dir(project_root: Path | str | None = None) -> Path:
   return get_live_outputs_root(project_root) / LIVE_EMAIL_SEND_SUBDIR
 
 
+def get_live_watch_expansion_dir(project_root: Path | str | None = None) -> Path:
+  return get_live_outputs_root(project_root) / LIVE_WATCH_EXPANSION_SUBDIR
+
+
+def get_live_watch_profiles_dir(project_root: Path | str | None = None) -> Path:
+  return get_live_outputs_root(project_root) / LIVE_WATCH_PROFILES_SUBDIR
+
+
 def _count_json_artifacts(directory: Path, pattern: str) -> int:
   if not directory.exists():
     return 0
@@ -83,6 +93,8 @@ def ensure_live_artifact_dirs(project_root: Path | str | None = None) -> tuple[b
     get_live_web_signals_dir(project_root),
     get_live_digest_preview_dir(project_root),
     get_live_email_send_dir(project_root),
+    get_live_watch_expansion_dir(project_root),
+    get_live_watch_profiles_dir(project_root),
   ):
     ok, message = check_directory_writable(directory)
     if not ok:
@@ -96,11 +108,15 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
   web_dir = get_live_web_signals_dir(project_root)
   digest_dir = get_live_digest_preview_dir(project_root)
   email_dir = get_live_email_send_dir(project_root)
+  expansion_dir = get_live_watch_expansion_dir(project_root)
+  profiles_dir = get_live_watch_profiles_dir(project_root)
 
   root_ok, root_message = check_directory_writable(root)
   web_ok, web_message = check_directory_writable(web_dir)
   digest_ok, digest_message = check_directory_writable(digest_dir)
   email_ok, email_message = check_directory_writable(email_dir)
+  expansion_ok, expansion_message = check_directory_writable(expansion_dir)
+  profiles_ok, profiles_message = check_directory_writable(profiles_dir)
 
   env_value = _env_live_outputs_root()
   return {
@@ -110,21 +126,32 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
     "web_signal_dir": str(web_dir),
     "digest_preview_dir": str(digest_dir),
     "email_send_log_dir": str(email_dir),
+    "watch_expansion_dir": str(expansion_dir),
+    "watch_profiles_dir": str(profiles_dir),
     "writable": {
       "active_storage_root": root_ok,
       "web_signal_dir": web_ok,
       "digest_preview_dir": digest_ok,
       "email_send_log_dir": email_ok,
+      "watch_expansion_dir": expansion_ok,
+      "watch_profiles_dir": profiles_ok,
     },
     "writable_messages": {
       "active_storage_root": root_message,
       "web_signal_dir": web_message,
       "digest_preview_dir": digest_message,
       "email_send_log_dir": email_message,
+      "watch_expansion_dir": expansion_message,
+      "watch_profiles_dir": profiles_message,
     },
     "artifact_counts": {
       "web_signal_packs": _count_json_artifacts(web_dir, "live_web_signal_pack_*.json"),
       "digest_previews": _count_json_artifacts(digest_dir, "live_digest_preview_*.json"),
       "email_send_logs": _count_json_artifacts(email_dir, "live_email_send_*.json"),
+      "watch_expansion_proposals": _count_json_artifacts(
+        expansion_dir,
+        "live_watch_expansion_proposals_*.json",
+      ),
+      "watch_profile_drafts": _count_json_artifacts(profiles_dir, "watch_profile_draft_*.json"),
     },
   }

@@ -30,7 +30,7 @@ def render_live_artifact_storage_expander(
   with st.expander("Live Artifact Storage（管理者向け）", expanded=expanded):
     st.markdown(
       render_info_box(
-        "Live 成果物（Web Signal / Digest Preview / Email Send Log）の保存先です。"
+        "Live 成果物（Web Signal / Digest Preview / Email Send Log / Watch Expansion / Watch Draft）の保存先です。"
         " Cloud Run では LIVE_OUTPUTS_ROOT に Cloud Storage mount を設定できます。"
         " Secret 値は表示しません。"
       ),
@@ -52,6 +52,16 @@ def render_live_artifact_storage_expander(
         "path": status["email_send_log_dir"],
         "writable": status["writable"]["email_send_log_dir"],
       },
+      {
+        "kind": "watch_expansion_dir",
+        "path": status["watch_expansion_dir"],
+        "writable": status["writable"]["watch_expansion_dir"],
+      },
+      {
+        "kind": "watch_profiles_dir",
+        "path": status["watch_profiles_dir"],
+        "writable": status["writable"]["watch_profiles_dir"],
+      },
     ]
     st.dataframe(rows, use_container_width=True, hide_index=True)
 
@@ -60,7 +70,9 @@ def render_live_artifact_storage_expander(
       "**latest artifact counts:** "
       f"web_signal_packs={counts['web_signal_packs']}, "
       f"digest_previews={counts['digest_previews']}, "
-      f"email_send_logs={counts['email_send_logs']}"
+      f"email_send_logs={counts['email_send_logs']}, "
+      f"watch_expansion_proposals={counts['watch_expansion_proposals']}, "
+      f"watch_profile_drafts={counts['watch_profile_drafts']}"
     )
 
     for label, ok in status["writable"].items():

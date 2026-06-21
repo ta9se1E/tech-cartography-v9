@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pre-deploy checks for Cloud Run live beta (Phase 25C–25G)."""
+"""Pre-deploy checks for Cloud Run live beta (Phase 25C–25I)."""
 
 from __future__ import annotations
 
@@ -68,6 +68,10 @@ def main() -> int:
   artifact_paths = PROJECT_ROOT / "src/tech_cartography/runtime/live_artifact_paths.py"
   artifact_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_artifact_storage_ui.py"
   artifact_docs = PROJECT_ROOT / "docs/phase25h_live_artifact_persistence_cloud_storage.md"
+  expansion_service = PROJECT_ROOT / "src/tech_cartography/services/live_watch_expansion_proposal.py"
+  draft_service = PROJECT_ROOT / "src/tech_cartography/services/watch_profile_draft.py"
+  expansion_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_watch_expansion_ui.py"
+  expansion_docs = PROJECT_ROOT / "docs/phase25i_human_approved_watch_expansion_proposal.md"
 
   for path in (
     module_path,
@@ -90,6 +94,10 @@ def main() -> int:
     artifact_paths,
     artifact_ui,
     artifact_docs,
+    expansion_service,
+    draft_service,
+    expansion_ui,
+    expansion_docs,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -145,6 +153,21 @@ def main() -> int:
     failures.append("theme_validation_ui に live email send UI がありません")
   if "render_live_artifact_storage_expander" not in analyst_ui:
     failures.append("theme_validation_ui に live artifact storage UI がありません")
+  if "render_live_watch_expansion_section" not in analyst_ui:
+    failures.append("theme_validation_ui に watch expansion UI がありません")
+  expansion_ui_text = _read(expansion_ui)
+  if "監視範囲の拡張候補を作成" not in expansion_ui_text:
+    failures.append("live_watch_expansion_ui に proposal 作成ボタンがありません")
+  if "update_watch_profile" in expansion_ui_text:
+    failures.append("live_watch_expansion_ui が本番 watch profile を更新しています")
+  if "render_watch_profile_draft_reports_section" not in market_ui:
+    failures.append("v7_easy_app reports タブに watch profile draft セクションがありません")
+  if "render_watch_profile_draft_reports_section" not in settings_ui:
+    failures.append("user_settings_view に watch profile draft セクションがありません")
+  if "live_artifact_paths" not in _read(expansion_service):
+    failures.append("live_watch_expansion_proposal が live_artifact_paths を使っていません")
+  if "live_artifact_paths" not in _read(draft_service):
+    failures.append("watch_profile_draft が live_artifact_paths を使っていません")
   if "CONFIRMATION_TEXT" not in email_ui_text and "SEND TO MYSELF" not in email_ui_text:
     failures.append("live_email_send_ui に確認テキスト要件がありません")
   if "SMTP_PASSWORD" in email_ui_text and "os.environ" in email_ui_text:
@@ -282,6 +305,8 @@ def main() -> int:
   print(f"live digest preview: {'yes' if digest_service.exists() else 'no'}")
   print(f"live email send: {'yes' if email_sender.exists() else 'no'}")
   print(f"live artifact paths: {'yes' if artifact_paths.exists() else 'no'}")
+  print(f"live watch expansion: {'yes' if expansion_service.exists() else 'no'}")
+  print(f"watch profile draft: {'yes' if draft_service.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

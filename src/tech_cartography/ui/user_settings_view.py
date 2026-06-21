@@ -185,6 +185,12 @@ def render_user_settings_tab(
       project_root=Path(__file__).resolve().parents[3],
       key="settings_live_artifact_storage",
     )
+    from tech_cartography.ui.live_watch_expansion_ui import render_watch_profile_draft_reports_section
+
+    render_watch_profile_draft_reports_section(
+      project_root=Path(__file__).resolve().parents[3],
+      key_prefix="settings_watch_profile_draft",
+    )
 
   if st.button("セッションをリセット", key="reset_session"):
     preserved_user = st.session_state.get(STATE_CURRENT_USER)

@@ -800,8 +800,10 @@ def _tab_reports(
 ) -> None:
   if demo_artifacts is None:
     from tech_cartography.ui.live_digest_preview_ui import render_live_digest_preview_reports_section
+    from tech_cartography.ui.live_watch_expansion_ui import render_watch_profile_draft_reports_section
 
     render_live_digest_preview_reports_section(project_root=PROJECT_ROOT)
+    render_watch_profile_draft_reports_section(project_root=PROJECT_ROOT)
   if is_analyst_view() and demo_artifacts is None:
     case = _resolve_analyst_case()
     snapshot = compute_analyst_workflow_snapshot(case, project_root=PROJECT_ROOT)

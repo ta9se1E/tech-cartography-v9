@@ -1239,6 +1239,9 @@ def render_analyst_input_execution_section(*, key_prefix: str = ANALYST_INPUT_KE
   from tech_cartography.ui.live_email_send_ui import render_live_email_send_section
 
   render_live_email_send_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_email_send")
+  from tech_cartography.ui.live_watch_expansion_ui import render_live_watch_expansion_section
+
+  render_live_watch_expansion_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_watch_expansion")
   render_pan_theme_loader_button(key_prefix=key_prefix)
   render_theme_validation_safety_messages()
 
