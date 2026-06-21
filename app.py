@@ -13,8 +13,13 @@ if str(_SRC) not in sys.path:
 
 import streamlit as st
 
+from tech_cartography.auth.basic_auth import is_login_required
 from tech_cartography.ui.demo_safe_ui import render_app_sidebar
 from tech_cartography.ui.easy_japanese_ui import inject_easy_ui_css
+from tech_cartography.ui.login_ui import (
+  build_app_user_from_basic_auth,
+  require_basic_login_gate,
+)
 from tech_cartography.ui.login_view import require_login
 from tech_cartography.ui.streamlit_session import (
   STATE_CURRENT_USER,
@@ -30,9 +35,14 @@ from tech_cartography.ui.v7_easy_app import DEFAULT_PIPELINE_ROOT, PROJECT_ROOT,
 st.set_page_config(page_title="Tech Cartography v7", layout="wide", initial_sidebar_state="expanded")
 st.markdown(inject_easy_ui_css(), unsafe_allow_html=True)
 
-user = require_login()
-if not user:
-  raise SystemExit(0)
+if is_login_required():
+  auth_session = require_basic_login_gate()
+  user = build_app_user_from_basic_auth(auth_session or {})
+  st.session_state[STATE_CURRENT_USER] = user
+else:
+  user = require_login()
+  if not user:
+    raise SystemExit(0)
 
 init_app_session_state(user)
 apply_pending_widget_state_updates()

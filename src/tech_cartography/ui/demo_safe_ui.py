@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from tech_cartography.auth.basic_auth import is_login_required
 from tech_cartography.ui.easy_japanese_ui import render_info_box, render_warning_box
 from tech_cartography.ui.developer_mode_visibility import is_show_developer_mode_enabled
 from tech_cartography.ui.japanese_labels import translate_tab_name
@@ -98,6 +99,10 @@ def is_analyst_view() -> bool:
 def is_developer_view() -> bool:
   if not is_show_developer_mode_enabled():
     return False
+  if is_login_required():
+    from tech_cartography.ui.login_ui import get_auth_role, is_basic_authenticated
+
+    return is_basic_authenticated() and get_auth_role() == "admin" and get_ui_mode() == UI_MODE_DEVELOPER
   return get_ui_mode() == UI_MODE_DEVELOPER
 
 
@@ -304,15 +309,21 @@ def render_app_sidebar(
   from tech_cartography.orchestration.latest_outputs import read_latest_run_pointer
   from tech_cartography.ui.login_view import render_logged_in_header
 
-  st.header("ユーザー")
-  render_logged_in_header(user)
-  if user.get("company_name"):
-    st.caption(f"会社: {user['company_name']}")
-  if sidebar_button("ログアウト", key="logout_button"):
-    from tech_cartography.ui.login_view import logout_user
+  from tech_cartography.auth.basic_auth import is_login_required
+  from tech_cartography.ui.login_ui import render_basic_auth_sidebar
 
-    logout_user()
-    st.rerun()
+  st.header("ユーザー")
+  if is_login_required():
+    render_basic_auth_sidebar(sidebar_button=sidebar_button)
+  else:
+    render_logged_in_header(user)
+    if user.get("company_name"):
+      st.caption(f"会社: {user['company_name']}")
+    if sidebar_button("ログアウト", key="logout_button"):
+      from tech_cartography.ui.login_view import logout_user
+
+      logout_user()
+      st.rerun()
 
   st.divider()
   st.header("表示モード")

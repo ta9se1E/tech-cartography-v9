@@ -12,5 +12,6 @@ data/cache/
 .streamlit/secrets.toml
 credentials/
 *.jsonl
+*.egg-info/
 config/email_recipients.json
 config/theme_validation_cases.json

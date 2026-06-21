@@ -726,8 +726,9 @@ def render_end_to_end_chain_section(
     disabled=not seeds_ready,
   )
   from tech_cartography.runtime.cloud_run_config import is_external_api_disabled
+  from tech_cartography.ui.login_ui import can_use_production_features
 
-  external_api_locked = is_external_api_disabled()
+  external_api_locked = is_external_api_disabled() or not can_use_production_features()
   allow_external_api = st.checkbox(
     "allow_external_api",
     value=False,
@@ -753,7 +754,9 @@ def render_end_to_end_chain_section(
     key=f"{key_prefix}_e2e_bigquery",
     disabled=not seeds_ready or external_api_locked,
   )
-  if external_api_locked:
+  if external_api_locked and not is_external_api_disabled():
+    st.caption("外部API実行はログイン後に利用できます。")
+  if external_api_locked and is_external_api_disabled():
     allow_external_api = False
     run_openalex = False
     run_tavily = False
@@ -1205,7 +1208,12 @@ def render_final_validation_builder(*, case: ThemeValidationCase, key_prefix: st
 
 
 def render_analyst_input_execution_section(*, key_prefix: str = ANALYST_INPUT_KEY_PREFIX) -> None:
+  from tech_cartography.ui.login_ui import can_use_production_features, render_production_access_blocked
+
   st.subheader("本番実行 / 新しいテーマで分析")
+  if not can_use_production_features():
+    render_production_access_blocked("本番実行")
+    return
   st.caption(
     "新しい技術テーマとseed公報を入力し、Manual ClaimsからEvidence Map、Paper/Web、Link、Watch、Digestまで順番に生成します。"
   )

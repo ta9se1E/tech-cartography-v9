@@ -54,9 +54,18 @@ def render_user_settings_tab(
   current_run_id: str | None = None,
   developer_mode: bool = False,
 ) -> None:
+  from tech_cartography.ui.login_ui import can_use_production_features, render_production_access_blocked
+
   st.markdown(render_info_box(explain_watch_profile()), unsafe_allow_html=True)
   watch = get_active_watch_profile(user["user_id"])
   st.markdown(render_watch_profile_card(watch), unsafe_allow_html=True)
+
+  if not can_use_production_features():
+    render_production_access_blocked("Watch Profile / 週次メール設定の更新")
+    st.divider()
+    if not is_show_developer_mode_enabled():
+      st.caption(developer_mode_hidden_notice())
+    return
 
   with st.expander("ユーザープロファイル編集", expanded=False):
     display_name = st.text_input(
