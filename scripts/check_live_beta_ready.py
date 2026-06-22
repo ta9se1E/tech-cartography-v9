@@ -239,6 +239,22 @@ def main() -> int:
     failures.append("live_approved_member_email_send_ui が SMTP_PASSWORD env を参照しています")
   if "render_live_approved_member_email_send_section" not in digest_ui_text:
     failures.append("live_digest_preview_ui に approved member email send UI がありません")
+  if digest_ui_text.index("render_live_approved_member_email_send_section") > digest_ui_text.index(
+    "render_live_email_send_section",
+  ):
+    failures.append("live_digest_preview_ui で approved member send が self-only より後です")
+  if "send_live_digest_email_self_only" in approved_member_ui_text:
+    failures.append("live_approved_member_email_send_ui が self_only sender を呼んでいます")
+  if "send_live_digest_email_to_approved_member" not in approved_member_ui_text:
+    failures.append("live_approved_member_email_send_ui が approved member sender を呼んでいません")
+  if "is_app_authenticated" not in approved_member_ui_text:
+    failures.append("live_approved_member_email_send_ui が is_app_authenticated を使っていません")
+  if "evaluate_live_admin_access" not in _read(approved_member_sender):
+    failures.append("live_approved_member_email_sender が evaluate_live_admin_access を使っていません")
+  if "evaluate_live_admin_access" not in _read(email_sender):
+    failures.append("live_email_sender が evaluate_live_admin_access を使っていません")
+  if "evaluate_live_admin_access" not in _read(user_context_module):
+    failures.append("user_context が evaluate_live_admin_access を提供していません")
   if "render_live_artifact_storage_expander" not in analyst_ui:
     failures.append("theme_validation_ui に live artifact storage UI がありません")
   if "render_live_watch_expansion_section" not in analyst_ui:

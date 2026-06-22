@@ -130,3 +130,32 @@ def user_context_as_dict(user_context: dict[str, Any]) -> dict[str, Any]:
     "auth_provider": normalized["auth_provider"],
     "is_admin": normalized["is_admin"],
   }
+
+
+def evaluate_live_admin_access(
+  *,
+  login_required: bool,
+  is_authenticated: bool,
+  auth_role: str,
+  user_context: dict[str, Any] | None = None,
+) -> tuple[bool, str | None, dict[str, Any]]:
+  """Resolve live admin access using session flags and UserContext (IAP-safe).
+
+  Streamlit session flags may be stale for IAP while ``user_context`` already
+  carries ``google_iap`` / admin identity from ``resolve_user_context()``.
+  """
+  ctx = normalize_user_context(user_context)
+  authed = bool(is_authenticated)
+  if (
+    not authed
+    and ctx.get("auth_provider") in {AUTH_PROVIDER_GOOGLE_IAP, AUTH_PROVIDER_STREAMLIT_BASIC}
+    and str(ctx.get("user_id") or "") not in {"", "anonymous"}
+  ):
+    authed = True
+  role = str(auth_role or "").strip().lower() if is_authenticated else str(ctx.get("role") or "member")
+  is_admin = role == "admin" or bool(ctx.get("is_admin"))
+  if login_required and not authed:
+    return False, "login_required", ctx
+  if login_required and not is_admin:
+    return False, "admin_required", ctx
+  return True, None, ctx

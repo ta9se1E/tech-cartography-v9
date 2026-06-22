@@ -31,3 +31,45 @@ def test_user_context_as_dict_safe_copy() -> None:
   copied = user_context_as_dict(raw)
   assert copied["user_id"] == "u1"
   assert "password" not in copied
+
+
+def test_build_user_context_from_iap_identity() -> None:
+  from tech_cartography.runtime.user_context import (
+    AUTH_PROVIDER_GOOGLE_IAP,
+    build_user_context_from_iap_identity,
+    evaluate_live_admin_access,
+  )
+
+  ctx = build_user_context_from_iap_identity(
+    {
+      "email": "admin@example.com",
+      "user_id": "admin@example.com",
+      "role": "admin",
+      "display_name": "Admin",
+      "is_admin": True,
+    },
+  )
+  assert ctx["auth_provider"] == AUTH_PROVIDER_GOOGLE_IAP
+  assert ctx["is_admin"] is True
+
+  allowed, reason, _ = evaluate_live_admin_access(
+    login_required=True,
+    is_authenticated=False,
+    auth_role="member",
+    user_context=ctx,
+  )
+  assert allowed is True
+  assert reason is None
+
+
+def test_evaluate_live_admin_access_requires_login_when_anonymous() -> None:
+  from tech_cartography.runtime.user_context import evaluate_live_admin_access
+
+  allowed, reason, _ = evaluate_live_admin_access(
+    login_required=True,
+    is_authenticated=False,
+    auth_role="member",
+    user_context=None,
+  )
+  assert allowed is False
+  assert reason == "login_required"

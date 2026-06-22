@@ -39,6 +39,7 @@ from tech_cartography.services.live_run_history import (
   map_result_status,
   record_live_run,
 )
+from tech_cartography.runtime.user_context import evaluate_live_admin_access
 
 ACTION_TYPE = "live_approved_member_email_send"
 PROVIDER = "smtp"
@@ -245,9 +246,15 @@ def send_live_digest_email_to_approved_member(
         confirmation_matched=confirmation_matched,
       ),
     )
-  if login_required and not is_authenticated:
+  access_ok, access_error, _ctx = evaluate_live_admin_access(
+    login_required=login_required,
+    is_authenticated=is_authenticated,
+    auth_role=auth_role,
+    user_context=user_context,
+  )
+  if not access_ok and access_error == "login_required":
     return _finalize(_block_result(error="login_required", message=approved_member_block_message("login_required")))
-  if login_required and str(auth_role or "member") != "admin":
+  if not access_ok and access_error == "admin_required":
     return _finalize(
       _block_result(error="member_not_allowed", message=approved_member_block_message("member_not_allowed")),
     )

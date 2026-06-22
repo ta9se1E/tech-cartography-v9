@@ -16,8 +16,43 @@ Phase 25G の **self-only 送信** に加え、管理者が事前承認済みの
 | 有効化フラグ | `EMAIL_SEND_MODE=self_only` | `ENABLE_APPROVED_MEMBER_SEND=true` |
 | 確認テキスト | `SEND TO MYSELF` | `SEND TO APPROVED MEMBER` |
 | 操作権限 | admin | admin のみ（member は不可） |
+| Run History action_type | `self_only_email_send` | `live_approved_member_email_send` |
+| 推奨モード | Basic Login 向け | **IAP 本番向け** |
 
-## 安全設計
+## IAP admin での実行（Phase 25Q.1）
+
+IAP 本番では **Approved Member Digest Send** を使用してください。
+
+- `auth_provider=google_iap`
+- `role=admin`
+- `user_id` は IAP メールアドレス（例: 管理者メール）
+
+認証判定は Streamlit Basic セッションだけでなく **UserContext**（`resolve_user_context()`）も参照します。
+IAP ログイン済みなのに「ログイン後に実行できます」と出る場合は Phase 25Q.1 以前の Basic 専用ガード不整合です。
+
+IAP mode（`AUTH_PROVIDER_MODE=iap`）では self-only 送信 UI は非表示です（誤ルーティング防止）。
+
+## Run History の期待値（成功時）
+
+| フィールド | 期待値 |
+|-----------|--------|
+| `action_type` | `live_approved_member_email_send` |
+| `status` | `success` |
+| `auth_provider` | `google_iap` |
+| `user_id` | IAP 管理者メール |
+| `output_artifact_paths` | `outputs/live_approved_member_send/*.json` と `*.md` |
+
+## 失敗時の見方
+
+| 症状 | 原因 |
+|------|------|
+| `action_type=self_only_email_send` | **誤経路** — self-only ボタンを押した。Approved Member ボタンを使用 |
+| `error_summary=ログイン後に実行できます` | 認証ガード不整合（Basic 専用 `is_basic_authenticated`） |
+| `output_artifact_paths={}` | 送信前にブロックされた |
+| `status=failed` + SMTP 不足 | SMTP env / Secret Manager 未設定 |
+
+テスト後は必ず `DISABLE_EMAIL_SEND=true` に戻してください。
+
 
 1. **デフォルト無効** — `ENABLE_APPROVED_MEMBER_SEND=false`
 2. **メール送信マスター停止** — `DISABLE_EMAIL_SEND=true` なら絶対に送信しない

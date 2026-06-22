@@ -18,6 +18,7 @@ from tech_cartography.runtime.approved_member_send_config import (
 from tech_cartography.runtime.cloud_run_config import is_email_send_disabled
 from tech_cartography.runtime.user_context import resolve_user_context
 from tech_cartography.services.live_approved_member_email_sender import (
+  ACTION_TYPE,
   send_live_digest_email_to_approved_member,
 )
 from tech_cartography.services.live_email_sender import (
@@ -49,17 +50,19 @@ def render_live_approved_member_email_send_section(
   status = get_approved_member_send_status()
   approved_emails = parse_approved_member_emails()
   confirmation_text = get_confirmation_text()
+  user_context = resolve_user_context()
 
-  with st.expander("Approved Member Digest Send（承認済みメンバーへ手動送信）", expanded=False):
+  with st.expander("Approved Member Digest Send（承認済みメンバーへ手動送信 / IAP本番向け）", expanded=False):
     st.markdown(
       render_caution_box(
-        "<strong>承認済みメンバーへ1通だけ</strong> 手動送信します。"
+        "<strong>承認済みメンバーへ1通だけ</strong> 手動送信します（IAP admin 向け）。"
+        " self-only 送信とは別経路です。"
         " 一斉送信・自由入力送信・scheduler 連携はありません。"
-        " SMTP パスワードは表示しません。"
       ),
       unsafe_allow_html=True,
     )
     st.markdown(render_info_box(LIVE_EMAIL_SAFETY_NOTICE_JA), unsafe_allow_html=True)
+    st.caption(f"action_type: {ACTION_TYPE}")
 
     if not is_approved_member_send_enabled():
       st.markdown(
@@ -68,7 +71,7 @@ def render_live_approved_member_email_send_section(
       )
     elif is_email_send_disabled():
       st.markdown(
-        render_warning_box("メール送信停止中（DISABLE_EMAIL_SEND=true）。"),
+        render_warning_box("メール送信停止中です（DISABLE_EMAIL_SEND=true）。"),
         unsafe_allow_html=True,
       )
     elif not approved_emails:
@@ -77,9 +80,13 @@ def render_live_approved_member_email_send_section(
         unsafe_allow_html=True,
       )
     elif status.get("missing_smtp_fields"):
+      st.markdown(
+        render_warning_box(approved_member_block_message("missing_smtp_config")),
+        unsafe_allow_html=True,
+      )
       st.caption(f"SMTP 不足: {', '.join(status['missing_smtp_fields'])}")
 
-    if get_auth_role() != "admin":
+    if get_auth_role() != "admin" and not user_context.get("is_admin"):
       st.markdown(
         render_warning_box(approved_member_block_message("member_not_allowed")),
         unsafe_allow_html=True,
@@ -94,6 +101,10 @@ def render_live_approved_member_email_send_section(
       return
 
     st.caption(f"preview: {preview_path}")
+    st.caption(
+      f"auth: provider={user_context.get('auth_provider')} "
+      f"user_id={user_context.get('user_id')} role={user_context.get('role')}"
+    )
     st.markdown(f"**subject:** {preview.get('subject')}")
     body_preview = build_outbound_body(
       plain_text_body=str(preview.get("body") or preview.get("plain_text_body") or ""),
@@ -105,7 +116,7 @@ def render_live_approved_member_email_send_section(
       return
 
     recipient = st.selectbox(
-      "送信先（承認済みメンバー）",
+      "送信先（承認済みメンバー — 自由入力不可）",
       options=approved_emails,
       key=f"{key_prefix}_recipient",
     )
@@ -138,7 +149,7 @@ def render_live_approved_member_email_send_section(
         auth_role=get_auth_role(),
         preview=preview,
         preview_source_path=preview_path,
-        user_context=resolve_user_context(),
+        user_context=user_context,
       )
       st.session_state[f"{key_prefix}_last_result"] = result
 
@@ -152,6 +163,8 @@ def render_live_approved_member_email_send_section(
     else:
       st.warning(str(last_result.get("message") or "送信できませんでした"))
 
+    if last_result.get("action_type"):
+      st.caption(f"recorded action_type: {last_result.get('action_type')}")
     if last_result.get("recipient_masked"):
       st.caption(f"recipient_masked: {last_result['recipient_masked']}")
     saved_paths = last_result.get("saved_paths") or {}

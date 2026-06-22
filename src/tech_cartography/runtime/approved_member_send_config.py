@@ -113,10 +113,10 @@ def approved_member_block_message(block_reason: str | None) -> str:
     "invalid_recipient": "送信先メールアドレスの形式が不正です。",
     "recipient_not_approved": "送信先は承認済みメンバー一覧に含まれている必要があります。",
     "missing_smtp_config": "SMTP 設定が不足しています。",
-    "confirm_text_mismatch": f"確認テキストが一致しません。{DEFAULT_CONFIRMATION_TEXT} と入力してください。",
+    "confirm_text_mismatch": "確認文が一致していません。SEND TO APPROVED MEMBER と入力してください。",
     "login_required": "ログイン後に実行できます。",
-    "admin_required": "管理者のみ実行できます。",
-    "member_not_allowed": "member ロールでは送信できません。",
+    "admin_required": "admin権限が必要です。",
+    "member_not_allowed": "admin権限が必要です。",
     "missing_preview": "latest live_digest_preview がありません。",
     "cc_bcc_not_allowed": "CC/BCC は使用できません。",
   }

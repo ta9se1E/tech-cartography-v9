@@ -8,6 +8,7 @@ from typing import Any
 import streamlit as st
 
 from tech_cartography.auth.basic_auth import is_login_required
+from tech_cartography.runtime.auth_provider_config import get_auth_provider_mode
 from tech_cartography.runtime.email_send_config import (
   get_email_send_status,
   is_email_send_disabled,
@@ -26,12 +27,18 @@ from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info
 from tech_cartography.ui.login_ui import (
   can_use_admin_features,
   get_auth_role,
-  is_basic_authenticated,
+  is_app_authenticated,
+  is_iap_authenticated,
 )
 
 
 def should_show_live_email_send_ui() -> bool:
-  return is_login_required() and can_use_admin_features()
+  if not (is_login_required() and can_use_admin_features()):
+    return False
+  # IAP mode: use Approved Member Send to avoid routing confusion (Phase 25Q.1).
+  if get_auth_provider_mode() == "iap" and is_iap_authenticated():
+    return False
+  return True
 
 
 def render_live_email_send_section(
@@ -46,13 +53,14 @@ def render_live_email_send_section(
   status = get_email_send_status()
   allowlist = parse_recipient_allowlist()
   default_recipient = allowlist[0] if allowlist else ""
+  user_context = resolve_user_context()
 
-  with st.expander("Self-only Email Send Test（自分宛てのみ）", expanded=False):
+  with st.expander("Self-only Email Send Test（自分宛てのみ / Basic向け）", expanded=False):
     st.markdown(
       render_caution_box(
-        "<strong>自分宛てに1通だけ</strong> テスト送信します。"
+        "<strong>自分宛てに1通だけ</strong> テスト送信します（Basic Login 向け）。"
+        " IAP 本番では <strong>Approved Member Digest Send</strong> を使用してください。"
         " 一斉送信・自動送信・scheduler 連携はありません。"
-        " SMTP パスワードは表示しません。"
       ),
       unsafe_allow_html=True,
     )
@@ -79,6 +87,7 @@ def render_live_email_send_section(
       return
 
     st.caption(f"preview: {preview_path}")
+    st.caption(f"action_type: self_only_email_send")
     st.markdown(f"**subject:** {preview.get('subject')}")
     body_preview = build_outbound_body(
       plain_text_body=str(preview.get("body") or preview.get("plain_text_body") or ""),
@@ -105,7 +114,7 @@ def render_live_email_send_section(
     )
 
     if st.button(
-      "自分宛てに1通送信",
+      "自分宛てに1通送信（self-only）",
       key=f"{key_prefix}_send",
       type="primary",
       disabled=send_disabled,
@@ -115,11 +124,11 @@ def render_live_email_send_section(
         confirm_text=confirm_text,
         output_root=project_root,
         login_required=is_login_required(),
-        is_authenticated=is_basic_authenticated(),
+        is_authenticated=is_app_authenticated(),
         auth_role=get_auth_role(),
         preview=preview,
         preview_source_path=preview_path,
-        user_context=resolve_user_context(),
+        user_context=user_context,
       )
       st.session_state[f"{key_prefix}_last_result"] = result
 

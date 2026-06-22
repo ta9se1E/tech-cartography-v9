@@ -154,3 +154,38 @@ def test_send_blocked_for_non_admin(monkeypatch: pytest.MonkeyPatch, sample_prev
   )
   assert result["ok"] is False
   assert result["status"] == "admin_required"
+
+
+def test_send_allows_iap_admin_via_user_context_without_basic_session(
+  monkeypatch: pytest.MonkeyPatch,
+  sample_preview: dict,
+  tmp_path: Path,
+) -> None:
+  _configure_smtp(monkeypatch)
+  calls: list[dict] = []
+
+  def _mock_send(**kwargs: object) -> None:
+    calls.append(dict(kwargs))
+
+  user_context = {
+    "user_id": "admin@example.com",
+    "display_name": "Admin",
+    "role": "admin",
+    "auth_provider": "google_iap",
+    "is_admin": True,
+  }
+  result = send_live_digest_email_self_only(
+    recipient="me@example.com",
+    confirm_text=CONFIRMATION_TEXT,
+    output_root=tmp_path,
+    login_required=True,
+    is_authenticated=False,
+    auth_role="member",
+    preview=sample_preview,
+    preview_source_path="preview.json",
+    smtp_send_fn=_mock_send,
+    user_context=user_context,
+  )
+  assert result["ok"] is True
+  assert result.get("error") not in {"login_required", "admin_required"}
+  assert len(calls) == 1

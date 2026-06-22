@@ -125,6 +125,43 @@ def test_send_blocked_for_member_role(monkeypatch: pytest.MonkeyPatch, sample_pr
   assert result["error"] == "member_not_allowed"
 
 
+def test_send_allows_iap_admin_via_user_context_without_session_flag(
+  monkeypatch: pytest.MonkeyPatch,
+  sample_preview: dict,
+  tmp_path: Path,
+) -> None:
+  _configure_send(monkeypatch)
+  calls: list[dict] = []
+
+  def _mock_send(**kwargs: object) -> None:
+    calls.append(dict(kwargs))
+
+  user_context = {
+    "user_id": "admin@example.com",
+    "display_name": "Admin",
+    "role": "admin",
+    "auth_provider": "google_iap",
+    "is_admin": True,
+  }
+  result = send_live_digest_email_to_approved_member(
+    recipient="approved@example.com",
+    confirm_text=DEFAULT_CONFIRMATION_TEXT,
+    output_root=tmp_path,
+    login_required=True,
+    is_authenticated=False,
+    auth_role="member",
+    preview=sample_preview,
+    preview_source_path="preview.json",
+    smtp_send_fn=_mock_send,
+    user_context=user_context,
+  )
+  assert result["ok"] is True
+  assert result["action_type"] == ACTION_TYPE
+  assert result.get("error") not in {"login_required", "member_not_allowed"}
+  assert "live_approved_member_send" in str(result["saved_paths"].get("json", ""))
+  assert len(calls) == 1
+
+
 def test_send_blocked_for_cc_bcc(monkeypatch: pytest.MonkeyPatch, sample_preview: dict, tmp_path: Path) -> None:
   _configure_send(monkeypatch)
   result = send_live_digest_email_to_approved_member(

@@ -116,3 +116,26 @@ def test_sanitize_redacts_env_value(monkeypatch: pytest.MonkeyPatch) -> None:
   summary = sanitize_input_summary("query with leaked-key-value inside")
   assert summary is not None
   assert "leaked-key-value" not in summary
+
+
+def test_live_approved_member_email_send_action_type_allowed(tmp_path: Path) -> None:
+  user = {
+    "user_id": "admin@example.com",
+    "display_name": "Admin",
+    "role": "admin",
+    "auth_provider": "google_iap",
+    "is_admin": True,
+  }
+  entry, saved, error = record_live_run(
+    action_type="live_approved_member_email_send",
+    status="success",
+    run_id=generate_run_id(),
+    user_context=user,
+    output_artifact_paths={"json": str(tmp_path / "live_approved_member_send.json")},
+    project_root=tmp_path,
+  )
+  assert error is None
+  assert entry is not None
+  assert entry["action_type"] == "live_approved_member_email_send"
+  assert entry["auth_provider"] == "google_iap"
+  assert saved is not None

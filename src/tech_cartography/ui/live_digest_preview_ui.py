@@ -149,12 +149,12 @@ def render_live_digest_preview_reports_section(
 
     st.markdown(render_info_box(str(preview.get("safety_notice") or SAFETY_NOTICE)), unsafe_allow_html=True)
 
-  from tech_cartography.ui.live_email_send_ui import render_live_email_send_section
-
-  render_live_email_send_section(project_root=project_root, key_prefix=f"{key_prefix}_email_send")
   from tech_cartography.ui.live_approved_member_email_send_ui import render_live_approved_member_email_send_section
 
   render_live_approved_member_email_send_section(
     project_root=project_root,
     key_prefix=f"{key_prefix}_approved_member_email_send",
   )
+  from tech_cartography.ui.live_email_send_ui import render_live_email_send_section
+
+  render_live_email_send_section(project_root=project_root, key_prefix=f"{key_prefix}_email_send")

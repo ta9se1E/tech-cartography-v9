@@ -36,3 +36,28 @@ def test_no_scheduler_enable_in_deploy_files() -> None:
   deploy = Path("scripts/deploy_live_safe.sh").read_text(encoding="utf-8")
   assert not re.search(r"DISABLE_SCHEDULER\s*=\s*false", cloudbuild)
   assert not re.search(r"DISABLE_SCHEDULER\s*=\s*false", deploy)
+
+
+def test_approved_member_ui_does_not_route_to_self_only() -> None:
+  text = Path("src/tech_cartography/ui/live_approved_member_email_send_ui.py").read_text(encoding="utf-8")
+  assert "send_live_digest_email_to_approved_member" in text
+  assert "send_live_digest_email_self_only" not in text
+  assert "live_approved_member_email_send" in text
+
+
+def test_user_context_evaluates_iap_admin_access() -> None:
+  from tech_cartography.runtime.user_context import evaluate_live_admin_access
+
+  allowed, reason, _ = evaluate_live_admin_access(
+    login_required=True,
+    is_authenticated=False,
+    auth_role="member",
+    user_context={
+      "user_id": "admin@example.com",
+      "role": "admin",
+      "auth_provider": "google_iap",
+      "is_admin": True,
+    },
+  )
+  assert allowed is True
+  assert reason is None

@@ -33,6 +33,7 @@ from tech_cartography.services.live_run_history import (
   map_result_status,
   record_live_run,
 )
+from tech_cartography.runtime.user_context import evaluate_live_admin_access
 
 CONFIRMATION_TEXT = "SEND TO MYSELF"
 PROVIDER = "smtp"
@@ -165,9 +166,15 @@ def send_live_digest_email_self_only(
     )
     return result
 
-  if login_required and not is_authenticated:
+  access_ok, access_error, _ctx = evaluate_live_admin_access(
+    login_required=login_required,
+    is_authenticated=is_authenticated,
+    auth_role=auth_role,
+    user_context=user_context,
+  )
+  if not access_ok and access_error == "login_required":
     return _finalize(_block_result(error="login_required", message=self_only_block_message("login_required")))
-  if login_required and str(auth_role or "member") != "admin":
+  if not access_ok and access_error == "admin_required":
     return _finalize(_block_result(error="admin_required", message=self_only_block_message("admin_required")))
   if str(confirm_text or "") != CONFIRMATION_TEXT:
     return _finalize(

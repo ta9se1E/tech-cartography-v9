@@ -143,9 +143,9 @@ def self_only_block_message(block_reason: str | None) -> str:
     "invalid_send_mode": "EMAIL_SEND_MODE=self_only の場合のみ送信できます。",
     "recipient_not_allowed": "recipient が EMAIL_RECIPIENT_ALLOWLIST に含まれていません。",
     "missing_smtp_config": "SMTP 設定が不足しています（host/port/username/password）。",
-    "confirm_text_mismatch": "確認テキストが一致しません。SEND TO MYSELF と入力してください。",
+    "confirm_text_mismatch": "確認文が一致していません。SEND TO MYSELF と入力してください。",
     "login_required": "ログイン後に実行できます。",
-    "admin_required": "管理者のみ実行できます。",
+    "admin_required": "admin権限が必要です。",
     "missing_preview": "latest live_digest_preview がありません。",
   }
   return mapping.get(str(block_reason or ""), "送信条件を満たしていません。")
