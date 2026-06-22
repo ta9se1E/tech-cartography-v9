@@ -35,7 +35,7 @@ Phase25O までで IAP + Google ログイン + Run History が live で動作し
 gcloud builds submit \
   --project devops-ai-agent-hackathon-2026 \
   --config cloudbuild.yaml \
-  --substitutions=_REGION=us-central1,_SERVICE=tech-cartography-v7-live,_LIVE_ARTIFACTS_BUCKET=tech-cartography-v7-live-artifacts-devops-ai-agent-hackathon-2026
+  --substitutions=_REGION=us-central1,_SERVICE=tech-cartography-v7-live,_LIVE_ARTIFACTS_BUCKET=tech-cartography-v7-live-artifacts-1020686343587
 ```
 
 ## deploy_live_safe.sh の使い方
@@ -53,7 +53,7 @@ chmod +x scripts/deploy_live_safe.sh
 PROJECT_ID=devops-ai-agent-hackathon-2026 \
 REGION=us-central1 \
 SERVICE=tech-cartography-v7-live \
-LIVE_ARTIFACTS_BUCKET=tech-cartography-v7-live-artifacts-devops-ai-agent-hackathon-2026 \
+LIVE_ARTIFACTS_BUCKET=tech-cartography-v7-live-artifacts-1020686343587 \
 ./scripts/deploy_live_safe.sh
 ```
 
@@ -105,7 +105,7 @@ gcloud builds triggers create github \
   --repo-owner=<GITHUB_OWNER> \
   --branch-pattern="^checkpoint/before-cloud-run$" \
   --build-config=cloudbuild.yaml \
-  --substitutions=_REGION=us-central1,_SERVICE=tech-cartography-v7-live,_LIVE_ARTIFACTS_BUCKET=tech-cartography-v7-live-artifacts-devops-ai-agent-hackathon-2026
+  --substitutions=_REGION=us-central1,_SERVICE=tech-cartography-v7-live,_LIVE_ARTIFACTS_BUCKET=tech-cartography-v7-live-artifacts-1020686343587
 ```
 
 > ブランチ名は運用ブランチに合わせて変更してください。初回は **手動 `gcloud builds submit`** で検証を推奨します。

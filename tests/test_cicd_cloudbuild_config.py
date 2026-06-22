@@ -25,6 +25,13 @@ def test_cloudbuild_deploys_without_disabling_iap() -> None:
   assert "gcloud run deploy" in text
   assert "--no-iap" not in text
   assert "AUTH_PROVIDER_MODE=iap" in text
+  assert "tech-cartography-v7-live-artifacts-1020686343587" in text
+  assert "tech-cartography-v7-live-artifacts-devops-ai-agent-hackathon-2026" not in text
+
+
+def test_cloudbuild_verifies_bucket_before_deploy() -> None:
+  text = CLOUDBUILD.read_text(encoding="utf-8")
+  assert "gcloud storage buckets describe" in text
 
 
 def test_cloudbuild_has_no_inline_secret_values() -> None:

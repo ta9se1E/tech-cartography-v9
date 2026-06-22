@@ -17,6 +17,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 DEFAULT_PROJECT_ID = "devops-ai-agent-hackathon-2026"
 DEFAULT_REGION = "us-central1"
 DEFAULT_SERVICE = "tech-cartography-v7-live"
+WRONG_LIVE_ARTIFACTS_BUCKET = "tech-cartography-v7-live-artifacts-devops-ai-agent-hackathon-2026"
+CORRECT_LIVE_ARTIFACTS_BUCKET = "tech-cartography-v7-live-artifacts-1020686343587"
 
 FORBIDDEN_INLINE_MARKERS = (
   "sk-",
@@ -91,8 +93,18 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
     for marker in FORBIDDEN_INLINE_MARKERS:
       if marker in cloudbuild_text:
         failures.append(f"cloudbuild.yaml contains forbidden inline secret marker: {marker}")
+    if WRONG_LIVE_ARTIFACTS_BUCKET in cloudbuild_text:
+      failures.append("cloudbuild.yaml contains project-id based live artifacts bucket name")
+    if CORRECT_LIVE_ARTIFACTS_BUCKET not in cloudbuild_text:
+      failures.append("cloudbuild.yaml missing project-number based live artifacts bucket default")
 
   if deploy_text:
+    if WRONG_LIVE_ARTIFACTS_BUCKET in deploy_text:
+      failures.append("deploy_live_safe.sh contains project-id based live artifacts bucket name")
+    if "PROJECT_NUMBER" not in deploy_text and "projectNumber" not in deploy_text:
+      failures.append("deploy_live_safe.sh must resolve bucket from PROJECT_NUMBER")
+    if "gcloud storage buckets describe" not in deploy_text:
+      failures.append("deploy_live_safe.sh must verify bucket exists before deploy")
     if re.search(r"gcloud\s+run\s+.*--no-iap", deploy_text):
       failures.append("deploy_live_safe.sh must not disable IAP")
     if "AUTH_PROVIDER_MODE=basic" in deploy_text:

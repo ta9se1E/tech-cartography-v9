@@ -5,7 +5,6 @@ set -euo pipefail
 PROJECT_ID="${PROJECT_ID:-devops-ai-agent-hackathon-2026}"
 REGION="${REGION:-us-central1}"
 SERVICE="${SERVICE:-tech-cartography-v7-live}"
-LIVE_ARTIFACTS_BUCKET="${LIVE_ARTIFACTS_BUCKET:-tech-cartography-v7-live-artifacts-${PROJECT_ID}}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
@@ -20,6 +19,29 @@ export PYTHONPATH="${ROOT}/src"
 
 log() {
   printf '%s\n' "$*"
+}
+
+resolve_live_artifacts_bucket() {
+  if [[ -n "${LIVE_ARTIFACTS_BUCKET:-}" ]]; then
+    printf '%s\n' "${LIVE_ARTIFACTS_BUCKET}"
+    return 0
+  fi
+  local project_number
+  project_number="$(gcloud projects describe "${PROJECT_ID}" --format="value(projectNumber)")"
+  if [[ -z "${project_number}" ]]; then
+    log "ERROR: could not resolve PROJECT_NUMBER for ${PROJECT_ID}"
+    exit 1
+  fi
+  printf 'tech-cartography-v7-live-artifacts-%s\n' "${project_number}"
+}
+
+verify_live_artifacts_bucket() {
+  log "Verifying live artifacts bucket: gs://${LIVE_ARTIFACTS_BUCKET}"
+  if ! gcloud storage buckets describe "gs://${LIVE_ARTIFACTS_BUCKET}" >/dev/null 2>&1; then
+    log "ERROR: bucket gs://${LIVE_ARTIFACTS_BUCKET} does not exist. Aborting deploy."
+    exit 1
+  fi
+  log "Bucket exists."
 }
 
 run_python_checks() {
@@ -67,6 +89,8 @@ deploy_live() {
 }
 
 main() {
+  LIVE_ARTIFACTS_BUCKET="$(resolve_live_artifacts_bucket)"
+  verify_live_artifacts_bucket
   run_python_checks
   deploy_live
   log "Deploy complete."

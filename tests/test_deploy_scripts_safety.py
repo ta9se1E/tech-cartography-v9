@@ -20,6 +20,15 @@ def test_deploy_script_does_not_echo_secrets() -> None:
   assert "gcloud run services update" not in text
   assert "AUTH_PROVIDER_MODE=iap" in text
   assert "check_iap_cutover_ready.py" in text
+  assert "tech-cartography-v7-live-artifacts-devops-ai-agent-hackathon-2026" not in text
+
+
+def test_deploy_script_uses_project_number_bucket() -> None:
+  text = DEPLOY.read_text(encoding="utf-8")
+  assert "projectNumber" in text
+  assert "tech-cartography-v7-live-artifacts-" in text
+  assert "gcloud storage buckets describe" in text
+  assert "resolve_live_artifacts_bucket" in text
 
 
 def test_rollback_script_uses_read_s() -> None:

@@ -4,7 +4,7 @@
 substitutions:
   _REGION: us-central1
   _SERVICE: tech-cartography-v7-live
-  _LIVE_ARTIFACTS_BUCKET: tech-cartography-v7-live-artifacts-devops-ai-agent-hackathon-2026
+  _LIVE_ARTIFACTS_BUCKET: tech-cartography-v7-live-artifacts-1020686343587
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -43,6 +43,7 @@ steps:
           --project "${PROJECT_ID}" \
           --region "${_REGION}" \
           --service "${_SERVICE}"
+        gcloud storage buckets describe "gs://${_LIVE_ARTIFACTS_BUCKET}"
         gcloud run deploy "${_SERVICE}" \
           --source . \
           --region "${_REGION}" \

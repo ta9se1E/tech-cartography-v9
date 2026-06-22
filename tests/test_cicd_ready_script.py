@@ -36,3 +36,15 @@ def test_check_cicd_ready_script_has_readiness_banner() -> None:
   text = SCRIPT.read_text(encoding="utf-8")
   assert "CI/CD readiness" in text
   assert "cloudbuild.yaml" in text
+  assert "WRONG_LIVE_ARTIFACTS_BUCKET" in text
+  assert "CORRECT_LIVE_ARTIFACTS_BUCKET" in text
+
+
+def test_repo_has_no_wrong_live_artifacts_bucket_name() -> None:
+  wrong = "tech-cartography-v7-live-artifacts-devops-ai-agent-hackathon-2026"
+  for path in (
+    Path("cloudbuild.yaml"),
+    Path("scripts/deploy_live_safe.sh"),
+    Path("docs/phase25p_cicd_cloud_build_deploy.md"),
+  ):
+    assert wrong not in path.read_text(encoding="utf-8"), f"wrong bucket in {path}"
