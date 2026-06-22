@@ -60,13 +60,25 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
   deploy_script = PROJECT_ROOT / "scripts/deploy_live_safe.sh"
   rollback_script = PROJECT_ROOT / "scripts/rollback_live_to_basic.sh"
   cicd_docs = PROJECT_ROOT / "docs/phase25p_cicd_cloud_build_deploy.md"
+  ensure_ignore_script = PROJECT_ROOT / "scripts/ensure_cloud_build_ignore_files.sh"
+  canonical_gcloudignore = PROJECT_ROOT / "config/cloudrun.gcloudignore"
+  canonical_dockerignore = PROJECT_ROOT / "config/cloudrun.dockerignore"
   required_checks = (
     PROJECT_ROOT / "scripts/check_cloudrun_demo_ready.py",
     PROJECT_ROOT / "scripts/check_live_beta_ready.py",
     PROJECT_ROOT / "scripts/check_iap_cutover_ready.py",
   )
 
-  for path in (cloudbuild, deploy_script, rollback_script, cicd_docs, *required_checks):
+  for path in (
+    cloudbuild,
+    deploy_script,
+    rollback_script,
+    cicd_docs,
+    ensure_ignore_script,
+    canonical_gcloudignore,
+    canonical_dockerignore,
+    *required_checks,
+  ):
     if path.exists():
       passes.append(f"artifact exists: {path.relative_to(PROJECT_ROOT)}")
     else:
@@ -97,6 +109,12 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
       failures.append("cloudbuild.yaml contains project-id based live artifacts bucket name")
     if CORRECT_LIVE_ARTIFACTS_BUCKET not in cloudbuild_text:
       failures.append("cloudbuild.yaml missing project-number based live artifacts bucket default")
+    if "ensure_cloud_build_ignore_files.sh" not in cloudbuild_text:
+      failures.append("cloudbuild.yaml must restore ignore files before quality-gate tests")
+    if "__pycache__" not in _read(canonical_gcloudignore):
+      failures.append("config/cloudrun.gcloudignore must exclude __pycache__")
+    if WRONG_LIVE_ARTIFACTS_BUCKET in _read(canonical_gcloudignore):
+      failures.append("canonical gcloudignore contains wrong live artifacts bucket name")
 
   if deploy_text:
     if WRONG_LIVE_ARTIFACTS_BUCKET in deploy_text:

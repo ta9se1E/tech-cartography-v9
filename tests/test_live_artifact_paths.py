@@ -115,21 +115,25 @@ def test_services_save_under_live_outputs_root(tmp_path: Path, monkeypatch: pyte
 
 
 def test_save_fails_safely_when_not_writable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-  live_root = tmp_path / "readonly_root"
+  live_root = tmp_path / "live_root"
   live_root.mkdir()
-  live_root.chmod(0o500)
   monkeypatch.setenv(LIVE_OUTPUTS_ROOT_ENV, str(live_root))
-  try:
-    with pytest.raises(ValueError, match="not writable"):
-      save_live_web_signal_pack(
-        {
-          "theme_name": "Test",
-          "query": "q",
-          "fetched_at": "2026-06-18T00:00:00+00:00",
-          "candidates": [],
-          "next_actions": [],
-        },
-        tmp_path,
-      )
-  finally:
-    live_root.chmod(0o700)
+
+  def deny_write(directory: Path) -> tuple[bool, str | None]:
+    return False, f"{directory} is not writable (PermissionError)"
+
+  monkeypatch.setattr(
+    "tech_cartography.services.live_web_signal_pack.check_directory_writable",
+    deny_write,
+  )
+  with pytest.raises(ValueError, match="not writable"):
+    save_live_web_signal_pack(
+      {
+        "theme_name": "Test",
+        "query": "q",
+        "fetched_at": "2026-06-18T00:00:00+00:00",
+        "candidates": [],
+        "next_actions": [],
+      },
+      tmp_path,
+    )

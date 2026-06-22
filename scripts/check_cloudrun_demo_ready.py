@@ -37,6 +37,15 @@ def _read(path: Path) -> str:
   return path.read_text(encoding="utf-8")
 
 
+def _ignore_text(dot_name: str) -> str:
+  dot_path = PROJECT_ROOT / dot_name
+  if dot_path.exists():
+    return _read(dot_path)
+  kind = dot_name.lstrip(".")
+  canonical = PROJECT_ROOT / "config" / f"cloudrun.{kind}"
+  return _read(canonical)
+
+
 def _git_tracks_env() -> bool:
   try:
     result = subprocess.run(
@@ -86,8 +95,10 @@ def main() -> int:
 
   gcloudignore = PROJECT_ROOT / ".gcloudignore"
   dockerignore = PROJECT_ROOT / ".dockerignore"
-  if not gcloudignore.exists() and not dockerignore.exists():
-    failures.append(".gcloudignore または .dockerignore が必要です")
+  if not gcloudignore.exists() and not (PROJECT_ROOT / "config/cloudrun.gcloudignore").exists():
+    failures.append(".gcloudignore または config/cloudrun.gcloudignore が必要です")
+  if not dockerignore.exists() and not (PROJECT_ROOT / "config/cloudrun.dockerignore").exists():
+    failures.append(".dockerignore または config/cloudrun.dockerignore が必要です")
 
   if _git_tracks_env():
     failures.append(".env が git 追跡対象です")
@@ -108,7 +119,7 @@ def main() -> int:
   if "PORT=" in env_example:
     failures.append(".env.example に PORT 固定値を書かないでください")
 
-  gcloudignore_text = _read(gcloudignore)
+  gcloudignore_text = _ignore_text(".gcloudignore")
   if "demo_outputs/" in gcloudignore_text or "demo_outputs\n" in gcloudignore_text:
     failures.append(".gcloudignore が demo_outputs を除外しています")
   if "outputs/" not in gcloudignore_text:

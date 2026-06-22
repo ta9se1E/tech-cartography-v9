@@ -45,6 +45,15 @@ def test_repo_has_no_wrong_live_artifacts_bucket_name() -> None:
   for path in (
     Path("cloudbuild.yaml"),
     Path("scripts/deploy_live_safe.sh"),
+    Path("config/cloudrun.gcloudignore"),
     Path("docs/phase25p_cicd_cloud_build_deploy.md"),
   ):
     assert wrong not in path.read_text(encoding="utf-8"), f"wrong bucket in {path}"
+
+
+def test_canonical_ignore_files_exist() -> None:
+  assert Path("config/cloudrun.gcloudignore").exists()
+  assert Path("config/cloudrun.dockerignore").exists()
+  text = Path("config/cloudrun.gcloudignore").read_text(encoding="utf-8")
+  assert "__pycache__" in text
+  assert "demo_outputs/" not in text

@@ -1,6 +1,6 @@
 .env
 *.db
-**pycache**/
+__pycache__/
 *.pyc
 outputs/
 inputs/manual/*

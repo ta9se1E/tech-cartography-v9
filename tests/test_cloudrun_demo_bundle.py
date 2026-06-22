@@ -45,7 +45,10 @@ def test_relative_upload_paths_use_demo_outputs_prefix() -> None:
   assert path.startswith("demo_outputs/US-12565719-B2/")
 
 
+from tests.cloudrun_ignore_paths import cloudrun_ignore_text
+
+
 def test_gcloudignore_does_not_exclude_demo_outputs() -> None:
-  text = (PROJECT_ROOT / ".gcloudignore").read_text(encoding="utf-8")
+  text = cloudrun_ignore_text("gcloudignore")
   assert "demo_outputs/" not in text
   assert "outputs/" in text

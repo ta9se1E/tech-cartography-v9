@@ -16,7 +16,10 @@ steps:
     args:
       - -ceu
       - |
-        pip install -q -r requirements.txt
+        bash scripts/ensure_cloud_build_ignore_files.sh
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+        python -m pip install -e .
         export PYTHONPATH=src
         python -m compileall scripts src tests app.py
         python -m pytest -q

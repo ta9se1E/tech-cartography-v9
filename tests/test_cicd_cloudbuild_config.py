@@ -34,6 +34,12 @@ def test_cloudbuild_verifies_bucket_before_deploy() -> None:
   assert "gcloud storage buckets describe" in text
 
 
+def test_cloudbuild_restores_ignore_files_before_tests() -> None:
+  text = CLOUDBUILD.read_text(encoding="utf-8")
+  assert "ensure_cloud_build_ignore_files.sh" in text
+  assert "pip install -e ." in text
+
+
 def test_cloudbuild_has_no_inline_secret_values() -> None:
   text = CLOUDBUILD.read_text(encoding="utf-8")
   assert "TECH_CARTOGRAPHY_LOGIN_PASSWORD" not in text

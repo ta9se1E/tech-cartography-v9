@@ -19,15 +19,18 @@ def test_procfile_exists_and_uses_port_env() -> None:
   assert "browser.gatherUsageStats=false" in text
 
 
+from tests.cloudrun_ignore_paths import cloudrun_ignore_text
+
+
 def test_gcloudignore_includes_demo_bundle() -> None:
-  text = (PROJECT_ROOT / ".gcloudignore").read_text(encoding="utf-8")
+  text = cloudrun_ignore_text("gcloudignore")
   assert "outputs/" in text
   assert "demo_outputs/" not in text
   assert ".env" in text
 
 
 def test_dockerignore_exists() -> None:
-  text = (PROJECT_ROOT / ".dockerignore").read_text(encoding="utf-8")
+  text = cloudrun_ignore_text("dockerignore")
   assert "outputs" in text
   assert "demo_outputs/" not in text
 
