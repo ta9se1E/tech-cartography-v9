@@ -13,6 +13,13 @@ from tech_cartography.runtime.live_artifact_paths import (
   check_directory_writable,
   get_live_digest_preview_dir,
 )
+from tech_cartography.services.live_run_history import (
+  attach_user_run_metadata,
+  copy_user_run_metadata,
+  generate_run_id,
+  map_result_status,
+  record_live_run,
+)
 from tech_cartography.services.live_web_signal_pack import (
   SOURCE_TYPE_LIVE,
   find_latest_live_web_signal_pack_path,
@@ -371,7 +378,7 @@ def _assert_no_sensitive_material(serialized: str) -> None:
 
 
 def build_save_payload(preview: dict[str, Any]) -> dict[str, Any]:
-  return {
+  payload = {
     "source_pack_path": preview.get("source_pack_path"),
     "source_type": preview.get("source_type"),
     "theme_name": preview.get("theme_name"),
@@ -386,6 +393,7 @@ def build_save_payload(preview: dict[str, Any]) -> dict[str, Any]:
     "digest_title": preview.get("digest_title"),
     "evidence_gaps": preview.get("evidence_gaps") or [],
   }
+  return copy_user_run_metadata(payload, preview)
 
 
 def save_live_digest_preview(
@@ -452,24 +460,48 @@ def create_live_digest_preview_from_latest_pack(
   login_required: bool,
   is_authenticated: bool,
   auth_role: str,
+  user_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
   """Build and save digest preview from latest pack. Never sends email."""
+  run_id = generate_run_id()
+  started_at = _utc_now_iso()
+  resolved_theme = str(theme_name or "").strip()
+
+  def _finalize(result: dict[str, Any], *, theme: str | None = None, source_path: str | None = None) -> dict[str, Any]:
+    record_live_run(
+      action_type="live_digest_preview",
+      status=map_result_status(ok=result.get("ok"), error=result.get("error")),
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      theme_name=theme or resolved_theme or None,
+      input_summary=user_note,
+      output_artifact_paths=result.get("saved_paths") or {},
+      source_artifact_paths=[source_path] if source_path else [],
+      error_summary=None if result.get("ok") else str(result.get("message") or result.get("error") or ""),
+      project_root=output_root,
+    )
+    result["run_id"] = run_id
+    return result
+
   assert_preview_only_operation()
   can_create_live_digest_preview()
 
   if login_required and not is_authenticated:
-    return {"ok": False, "error": "login_required", "message": "ログイン後に実行できます。"}
+    return _finalize({"ok": False, "error": "login_required", "message": "ログイン後に実行できます。"})
   if login_required and str(auth_role or "member") != "admin":
-    return {"ok": False, "error": "admin_required", "message": "管理者のみ実行できます。"}
+    return _finalize({"ok": False, "error": "admin_required", "message": "管理者のみ実行できます。"})
 
   pack, resolved_path, source_type = resolve_latest_web_signal_pack(output_root)
   pack_path = resolved_path
   if pack_path is None:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "missing_source_pack",
       "message": "latest web signal pack がありません。先に Web Signal Pack または Next Cycle Pack を作成してください。",
-    }
+    },
+    )
 
   pack = pack or load_live_web_signal_pack(pack_path)
   if not pack and pack_path is not None:
@@ -477,11 +509,14 @@ def create_live_digest_preview_from_latest_pack(
 
     pack = load_next_cycle_web_signal_pack(pack_path)
   if not pack:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "invalid_source_pack",
       "message": "source pack の読み込みに失敗しました。",
-    }
+    },
+      source_path=str(pack_path),
+    )
 
   try:
     preview = generate_live_digest_preview(
@@ -491,11 +526,17 @@ def create_live_digest_preview_from_latest_pack(
       recipient_group_name=recipient_group_name,
       user_note=user_note,
     )
+    preview = attach_user_run_metadata(preview, user_context=user_context, run_id=run_id)
     saved_paths = save_live_digest_preview(preview, output_root)
   except (OSError, ValueError) as exc:
-    return {"ok": False, "error": "save_failed", "message": str(exc)}
+    return _finalize(
+      {"ok": False, "error": "save_failed", "message": str(exc)},
+      source_path=str(pack_path),
+      theme=str(pack.get("theme_name") or ""),
+    )
 
-  return {
+  return _finalize(
+    {
     "ok": True,
     "error": None,
     "message": "メール下書きプレビューを作成しました（送信なし）。",
@@ -503,4 +544,7 @@ def create_live_digest_preview_from_latest_pack(
     "saved_paths": saved_paths,
     "email_send_disabled": email_send_is_disabled(),
     "source_type": source_type or preview.get("source_type"),
-  }
+  },
+    source_path=str(pack_path),
+    theme=str(preview.get("theme_name") or pack.get("theme_name") or ""),
+  )

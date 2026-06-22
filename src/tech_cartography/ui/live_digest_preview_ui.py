@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from tech_cartography.auth.basic_auth import is_login_required
+from tech_cartography.runtime.user_context import resolve_user_context
 from tech_cartography.services.live_digest_preview import (
   SAFETY_NOTICE,
   can_create_live_digest_preview,
@@ -89,6 +90,7 @@ def render_live_digest_preview_section(
         login_required=is_login_required(),
         is_authenticated=is_basic_authenticated(),
         auth_role=get_auth_role(),
+        user_context=resolve_user_context(),
       )
       st.session_state[f"{key_prefix}_last_result"] = result
 

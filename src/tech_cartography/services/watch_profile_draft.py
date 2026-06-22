@@ -12,6 +12,12 @@ from tech_cartography.runtime.live_artifact_paths import (
   check_directory_writable,
   get_live_watch_profiles_dir,
 )
+from tech_cartography.services.live_run_history import (
+  attach_user_run_metadata,
+  generate_run_id,
+  map_result_status,
+  record_live_run,
+)
 from tech_cartography.services.live_watch_expansion_proposal import (
   FORBIDDEN_PHRASES,
   PROPOSAL_TYPES,
@@ -380,14 +386,38 @@ def apply_human_watch_expansion_decisions(
   approved_by: str,
   source_proposal_path: str,
   output_root: Path | str,
+  user_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
   """Persist human-approved draft only — never touches production watch profile store."""
+  run_id = generate_run_id()
+  started_at = _utc_now_iso()
+  theme_name = str(proposals_document.get("theme_name") or "").strip() or None
+
+  def _finalize(result: dict[str, Any]) -> dict[str, Any]:
+    record_live_run(
+      action_type="watch_profile_draft",
+      status=map_result_status(ok=result.get("ok"), error=result.get("error")),
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      theme_name=theme_name,
+      input_summary=f"approved={len(approved_proposal_ids)} rejected={len(rejected_proposal_ids)}",
+      output_artifact_paths=result.get("saved_paths") or {},
+      source_artifact_paths=[source_proposal_path] if source_proposal_path else [],
+      error_summary=None if result.get("ok") else str(result.get("message") or result.get("error") or ""),
+      project_root=output_root,
+    )
+    result["run_id"] = run_id
+    return result
+
   if not approved_proposal_ids and not rejected_proposal_ids:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "empty_selection",
       "message": "承認または却下する proposal を選択してください。",
-    }
+    },
+    )
 
   try:
     draft = build_watch_profile_draft_from_decisions(
@@ -397,14 +427,17 @@ def apply_human_watch_expansion_decisions(
       approved_by=approved_by,
       source_proposal_path=source_proposal_path,
     )
+    draft = attach_user_run_metadata(draft, user_context=user_context, run_id=run_id)
     saved_paths = save_watch_profile_draft(draft, output_root)
   except (OSError, ValueError) as exc:
-    return {"ok": False, "error": "save_failed", "message": str(exc)}
+    return _finalize({"ok": False, "error": "save_failed", "message": str(exc)})
 
-  return {
+  return _finalize(
+    {
     "ok": True,
     "error": None,
     "message": "Watch Profile Draft を保存しました（本番 profile は未更新）。",
     "draft": draft,
     "saved_paths": saved_paths,
-  }
+  },
+  )

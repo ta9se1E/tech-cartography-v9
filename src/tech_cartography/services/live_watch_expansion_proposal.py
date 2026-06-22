@@ -19,6 +19,12 @@ from tech_cartography.services.live_digest_preview import (
   load_latest_live_digest_preview,
   load_live_digest_preview,
 )
+from tech_cartography.services.live_run_history import (
+  attach_user_run_metadata,
+  generate_run_id,
+  map_result_status,
+  record_live_run,
+)
 from tech_cartography.services.live_web_signal_pack import (
   find_latest_live_web_signal_pack_path,
   load_latest_live_web_signal_pack,
@@ -594,28 +600,53 @@ def create_live_watch_expansion_proposals_from_latest(
   login_required: bool,
   is_authenticated: bool,
   auth_role: str,
+  user_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
   """Generate and save proposals from latest live artifacts. Never auto-approves."""
+  run_id = generate_run_id()
+  started_at = _utc_now_iso()
+
+  def _finalize(result: dict[str, Any], *, theme: str | None = None, pack_path: str | None = None) -> dict[str, Any]:
+    record_live_run(
+      action_type="watch_expansion_proposal",
+      status=map_result_status(ok=result.get("ok"), error=result.get("error")),
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      theme_name=theme,
+      output_artifact_paths=result.get("saved_paths") or {},
+      source_artifact_paths=[pack_path] if pack_path else [],
+      error_summary=None if result.get("ok") else str(result.get("message") or result.get("error") or ""),
+      project_root=output_root,
+    )
+    result["run_id"] = run_id
+    return result
+
   if login_required and not is_authenticated:
-    return {"ok": False, "error": "login_required", "message": "ログイン後に実行できます。"}
+    return _finalize({"ok": False, "error": "login_required", "message": "ログイン後に実行できます。"})
   if login_required and str(auth_role or "member") != "admin":
-    return {"ok": False, "error": "admin_required", "message": "管理者のみ実行できます。"}
+    return _finalize({"ok": False, "error": "admin_required", "message": "管理者のみ実行できます。"})
 
   pack_path = find_latest_live_web_signal_pack_path(output_root)
   if pack_path is None:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "missing_source_pack",
       "message": "latest live_web_signal_pack がありません。先に Web Signal Pack を作成してください。",
-    }
+    },
+    )
 
   pack = load_live_web_signal_pack(pack_path)
   if not pack:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "invalid_source_pack",
       "message": "source pack の読み込みに失敗しました。",
-    }
+    },
+      pack_path=str(pack_path),
+    )
 
   digest_path = find_latest_live_digest_preview_path(output_root)
   digest = load_latest_live_digest_preview(output_root) if digest_path else None
@@ -629,13 +660,19 @@ def create_live_watch_expansion_proposals_from_latest(
     theme_name=resolved_theme,
     watch_profile=watch_profile,
   )
+  document = attach_user_run_metadata(document, user_context=user_context, run_id=run_id)
 
   try:
     saved_paths = save_live_watch_expansion_proposals(document, output_root)
   except (OSError, ValueError) as exc:
-    return {"ok": False, "error": "save_failed", "message": str(exc)}
+    return _finalize(
+      {"ok": False, "error": "save_failed", "message": str(exc)},
+      theme=resolved_theme or None,
+      pack_path=str(pack_path),
+    )
 
-  return {
+  return _finalize(
+    {
     "ok": True,
     "error": None,
     "message": f"監視範囲拡張候補を {len(document.get('proposals') or [])} 件作成しました（承認前）。",
@@ -643,4 +680,7 @@ def create_live_watch_expansion_proposals_from_latest(
     "saved_paths": saved_paths,
     "source_pack_path": str(pack_path),
     "source_digest_path": str(digest_path) if digest_path else None,
-  }
+  },
+    theme=resolved_theme or None,
+    pack_path=str(pack_path),
+  )

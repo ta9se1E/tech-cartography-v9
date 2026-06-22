@@ -16,6 +16,7 @@ from tech_cartography.services.live_tavily_search import (
   clamp_max_results,
   live_tavily_block_message,
 )
+from tech_cartography.runtime.user_context import resolve_user_context
 from tech_cartography.services.live_web_signal_pack import (
   SAFETY_NOTICE,
   load_latest_live_web_signal_pack,
@@ -104,6 +105,7 @@ def render_live_web_signal_pack_section(
         is_authenticated=is_basic_authenticated(),
         auth_role=get_auth_role(),
         output_root=project_root,
+        user_context=resolve_user_context(),
       )
       st.session_state[f"{key_prefix}_last_result"] = result
 

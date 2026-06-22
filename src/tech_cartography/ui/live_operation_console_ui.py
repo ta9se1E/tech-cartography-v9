@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from tech_cartography.auth.basic_auth import is_login_required
+from tech_cartography.runtime.user_context import resolve_user_context
 from tech_cartography.services.live_operation_status import (
   SAFETY_NOTICE,
   STEP_GUIDANCE,
@@ -65,9 +66,12 @@ def render_live_operation_console_section(
 
     if status is None:
       if save_on_load:
-        status, saved_paths, save_error = build_and_save_operation_cycle_status(project_root)
+        status, saved_paths, save_error = build_and_save_operation_cycle_status(
+          project_root,
+          user_context=resolve_user_context(),
+        )
       else:
-        status = build_operation_cycle_status(project_root)
+        status = build_operation_cycle_status(project_root, user_context=resolve_user_context())
         saved_paths = None
         save_error = None
       st.session_state[f"{key_prefix}_status"] = status
@@ -112,6 +116,18 @@ def render_live_operation_console_section(
     st.dataframe(step_rows, use_container_width=True, hide_index=True)
 
     st.markdown(f"**next recommended action:** {status.get('next_recommended_action')}")
+
+    history_summary = status.get("run_history_summary") or {}
+    st.markdown(
+      f"**Run History:** visible={history_summary.get('total_visible_count', 0)}件 / "
+      f"latest by you: {(history_summary.get('latest_by_current_user') or {}).get('action_type', '(none)')}"
+    )
+    latest_failed = history_summary.get("latest_failed_or_blocked")
+    if latest_failed:
+      st.warning(
+        f"直近 failed/blocked: {latest_failed.get('action_type')} — "
+        f"{latest_failed.get('error_summary') or latest_failed.get('status')}"
+      )
 
     warnings = status.get("warnings") or []
     if warnings:

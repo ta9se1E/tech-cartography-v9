@@ -13,6 +13,12 @@ from tech_cartography.runtime.live_artifact_paths import (
   check_directory_writable,
   get_live_web_signals_dir,
 )
+from tech_cartography.services.live_run_history import (
+  attach_user_run_metadata,
+  generate_run_id,
+  map_result_status,
+  record_live_run,
+)
 from tech_cartography.services.live_tavily_search import (
   PROVIDER,
   clamp_max_results,
@@ -298,28 +304,52 @@ def run_live_web_signal_pack(
   auth_role: str,
   output_root: Path | str,
   post_fn: Callable[..., dict[str, Any]] | None = None,
+  user_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
   """Search Tavily, convert to candidates, save pack. Never raises."""
+  run_id = generate_run_id()
+  started_at = _utc_now_iso()
   cleaned_theme = str(theme_name or "").strip()
   cleaned_query = str(query or "").strip()
+
+  def _finalize(result: dict[str, Any]) -> dict[str, Any]:
+    record_live_run(
+      action_type="live_web_signal_pack",
+      status=map_result_status(ok=result.get("ok"), error=result.get("error")),
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      theme_name=cleaned_theme or None,
+      input_summary=f"query={cleaned_query}",
+      output_artifact_paths=result.get("saved_paths") or {},
+      error_summary=None if result.get("ok") else str(result.get("message") or result.get("error") or ""),
+      project_root=output_root,
+    )
+    result["run_id"] = run_id
+    return result
+
   if not cleaned_theme:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "empty_theme",
       "message": "theme_name を入力してください。",
       "candidates": [],
       "pack": None,
       "saved_paths": {},
-    }
+    },
+    )
   if not cleaned_query:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "empty_query",
       "message": "検索クエリを入力してください。",
       "candidates": [],
       "pack": None,
       "saved_paths": {},
-    }
+    },
+    )
 
   bounded = clamp_max_results(max_results)
   search_result = run_live_tavily_search_smoke(
@@ -331,11 +361,14 @@ def run_live_web_signal_pack(
     post_fn=post_fn,
   )
   if not search_result.get("ok"):
-    return {
+    return _finalize(
+      {
       **search_result,
       "candidates": [],
       "pack": None,
-    }
+      "saved_paths": {},
+    },
+    )
 
   candidates = tavily_results_to_candidates(
     theme_name=cleaned_theme,
@@ -348,19 +381,23 @@ def run_live_web_signal_pack(
     candidates=candidates,
     fetched_at=str(search_result.get("fetched_at") or _utc_now_iso()),
   )
+  pack = attach_user_run_metadata(pack, user_context=user_context, run_id=run_id)
   try:
     saved_paths = save_live_web_signal_pack(pack, output_root)
   except (OSError, ValueError) as exc:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "save_failed",
       "message": f"Web Signal Pack 保存に失敗しました: {exc}",
       "candidates": candidates,
       "pack": pack,
       "saved_paths": {},
-    }
+    },
+    )
 
-  return {
+  return _finalize(
+    {
     "ok": True,
     "error": None,
     "message": f"Web Signal Pack を作成しました（{len(candidates)} 件）",
@@ -374,4 +411,5 @@ def run_live_web_signal_pack(
     "saved_paths": saved_paths,
     "safety_notice": SAFETY_NOTICE,
     "next_actions": pack["next_actions"],
-  }
+  },
+  )

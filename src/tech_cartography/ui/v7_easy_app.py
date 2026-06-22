@@ -816,6 +816,9 @@ def _tab_reports(
     from tech_cartography.ui.live_next_cycle_search_ui import render_live_next_cycle_search_reports_section
 
     render_live_next_cycle_search_reports_section(project_root=PROJECT_ROOT)
+    from tech_cartography.ui.live_run_history_ui import render_run_history_section
+
+    render_run_history_section(project_root=PROJECT_ROOT, key_prefix="reports_live_run_history")
   if is_analyst_view() and demo_artifacts is None:
     case = _resolve_analyst_case()
     snapshot = compute_analyst_workflow_snapshot(case, project_root=PROJECT_ROOT)

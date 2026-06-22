@@ -1,7 +1,9 @@
-"""Basic username/password auth from environment variables (Phase 25A)."""
+"""Basic username/password auth from environment variables (Phase 25A, 25M)."""
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import secrets
@@ -12,8 +14,11 @@ REQUIRE_LOGIN_ENV = "REQUIRE_LOGIN"
 USERS_JSON_ENV = "TECH_CARTOGRAPHY_USERS_JSON"
 SIMPLE_LOGIN_USERNAME_ENV = "TECH_CARTOGRAPHY_LOGIN_USERNAME"
 SIMPLE_LOGIN_PASSWORD_ENV = "TECH_CARTOGRAPHY_LOGIN_PASSWORD"
+ENABLE_MULTI_USER_LOGIN_ENV = "ENABLE_MULTI_USER_LOGIN"
 
 VALID_ROLES = frozenset({"member", "admin"})
+PBKDF2_PREFIX = "pbkdf2_sha256$"
+DEFAULT_PBKDF2_ITERATIONS = 260_000
 
 
 @dataclass(frozen=True)
@@ -73,6 +78,34 @@ def authenticate_simple(username: str, password: str) -> AuthUser | None:
   )
 
 
+def is_multi_user_login_enabled() -> bool:
+  return _truthy(ENABLE_MULTI_USER_LOGIN_ENV, default=False)
+
+
+def hash_password_pbkdf2(password: str, *, iterations: int = DEFAULT_PBKDF2_ITERATIONS) -> str:
+  if not password:
+    raise ValueError("password must not be empty")
+  salt = secrets.token_bytes(16)
+  digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+  salt_b64 = base64.urlsafe_b64encode(salt).decode("ascii").rstrip("=")
+  digest_b64 = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+  return f"{PBKDF2_PREFIX}{iterations}${salt_b64}${digest_b64}"
+
+
+def verify_password_pbkdf2(password: str, password_hash: str) -> bool:
+  if not password or not password_hash or not password_hash.startswith(PBKDF2_PREFIX):
+    return False
+  try:
+    _, iterations_raw, salt_b64, digest_b64 = password_hash.split("$", 3)
+    iterations = int(iterations_raw)
+    salt = base64.urlsafe_b64decode(salt_b64 + "=" * (-len(salt_b64) % 4))
+    expected = base64.urlsafe_b64decode(digest_b64 + "=" * (-len(digest_b64) % 4))
+    actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return secrets.compare_digest(actual, expected)
+  except (ValueError, TypeError):
+    return False
+
+
 def hash_password(password: str) -> str:
   import bcrypt
 
@@ -82,10 +115,12 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-  import bcrypt
-
   if not password or not password_hash:
     return False
+  if password_hash.startswith(PBKDF2_PREFIX):
+    return verify_password_pbkdf2(password, password_hash)
+  import bcrypt
+
   try:
     return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
   except ValueError:
@@ -125,7 +160,7 @@ def load_user_records() -> list[dict[str, Any]]:
   return records
 
 
-def authenticate_bcrypt_json(username: str, password: str) -> AuthUser | None:
+def authenticate_json_users(username: str, password: str) -> AuthUser | None:
   candidate = str(username or "").strip()
   if not candidate or not password:
     return None
@@ -146,13 +181,21 @@ def authenticate_bcrypt_json(username: str, password: str) -> AuthUser | None:
   return None
 
 
+def authenticate_bcrypt_json(username: str, password: str) -> AuthUser | None:
+  return authenticate_json_users(username, password)
+
+
 def authenticate(username: str, password: str) -> AuthUser | None:
+  if is_multi_user_login_enabled() and load_user_records():
+    return authenticate_json_users(username, password)
   if is_simple_login_configured():
     return authenticate_simple(username, password)
-  return authenticate_bcrypt_json(username, password)
+  return authenticate_json_users(username, password)
 
 
 def users_configured() -> bool:
+  if is_multi_user_login_enabled():
+    return bool(load_user_records())
   return is_simple_login_configured() or bool(load_user_records())
 
 

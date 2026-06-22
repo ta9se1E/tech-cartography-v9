@@ -21,6 +21,12 @@ from tech_cartography.services.live_tavily_search import (
   live_tavily_block_message,
   run_live_tavily_search_smoke,
 )
+from tech_cartography.services.live_run_history import (
+  attach_user_run_metadata,
+  generate_run_id,
+  map_result_status,
+  record_live_run,
+)
 from tech_cartography.services.live_web_signal_pack import (
   infer_confidence_label,
   infer_live_signal_type,
@@ -245,18 +251,42 @@ def run_next_cycle_tavily_searches(
   is_authenticated: bool,
   auth_role: str,
   post_fn: Callable[..., dict[str, Any]] | None = None,
+  user_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
   """Run Tavily only for admin-selected queries. Never raises."""
+  run_id = generate_run_id()
+  started_at = _utc_now_iso()
+  cleaned_theme = str(theme_name or "").strip()
+
+  def _finalize(result: dict[str, Any]) -> dict[str, Any]:
+    record_live_run(
+      action_type="next_cycle_web_signal_pack",
+      status=map_result_status(ok=result.get("ok"), error=result.get("error")),
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      theme_name=cleaned_theme or None,
+      input_summary=f"selected_queries={len(selected_query_candidates)}",
+      output_artifact_paths=result.get("saved_paths") or {},
+      source_artifact_paths=[p for p in (source_plan_path, source_watch_profile_draft_path) if p],
+      error_summary=None if result.get("ok") else str(result.get("message") or result.get("error") or ""),
+      project_root=output_root,
+    )
+    result["run_id"] = run_id
+    return result
+
   selected = clamp_selected_queries(selected_query_candidates)
   if not selected:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "empty_selection",
       "message": "Tavily 実行対象の query を選択してください。",
       "candidates": [],
       "pack": None,
       "saved_paths": {},
-    }
+    },
+    )
 
   bounded_max = clamp_max_results(max_results_per_query)
   all_candidates: list[dict[str, Any]] = []
@@ -298,7 +328,8 @@ def run_next_cycle_tavily_searches(
   if not any(run.get("ok") for run in query_runs):
     first_error = next((run for run in query_runs if not run.get("ok")), {})
     block_reason = str(first_error.get("error") or "blocked")
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": block_reason,
       "message": live_tavily_block_message(block_reason)
@@ -308,7 +339,8 @@ def run_next_cycle_tavily_searches(
       "candidates": [],
       "pack": None,
       "saved_paths": {},
-    }
+    },
+    )
 
   pack = build_next_cycle_web_signal_pack(
     theme_name=theme_name,
@@ -318,11 +350,13 @@ def run_next_cycle_tavily_searches(
     query_runs=query_runs,
     candidates=all_candidates,
   )
+  pack = attach_user_run_metadata(pack, user_context=user_context, run_id=run_id)
 
   try:
     saved_paths = save_next_cycle_web_signal_pack(pack, output_root)
   except (OSError, ValueError) as exc:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "save_failed",
       "message": str(exc),
@@ -330,9 +364,11 @@ def run_next_cycle_tavily_searches(
       "candidates": all_candidates,
       "pack": pack,
       "saved_paths": {},
-    }
+    },
+    )
 
-  return {
+  return _finalize(
+    {
     "ok": True,
     "error": None,
     "message": f"Next Cycle Web Signal Pack を保存しました（{len(all_candidates)} 件）。",
@@ -341,4 +377,5 @@ def run_next_cycle_tavily_searches(
     "pack": pack,
     "saved_paths": saved_paths,
     "max_results_per_query": bounded_max,
-  }
+  },
+  )

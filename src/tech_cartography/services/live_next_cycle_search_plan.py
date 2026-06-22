@@ -14,6 +14,12 @@ from tech_cartography.runtime.live_artifact_paths import (
   check_directory_writable,
   get_live_next_cycle_search_dir,
 )
+from tech_cartography.services.live_run_history import (
+  attach_user_run_metadata,
+  generate_run_id,
+  map_result_status,
+  record_live_run,
+)
 from tech_cartography.services.watch_profile_draft import (
   find_latest_watch_profile_draft_path,
   load_latest_watch_profile_draft,
@@ -268,27 +274,53 @@ def create_next_cycle_search_plan_from_latest_draft(
   login_required: bool,
   is_authenticated: bool,
   auth_role: str,
+  user_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+  run_id = generate_run_id()
+  started_at = _utc_now_iso()
+
+  def _finalize(result: dict[str, Any], *, theme: str | None = None, draft_path: str | None = None) -> dict[str, Any]:
+    record_live_run(
+      action_type="next_cycle_search_plan",
+      status=map_result_status(ok=result.get("ok"), error=result.get("error")),
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      theme_name=theme,
+      input_summary=user_note,
+      output_artifact_paths=result.get("saved_paths") or {},
+      source_artifact_paths=[draft_path] if draft_path else [],
+      error_summary=None if result.get("ok") else str(result.get("message") or result.get("error") or ""),
+      project_root=output_root,
+    )
+    result["run_id"] = run_id
+    return result
+
   if login_required and not is_authenticated:
-    return {"ok": False, "error": "login_required", "message": "ログイン後に実行できます。"}
+    return _finalize({"ok": False, "error": "login_required", "message": "ログイン後に実行できます。"})
   if login_required and str(auth_role or "member") != "admin":
-    return {"ok": False, "error": "admin_required", "message": "管理者のみ実行できます。"}
+    return _finalize({"ok": False, "error": "admin_required", "message": "管理者のみ実行できます。"})
 
   draft_path = find_latest_watch_profile_draft_path(output_root)
   if draft_path is None:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "missing_watch_profile_draft",
       "message": "latest watch_profile_draft がありません。先に Watch Expansion を承認してください。",
-    }
+    },
+    )
 
   draft = load_watch_profile_draft(draft_path)
   if not draft:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "invalid_watch_profile_draft",
       "message": "watch_profile_draft の読み込みに失敗しました。",
-    }
+    },
+      draft_path=str(draft_path),
+    )
 
   plan = build_next_cycle_search_plan(
     draft=draft,
@@ -297,22 +329,35 @@ def create_next_cycle_search_plan_from_latest_draft(
     user_note=user_note,
   )
   if not plan.get("query_candidates"):
-    return {
+    return _finalize(
+      {
       "ok": False,
       "error": "empty_approved_items",
       "message": "approved item が空のため query 候補を作成できません。",
-    }
+    },
+      theme=str(plan.get("theme_name") or draft.get("theme_name") or ""),
+      draft_path=str(draft_path),
+    )
 
+  plan = attach_user_run_metadata(plan, user_context=user_context, run_id=run_id)
   try:
     saved_paths = save_next_cycle_search_plan(plan, output_root)
   except (OSError, ValueError) as exc:
-    return {"ok": False, "error": "save_failed", "message": str(exc)}
+    return _finalize(
+      {"ok": False, "error": "save_failed", "message": str(exc)},
+      theme=str(plan.get("theme_name") or ""),
+      draft_path=str(draft_path),
+    )
 
-  return {
+  return _finalize(
+    {
     "ok": True,
     "error": None,
     "message": f"次回検索クエリ候補を {len(plan['query_candidates'])} 件作成しました（選択前）。",
     "plan": plan,
     "saved_paths": saved_paths,
     "source_watch_profile_draft_path": str(draft_path),
-  }
+  },
+    theme=str(plan.get("theme_name") or ""),
+    draft_path=str(draft_path),
+  )

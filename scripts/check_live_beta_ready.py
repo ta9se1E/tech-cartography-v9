@@ -82,6 +82,11 @@ def main() -> int:
   release_pack_service = PROJECT_ROOT / "src/tech_cartography/services/live_beta_release_pack.py"
   release_pack_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_beta_release_pack_ui.py"
   release_pack_docs = PROJECT_ROOT / "docs/phase25l_live_beta_release_pack.md"
+  user_context_module = PROJECT_ROOT / "src/tech_cartography/runtime/user_context.py"
+  run_history_service = PROJECT_ROOT / "src/tech_cartography/services/live_run_history.py"
+  run_history_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_run_history_ui.py"
+  run_history_docs = PROJECT_ROOT / "docs/phase25m_user_run_context_and_execution_history.md"
+  password_hash_script = PROJECT_ROOT / "scripts/generate_login_password_hash.py"
 
   for path in (
     module_path,
@@ -118,6 +123,11 @@ def main() -> int:
     release_pack_service,
     release_pack_ui,
     release_pack_docs,
+    user_context_module,
+    run_history_service,
+    run_history_ui,
+    run_history_docs,
+    password_hash_script,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -331,6 +341,21 @@ def main() -> int:
     failures.append("live_artifact_storage_ui に管理者向けタイトルがありません")
   if "live_release_packs" not in artifact_ui_text:
     failures.append("live_artifact_storage_ui に live_release_packs 件数がありません")
+  if "get_live_run_history_dir" not in _read(artifact_paths):
+    failures.append("live_artifact_paths に get_live_run_history_dir がありません")
+  if "live_run_history_entries" not in artifact_ui_text:
+    failures.append("live_artifact_storage_ui に live_run_history 件数がありません")
+  if "render_run_history_section" not in market_ui:
+    failures.append("v7_easy_app reports タブに run history UI がありません")
+  if "render_run_history_section" not in settings_ui:
+    failures.append("user_settings_view に run history UI がありません")
+  if "record_live_run" not in _read(run_history_service):
+    failures.append("live_run_history が record_live_run を提供していません")
+  if "resolve_user_context" not in _read(user_context_module):
+    failures.append("user_context が resolve_user_context を提供していません")
+  basic_auth_path = PROJECT_ROOT / "src/tech_cartography/auth/basic_auth.py"
+  if "hash_password_pbkdf2" not in _read(basic_auth_path):
+    failures.append("basic_auth が pbkdf2 hash を提供していません")
   if "SMTP_PASSWORD" in artifact_ui_text or "API_KEY" in artifact_ui_text:
     failures.append("live_artifact_storage_ui が secret 名を露出しています")
 
@@ -378,6 +403,7 @@ def main() -> int:
   print(f"next cycle tavily runner: {'yes' if next_cycle_runner.exists() else 'no'}")
   print(f"live operation console: {'yes' if operation_status.exists() else 'no'}")
   print(f"live beta release pack: {'yes' if release_pack_service.exists() else 'no'}")
+  print(f"user run history: {'yes' if run_history_service.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

@@ -10,6 +10,7 @@ import streamlit as st
 
 from tech_cartography.auth.basic_auth import is_login_required
 from tech_cartography.services.live_digest_preview import find_latest_live_digest_preview_path
+from tech_cartography.runtime.user_context import resolve_user_context
 from tech_cartography.services.live_watch_expansion_proposal import (
   SAFETY_NOTICE,
   create_live_watch_expansion_proposals_from_latest,
@@ -101,6 +102,7 @@ def render_live_watch_expansion_section(
         login_required=is_login_required(),
         is_authenticated=is_basic_authenticated(),
         auth_role=get_auth_role(),
+        user_context=resolve_user_context(),
       )
       st.session_state[f"{key_prefix}_last_create"] = result
       if result.get("ok"):
@@ -182,6 +184,7 @@ def render_live_watch_expansion_section(
         approved_by=_approved_by_label(),
         source_proposal_path=str(active_path),
         output_root=project_root,
+        user_context=resolve_user_context(),
       )
       st.session_state[f"{key_prefix}_last_decision"] = decision
 
@@ -193,6 +196,7 @@ def render_live_watch_expansion_section(
         approved_by=_approved_by_label(),
         source_proposal_path=str(active_path),
         output_root=project_root,
+        user_context=resolve_user_context(),
       )
       st.session_state[f"{key_prefix}_last_decision"] = decision
 

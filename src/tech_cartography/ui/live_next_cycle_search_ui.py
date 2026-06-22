@@ -11,6 +11,7 @@ import streamlit as st
 from tech_cartography.auth.basic_auth import is_login_required
 from tech_cartography.runtime.cloud_run_config import is_external_api_disabled
 from tech_cartography.runtime.external_api_guard import check_live_tavily_smoke_allowed
+from tech_cartography.runtime.user_context import resolve_user_context
 from tech_cartography.services.live_next_cycle_search_plan import (
   SAFETY_NOTICE as PLAN_SAFETY_NOTICE,
   create_next_cycle_search_plan_from_latest_draft,
@@ -97,6 +98,7 @@ def render_live_next_cycle_search_section(
         login_required=is_login_required(),
         is_authenticated=is_basic_authenticated(),
         auth_role=get_auth_role(),
+        user_context=resolve_user_context(),
       )
       st.session_state[f"{key_prefix}_last_plan_result"] = result
       if result.get("ok"):
@@ -184,6 +186,7 @@ def render_live_next_cycle_search_section(
         login_required=is_login_required(),
         is_authenticated=is_basic_authenticated(),
         auth_role=get_auth_role(),
+        user_context=resolve_user_context(),
       )
       st.session_state[f"{key_prefix}_last_run_result"] = run_result
 

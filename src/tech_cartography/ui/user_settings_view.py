@@ -198,6 +198,13 @@ def render_user_settings_tab(
       key_prefix="settings_live_beta_release_pack",
       expanded=False,
     )
+    from tech_cartography.ui.live_run_history_ui import render_run_history_section
+
+    render_run_history_section(
+      project_root=Path(__file__).resolve().parents[3],
+      key_prefix="settings_live_run_history",
+      expanded=False,
+    )
 
   if st.button("セッションをリセット", key="reset_session"):
     preserved_user = st.session_state.get(STATE_CURRENT_USER)

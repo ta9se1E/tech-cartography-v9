@@ -30,6 +30,13 @@ from tech_cartography.runtime.live_artifact_paths import (
   get_live_web_signals_dir,
   using_live_outputs_root_env,
 )
+from tech_cartography.services.live_run_history import (
+  attach_user_run_metadata,
+  generate_run_id,
+  map_result_status,
+  record_live_run,
+  summarize_run_history_for_console,
+)
 from tech_cartography.services.watch_profile_draft import (
   find_latest_watch_profile_draft_path,
   load_watch_profile_draft_with_status,
@@ -196,10 +203,18 @@ def _build_step(
   }
 
 
-def build_operation_cycle_status(project_root: Path | str | None = None) -> dict[str, Any]:
+def build_operation_cycle_status(
+  project_root: Path | str | None = None,
+  *,
+  user_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
   """Aggregate live artifact step status. Never raises; no secrets."""
   checked_at = _utc_now_iso()
   active_storage_root = str(get_live_outputs_root(project_root))
+  run_history_summary = summarize_run_history_for_console(
+    project_root,
+    viewer_user_context=user_context,
+  )
 
   artifacts: dict[str, dict[str, Any]] = {}
   for step_name, dir_key, pattern, created_at_keys in _ARTIFACT_SPECS:
@@ -382,6 +397,13 @@ def build_operation_cycle_status(project_root: Path | str | None = None) -> dict
     )
 
   next_recommended_action = _derive_next_recommended_action(step_statuses)
+  latest_failed = run_history_summary.get("latest_failed_or_blocked")
+  if latest_failed:
+    warnings.append(
+      "直近の失敗/ブロック実行: "
+      f"{latest_failed.get('action_type')} ({latest_failed.get('status')}) — "
+      f"{latest_failed.get('error_summary') or '詳細は Run History を確認してください。'}"
+    )
   latest_artifact_paths = {
     step: (artifacts.get(step) or {}).get("latest_path")
     for step in STEP_ORDER
@@ -407,6 +429,7 @@ def build_operation_cycle_status(project_root: Path | str | None = None) -> dict
     },
     "latest_artifact_paths": latest_artifact_paths,
     "operation_cycle_status": step_statuses,
+    "run_history_summary": run_history_summary,
   }
 
 
@@ -503,11 +526,36 @@ def load_latest_operation_status(project_root: Path | str | None = None) -> dict
 
 def build_and_save_operation_cycle_status(
   project_root: Path | str | None = None,
+  *,
+  user_context: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, str] | None, str | None]:
   """Build status and persist snapshot. Returns (status, saved_paths, error_message)."""
-  status = build_operation_cycle_status(project_root)
+  run_id = generate_run_id()
+  started_at = _utc_now_iso()
+  status = build_operation_cycle_status(project_root, user_context=user_context)
+  status = attach_user_run_metadata(status, user_context=user_context, run_id=run_id)
   try:
     saved_paths = save_operation_cycle_status(status, project_root)
+    record_live_run(
+      action_type="live_operation_status",
+      status="success",
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      input_summary="operation cycle status snapshot",
+      output_artifact_paths=saved_paths,
+      project_root=project_root,
+    )
   except (OSError, ValueError) as exc:
+    record_live_run(
+      action_type="live_operation_status",
+      status="failed",
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      input_summary="operation cycle status snapshot",
+      error_summary=str(exc),
+      project_root=project_root,
+    )
     return status, None, str(exc)
   return status, saved_paths, None

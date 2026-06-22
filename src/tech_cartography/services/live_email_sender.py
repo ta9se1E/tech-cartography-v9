@@ -26,6 +26,13 @@ from tech_cartography.services.live_digest_preview import (
   load_latest_live_digest_preview,
   load_live_digest_preview,
 )
+from tech_cartography.services.live_run_history import (
+  attach_user_run_metadata,
+  copy_user_run_metadata,
+  generate_run_id,
+  map_result_status,
+  record_live_run,
+)
 
 CONFIRMATION_TEXT = "SEND TO MYSELF"
 PROVIDER = "smtp"
@@ -128,43 +135,75 @@ def send_live_digest_email_self_only(
   preview: dict[str, Any] | None = None,
   preview_source_path: str | None = None,
   smtp_send_fn: Callable[..., None] | None = None,
+  user_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
   """Send one self-only digest email. Never raises; never returns secrets."""
+  run_id = generate_run_id()
+  started_at = _utc_now_iso()
   cleaned_recipient = str(recipient or "").strip()
   source_path = preview_source_path
+  theme_name = str((preview or {}).get("theme_name") or "").strip() or None
+
+  def _finalize(result: dict[str, Any]) -> dict[str, Any]:
+    result = dict(result)
+    result["run_id"] = run_id
+    for key in ("run_id", "created_by_user_id", "created_by_display_name", "created_by_role", "created_by_auth_provider"):
+      if key in result:
+        continue
+    record_live_run(
+      action_type="self_only_email_send",
+      status=map_result_status(ok=result.get("ok"), error=result.get("error")),
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      theme_name=theme_name,
+      input_summary=f"recipient={mask_recipient(cleaned_recipient) if cleaned_recipient else '(unset)'}",
+      output_artifact_paths=result.get("saved_paths") or {},
+      source_artifact_paths=[source_path] if source_path else [],
+      error_summary=None if result.get("ok") else str(result.get("message") or result.get("error") or ""),
+      project_root=output_root,
+    )
+    return result
 
   if login_required and not is_authenticated:
-    return _block_result(error="login_required", message=self_only_block_message("login_required"))
+    return _finalize(_block_result(error="login_required", message=self_only_block_message("login_required")))
   if login_required and str(auth_role or "member") != "admin":
-    return _block_result(error="admin_required", message=self_only_block_message("admin_required"))
+    return _finalize(_block_result(error="admin_required", message=self_only_block_message("admin_required")))
   if str(confirm_text or "") != CONFIRMATION_TEXT:
-    return _block_result(
+    return _finalize(
+      _block_result(
       error="confirm_text_mismatch",
       message=self_only_block_message("confirm_text_mismatch"),
       recipient=cleaned_recipient,
+    ),
     )
 
   allowed, block_reason = can_send_self_only_email(cleaned_recipient)
   if not allowed:
-    return _block_result(
+    return _finalize(
+      _block_result(
       error=block_reason or "blocked",
       message=self_only_block_message(block_reason),
       recipient=cleaned_recipient,
       preview_source_path=source_path,
+    ),
     )
 
   if preview is None:
     latest_path = find_latest_live_digest_preview_path(output_root)
     if latest_path is None:
-      return _block_result(error="missing_preview", message=self_only_block_message("missing_preview"))
+      return _finalize(_block_result(error="missing_preview", message=self_only_block_message("missing_preview")))
     source_path = str(latest_path)
     preview = load_live_digest_preview(latest_path)
+    theme_name = str((preview or {}).get("theme_name") or "").strip() or None
   if not preview:
-    return _block_result(
+    return _finalize(
+      _block_result(
       error="missing_preview",
       message=self_only_block_message("missing_preview"),
       recipient=cleaned_recipient,
       preview_source_path=source_path,
+    ),
     )
 
   subject = str(preview.get("subject") or "Live Digest Preview")
@@ -192,7 +231,8 @@ def send_live_digest_email_self_only(
       body=outbound_body,
     )
   except (OSError, smtplib.SMTPException) as exc:
-    return {
+    return _finalize(
+      {
       "ok": False,
       "status": "smtp_failed",
       "message": f"SMTP送信に失敗しました: {type(exc).__name__}",
@@ -202,7 +242,8 @@ def send_live_digest_email_self_only(
       "preview_source_path": source_path,
       "send_mode": SEND_MODE,
       "saved_paths": {},
-    }
+    },
+    )
 
   result = {
     "ok": True,
@@ -216,6 +257,7 @@ def send_live_digest_email_self_only(
     "subject": subject,
     "saved_paths": {},
   }
+  result = attach_user_run_metadata(result, user_context=user_context, run_id=run_id)
   try:
     result["saved_paths"] = save_live_email_send_log(
       result,
@@ -224,7 +266,7 @@ def send_live_digest_email_self_only(
     )
   except (OSError, ValueError):
     result["message"] = "送信は成功しましたが、送信ログの保存に失敗しました。"
-  return result
+  return _finalize(result)
 
 
 def build_send_log_payload(
@@ -232,7 +274,7 @@ def build_send_log_payload(
   *,
   subject: str,
 ) -> dict[str, Any]:
-  return {
+  payload = {
     "sent_at": result.get("sent_at"),
     "recipient_masked": result.get("recipient_masked"),
     "subject": subject,
@@ -242,6 +284,7 @@ def build_send_log_payload(
     "result_status": result.get("status"),
     "safety_notice": LIVE_EMAIL_SAFETY_NOTICE,
   }
+  return copy_user_run_metadata(payload, result)
 
 
 def render_send_log_markdown(payload: dict[str, Any]) -> str:

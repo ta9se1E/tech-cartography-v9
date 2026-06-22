@@ -32,6 +32,11 @@ from tech_cartography.services.live_next_cycle_search_plan import (
   find_latest_next_cycle_search_plan_path,
   load_next_cycle_search_plan,
 )
+from tech_cartography.services.live_run_history import (
+  attach_user_run_metadata,
+  generate_run_id,
+  record_live_run,
+)
 from tech_cartography.services.live_operation_status import (
   STEP_GUIDANCE,
   STEP_ORDER,
@@ -623,10 +628,34 @@ def build_and_save_live_beta_release_pack(
   project_root: Path | str | None = None,
   *,
   release_note: str | None = None,
+  user_context: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, str] | None, str | None]:
+  run_id = generate_run_id()
+  started_at = _utc_now_iso()
   pack = build_live_beta_release_pack(project_root, release_note=release_note)
+  pack = attach_user_run_metadata(pack, user_context=user_context, run_id=run_id)
   try:
     saved_paths = save_live_beta_release_pack(pack, project_root)
+    record_live_run(
+      action_type="live_beta_release_pack",
+      status="success",
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      input_summary=release_note,
+      output_artifact_paths=saved_paths,
+      project_root=project_root,
+    )
   except (OSError, ValueError) as exc:
+    record_live_run(
+      action_type="live_beta_release_pack",
+      status="failed",
+      run_id=run_id,
+      started_at=started_at,
+      user_context=user_context,
+      input_summary=release_note,
+      error_summary=str(exc),
+      project_root=project_root,
+    )
     return pack, None, str(exc)
   return pack, saved_paths, None

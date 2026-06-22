@@ -14,6 +14,7 @@ from tech_cartography.runtime.email_send_config import (
   parse_recipient_allowlist,
   self_only_block_message,
 )
+from tech_cartography.runtime.user_context import resolve_user_context
 from tech_cartography.services.live_email_sender import (
   CONFIRMATION_TEXT,
   LIVE_EMAIL_SAFETY_NOTICE_JA,
@@ -118,6 +119,7 @@ def render_live_email_send_section(
         auth_role=get_auth_role(),
         preview=preview,
         preview_source_path=preview_path,
+        user_context=resolve_user_context(),
       )
       st.session_state[f"{key_prefix}_last_result"] = result
 

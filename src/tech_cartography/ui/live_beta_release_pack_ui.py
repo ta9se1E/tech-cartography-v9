@@ -9,6 +9,7 @@ import streamlit as st
 
 from tech_cartography.auth.basic_auth import is_login_required
 from tech_cartography.runtime.live_artifact_paths import describe_live_artifact_storage
+from tech_cartography.runtime.user_context import resolve_user_context
 from tech_cartography.services.live_beta_release_pack import (
   build_and_save_live_beta_release_pack,
   render_live_beta_release_pack_markdown,
@@ -116,6 +117,7 @@ def render_live_beta_release_pack_section(
       pack, saved_paths, error = build_and_save_live_beta_release_pack(
         project_root,
         release_note=release_note.strip() or None,
+        user_context=resolve_user_context(),
       )
       st.session_state[f"{key_prefix}_pack"] = pack
       st.session_state[f"{key_prefix}_saved_paths"] = saved_paths
