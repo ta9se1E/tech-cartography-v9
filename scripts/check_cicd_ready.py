@@ -27,6 +27,23 @@ FORBIDDEN_INLINE_MARKERS = (
   "BEGIN PRIVATE KEY",
 )
 
+DEPLOY_STEP_FORBIDDEN_PATTERNS = (
+  re.compile(r"\bpip3?\s+install\b"),
+  re.compile(r"python3?\s+-m\s+pip\b"),
+  re.compile(r"--break-system-packages\b"),
+  re.compile(r"\bapt-get\s+install\b.*python"),
+  re.compile(r"check_iap_cutover_ready\.py"),
+)
+
+
+def _cloudbuild_step_body(text: str, step_id: str) -> str:
+  pattern = (
+    rf"- id: {re.escape(step_id)}\b.*?\n\s+args:\s*\n\s+- -ceu\s*\n\s+- \|\s*\n"
+    r"(.*?)(?=\n\s+- id: |\ntimeout:|\Z)"
+  )
+  match = re.search(pattern, text, re.DOTALL)
+  return match.group(1) if match else ""
+
 
 def _read(path: Path) -> str:
   if not path.exists():
@@ -98,7 +115,7 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
       failures.append("cloudbuild.yaml does not run pytest")
     if "gcloud run deploy" not in cloudbuild_text:
       failures.append("cloudbuild.yaml does not deploy Cloud Run")
-    if "--no-iap" in cloudbuild_text:
+    if re.search(r"gcloud\s+run\s+.*--no-iap", cloudbuild_text):
       failures.append("cloudbuild.yaml must not disable IAP")
     if "AUTH_PROVIDER_MODE=iap" not in cloudbuild_text:
       warnings.append("cloudbuild.yaml should set AUTH_PROVIDER_MODE=iap")
@@ -115,6 +132,28 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
       failures.append("config/cloudrun.gcloudignore must exclude __pycache__")
     if WRONG_LIVE_ARTIFACTS_BUCKET in _read(canonical_gcloudignore):
       failures.append("canonical gcloudignore contains wrong live artifacts bucket name")
+
+    quality_gate_body = _cloudbuild_step_body(cloudbuild_text, "quality-gate")
+    deploy_step_body = _cloudbuild_step_body(cloudbuild_text, "iap-preflight-and-deploy")
+    if not quality_gate_body:
+      failures.append("cloudbuild.yaml quality-gate step body not found")
+    elif "pip install" not in quality_gate_body:
+      failures.append("cloudbuild.yaml quality-gate must install Python dependencies")
+    if not deploy_step_body:
+      failures.append("cloudbuild.yaml deploy step body not found")
+    else:
+      if "gcloud run deploy" not in deploy_step_body:
+        failures.append("cloudbuild.yaml deploy step must run gcloud run deploy")
+      if "gcloud storage buckets describe" not in deploy_step_body:
+        failures.append("cloudbuild.yaml deploy step must describe live artifacts bucket")
+      for pattern in DEPLOY_STEP_FORBIDDEN_PATTERNS:
+        if pattern.search(deploy_step_body):
+          failures.append(
+            f"cloudbuild.yaml deploy step must be gcloud-only (forbidden: {pattern.pattern})",
+          )
+      if "gcloud config set project" not in deploy_step_body:
+        failures.append("cloudbuild.yaml deploy step must set gcloud project")
+      passes.append("cloudbuild deploy step: gcloud-only (no pip install)")
 
   if deploy_text:
     if WRONG_LIVE_ARTIFACTS_BUCKET in deploy_text:

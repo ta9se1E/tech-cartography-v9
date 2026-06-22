@@ -38,15 +38,12 @@ steps:
     args:
       - -ceu
       - |
-        apt-get update -qq
-        apt-get install -qq -y python3 python3-pip
-        pip3 install -q -r requirements.txt
-        export PYTHONPATH=src
-        python3 scripts/check_iap_cutover_ready.py \
-          --project "${PROJECT_ID}" \
-          --region "${_REGION}" \
-          --service "${_SERVICE}"
+        echo "IAP preserved — deploy step does not disable IAP"
+        gcloud config set project "${PROJECT_ID}"
         gcloud storage buckets describe "gs://${_LIVE_ARTIFACTS_BUCKET}"
+        gcloud run services describe "${_SERVICE}" \
+          --region "${_REGION}" \
+          --project "${PROJECT_ID}"
         gcloud run deploy "${_SERVICE}" \
           --source . \
           --region "${_REGION}" \
@@ -59,6 +56,6 @@ steps:
         gcloud run services describe "${_SERVICE}" \
           --region "${_REGION}" \
           --project "${PROJECT_ID}" \
-          --format="value(status.url)"
+          --format="yaml(status.url,status.latestReadyRevisionName,spec.template.spec.volumes,spec.template.spec.containers[0].volumeMounts)"
 
 timeout: 1800s

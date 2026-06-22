@@ -57,3 +57,21 @@ def test_canonical_ignore_files_exist() -> None:
   text = Path("config/cloudrun.gcloudignore").read_text(encoding="utf-8")
   assert "__pycache__" in text
   assert "demo_outputs/" not in text
+
+
+def test_check_cicd_ready_flags_deploy_step_pip_install(capsys: pytest.CaptureFixture[str]) -> None:
+  module = _load_module()
+  cloudbuild = PROJECT_ROOT / "cloudbuild.yaml"
+  original = cloudbuild.read_text(encoding="utf-8")
+  polluted = original.replace(
+    "gcloud config set project",
+    "pip3 install -r requirements.txt\ngcloud config set project",
+  )
+  cloudbuild.write_text(polluted, encoding="utf-8")
+  try:
+    code = module.main(["--skip-gcloud"])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "deploy step must be gcloud-only" in out
+  finally:
+    cloudbuild.write_text(original, encoding="utf-8")

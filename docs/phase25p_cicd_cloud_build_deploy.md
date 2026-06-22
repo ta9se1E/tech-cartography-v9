@@ -21,11 +21,41 @@ Phase25O までで IAP + Google ログイン + Run History が live で動作し
 
 ## cloudbuild.yaml の役割
 
-`cloudbuild.yaml` は Cloud Build 実行時に以下を行います。
+`cloudbuild.yaml` は **2ステップ** で構成されます。
 
-1. `compileall` / `pytest` / check scripts
-2. `check_cicd_ready.py` / `check_iap_cutover_ready.py`
-3. すべて OK なら `tech-cartography-v7-live` へ deploy
+| Step | イメージ | 役割 |
+|------|---------|------|
+| **#0 quality-gate** | `python:3.11-slim` | 依存 install、`compileall` / `pytest` / check scripts |
+| **#1 iap-preflight-and-deploy** | `cloud-sdk:slim` | **gcloud のみ** — bucket/service preflight + Cloud Run deploy |
+
+Step #0 で以下を実行します。
+
+1. ignore ファイル復元 / `pip install` / `compileall` / `pytest` / check scripts
+
+Step #1 では **pip install を実行しません**（PEP 668 / externally-managed-environment 回避）。
+
+1. `gcloud config set project`
+2. `gcloud storage buckets describe`（live artifacts bucket）
+3. `gcloud run services describe`（preflight）
+4. `gcloud run deploy`（IAP 維持、`--no-iap` なし）
+5. deploy 後 `gcloud run services describe`（URL / revision / volume mount 確認）
+
+### externally-managed-environment の回避方針
+
+`gcr.io/google.com/cloudsdktool/cloud-sdk:slim` の Python は **システム管理環境** です。
+Step #1 で `pip install` すると `externally-managed-environment` エラーになります。
+
+- Python チェックは Step #0 に集約
+- Step #1 は gcloud / bash のみ
+- `--break-system-packages` は使わない
+
+### IAM 不足と pip 環境エラーの見分け方
+
+| 症状 | 典型原因 |
+|------|----------|
+| `externally-managed-environment` | cloud-sdk イメージでの `pip install`（IAM ではない） |
+| `Permission denied` / `403` on `gcloud run deploy` | Cloud Build SA の IAM 不足 |
+| `Secret ... not found` | Secret Manager 参照または accessor ロール不足 |
 
 **Secret 値は YAML に直書きしません。** Secret Manager 参照のみです。
 
