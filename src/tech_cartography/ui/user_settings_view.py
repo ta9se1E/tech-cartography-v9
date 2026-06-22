@@ -212,6 +212,13 @@ def render_user_settings_tab(
       key="settings_auth_status",
       expanded=False,
     )
+    from tech_cartography.ui.iap_cutover_status_ui import render_iap_cutover_status_expander
+
+    render_iap_cutover_status_expander(
+      project_root=Path(__file__).resolve().parents[3],
+      key="settings_iap_cutover_status",
+      expanded=False,
+    )
 
   if st.button("セッションをリセット", key="reset_session"):
     preserved_user = st.session_state.get(STATE_CURRENT_USER)

@@ -14,6 +14,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from tech_cartography.runtime.auth_provider_config import (
   get_admin_emails,
   get_allowed_email_domains,
+  get_auth_provider_mode,
 )
 from tech_cartography.runtime.api_secret_config import (  # noqa: E402
   KNOWN_API_SECRETS,
@@ -96,6 +97,9 @@ def main() -> int:
   iap_role_mapping = PROJECT_ROOT / "src/tech_cartography/runtime/iap_role_mapping.py"
   auth_status_ui = PROJECT_ROOT / "src/tech_cartography/ui/auth_status_ui.py"
   auth_bridge_docs = PROJECT_ROOT / "docs/phase25n_google_iap_ready_auth_bridge.md"
+  iap_cutover_docs = PROJECT_ROOT / "docs/phase25o_cloud_run_iap_cutover_runbook.md"
+  iap_cutover_script = PROJECT_ROOT / "scripts/check_iap_cutover_ready.py"
+  iap_cutover_status_ui = PROJECT_ROOT / "src/tech_cartography/ui/iap_cutover_status_ui.py"
 
   for path in (
     module_path,
@@ -142,6 +146,9 @@ def main() -> int:
     iap_role_mapping,
     auth_status_ui,
     auth_bridge_docs,
+    iap_cutover_docs,
+    iap_cutover_script,
+    iap_cutover_status_ui,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -389,9 +396,20 @@ def main() -> int:
     failures.append(".env.example に AUTH_PROVIDER_MODE がありません")
   if "SMTP_PASSWORD" in auth_status_text or "TECH_CARTOGRAPHY_LOGIN_PASSWORD" in auth_status_text:
     failures.append("auth_status_ui が secret 名を露出しています")
-  if os.environ.get("AUTH_PROVIDER_MODE", "").strip().lower() == "iap":
+  iap_cutover_ui_text = _read(iap_cutover_status_ui)
+  if "IAP Cutover Status（管理者向け）" not in iap_cutover_ui_text:
+    failures.append("iap_cutover_status_ui に管理者向けタイトルがありません")
+  if "render_iap_cutover_status_expander" not in settings_ui:
+    failures.append("user_settings_view に IAP cutover status UI がありません")
+  if "SMTP_PASSWORD" in iap_cutover_ui_text or "TECH_CARTOGRAPHY_LOGIN_PASSWORD" in iap_cutover_ui_text:
+    failures.append("iap_cutover_status_ui が secret 名を露出しています")
+  cutover_script_text = _read(iap_cutover_script)
+  if "never enables" not in cutover_script_text.lower():
+    failures.append("check_iap_cutover_ready に read-only / never enables の宣言がありません")
+  auth_mode = os.environ.get("AUTH_PROVIDER_MODE", "").strip().lower() or get_auth_provider_mode()
+  if auth_mode in {"iap", "hybrid"}:
     if not get_admin_emails() and not get_allowed_email_domains():
-      warnings.append("AUTH_PROVIDER_MODE=iap ですが ADMIN_EMAILS / ALLOWED_EMAIL_DOMAINS が未設定です")
+      warnings.append(f"AUTH_PROVIDER_MODE={auth_mode} ですが ADMIN_EMAILS / ALLOWED_EMAIL_DOMAINS が未設定です")
   if os.environ.get("IAP_JWT_VERIFY_MODE", "").strip().lower() == "strict":
     if not os.environ.get("IAP_EXPECTED_AUDIENCE", "").strip():
       failures.append("IAP_JWT_VERIFY_MODE=strict ですが IAP_EXPECTED_AUDIENCE が未設定です")
@@ -444,6 +462,7 @@ def main() -> int:
   print(f"live beta release pack: {'yes' if release_pack_service.exists() else 'no'}")
   print(f"user run history: {'yes' if run_history_service.exists() else 'no'}")
   print(f"iap auth bridge: {'yes' if iap_identity.exists() else 'no'}")
+  print(f"iap cutover runbook: {'yes' if iap_cutover_docs.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")
