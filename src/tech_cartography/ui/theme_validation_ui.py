@@ -1251,6 +1251,9 @@ def render_analyst_input_execution_section(*, key_prefix: str = ANALYST_INPUT_KE
   from tech_cartography.ui.live_run_history_ui import render_run_history_section
 
   render_run_history_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_run_history")
+  from tech_cartography.ui.auth_status_ui import render_auth_status_expander
+
+  render_auth_status_expander(project_root=_project_root(), key=f"{key_prefix}_auth_status", expanded=False)
   render_pan_theme_loader_button(key_prefix=key_prefix)
   render_theme_validation_safety_messages()
 

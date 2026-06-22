@@ -17,8 +17,8 @@ from tech_cartography.auth.basic_auth import is_login_required
 from tech_cartography.ui.demo_safe_ui import render_app_sidebar
 from tech_cartography.ui.easy_japanese_ui import inject_easy_ui_css
 from tech_cartography.ui.login_ui import (
-  build_app_user_from_basic_auth,
-  require_basic_login_gate,
+  build_app_user_from_auth_session,
+  require_auth_login_gate,
 )
 from tech_cartography.ui.login_view import require_login
 from tech_cartography.ui.streamlit_session import (
@@ -36,8 +36,8 @@ st.set_page_config(page_title="Tech Cartography v7", layout="wide", initial_side
 st.markdown(inject_easy_ui_css(), unsafe_allow_html=True)
 
 if is_login_required():
-  auth_session = require_basic_login_gate()
-  user = build_app_user_from_basic_auth(auth_session or {})
+  auth_session = require_auth_login_gate()
+  user = build_app_user_from_auth_session(auth_session or {})
   st.session_state[STATE_CURRENT_USER] = user
 else:
   user = require_login()

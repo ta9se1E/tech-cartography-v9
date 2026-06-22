@@ -32,11 +32,11 @@ def test_is_login_required_true(monkeypatch: pytest.MonkeyPatch) -> None:
   assert is_login_required() is True
 
 
-def test_app_entry_has_basic_login_gate_branch() -> None:
+def test_app_entry_has_auth_login_gate_branch() -> None:
   text = APP_PY.read_text(encoding="utf-8")
   assert "is_login_required()" in text
-  assert "require_basic_login_gate" in text
-  assert "build_app_user_from_basic_auth" in text
+  assert "require_auth_login_gate" in text
+  assert "build_app_user_from_auth_session" in text
   assert "require_login()" in text
 
 

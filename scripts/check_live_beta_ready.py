@@ -11,6 +11,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+from tech_cartography.runtime.auth_provider_config import (
+  get_admin_emails,
+  get_allowed_email_domains,
+)
 from tech_cartography.runtime.api_secret_config import (  # noqa: E402
   KNOWN_API_SECRETS,
   can_use_external_api,
@@ -87,6 +91,11 @@ def main() -> int:
   run_history_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_run_history_ui.py"
   run_history_docs = PROJECT_ROOT / "docs/phase25m_user_run_context_and_execution_history.md"
   password_hash_script = PROJECT_ROOT / "scripts/generate_login_password_hash.py"
+  auth_provider_config = PROJECT_ROOT / "src/tech_cartography/runtime/auth_provider_config.py"
+  iap_identity = PROJECT_ROOT / "src/tech_cartography/runtime/iap_identity.py"
+  iap_role_mapping = PROJECT_ROOT / "src/tech_cartography/runtime/iap_role_mapping.py"
+  auth_status_ui = PROJECT_ROOT / "src/tech_cartography/ui/auth_status_ui.py"
+  auth_bridge_docs = PROJECT_ROOT / "docs/phase25n_google_iap_ready_auth_bridge.md"
 
   for path in (
     module_path,
@@ -128,6 +137,11 @@ def main() -> int:
     run_history_ui,
     run_history_docs,
     password_hash_script,
+    auth_provider_config,
+    iap_identity,
+    iap_role_mapping,
+    auth_status_ui,
+    auth_bridge_docs,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -356,6 +370,31 @@ def main() -> int:
   basic_auth_path = PROJECT_ROOT / "src/tech_cartography/auth/basic_auth.py"
   if "hash_password_pbkdf2" not in _read(basic_auth_path):
     failures.append("basic_auth が pbkdf2 hash を提供していません")
+  auth_status_text = _read(auth_status_ui)
+  if "Authentication Status（管理者向け）" not in auth_status_text:
+    failures.append("auth_status_ui に管理者向けタイトルがありません")
+  if "render_auth_status_expander" not in settings_ui:
+    failures.append("user_settings_view に auth status UI がありません")
+  if "render_auth_status_expander" not in analyst_ui:
+    failures.append("theme_validation_ui に auth status UI がありません")
+  if "get_auth_provider_mode" not in _read(auth_provider_config):
+    failures.append("auth_provider_config が get_auth_provider_mode を提供していません")
+  if "resolve_iap_identity_from_headers" not in _read(iap_identity):
+    failures.append("iap_identity が resolve_iap_identity_from_headers を提供していません")
+  if "map_email_to_role" not in _read(iap_role_mapping):
+    failures.append("iap_role_mapping が map_email_to_role を提供していません")
+  if "require_auth_login_gate" not in _read(PROJECT_ROOT / "src/tech_cartography/ui/login_ui.py"):
+    failures.append("login_ui が require_auth_login_gate を提供していません")
+  if "AUTH_PROVIDER_MODE" not in env_example:
+    failures.append(".env.example に AUTH_PROVIDER_MODE がありません")
+  if "SMTP_PASSWORD" in auth_status_text or "TECH_CARTOGRAPHY_LOGIN_PASSWORD" in auth_status_text:
+    failures.append("auth_status_ui が secret 名を露出しています")
+  if os.environ.get("AUTH_PROVIDER_MODE", "").strip().lower() == "iap":
+    if not get_admin_emails() and not get_allowed_email_domains():
+      warnings.append("AUTH_PROVIDER_MODE=iap ですが ADMIN_EMAILS / ALLOWED_EMAIL_DOMAINS が未設定です")
+  if os.environ.get("IAP_JWT_VERIFY_MODE", "").strip().lower() == "strict":
+    if not os.environ.get("IAP_EXPECTED_AUDIENCE", "").strip():
+      failures.append("IAP_JWT_VERIFY_MODE=strict ですが IAP_EXPECTED_AUDIENCE が未設定です")
   if "SMTP_PASSWORD" in artifact_ui_text or "API_KEY" in artifact_ui_text:
     failures.append("live_artifact_storage_ui が secret 名を露出しています")
 
@@ -404,6 +443,7 @@ def main() -> int:
   print(f"live operation console: {'yes' if operation_status.exists() else 'no'}")
   print(f"live beta release pack: {'yes' if release_pack_service.exists() else 'no'}")
   print(f"user run history: {'yes' if run_history_service.exists() else 'no'}")
+  print(f"iap auth bridge: {'yes' if iap_identity.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")
