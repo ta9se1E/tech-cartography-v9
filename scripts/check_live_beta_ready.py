@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -100,6 +101,11 @@ def main() -> int:
   iap_cutover_docs = PROJECT_ROOT / "docs/phase25o_cloud_run_iap_cutover_runbook.md"
   iap_cutover_script = PROJECT_ROOT / "scripts/check_iap_cutover_ready.py"
   iap_cutover_status_ui = PROJECT_ROOT / "src/tech_cartography/ui/iap_cutover_status_ui.py"
+  cloudbuild_yaml = PROJECT_ROOT / "cloudbuild.yaml"
+  deploy_live_script = PROJECT_ROOT / "scripts/deploy_live_safe.sh"
+  rollback_live_script = PROJECT_ROOT / "scripts/rollback_live_to_basic.sh"
+  cicd_docs = PROJECT_ROOT / "docs/phase25p_cicd_cloud_build_deploy.md"
+  cicd_ready_script = PROJECT_ROOT / "scripts/check_cicd_ready.py"
 
   for path in (
     module_path,
@@ -149,6 +155,11 @@ def main() -> int:
     iap_cutover_docs,
     iap_cutover_script,
     iap_cutover_status_ui,
+    cloudbuild_yaml,
+    deploy_live_script,
+    rollback_live_script,
+    cicd_docs,
+    cicd_ready_script,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -406,7 +417,24 @@ def main() -> int:
   cutover_script_text = _read(iap_cutover_script)
   if "never enables" not in cutover_script_text.lower():
     failures.append("check_iap_cutover_ready に read-only / never enables の宣言がありません")
+  cloudbuild_text = _read(cloudbuild_yaml)
+  deploy_script_text = _read(deploy_live_script)
+  rollback_script_text = _read(rollback_live_script)
+  if "pytest" not in cloudbuild_text:
+    failures.append("cloudbuild.yaml が pytest を実行していません")
+  if "gcloud run deploy" not in cloudbuild_text:
+    failures.append("cloudbuild.yaml が Cloud Run deploy を含んでいません")
+  if "--no-iap" in cloudbuild_text or re.search(r"gcloud\s+run\s+.*--no-iap", deploy_script_text):
+    failures.append("CI/CD deploy が IAP を無効化する --no-iap を含んでいます")
+  if "SMTP_PASSWORD=" in cloudbuild_text and "tech-cartography-smtp-password" not in cloudbuild_text:
+    failures.append("cloudbuild.yaml が SMTP 値を直書きしている可能性があります")
+  if "read -rs" not in rollback_script_text and "read -s" not in rollback_script_text:
+    failures.append("rollback_live_to_basic.sh が read -s を使っていません")
+  cicd_ready_text = _read(cicd_ready_script)
+  if "CI/CD readiness" not in cicd_ready_text:
+    failures.append("check_cicd_ready.py が CI/CD readiness を報告していません")
   auth_mode = os.environ.get("AUTH_PROVIDER_MODE", "").strip().lower() or get_auth_provider_mode()
+  print(f"auth provider mode (local): {auth_mode}")
   if auth_mode in {"iap", "hybrid"}:
     if not get_admin_emails() and not get_allowed_email_domains():
       warnings.append(f"AUTH_PROVIDER_MODE={auth_mode} ですが ADMIN_EMAILS / ALLOWED_EMAIL_DOMAINS が未設定です")
@@ -463,6 +491,7 @@ def main() -> int:
   print(f"user run history: {'yes' if run_history_service.exists() else 'no'}")
   print(f"iap auth bridge: {'yes' if iap_identity.exists() else 'no'}")
   print(f"iap cutover runbook: {'yes' if iap_cutover_docs.exists() else 'no'}")
+  print(f"cicd pipeline: {'yes' if cloudbuild_yaml.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

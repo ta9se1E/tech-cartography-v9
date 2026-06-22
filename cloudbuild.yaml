@@ -1,0 +1,60 @@
+# Phase 25P — CI/CD safe deploy for Cloud Run live (tech-cartography-v7-live)
+# Secrets are referenced via Secret Manager only — never inline values.
+
+substitutions:
+  _REGION: us-central1
+  _SERVICE: tech-cartography-v7-live
+  _LIVE_ARTIFACTS_BUCKET: tech-cartography-v7-live-artifacts-devops-ai-agent-hackathon-2026
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - id: quality-gate
+    name: python:3.11-slim
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        pip install -q -r requirements.txt
+        export PYTHONPATH=src
+        python -m compileall scripts src tests app.py
+        python -m pytest -q
+        python scripts/check_cloudrun_demo_ready.py
+        python scripts/check_live_beta_ready.py
+        python scripts/check_cicd_ready.py --skip-gcloud
+        python scripts/check_iap_cutover_ready.py \
+          --project "${PROJECT_ID}" \
+          --region "${_REGION}" \
+          --service "${_SERVICE}" \
+          --skip-gcloud
+
+  - id: iap-preflight-and-deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        apt-get update -qq
+        apt-get install -qq -y python3 python3-pip
+        pip3 install -q -r requirements.txt
+        export PYTHONPATH=src
+        python3 scripts/check_iap_cutover_ready.py \
+          --project "${PROJECT_ID}" \
+          --region "${_REGION}" \
+          --service "${_SERVICE}"
+        gcloud run deploy "${_SERVICE}" \
+          --source . \
+          --region "${_REGION}" \
+          --project "${PROJECT_ID}" \
+          --allow-unauthenticated \
+          --add-volume "name=live-artifacts,type=cloud-storage,bucket=${_LIVE_ARTIFACTS_BUCKET}" \
+          --add-volume-mount "volume=live-artifacts,mount-path=/mnt/live_artifacts" \
+          --update-env-vars "REQUIRE_LOGIN=true,APP_DEFAULT_MODE=analyst,AUTH_PROVIDER_MODE=iap,IAP_JWT_VERIFY_MODE=off,SHOW_DEVELOPER_MODE=false,DEMO_OUTPUTS_ROOT=demo_outputs,LIVE_OUTPUTS_ROOT=/mnt/live_artifacts/outputs,DISABLE_EXTERNAL_API=true,DISABLE_EMAIL_SEND=true,DISABLE_SCHEDULER=true,TECH_CARTOGRAPHY_ADMIN_EMAILS=ta9se1@gmail.com" \
+          --update-secrets "TAVILY_API_KEY=tech-cartography-tavily-api-key:latest,SMTP_PASSWORD=tech-cartography-smtp-password:latest"
+        gcloud run services describe "${_SERVICE}" \
+          --region "${_REGION}" \
+          --project "${PROJECT_ID}" \
+          --format="value(status.url)"
+
+timeout: 1800s
