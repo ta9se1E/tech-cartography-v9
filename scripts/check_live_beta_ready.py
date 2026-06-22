@@ -33,6 +33,11 @@ from tech_cartography.runtime.email_send_config import (  # noqa: E402
   SELF_ONLY_SEND_MODE,
   can_send_self_only_email,
 )
+from tech_cartography.runtime.approved_member_send_config import (  # noqa: E402
+  ENABLE_APPROVED_MEMBER_SEND_ENV,
+  can_send_approved_member_email,
+  is_approved_member_send_enabled,
+)
 from tech_cartography.services.live_digest_preview import can_create_live_digest_preview  # noqa: E402
 from tech_cartography.runtime.external_api_guard import check_live_tavily_smoke_allowed  # noqa: E402
 from tech_cartography.runtime.live_artifact_paths import (  # noqa: E402
@@ -71,6 +76,10 @@ def main() -> int:
   email_sender = PROJECT_ROOT / "src/tech_cartography/services/live_email_sender.py"
   email_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_email_send_ui.py"
   email_docs = PROJECT_ROOT / "docs/phase25g_self_only_live_digest_email_send_test.md"
+  approved_member_cfg = PROJECT_ROOT / "src/tech_cartography/runtime/approved_member_send_config.py"
+  approved_member_sender = PROJECT_ROOT / "src/tech_cartography/services/live_approved_member_email_sender.py"
+  approved_member_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_approved_member_email_send_ui.py"
+  approved_member_docs = PROJECT_ROOT / "docs/phase25q_approved_member_send.md"
   artifact_paths = PROJECT_ROOT / "src/tech_cartography/runtime/live_artifact_paths.py"
   artifact_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_artifact_storage_ui.py"
   artifact_docs = PROJECT_ROOT / "docs/phase25h_live_artifact_persistence_cloud_storage.md"
@@ -125,6 +134,10 @@ def main() -> int:
     email_sender,
     email_ui,
     email_docs,
+    approved_member_cfg,
+    approved_member_sender,
+    approved_member_ui,
+    approved_member_docs,
     artifact_paths,
     artifact_ui,
     artifact_docs,
@@ -213,6 +226,19 @@ def main() -> int:
     failures.append("v7_easy_app reports タブに live digest preview セクションがありません")
   if "render_live_email_send_section" not in analyst_ui:
     failures.append("theme_validation_ui に live email send UI がありません")
+  if "render_live_approved_member_email_send_section" not in analyst_ui:
+    failures.append("theme_validation_ui に approved member email send UI がありません")
+  approved_member_ui_text = _read(approved_member_ui)
+  if "承認済みメンバーへDigestを送信" not in approved_member_ui_text:
+    failures.append("live_approved_member_email_send_ui に送信ボタンがありません")
+  if "SEND TO APPROVED MEMBER" not in approved_member_ui_text and "get_confirmation_text" not in approved_member_ui_text:
+    failures.append("live_approved_member_email_send_ui に確認テキスト要件がありません")
+  if "st.text_input" in approved_member_ui_text and "st.selectbox" not in approved_member_ui_text:
+    failures.append("live_approved_member_email_send_ui が selectbox を使っていません")
+  if "SMTP_PASSWORD" in approved_member_ui_text and "os.environ" in approved_member_ui_text:
+    failures.append("live_approved_member_email_send_ui が SMTP_PASSWORD env を参照しています")
+  if "render_live_approved_member_email_send_section" not in digest_ui_text:
+    failures.append("live_digest_preview_ui に approved member email send UI がありません")
   if "render_live_artifact_storage_expander" not in analyst_ui:
     failures.append("theme_validation_ui に live artifact storage UI がありません")
   if "render_live_watch_expansion_section" not in analyst_ui:
@@ -354,6 +380,31 @@ def main() -> int:
     if send_reason_missing != "missing_smtp_config":
       failures.append(f"SMTP 不足 block reason が不正: {send_reason_missing}")
 
+    saved_approved_send = os.environ.get(ENABLE_APPROVED_MEMBER_SEND_ENV)
+    os.environ[ENABLE_APPROVED_MEMBER_SEND_ENV] = "false"
+    if is_approved_member_send_enabled():
+      failures.append("ENABLE_APPROVED_MEMBER_SEND=false が有効になりません")
+    allowed_approved, approved_reason = can_send_approved_member_email("approved@example.com")
+    if allowed_approved:
+      failures.append("ENABLE_APPROVED_MEMBER_SEND=false でも approved member send が許可されています")
+    if approved_reason != "approved_member_send_disabled":
+      failures.append(f"approved member send block reason が不正: {approved_reason}")
+
+    os.environ[ENABLE_APPROVED_MEMBER_SEND_ENV] = "true"
+    os.environ["TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS"] = "approved@example.com"
+    os.environ[DISABLE_EMAIL_SEND_ENV] = "true"
+    allowed_disabled_email, disabled_reason = can_send_approved_member_email("approved@example.com")
+    if allowed_disabled_email:
+      failures.append("DISABLE_EMAIL_SEND=true でも approved member send が許可されています")
+    if disabled_reason != "disabled_by_env":
+      failures.append(f"approved member DISABLE_EMAIL_SEND block reason が不正: {disabled_reason}")
+
+    if saved_approved_send is None:
+      os.environ.pop(ENABLE_APPROVED_MEMBER_SEND_ENV, None)
+    else:
+      os.environ[ENABLE_APPROVED_MEMBER_SEND_ENV] = saved_approved_send
+    os.environ.pop("TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS", None)
+
     if saved_email_disable is None:
       os.environ.pop(DISABLE_EMAIL_SEND_ENV, None)
     else:
@@ -426,6 +477,21 @@ def main() -> int:
     failures.append("cloudbuild.yaml が Cloud Run deploy を含んでいません")
   if "--no-iap" in cloudbuild_text or re.search(r"gcloud\s+run\s+.*--no-iap", deploy_script_text):
     failures.append("CI/CD deploy が IAP を無効化する --no-iap を含んでいます")
+  if "live_approved_member_email_send" not in _read(run_history_service):
+    failures.append("live_run_history に live_approved_member_email_send action_type がありません")
+  if "get_live_approved_member_send_dir" not in _read(artifact_paths):
+    failures.append("live_artifact_paths に get_live_approved_member_send_dir がありません")
+  if "live_artifact_paths" not in _read(approved_member_sender):
+    failures.append("live_approved_member_email_sender が live_artifact_paths を使っていません")
+  if "ENABLE_APPROVED_MEMBER_SEND=false" not in cloudbuild_text:
+    failures.append("cloudbuild.yaml に ENABLE_APPROVED_MEMBER_SEND=false がありません")
+  if "TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS=" in cloudbuild_text:
+    failures.append("cloudbuild.yaml に TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS が直書きされています")
+  approved_member_docs_text = _read(approved_member_docs)
+  if "approved@example.com" not in approved_member_docs_text:
+    failures.append("phase25q docs に approved@example.com 例がありません")
+  if "一斉送信" not in approved_member_docs_text:
+    failures.append("phase25q docs に一斉送信禁止の記載がありません")
   if "SMTP_PASSWORD=" in cloudbuild_text and "tech-cartography-smtp-password" not in cloudbuild_text:
     failures.append("cloudbuild.yaml が SMTP 値を直書きしている可能性があります")
   if "read -rs" not in rollback_script_text and "read -s" not in rollback_script_text:
@@ -481,6 +547,7 @@ def main() -> int:
   print(f"live web signal pack: {'yes' if pack_service.exists() else 'no'}")
   print(f"live digest preview: {'yes' if digest_service.exists() else 'no'}")
   print(f"live email send: {'yes' if email_sender.exists() else 'no'}")
+  print(f"approved member send: {'yes' if approved_member_sender.exists() else 'no'}")
   print(f"live artifact paths: {'yes' if artifact_paths.exists() else 'no'}")
   print(f"live watch expansion: {'yes' if expansion_service.exists() else 'no'}")
   print(f"watch profile draft: {'yes' if draft_service.exists() else 'no'}")

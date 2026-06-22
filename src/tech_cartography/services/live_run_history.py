@@ -24,6 +24,7 @@ ACTION_TYPES: frozenset[str] = frozenset(
     "live_web_signal_pack",
     "live_digest_preview",
     "self_only_email_send",
+    "live_approved_member_email_send",
     "watch_expansion_proposal",
     "watch_profile_draft",
     "next_cycle_search_plan",
@@ -340,4 +341,10 @@ def is_blocked_error(error: str | None) -> bool:
     "admin_required",
     "missing_smtp_config",
     "email_disabled",
+    "approved_member_send_disabled",
+    "approved_list_empty",
+    "recipient_not_approved",
+    "member_not_allowed",
+    "invalid_recipient",
+    "cc_bcc_not_allowed",
   }

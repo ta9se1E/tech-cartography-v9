@@ -119,6 +119,14 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
       failures.append("cloudbuild.yaml must not disable IAP")
     if "AUTH_PROVIDER_MODE=iap" not in cloudbuild_text:
       warnings.append("cloudbuild.yaml should set AUTH_PROVIDER_MODE=iap")
+    if "ENABLE_APPROVED_MEMBER_SEND=false" not in cloudbuild_text:
+      failures.append("cloudbuild.yaml must default ENABLE_APPROVED_MEMBER_SEND=false")
+    if "DISABLE_EMAIL_SEND=true" not in cloudbuild_text:
+      failures.append("cloudbuild.yaml must default DISABLE_EMAIL_SEND=true")
+    if "TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS=" in cloudbuild_text:
+      failures.append("cloudbuild.yaml must not inline TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS")
+    if re.search(r"DISABLE_SCHEDULER\s*=\s*false", cloudbuild_text):
+      failures.append("cloudbuild.yaml must not enable scheduler")
     for marker in FORBIDDEN_INLINE_MARKERS:
       if marker in cloudbuild_text:
         failures.append(f"cloudbuild.yaml contains forbidden inline secret marker: {marker}")
@@ -166,6 +174,10 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
       failures.append("deploy_live_safe.sh must not disable IAP")
     if "AUTH_PROVIDER_MODE=basic" in deploy_text:
       failures.append("deploy_live_safe.sh must not set AUTH_PROVIDER_MODE=basic")
+    if "ENABLE_APPROVED_MEMBER_SEND=false" not in deploy_text:
+      failures.append("deploy_live_safe.sh must default ENABLE_APPROVED_MEMBER_SEND=false")
+    if "TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS=" in deploy_text:
+      failures.append("deploy_live_safe.sh must not inline TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS")
 
   if rollback_text:
     if "read -rs" not in rollback_text and "read -s" not in rollback_text:

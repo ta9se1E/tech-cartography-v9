@@ -78,7 +78,7 @@ deploy_live() {
     --project "${PROJECT_ID}" \
     --allow-unauthenticated \
     "${volume_args[@]}" \
-    --update-env-vars "REQUIRE_LOGIN=true,APP_DEFAULT_MODE=analyst,AUTH_PROVIDER_MODE=iap,IAP_JWT_VERIFY_MODE=off,SHOW_DEVELOPER_MODE=false,DEMO_OUTPUTS_ROOT=demo_outputs,LIVE_OUTPUTS_ROOT=/mnt/live_artifacts/outputs,DISABLE_EXTERNAL_API=true,DISABLE_EMAIL_SEND=true,DISABLE_SCHEDULER=true,TECH_CARTOGRAPHY_ADMIN_EMAILS=ta9se1@gmail.com" \
+    --update-env-vars "REQUIRE_LOGIN=true,APP_DEFAULT_MODE=analyst,AUTH_PROVIDER_MODE=iap,IAP_JWT_VERIFY_MODE=off,SHOW_DEVELOPER_MODE=false,DEMO_OUTPUTS_ROOT=demo_outputs,LIVE_OUTPUTS_ROOT=/mnt/live_artifacts/outputs,DISABLE_EXTERNAL_API=true,DISABLE_EMAIL_SEND=true,DISABLE_SCHEDULER=true,ENABLE_APPROVED_MEMBER_SEND=false,APPROVED_MEMBER_SEND_CONFIRMATION=SEND TO APPROVED MEMBER,TECH_CARTOGRAPHY_ADMIN_EMAILS=ta9se1@gmail.com" \
     --update-secrets "TAVILY_API_KEY=tech-cartography-tavily-api-key:latest,SMTP_PASSWORD=tech-cartography-smtp-password:latest"
 
   log "Post-deploy service summary:"
