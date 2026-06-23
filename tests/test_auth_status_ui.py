@@ -31,6 +31,7 @@ def test_auth_status_ui_has_no_secrets() -> None:
   text = Path("src/tech_cartography/ui/auth_status_ui.py").read_text(encoding="utf-8")
   assert "Authentication Status（管理者向け）" in text
   assert "AUTH_PROVIDER_MODE" in text
+  assert "del project_root" not in text
   assert "SMTP_PASSWORD" not in text
   assert "TECH_CARTOGRAPHY_LOGIN_PASSWORD" not in text
   assert "TECH_CARTOGRAPHY_USERS_JSON" not in text

@@ -39,13 +39,20 @@ def _next_setup_hint(mode: str, iap_status: dict[str, Any] | None) -> str:
   return "認証モードを確認してください。"
 
 
+def _resolve_project_root(project_root: Path | str | None) -> Path:
+  """Resolve project root for nested UI panels (Cloud Run /workspace safe)."""
+  if project_root is None:
+    return Path.cwd()
+  return Path(project_root).expanduser().resolve()
+
+
 def render_auth_status_expander(
   *,
-  project_root: Path | str,
+  project_root: Path | str | None = None,
   key: str = "auth_status",
   expanded: bool = False,
 ) -> None:
-  del project_root  # reserved for future auth diagnostics tied to artifacts
+  root = _resolve_project_root(project_root)
   if not should_show_auth_status_ui():
     return
 
@@ -114,8 +121,8 @@ def render_auth_status_expander(
         st.markdown(render_warning_box(warning), unsafe_allow_html=True)
 
     render_email_operation_status_panel(
-      project_root=project_root,
-      key=f"{key}_email_ops",
+      project_root=root,
+      key_prefix=f"{key}_email_ops",
       expanded=False,
     )
 
