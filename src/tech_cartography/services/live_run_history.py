@@ -120,6 +120,28 @@ def attach_user_run_metadata(
   return enriched
 
 
+def sanitize_operation_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
+  if not metadata:
+    return None
+  allowed_keys = frozenset(
+    {
+      "post_send_recommended_action",
+      "reset_required",
+      "recipient_masked",
+      "recipient_domain",
+    },
+  )
+  safe: dict[str, Any] = {}
+  for key, value in metadata.items():
+    if key not in allowed_keys or value is None:
+      continue
+    text = str(value)
+    if _SENSITIVE_PATTERN.search(text):
+      continue
+    safe[str(key)] = value
+  return safe or None
+
+
 def build_run_history_entry(
   *,
   run_id: str,
@@ -133,6 +155,7 @@ def build_run_history_entry(
   output_artifact_paths: dict[str, str] | None = None,
   source_artifact_paths: list[str] | None = None,
   error_summary: str | None = None,
+  operation_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
   if action_type not in ACTION_TYPES:
     raise ValueError(f"Unknown action_type: {action_type}")
@@ -158,6 +181,9 @@ def build_run_history_entry(
     "safety_label": SAFETY_LABEL,
     "secret_redaction_status": SECRET_REDACTION_STATUS,
   }
+  safe_metadata = sanitize_operation_metadata(operation_metadata)
+  if safe_metadata:
+    entry["operation_metadata"] = safe_metadata
   serialized = json.dumps(entry, ensure_ascii=False)
   _assert_history_safe(serialized)
   return entry
@@ -198,6 +224,7 @@ def record_live_run(
   output_artifact_paths: dict[str, str] | None = None,
   source_artifact_paths: list[str] | None = None,
   error_summary: str | None = None,
+  operation_metadata: dict[str, Any] | None = None,
   project_root: Path | str | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, str] | None, str | None]:
   run_id_value = run_id or generate_run_id()
@@ -216,6 +243,7 @@ def record_live_run(
       output_artifact_paths=output_artifact_paths,
       source_artifact_paths=source_artifact_paths,
       error_summary=error_summary,
+      operation_metadata=operation_metadata,
     )
     saved_paths = save_run_history_entry(entry, project_root)
   except (OSError, ValueError) as exc:
@@ -251,6 +279,11 @@ def render_run_history_markdown(entry: dict[str, Any]) -> str:
   else:
     lines.append("(none)")
   lines.extend(["", "## error_summary", "", str(entry.get("error_summary") or "(none)"), ""])
+  op_meta = entry.get("operation_metadata") or {}
+  if op_meta:
+    lines.extend(["", "## operation_metadata", ""])
+    for key, value in op_meta.items():
+      lines.append(f"- {key}: {value}")
   lines.extend(["## safety_label", "", str(entry.get("safety_label") or SAFETY_LABEL), ""])
   return "\n".join(lines).strip() + "\n"
 

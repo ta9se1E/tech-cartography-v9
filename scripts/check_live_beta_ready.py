@@ -80,6 +80,9 @@ def main() -> int:
   approved_member_sender = PROJECT_ROOT / "src/tech_cartography/services/live_approved_member_email_sender.py"
   approved_member_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_approved_member_email_send_ui.py"
   approved_member_docs = PROJECT_ROOT / "docs/phase25q_approved_member_send.md"
+  email_operation_status = PROJECT_ROOT / "src/tech_cartography/runtime/email_operation_status.py"
+  email_operation_status_ui = PROJECT_ROOT / "src/tech_cartography/ui/email_operation_status_ui.py"
+  send_safety_docs = PROJECT_ROOT / "docs/phase25q2_send_safety_reset.md"
   artifact_paths = PROJECT_ROOT / "src/tech_cartography/runtime/live_artifact_paths.py"
   artifact_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_artifact_storage_ui.py"
   artifact_docs = PROJECT_ROOT / "docs/phase25h_live_artifact_persistence_cloud_storage.md"
@@ -138,6 +141,9 @@ def main() -> int:
     approved_member_sender,
     approved_member_ui,
     approved_member_docs,
+    email_operation_status,
+    email_operation_status_ui,
+    send_safety_docs,
     artifact_paths,
     artifact_ui,
     artifact_docs,
@@ -255,6 +261,30 @@ def main() -> int:
     failures.append("live_email_sender が evaluate_live_admin_access を使っていません")
   if "evaluate_live_admin_access" not in _read(user_context_module):
     failures.append("user_context が evaluate_live_admin_access を提供していません")
+  if "get_email_operation_status" not in _read(email_operation_status):
+    failures.append("email_operation_status が get_email_operation_status を提供していません")
+  if "reset_required" not in _read(approved_member_sender):
+    failures.append("live_approved_member_email_sender に post-send reset guidance がありません")
+  if "operation_metadata" not in _read(run_history_service):
+    failures.append("live_run_history に operation_metadata サポートがありません")
+  if "render_email_operation_status_panel" not in _read(email_operation_status_ui):
+    failures.append("email_operation_status_ui に status panel がありません")
+  if "SMTP_PASSWORD" in _read(email_operation_status_ui) and "configured" not in _read(email_operation_status_ui):
+    failures.append("email_operation_status_ui が SMTP_PASSWORD を露出しています")
+  send_safety_docs_text = _read(send_safety_docs)
+  if "controlled_manual_send_enabled" not in send_safety_docs_text:
+    failures.append("phase25q2 docs に safety level 説明がありません")
+  if "reset_required" not in send_safety_docs_text:
+    failures.append("phase25q2 docs に reset_required 説明がありません")
+  if "DISABLE_EMAIL_SEND=true" not in send_safety_docs_text:
+    failures.append("phase25q2 docs に DISABLE_EMAIL_SEND=true 復帰手順がありません")
+  email_ops_text = _read(email_operation_status)
+  if "SMTP_PASSWORD" in email_ops_text and "smtp_password_configured" not in email_ops_text:
+    failures.append("email_operation_status が SMTP_PASSWORD 実値を扱っている可能性があります")
+  if "build_post_send_reset_command" not in email_ops_text:
+    failures.append("email_operation_status に reset command builder がありません")
+  if "secret" in email_ops_text.lower() and "no secrets" not in email_ops_text.lower():
+    failures.append("email_operation_status の reset command に secret が含まれる可能性があります")
   if "render_live_artifact_storage_expander" not in analyst_ui:
     failures.append("theme_validation_ui に live artifact storage UI がありません")
   if "render_live_watch_expansion_section" not in analyst_ui:
@@ -564,6 +594,7 @@ def main() -> int:
   print(f"live digest preview: {'yes' if digest_service.exists() else 'no'}")
   print(f"live email send: {'yes' if email_sender.exists() else 'no'}")
   print(f"approved member send: {'yes' if approved_member_sender.exists() else 'no'}")
+  print(f"email operation status: {'yes' if email_operation_status.exists() else 'no'}")
   print(f"live artifact paths: {'yes' if artifact_paths.exists() else 'no'}")
   print(f"live watch expansion: {'yes' if expansion_service.exists() else 'no'}")
   print(f"watch profile draft: {'yes' if draft_service.exists() else 'no'}")

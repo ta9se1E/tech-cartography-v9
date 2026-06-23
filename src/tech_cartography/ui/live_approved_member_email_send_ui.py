@@ -27,6 +27,7 @@ from tech_cartography.services.live_email_sender import (
   load_latest_digest_for_send,
 )
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_warning_box
+from tech_cartography.ui.email_operation_status_ui import render_email_operation_status_compact
 from tech_cartography.ui.login_ui import (
   can_use_admin_features,
   get_auth_role,
@@ -53,6 +54,7 @@ def render_live_approved_member_email_send_section(
   user_context = resolve_user_context()
 
   with st.expander("Approved Member Digest Send（承認済みメンバーへ手動送信 / IAP本番向け）", expanded=False):
+    render_email_operation_status_compact(project_root=project_root, key_prefix=f"{key_prefix}_ops_status")
     st.markdown(
       render_caution_box(
         "<strong>承認済みメンバーへ1通だけ</strong> 手動送信します（IAP admin 向け）。"
@@ -160,6 +162,15 @@ def render_live_approved_member_email_send_section(
 
     if last_result.get("ok"):
       st.success(str(last_result.get("message") or "送信完了"))
+      if last_result.get("reset_required"):
+        st.markdown(
+          render_caution_box(
+            str(last_result.get("post_send_safety_note") or "送信テスト後はメール送信をOFFに戻してください。")
+          ),
+          unsafe_allow_html=True,
+        )
+        with st.expander("安全復帰コマンド（手動実行）", expanded=True):
+          st.code(str(last_result.get("reset_command_hint") or ""), language="bash")
     else:
       st.warning(str(last_result.get("message") or "送信できませんでした"))
 

@@ -40,6 +40,7 @@ from tech_cartography.services.live_run_history import (
   record_live_run,
 )
 from tech_cartography.runtime.user_context import evaluate_live_admin_access
+from tech_cartography.runtime.email_operation_status import build_post_send_reset_guidance
 
 ACTION_TYPE = "live_approved_member_email_send"
 PROVIDER = "smtp"
@@ -129,6 +130,8 @@ def build_approved_member_send_log_payload(
     "provider": PROVIDER,
     "safety_notice": LIVE_EMAIL_SAFETY_NOTICE,
   }
+  if result.get("ok"):
+    payload.update(build_post_send_reset_guidance(at_send=True))
   return copy_user_run_metadata(payload, result)
 
 
@@ -156,6 +159,24 @@ def render_approved_member_send_log_markdown(payload: dict[str, Any]) -> str:
   flags = payload.get("safety_flags") or {}
   for key, value in sorted(flags.items()):
     lines.append(f"- {key}: {value}")
+  if payload.get("reset_required"):
+    lines.extend(
+      [
+        "",
+        "## post_send_reset_guidance",
+        "",
+        f"- post_send_recommended_action: {payload.get('post_send_recommended_action')}",
+        f"- reset_required: {payload.get('reset_required')}",
+        f"- post_send_safety_note: {payload.get('post_send_safety_note')}",
+        f"- scheduler_state_at_send: {payload.get('scheduler_state_at_send')}",
+        f"- disable_email_send_at_send: {payload.get('disable_email_send_at_send')}",
+        f"- approved_member_send_enabled_at_send: {payload.get('approved_member_send_enabled_at_send')}",
+        "",
+        "## reset_command_hint",
+        "",
+        str(payload.get("reset_command_hint") or "(none)"),
+      ],
+    )
   lines.extend(["", "## safety_notice", "", str(payload.get("safety_notice") or LIVE_EMAIL_SAFETY_NOTICE), ""])
   return "\n".join(lines).strip() + "\n"
 
@@ -218,6 +239,14 @@ def send_live_digest_email_to_approved_member(
   def _finalize(result: dict[str, Any]) -> dict[str, Any]:
     result = dict(result)
     result["run_id"] = run_id
+    operation_metadata: dict[str, Any] | None = None
+    if result.get("ok"):
+      operation_metadata = {
+        "post_send_recommended_action": "disable_email_send",
+        "reset_required": True,
+        "recipient_masked": result.get("recipient_masked"),
+        "recipient_domain": result.get("recipient_domain"),
+      }
     record_live_run(
       action_type=ACTION_TYPE,
       status=map_result_status(ok=result.get("ok"), error=result.get("error")),
@@ -232,8 +261,11 @@ def send_live_digest_email_to_approved_member(
       output_artifact_paths=result.get("saved_paths") or {},
       source_artifact_paths=[source_path] if source_path else [],
       error_summary=None if result.get("ok") else str(result.get("message") or result.get("error") or ""),
+      operation_metadata=operation_metadata,
       project_root=output_root,
     )
+    if result.get("ok"):
+      result.update(build_post_send_reset_guidance(at_send=True))
     return result
 
   if cc or bcc:

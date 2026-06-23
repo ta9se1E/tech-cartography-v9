@@ -184,6 +184,23 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
       failures.append("rollback_live_to_basic.sh must read password with read -s")
     if "unset TC_LOGIN_PASSWORD" not in rollback_text:
       warnings.append("rollback_live_to_basic.sh should unset TC_LOGIN_PASSWORD")
+    if "DISABLE_EMAIL_SEND=true" not in rollback_text:
+      failures.append("rollback_live_to_basic.sh must keep DISABLE_EMAIL_SEND=true")
+    if "ENABLE_APPROVED_MEMBER_SEND=false" not in rollback_text:
+      failures.append("rollback_live_to_basic.sh must keep ENABLE_APPROVED_MEMBER_SEND=false")
+    if "SMTP_PASSWORD" in rollback_text:
+      failures.append("rollback_live_to_basic.sh must not contain SMTP_PASSWORD")
+
+  send_safety_docs = PROJECT_ROOT / "docs/phase25q2_send_safety_reset.md"
+  if send_safety_docs.exists():
+    passes.append(f"artifact exists: {send_safety_docs.relative_to(PROJECT_ROOT)}")
+    safety_doc_text = _read(send_safety_docs)
+    if "SMTP_PASSWORD" in safety_doc_text and "扱わない" not in safety_doc_text:
+      failures.append("phase25q2 docs may inline SMTP_PASSWORD")
+    if "ENABLE_APPROVED_MEMBER_SEND=false" not in safety_doc_text:
+      failures.append("phase25q2 docs missing reset env guidance")
+  else:
+    failures.append("missing: docs/phase25q2_send_safety_reset.md")
 
   passes.append(f"target project: {project}")
   passes.append(f"target region: {region}")

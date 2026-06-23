@@ -12,6 +12,7 @@ from tech_cartography.runtime.auth_provider_config import auth_provider_mode_sum
 from tech_cartography.runtime.iap_role_mapping import role_mapping_status
 from tech_cartography.runtime.user_context import resolve_user_context
 from tech_cartography.ui.easy_japanese_ui import render_info_box, render_warning_box
+from tech_cartography.ui.email_operation_status_ui import render_email_operation_status_panel
 from tech_cartography.ui.login_ui import (
   can_use_admin_features,
   get_last_iap_identity_status,
@@ -111,5 +112,11 @@ def render_auth_status_expander(
       st.markdown("**warnings**")
       for warning in warnings:
         st.markdown(render_warning_box(warning), unsafe_allow_html=True)
+
+    render_email_operation_status_panel(
+      project_root=project_root,
+      key=f"{key}_email_ops",
+      expanded=False,
+    )
 
     st.info(_next_setup_hint(mode, iap_status))

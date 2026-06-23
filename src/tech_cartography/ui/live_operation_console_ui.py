@@ -18,6 +18,7 @@ from tech_cartography.services.live_operation_status import (
   build_operation_cycle_status,
 )
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_warning_box
+from tech_cartography.ui.email_operation_status_ui import render_email_operation_status_panel
 from tech_cartography.ui.login_ui import can_use_admin_features
 
 
@@ -100,6 +101,12 @@ def render_live_operation_console_section(
       },
     ]
     st.dataframe(flag_rows, use_container_width=True, hide_index=True)
+
+    render_email_operation_status_panel(
+      project_root=project_root,
+      key_prefix=f"{key_prefix}_email_ops",
+      expanded=False,
+    )
 
     step_rows = []
     for index, step in enumerate(STEP_ORDER, start=1):
