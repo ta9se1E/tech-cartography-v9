@@ -15,6 +15,10 @@ LIVE_EMAIL_SEND_SUBDIR = "live_email_send"
 LIVE_APPROVED_MEMBER_SEND_SUBDIR = "live_approved_member_send"
 LIVE_WATCH_EXPANSION_SUBDIR = "live_watch_expansion"
 LIVE_WATCH_PROFILES_SUBDIR = "live_watch_profiles"
+LIVE_WATCH_PROFILES_DRAFTS_SUBDIR = "drafts"
+LIVE_WATCH_PROFILES_ACTIVE_SUBDIR = "active"
+LIVE_WATCH_PROFILES_ARCHIVE_SUBDIR = "archive"
+LIVE_SCHEDULER_DRY_RUN_SUBDIR = "live_scheduler_dry_run"
 LIVE_NEXT_CYCLE_SEARCH_SUBDIR = "live_next_cycle_search"
 LIVE_NEXT_CYCLE_WEB_SIGNALS_SUBDIR = "live_next_cycle_web_signals"
 LIVE_OPERATION_STATUS_SUBDIR = "live_operation_status"
@@ -80,6 +84,22 @@ def get_live_watch_profiles_dir(project_root: Path | str | None = None) -> Path:
   return get_live_outputs_root(project_root) / LIVE_WATCH_PROFILES_SUBDIR
 
 
+def get_live_watch_profiles_drafts_dir(project_root: Path | str | None = None) -> Path:
+  return get_live_watch_profiles_dir(project_root) / LIVE_WATCH_PROFILES_DRAFTS_SUBDIR
+
+
+def get_live_watch_profiles_active_dir(project_root: Path | str | None = None) -> Path:
+  return get_live_watch_profiles_dir(project_root) / LIVE_WATCH_PROFILES_ACTIVE_SUBDIR
+
+
+def get_live_watch_profiles_archive_dir(project_root: Path | str | None = None) -> Path:
+  return get_live_watch_profiles_dir(project_root) / LIVE_WATCH_PROFILES_ARCHIVE_SUBDIR
+
+
+def get_live_scheduler_dry_run_dir(project_root: Path | str | None = None) -> Path:
+  return get_live_outputs_root(project_root) / LIVE_SCHEDULER_DRY_RUN_SUBDIR
+
+
 def get_live_next_cycle_search_dir(project_root: Path | str | None = None) -> Path:
   return get_live_outputs_root(project_root) / LIVE_NEXT_CYCLE_SEARCH_SUBDIR
 
@@ -126,6 +146,10 @@ def ensure_live_artifact_dirs(project_root: Path | str | None = None) -> tuple[b
     get_live_approved_member_send_dir(project_root),
     get_live_watch_expansion_dir(project_root),
     get_live_watch_profiles_dir(project_root),
+    get_live_watch_profiles_drafts_dir(project_root),
+    get_live_watch_profiles_active_dir(project_root),
+    get_live_watch_profiles_archive_dir(project_root),
+    get_live_scheduler_dry_run_dir(project_root),
     get_live_next_cycle_search_dir(project_root),
     get_live_next_cycle_web_signals_dir(project_root),
     get_live_operation_status_dir(project_root),

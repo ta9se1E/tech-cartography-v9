@@ -124,6 +124,25 @@ def render_live_operation_console_section(
 
     st.markdown(f"**next recommended action:** {status.get('next_recommended_action')}")
 
+    watch_profile = status.get("watch_profile") or {}
+    st.markdown("**Watch Profile status**")
+    st.caption(
+      f"status={status.get('watch_profile_status')} | "
+      f"active={status.get('active_watch_profile_theme') or '(none)'} | "
+      f"draft={status.get('latest_draft_theme') or '(none)'}"
+    )
+    if status.get("active_watch_profile_path"):
+      st.caption(f"active path: {status.get('active_watch_profile_path')}")
+    if status.get("latest_draft_path"):
+      st.caption(f"latest draft path: {status.get('latest_draft_path')}")
+    st.caption(str(status.get("watch_profile_next_recommended_action") or ""))
+
+    from tech_cartography.ui.live_watch_profile_ui import render_live_watch_profile_section
+    from tech_cartography.ui.live_scheduler_dry_run_ui import render_live_scheduler_dry_run_section
+
+    render_live_watch_profile_section(project_root=project_root, key_prefix=f"{key_prefix}_watch_profile")
+    render_live_scheduler_dry_run_section(project_root=project_root, key_prefix=f"{key_prefix}_scheduler_dry_run")
+
     history_summary = status.get("run_history_summary") or {}
     st.markdown(
       f"**Run History:** visible={history_summary.get('total_visible_count', 0)}件 / "

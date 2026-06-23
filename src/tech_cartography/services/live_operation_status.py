@@ -37,6 +37,7 @@ from tech_cartography.services.live_run_history import (
   record_live_run,
   summarize_run_history_for_console,
 )
+from tech_cartography.services.live_watch_profile_manager import describe_watch_profile_status
 from tech_cartography.services.watch_profile_draft import (
   find_latest_watch_profile_draft_path,
   load_watch_profile_draft_with_status,
@@ -397,6 +398,13 @@ def build_operation_cycle_status(
     )
 
   next_recommended_action = _derive_next_recommended_action(step_statuses)
+  watch_profile_info = describe_watch_profile_status(project_root or Path.cwd())
+  if watch_profile_info.get("watch_profile_status") == "no_active_profile":
+    warnings.append("active Watch Profile がありません。週次監視条件を draft 作成後に active 化してください。")
+  elif watch_profile_info.get("watch_profile_status") == "draft_waiting_approval":
+    warnings.append("Watch Profile draft が承認待ちです。admin が確認文付きで active 化してください。")
+  elif watch_profile_info.get("watch_profile_status") == "profile_misconfigured":
+    warnings.append("Watch Profile draft の検索条件が未設定です。search_keywords または search_queries を設定してください。")
   latest_failed = run_history_summary.get("latest_failed_or_blocked")
   if latest_failed:
     warnings.append(
@@ -427,6 +435,15 @@ def build_operation_cycle_status(
       "email_send_disabled": is_email_send_disabled(),
       "scheduler_disabled": is_scheduler_disabled(),
     },
+    "watch_profile": watch_profile_info,
+    "active_watch_profile_exists": watch_profile_info.get("active_watch_profile_exists"),
+    "active_watch_profile_path": watch_profile_info.get("active_watch_profile_path"),
+    "active_watch_profile_theme": watch_profile_info.get("active_watch_profile_theme"),
+    "latest_draft_exists": watch_profile_info.get("latest_draft_exists"),
+    "latest_draft_path": watch_profile_info.get("latest_draft_path"),
+    "latest_draft_theme": watch_profile_info.get("latest_draft_theme"),
+    "watch_profile_status": watch_profile_info.get("watch_profile_status"),
+    "watch_profile_next_recommended_action": watch_profile_info.get("next_recommended_action"),
     "latest_artifact_paths": latest_artifact_paths,
     "operation_cycle_status": step_statuses,
     "run_history_summary": run_history_summary,
@@ -501,6 +518,9 @@ def save_operation_cycle_status(
     "warnings": status.get("warnings"),
     "safety_notice": status.get("safety_notice"),
     "runtime_flags": status.get("runtime_flags"),
+    "watch_profile": status.get("watch_profile"),
+    "watch_profile_status": status.get("watch_profile_status"),
+    "active_watch_profile_path": status.get("active_watch_profile_path"),
   }
   serialized = json.dumps(payload, indent=2, ensure_ascii=False)
   _assert_no_sensitive_material(serialized)

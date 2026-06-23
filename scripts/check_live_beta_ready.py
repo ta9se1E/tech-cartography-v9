@@ -46,6 +46,7 @@ from tech_cartography.runtime.live_artifact_paths import (  # noqa: E402
   get_live_outputs_root,
   using_live_outputs_root_env,
 )
+from tech_cartography.runtime.watch_profile_management_config import is_watch_profile_management_enabled
 from tech_cartography.services.live_tavily_search import clamp_max_results  # noqa: E402
 
 
@@ -118,6 +119,13 @@ def main() -> int:
   rollback_live_script = PROJECT_ROOT / "scripts/rollback_live_to_basic.sh"
   cicd_docs = PROJECT_ROOT / "docs/phase25p_cicd_cloud_build_deploy.md"
   cicd_ready_script = PROJECT_ROOT / "scripts/check_cicd_ready.py"
+  watch_profile_schema = PROJECT_ROOT / "src/tech_cartography/runtime/watch_profile_schema.py"
+  watch_profile_mgmt_cfg = PROJECT_ROOT / "src/tech_cartography/runtime/watch_profile_management_config.py"
+  watch_profile_manager = PROJECT_ROOT / "src/tech_cartography/services/live_watch_profile_manager.py"
+  watch_profile_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_watch_profile_ui.py"
+  scheduler_dry_run_service = PROJECT_ROOT / "src/tech_cartography/services/live_scheduler_dry_run.py"
+  scheduler_dry_run_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_scheduler_dry_run_ui.py"
+  watch_profile_docs = PROJECT_ROOT / "docs/phase25s_watch_profile_management.md"
 
   for path in (
     module_path,
@@ -179,6 +187,13 @@ def main() -> int:
     rollback_live_script,
     cicd_docs,
     cicd_ready_script,
+    watch_profile_schema,
+    watch_profile_mgmt_cfg,
+    watch_profile_manager,
+    watch_profile_ui,
+    scheduler_dry_run_service,
+    scheduler_dry_run_ui,
+    watch_profile_docs,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -556,6 +571,42 @@ def main() -> int:
   if "SMTP_PASSWORD" in artifact_ui_text or "API_KEY" in artifact_ui_text:
     failures.append("live_artifact_storage_ui が secret 名を露出しています")
 
+  watch_profile_manager_text = _read(watch_profile_manager)
+  watch_profile_paths_text = _read(artifact_paths)
+  run_history_text = _read(run_history_service)
+  if "live_watch_profiles/drafts" not in watch_profile_paths_text.replace('"', ""):
+    if "LIVE_WATCH_PROFILES_DRAFTS_SUBDIR" not in watch_profile_paths_text:
+      failures.append("live_artifact_paths に live_watch_profiles/drafts がありません")
+  for sub in ("drafts", "active", "archive"):
+    if f"LIVE_WATCH_PROFILES_{sub.upper()}_SUBDIR" not in watch_profile_paths_text and f"live_watch_profiles/{sub}" not in watch_profile_paths_text:
+      failures.append(f"live_artifact_paths に live_watch_profiles/{sub} がありません")
+  for action in (
+    "live_watch_profile_draft_save",
+    "live_watch_profile_activate",
+    "live_watch_profile_archive",
+    "live_watch_profile_rollback",
+    "live_scheduler_dry_run",
+  ):
+    if action not in run_history_text:
+      failures.append(f"live_run_history に {action} がありません")
+  if is_watch_profile_management_enabled():
+    warnings.append("ENABLE_WATCH_PROFILE_MANAGEMENT=true — deploy デフォルトは false 推奨")
+  for forbidden in ("requests.", "smtplib", "send_email", "scheduler.start", "cloudscheduler"):
+    if forbidden in watch_profile_manager_text.lower():
+      failures.append(f"live_watch_profile_manager が禁止操作 {forbidden} を含みます")
+  for secret_token in ("SMTP_PASSWORD", "oauth", "jwt", "api_key"):
+    if secret_token.lower() in watch_profile_manager_text.lower() and "sensitive" not in watch_profile_manager_text.lower():
+      pass
+  if re.search(r"SMTP_PASSWORD|jwt|oauth", watch_profile_manager_text, re.IGNORECASE):
+    if "_SENSITIVE_PATTERN" not in watch_profile_manager_text:
+      failures.append("live_watch_profile_manager に secret ガードがありません")
+  if "ENABLE_WATCH_PROFILE_MANAGEMENT=false" not in _read(cloudbuild_yaml):
+    failures.append("cloudbuild.yaml が ENABLE_WATCH_PROFILE_MANAGEMENT=false をデフォルトにしていません")
+  if "ENABLE_WATCH_PROFILE_MANAGEMENT=false" not in _read(deploy_live_script):
+    failures.append("deploy_live_safe.sh が ENABLE_WATCH_PROFILE_MANAGEMENT=false をデフォルトにしていません")
+  if "phase25s" not in _read(watch_profile_docs).lower() and "Watch Profile" not in _read(watch_profile_docs):
+    failures.append("phase25s docs に Watch Profile 説明がありません")
+
   pack_service_text = _read(pack_service)
   if "live_artifact_paths" not in pack_service_text:
     failures.append("live_web_signal_pack が live_artifact_paths を使っていません")
@@ -606,6 +657,8 @@ def main() -> int:
   print(f"iap auth bridge: {'yes' if iap_identity.exists() else 'no'}")
   print(f"iap cutover runbook: {'yes' if iap_cutover_docs.exists() else 'no'}")
   print(f"cicd pipeline: {'yes' if cloudbuild_yaml.exists() else 'no'}")
+  print(f"watch profile management: {'yes' if watch_profile_manager.exists() else 'no'}")
+  print(f"scheduler dry-run: {'yes' if scheduler_dry_run_service.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

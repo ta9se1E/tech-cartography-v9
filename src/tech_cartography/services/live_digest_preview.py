@@ -26,6 +26,7 @@ from tech_cartography.services.live_web_signal_pack import (
   load_latest_live_web_signal_pack,
   load_live_web_signal_pack,
 )
+from tech_cartography.services.live_watch_profile_manager import get_active_watch_profile
 
 def resolve_latest_web_signal_pack(
   output_root: Path | str,
@@ -377,7 +378,14 @@ def _assert_no_sensitive_material(serialized: str) -> None:
       raise ValueError("Refusing to save payload containing sensitive material")
 
 
-def build_save_payload(preview: dict[str, Any]) -> dict[str, Any]:
+def build_save_payload(preview: dict[str, Any], *, output_root: Path | str | None = None) -> dict[str, Any]:
+  active_profile_path: str | None = None
+  active_profile_id: str | None = None
+  if output_root is not None:
+    active, active_path = get_active_watch_profile(output_root)
+    if active and active_path:
+      active_profile_path = active_path
+      active_profile_id = str(active.get("profile_id") or "") or None
   payload = {
     "source_pack_path": preview.get("source_pack_path"),
     "source_type": preview.get("source_type"),
@@ -392,6 +400,8 @@ def build_save_payload(preview: dict[str, Any]) -> dict[str, Any]:
     "preview_mode": PREVIEW_ONLY_LABEL,
     "digest_title": preview.get("digest_title"),
     "evidence_gaps": preview.get("evidence_gaps") or [],
+    "active_watch_profile_path": active_profile_path or preview.get("active_watch_profile_path"),
+    "active_watch_profile_id": active_profile_id or preview.get("active_watch_profile_id"),
   }
   return copy_user_run_metadata(payload, preview)
 
@@ -411,7 +421,7 @@ def save_live_digest_preview(
   md_path = out_dir / f"live_digest_preview_{slug}.md"
   txt_path = out_dir / f"live_digest_preview_{slug}.txt"
 
-  payload = build_save_payload(preview)
+  payload = build_save_payload(preview, output_root=output_root)
   serialized = json.dumps(payload, indent=2, ensure_ascii=False)
   _assert_no_sensitive_material(serialized)
 
@@ -527,6 +537,10 @@ def create_live_digest_preview_from_latest_pack(
       user_note=user_note,
     )
     preview = attach_user_run_metadata(preview, user_context=user_context, run_id=run_id)
+    active, active_path = get_active_watch_profile(output_root)
+    if active_path:
+      preview["active_watch_profile_path"] = active_path
+      preview["active_watch_profile_id"] = active.get("profile_id")
     saved_paths = save_live_digest_preview(preview, output_root)
   except (OSError, ValueError) as exc:
     return _finalize(

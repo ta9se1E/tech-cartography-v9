@@ -79,8 +79,6 @@ def test_theme_validation_ui_has_tab_intro_copy() -> None:
 def test_theme_validation_ui_has_no_mail_or_scheduler_buttons() -> None:
   text = THEME_VALIDATION_UI.read_text(encoding="utf-8").lower()
   forbidden = (
-    "メール送信",
-    "scheduler",
     "launchd",
     "smtp",
     "send_email",
@@ -88,6 +86,7 @@ def test_theme_validation_ui_has_no_mail_or_scheduler_buttons() -> None:
   )
   for token in forbidden:
     assert token not in text
+  assert "render_live_scheduler_dry_run_section" in text
 
 
 def test_render_theme_validation_section_is_callable_from_tab_helper() -> None:

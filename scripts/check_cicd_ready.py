@@ -121,6 +121,8 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
       warnings.append("cloudbuild.yaml should set AUTH_PROVIDER_MODE=iap")
     if "ENABLE_APPROVED_MEMBER_SEND=false" not in cloudbuild_text:
       failures.append("cloudbuild.yaml must default ENABLE_APPROVED_MEMBER_SEND=false")
+    if "ENABLE_WATCH_PROFILE_MANAGEMENT=false" not in cloudbuild_text:
+      failures.append("cloudbuild.yaml must default ENABLE_WATCH_PROFILE_MANAGEMENT=false")
     if "DISABLE_EMAIL_SEND=true" not in cloudbuild_text:
       failures.append("cloudbuild.yaml must default DISABLE_EMAIL_SEND=true")
     if "TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS=" in cloudbuild_text:
@@ -176,6 +178,8 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
       failures.append("deploy_live_safe.sh must not set AUTH_PROVIDER_MODE=basic")
     if "ENABLE_APPROVED_MEMBER_SEND=false" not in deploy_text:
       failures.append("deploy_live_safe.sh must default ENABLE_APPROVED_MEMBER_SEND=false")
+    if "ENABLE_WATCH_PROFILE_MANAGEMENT=false" not in deploy_text:
+      failures.append("deploy_live_safe.sh must default ENABLE_WATCH_PROFILE_MANAGEMENT=false")
     if "TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS=" in deploy_text:
       failures.append("deploy_live_safe.sh must not inline TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS")
 
@@ -190,6 +194,20 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
       failures.append("rollback_live_to_basic.sh must keep ENABLE_APPROVED_MEMBER_SEND=false")
     if "SMTP_PASSWORD" in rollback_text:
       failures.append("rollback_live_to_basic.sh must not contain SMTP_PASSWORD")
+
+  watch_profile_docs = PROJECT_ROOT / "docs/phase25s_watch_profile_management.md"
+  watch_profile_manager = PROJECT_ROOT / "src/tech_cartography/services/live_watch_profile_manager.py"
+  if not watch_profile_docs.exists():
+    failures.append("missing: docs/phase25s_watch_profile_management.md")
+  else:
+    passes.append("phase25s watch profile docs present")
+  if watch_profile_manager.exists():
+    mgr_text = _read(watch_profile_manager)
+    for forbidden in ("requests.", "smtplib", "send_email"):
+      if forbidden in mgr_text:
+        failures.append(f"live_watch_profile_manager contains forbidden {forbidden}")
+    if "_SENSITIVE_PATTERN" not in mgr_text:
+      failures.append("live_watch_profile_manager missing sensitive guard")
 
   send_safety_docs = PROJECT_ROOT / "docs/phase25q2_send_safety_reset.md"
   if send_safety_docs.exists():
