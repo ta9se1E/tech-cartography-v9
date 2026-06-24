@@ -37,7 +37,9 @@ from tech_cartography.services.live_run_history import (
   record_live_run,
   summarize_run_history_for_console,
 )
+from tech_cartography.runtime.external_api_operation_config import describe_external_api_collection_runtime
 from tech_cartography.services.live_watch_profile_manager import describe_watch_profile_status
+from tech_cartography.services.live_web_signal_collector import describe_latest_web_signal_collection
 from tech_cartography.services.watch_profile_draft import (
   find_latest_watch_profile_draft_path,
   load_watch_profile_draft_with_status,
@@ -70,7 +72,7 @@ STEP_GUIDANCE: dict[str, str] = {
   "next_cycle_web_signal_pack": "Next Cycle Search で選択 query のみ Tavily 実行し、Next Cycle Web Signal Pack を作成してください。",
 }
 
-_SENSITIVE_PATTERN = re.compile(r"(api[_-]?key|authorization|token|secret|smtp|password)", re.IGNORECASE)
+_SENSITIVE_PATTERN = re.compile(r"(api[_-]?key|authorization|oauth|jwt|smtp_password)", re.IGNORECASE)
 
 _ARTIFACT_SPECS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
   ("web_signal_pack", "live_web_signals", "live_web_signal_pack_*.json", ("fetched_at", "created_at")),
@@ -202,6 +204,24 @@ def _build_step(
     "next_action": next_action,
     "guidance": STEP_GUIDANCE.get(step_name, ""),
   }
+
+
+def _web_signal_collection_next_action(
+  external_api_info: dict[str, object],
+  watch_profile_info: dict[str, Any],
+  collection_info: dict[str, Any],
+) -> str:
+  if external_api_info.get("disable_external_api"):
+    return "外部APIは停止中です。手動収集する場合は DISABLE_EXTERNAL_API=false と ENABLE_MANUAL_WEB_SIGNAL_COLLECTION=true を設定してください。"
+  if not external_api_info.get("enable_manual_web_signal_collection"):
+    return "手動 Web Signal 収集は無効です。ENABLE_MANUAL_WEB_SIGNAL_COLLECTION=true で有効化してください。"
+  if not watch_profile_info.get("active_watch_profile_exists"):
+    return "active Watch Profile を用意してから Web Signal 手動収集を実行してください。"
+  if not external_api_info.get("tavily_secret_configured"):
+    return "TAVILY_API_KEY を設定してから Web Signal 手動収集を実行してください。"
+  if collection_info.get("latest_web_signal_collection_status") == "success":
+    return "最新 Web Signal collection を確認し、Digest Preview を手動作成してください。"
+  return "Web Signal 手動収集（確認文付き）を実行してください。"
 
 
 def build_operation_cycle_status(
@@ -399,6 +419,8 @@ def build_operation_cycle_status(
 
   next_recommended_action = _derive_next_recommended_action(step_statuses)
   watch_profile_info = describe_watch_profile_status(project_root or Path.cwd())
+  external_api_info = describe_external_api_collection_runtime()
+  web_signal_collection_info = describe_latest_web_signal_collection(project_root or Path.cwd())
   if watch_profile_info.get("watch_profile_status") == "no_active_profile":
     warnings.append("active Watch Profile がありません。週次監視条件を draft 作成後に active 化してください。")
   elif watch_profile_info.get("watch_profile_status") == "draft_waiting_approval":
@@ -444,6 +466,18 @@ def build_operation_cycle_status(
     "latest_draft_theme": watch_profile_info.get("latest_draft_theme"),
     "watch_profile_status": watch_profile_info.get("watch_profile_status"),
     "watch_profile_next_recommended_action": watch_profile_info.get("next_recommended_action"),
+    "external_api_collection": external_api_info,
+    "disable_external_api": external_api_info.get("disable_external_api"),
+    "enable_manual_web_signal_collection": external_api_info.get("enable_manual_web_signal_collection"),
+    "tavily_secret_configured": external_api_info.get("tavily_secret_configured"),
+    "latest_web_signal_collection_artifact": web_signal_collection_info.get("latest_web_signal_collection_artifact"),
+    "latest_web_signal_collection_status": web_signal_collection_info.get("latest_web_signal_collection_status"),
+    "latest_web_signal_result_count": web_signal_collection_info.get("latest_web_signal_result_count"),
+    "web_signal_collection_next_recommended_action": _web_signal_collection_next_action(
+      external_api_info,
+      watch_profile_info,
+      web_signal_collection_info,
+    ),
     "latest_artifact_paths": latest_artifact_paths,
     "operation_cycle_status": step_statuses,
     "run_history_summary": run_history_summary,
@@ -521,6 +555,8 @@ def save_operation_cycle_status(
     "watch_profile": status.get("watch_profile"),
     "watch_profile_status": status.get("watch_profile_status"),
     "active_watch_profile_path": status.get("active_watch_profile_path"),
+    "external_api_collection": status.get("external_api_collection"),
+    "latest_web_signal_collection_artifact": status.get("latest_web_signal_collection_artifact"),
   }
   serialized = json.dumps(payload, indent=2, ensure_ascii=False)
   _assert_no_sensitive_material(serialized)

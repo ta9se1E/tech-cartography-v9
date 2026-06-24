@@ -1257,6 +1257,12 @@ def render_analyst_input_execution_section(*, key_prefix: str = ANALYST_INPUT_KE
   from tech_cartography.ui.live_watch_profile_ui import render_live_watch_profile_section
 
   render_live_watch_profile_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_watch_profile")
+  from tech_cartography.ui.live_web_signal_collection_ui import render_live_web_signal_collection_section
+
+  render_live_web_signal_collection_section(
+    project_root=_project_root(),
+    key_prefix=f"{key_prefix}_live_web_signal_collection",
+  )
   from tech_cartography.ui.live_scheduler_dry_run_ui import render_live_scheduler_dry_run_section
 
   render_live_scheduler_dry_run_section(project_root=_project_root(), key_prefix=f"{key_prefix}_live_scheduler_dry_run")

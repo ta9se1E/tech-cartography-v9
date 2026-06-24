@@ -123,6 +123,10 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
       failures.append("cloudbuild.yaml must default ENABLE_APPROVED_MEMBER_SEND=false")
     if "ENABLE_WATCH_PROFILE_MANAGEMENT=false" not in cloudbuild_text:
       failures.append("cloudbuild.yaml must default ENABLE_WATCH_PROFILE_MANAGEMENT=false")
+    if "ENABLE_MANUAL_WEB_SIGNAL_COLLECTION=false" not in cloudbuild_text:
+      failures.append("cloudbuild.yaml must default ENABLE_MANUAL_WEB_SIGNAL_COLLECTION=false")
+    if "DISABLE_EXTERNAL_API=true" not in cloudbuild_text:
+      failures.append("cloudbuild.yaml must default DISABLE_EXTERNAL_API=true")
     if "DISABLE_EMAIL_SEND=true" not in cloudbuild_text:
       failures.append("cloudbuild.yaml must default DISABLE_EMAIL_SEND=true")
     if "TECH_CARTOGRAPHY_APPROVED_MEMBER_EMAILS=" in cloudbuild_text:
@@ -208,6 +212,17 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
         failures.append(f"live_watch_profile_manager contains forbidden {forbidden}")
     if "_SENSITIVE_PATTERN" not in mgr_text:
       failures.append("live_watch_profile_manager missing sensitive guard")
+
+  web_signal_collection_docs = PROJECT_ROOT / "docs/phase25t_controlled_web_signal_collection.md"
+  web_signal_collector = PROJECT_ROOT / "src/tech_cartography/services/live_web_signal_collector.py"
+  if not web_signal_collection_docs.exists():
+    failures.append("missing: docs/phase25t_controlled_web_signal_collection.md")
+  if web_signal_collector.exists():
+    coll = _read(web_signal_collector)
+    if "smtplib" in coll or "send_email" in coll:
+      failures.append("live_web_signal_collector contains forbidden email/scheduler calls")
+    if "legal_judgement" not in coll:
+      failures.append("live_web_signal_collector missing legal_judgement safety flag")
 
   send_safety_docs = PROJECT_ROOT / "docs/phase25q2_send_safety_reset.md"
   if send_safety_docs.exists():

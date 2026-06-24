@@ -20,6 +20,7 @@ from tech_cartography.services.live_run_history import (
   map_result_status,
   record_live_run,
 )
+from tech_cartography.services.live_web_signal_collector import find_latest_web_signal_collection_path
 from tech_cartography.services.live_watch_profile_manager import (
   describe_watch_profile_status,
   get_active_watch_profile,
@@ -38,16 +39,19 @@ def _timestamp_slug(iso_ts: str) -> str:
   return iso_ts.replace(":", "").replace("-", "")
 
 
-def _planned_steps(*, has_active_profile: bool) -> list[str]:
+def _planned_steps(*, has_active_profile: bool, has_web_signal_collection: bool) -> list[str]:
   steps = [
     "verify_runtime_flags",
     "verify_active_watch_profile",
+    "review_latest_web_signal_collection",
     "review_digest_preview_artifact",
     "review_next_cycle_search_plan",
     "human_approval_checkpoint",
   ]
   if not has_active_profile:
     steps.insert(1, "warning_no_active_watch_profile")
+  if not has_web_signal_collection:
+    steps.insert(2, "warning_no_web_signal_collection_artifact")
   return steps
 
 
@@ -71,10 +75,13 @@ def run_live_scheduler_dry_run(
     return {"ok": False, "error": access_error, "message": "管理者のみ dry-run を実行できます。"}
 
   active, active_path = get_active_watch_profile(output_root)
+  collection_path = find_latest_web_signal_collection_path(output_root)
   profile_status = describe_watch_profile_status(output_root)
   warnings: list[str] = []
   if not active:
     warnings.append("active Watch Profile がありません。dry-run は計画のみで実行しません。")
+  if not collection_path:
+    warnings.append("最新 Web Signal collection artifact がありません。")
   if not is_scheduler_disabled():
     warnings.append("DISABLE_SCHEDULER=false です。本番 scheduler は起動しませんが env を確認してください。")
 
@@ -85,7 +92,11 @@ def run_live_scheduler_dry_run(
     "scheduler_disabled": is_scheduler_disabled(),
     "active_watch_profile_path": active_path,
     "active_watch_profile_theme": (active or {}).get("theme_name"),
-    "planned_steps": _planned_steps(has_active_profile=bool(active)),
+    "latest_web_signal_collection_path": str(collection_path) if collection_path else None,
+    "planned_steps": _planned_steps(
+      has_active_profile=bool(active),
+      has_web_signal_collection=bool(collection_path),
+    ),
     "warnings": warnings,
     "watch_profile_status": profile_status.get("watch_profile_status"),
     "safety_flags": {
@@ -114,6 +125,7 @@ def run_live_scheduler_dry_run(
     "# Scheduler Dry-Run Plan",
     "",
     f"- active_watch_profile_path: {active_path}",
+    f"- latest_web_signal_collection_path: {collection_path}",
     f"- watch_profile_status: {profile_status.get('watch_profile_status')}",
     "",
     "## planned_steps",

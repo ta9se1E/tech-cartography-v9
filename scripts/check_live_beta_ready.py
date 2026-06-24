@@ -47,6 +47,11 @@ from tech_cartography.runtime.live_artifact_paths import (  # noqa: E402
   using_live_outputs_root_env,
 )
 from tech_cartography.runtime.watch_profile_management_config import is_watch_profile_management_enabled
+from tech_cartography.runtime.external_api_operation_config import (
+  get_web_signal_max_queries,
+  get_web_signal_max_results_per_query,
+  is_manual_web_signal_collection_enabled,
+)
 from tech_cartography.services.live_tavily_search import clamp_max_results  # noqa: E402
 
 
@@ -126,6 +131,10 @@ def main() -> int:
   scheduler_dry_run_service = PROJECT_ROOT / "src/tech_cartography/services/live_scheduler_dry_run.py"
   scheduler_dry_run_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_scheduler_dry_run_ui.py"
   watch_profile_docs = PROJECT_ROOT / "docs/phase25s_watch_profile_management.md"
+  external_api_op_cfg = PROJECT_ROOT / "src/tech_cartography/runtime/external_api_operation_config.py"
+  web_signal_collector = PROJECT_ROOT / "src/tech_cartography/services/live_web_signal_collector.py"
+  web_signal_collection_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_web_signal_collection_ui.py"
+  web_signal_collection_docs = PROJECT_ROOT / "docs/phase25t_controlled_web_signal_collection.md"
 
   for path in (
     module_path,
@@ -194,6 +203,10 @@ def main() -> int:
     scheduler_dry_run_service,
     scheduler_dry_run_ui,
     watch_profile_docs,
+    external_api_op_cfg,
+    web_signal_collector,
+    web_signal_collection_ui,
+    web_signal_collection_docs,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -586,6 +599,7 @@ def main() -> int:
     "live_watch_profile_archive",
     "live_watch_profile_rollback",
     "live_scheduler_dry_run",
+    "live_web_signal_collection",
   ):
     if action not in run_history_text:
       failures.append(f"live_run_history に {action} がありません")
@@ -606,6 +620,35 @@ def main() -> int:
     failures.append("deploy_live_safe.sh が ENABLE_WATCH_PROFILE_MANAGEMENT=false をデフォルトにしていません")
   if "phase25s" not in _read(watch_profile_docs).lower() and "Watch Profile" not in _read(watch_profile_docs):
     failures.append("phase25s docs に Watch Profile 説明がありません")
+
+  collector_text = _read(web_signal_collector)
+  digest_text = _read(digest_service)
+  scheduler_text = _read(scheduler_dry_run_service)
+  if "live_web_signal_collection" not in run_history_text:
+    failures.append("live_run_history に live_web_signal_collection がありません")
+  if "ENABLE_MANUAL_WEB_SIGNAL_COLLECTION=false" not in _read(cloudbuild_yaml):
+    failures.append("cloudbuild.yaml が ENABLE_MANUAL_WEB_SIGNAL_COLLECTION=false をデフォルトにしていません")
+  if "DISABLE_EXTERNAL_API=true" not in _read(cloudbuild_yaml):
+    failures.append("cloudbuild.yaml が DISABLE_EXTERNAL_API=true を維持していません")
+  if get_web_signal_max_queries() > 5:
+    failures.append("WEB_SIGNAL_MAX_QUERIES が大きすぎます")
+  if get_web_signal_max_results_per_query() > 10:
+    failures.append("WEB_SIGNAL_MAX_RESULTS_PER_QUERY が大きすぎます")
+  for forbidden in ("smtplib", "send_email", "cloudscheduler"):
+    if forbidden in collector_text.lower():
+      failures.append(f"live_web_signal_collector が禁止操作 {forbidden} を含みます")
+  if "_default_post_tavily" in collector_text and "post_fn" not in collector_text:
+    failures.append("live_web_signal_collector に post_fn 注入がありません")
+  if "collect_live_web_signals" in scheduler_text:
+    failures.append("live_scheduler_dry_run が web signal collector を呼んでいます")
+  if "collect_live_web_signals" in digest_text:
+    failures.append("live_digest_preview が web signal collector を自動呼び出ししています")
+  if "fto_judgement" not in collector_text or "candidate_information_only" not in collector_text:
+    failures.append("live_web_signal_collector に safety_flags がありません")
+  if "phase25t" not in _read(web_signal_collection_docs).lower() and "Web Signal" not in _read(web_signal_collection_docs):
+    failures.append("phase25t docs に Web Signal 説明がありません")
+  if is_manual_web_signal_collection_enabled():
+    warnings.append("ENABLE_MANUAL_WEB_SIGNAL_COLLECTION=true — deploy デフォルトは false 推奨")
 
   pack_service_text = _read(pack_service)
   if "live_artifact_paths" not in pack_service_text:
@@ -659,6 +702,7 @@ def main() -> int:
   print(f"cicd pipeline: {'yes' if cloudbuild_yaml.exists() else 'no'}")
   print(f"watch profile management: {'yes' if watch_profile_manager.exists() else 'no'}")
   print(f"scheduler dry-run: {'yes' if scheduler_dry_run_service.exists() else 'no'}")
+  print(f"controlled web signal collection: {'yes' if web_signal_collector.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

@@ -27,6 +27,10 @@ from tech_cartography.services.live_web_signal_pack import (
   load_live_web_signal_pack,
 )
 from tech_cartography.services.live_watch_profile_manager import get_active_watch_profile
+from tech_cartography.services.live_web_signal_collector import (
+  find_latest_web_signal_collection_path,
+  load_web_signal_collection,
+)
 
 def resolve_latest_web_signal_pack(
   output_root: Path | str,
@@ -381,11 +385,18 @@ def _assert_no_sensitive_material(serialized: str) -> None:
 def build_save_payload(preview: dict[str, Any], *, output_root: Path | str | None = None) -> dict[str, Any]:
   active_profile_path: str | None = None
   active_profile_id: str | None = None
+  collection_path: str | None = None
+  collection_run_id: str | None = None
   if output_root is not None:
     active, active_path = get_active_watch_profile(output_root)
     if active and active_path:
       active_profile_path = active_path
       active_profile_id = str(active.get("profile_id") or "") or None
+    coll_path = find_latest_web_signal_collection_path(output_root)
+    if coll_path is not None:
+      collection = load_web_signal_collection(coll_path) or {}
+      collection_path = str(coll_path)
+      collection_run_id = str(collection.get("run_id") or "") or None
   payload = {
     "source_pack_path": preview.get("source_pack_path"),
     "source_type": preview.get("source_type"),
@@ -402,6 +413,8 @@ def build_save_payload(preview: dict[str, Any], *, output_root: Path | str | Non
     "evidence_gaps": preview.get("evidence_gaps") or [],
     "active_watch_profile_path": active_profile_path or preview.get("active_watch_profile_path"),
     "active_watch_profile_id": active_profile_id or preview.get("active_watch_profile_id"),
+    "latest_web_signal_collection_path": collection_path or preview.get("latest_web_signal_collection_path"),
+    "latest_web_signal_collection_run_id": collection_run_id or preview.get("latest_web_signal_collection_run_id"),
   }
   return copy_user_run_metadata(payload, preview)
 

@@ -137,9 +137,29 @@ def render_live_operation_console_section(
       st.caption(f"latest draft path: {status.get('latest_draft_path')}")
     st.caption(str(status.get("watch_profile_next_recommended_action") or ""))
 
+    ext_api = status.get("external_api_collection") or {}
+    st.markdown("**External API / Web Signal Collection**")
+    st.caption(
+      f"DISABLE_EXTERNAL_API={ext_api.get('disable_external_api')} | "
+      f"ENABLE_MANUAL_WEB_SIGNAL_COLLECTION={ext_api.get('enable_manual_web_signal_collection')} | "
+      f"tavily_configured={ext_api.get('tavily_secret_configured')}"
+    )
+    if status.get("latest_web_signal_collection_artifact"):
+      st.caption(f"latest collection: {status.get('latest_web_signal_collection_artifact')}")
+      st.caption(
+        f"status={status.get('latest_web_signal_collection_status')} | "
+        f"results={status.get('latest_web_signal_result_count')}"
+      )
+    st.caption(str(status.get("web_signal_collection_next_recommended_action") or ""))
+
+    from tech_cartography.ui.live_web_signal_collection_ui import render_live_web_signal_collection_section
     from tech_cartography.ui.live_watch_profile_ui import render_live_watch_profile_section
     from tech_cartography.ui.live_scheduler_dry_run_ui import render_live_scheduler_dry_run_section
 
+    render_live_web_signal_collection_section(
+      project_root=project_root,
+      key_prefix=f"{key_prefix}_web_signal_collection",
+    )
     render_live_watch_profile_section(project_root=project_root, key_prefix=f"{key_prefix}_watch_profile")
     render_live_scheduler_dry_run_section(project_root=project_root, key_prefix=f"{key_prefix}_scheduler_dry_run")
 
