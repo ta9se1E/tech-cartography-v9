@@ -13,6 +13,7 @@ from tech_cartography.runtime.live_artifact_paths import (
   check_directory_writable,
   get_live_digest_preview_dir,
 )
+from tech_cartography.runtime.user_context import evaluate_live_admin_access, normalize_user_context
 from tech_cartography.services.live_run_history import (
   attach_user_run_metadata,
   copy_user_run_metadata,
@@ -32,9 +33,9 @@ from tech_cartography.services.live_web_signal_collector import (
   load_web_signal_collection,
 )
 from tech_cartography.services.live_web_signal_review import (
+  DIGEST_WITH_SIGNALS_ACTION,
   build_web_signal_review,
   integrate_review_into_preview,
-  record_digest_preview_with_web_signals,
   record_web_signal_review_run,
   save_web_signal_review,
 )
@@ -138,6 +139,49 @@ def can_create_live_digest_preview() -> tuple[bool, str]:
   if email_send_is_disabled():
     return True, "Digest preview only — email send disabled (DISABLE_EMAIL_SEND=true)."
   return True, "Digest preview only — no email send in this phase."
+
+
+DIGEST_PREVIEW_ACCESS_MESSAGES: dict[str, str] = {
+  "login_required": "ログイン後に実行できます。",
+  "admin_required": "admin権限が必要です。",
+}
+
+
+def evaluate_digest_preview_access(
+  *,
+  login_required: bool,
+  is_authenticated: bool,
+  auth_role: str,
+  user_context: dict[str, Any] | None = None,
+) -> tuple[bool, str | None, str, dict[str, Any]]:
+  """Return (allowed, error_code, message, resolved_user_context). IAP-safe."""
+  access_ok, access_error, resolved_ctx = evaluate_live_admin_access(
+    login_required=login_required,
+    is_authenticated=is_authenticated,
+    auth_role=auth_role,
+    user_context=user_context,
+  )
+  if access_ok:
+    return True, None, "実行可能", resolved_ctx
+  error = access_error or "blocked"
+  return False, error, DIGEST_PREVIEW_ACCESS_MESSAGES.get(error, "実行できません。"), resolved_ctx
+
+
+def digest_preview_safety_metadata(*, uses_web_signals: bool, signal_count: int = 0) -> dict[str, Any]:
+  metadata: dict[str, Any] = {
+    "uses_web_signals": uses_web_signals,
+    "candidate_information_only": True,
+    "legal_judgement": False,
+    "fto_judgement": False,
+    "infringement_judgement": False,
+    "validity_judgement": False,
+    "no_external_api_call": True,
+    "no_email_send": True,
+    "no_scheduler_start": True,
+  }
+  if uses_web_signals:
+    metadata["signal_count"] = signal_count
+  return metadata
 
 
 def assert_preview_only_operation() -> None:
@@ -500,19 +544,29 @@ def create_live_digest_preview_from_latest_pack(
   run_id = generate_run_id()
   started_at = _utc_now_iso()
   resolved_theme = str(theme_name or "").strip()
+  resolved_ctx = normalize_user_context(user_context)
 
-  def _finalize(result: dict[str, Any], *, theme: str | None = None, source_path: str | None = None) -> dict[str, Any]:
+  def _finalize(
+    result: dict[str, Any],
+    *,
+    theme: str | None = None,
+    source_paths: list[str] | None = None,
+    action_type: str = "live_digest_preview",
+    operation_metadata: dict[str, Any] | None = None,
+  ) -> dict[str, Any]:
+    paths = [p for p in (source_paths or []) if p]
     record_live_run(
-      action_type="live_digest_preview",
+      action_type=action_type,
       status=map_result_status(ok=result.get("ok"), error=result.get("error")),
       run_id=run_id,
       started_at=started_at,
-      user_context=user_context,
+      user_context=resolved_ctx,
       theme_name=theme or resolved_theme or None,
       input_summary=user_note,
       output_artifact_paths=result.get("saved_paths") or {},
-      source_artifact_paths=[source_path] if source_path else [],
+      source_artifact_paths=paths,
       error_summary=None if result.get("ok") else str(result.get("message") or result.get("error") or ""),
+      operation_metadata=operation_metadata,
       project_root=output_root,
     )
     result["run_id"] = run_id
@@ -521,10 +575,17 @@ def create_live_digest_preview_from_latest_pack(
   assert_preview_only_operation()
   can_create_live_digest_preview()
 
-  if login_required and not is_authenticated:
-    return _finalize({"ok": False, "error": "login_required", "message": "ログイン後に実行できます。"})
-  if login_required and str(auth_role or "member") != "admin":
-    return _finalize({"ok": False, "error": "admin_required", "message": "管理者のみ実行できます。"})
+  access_ok, access_error, access_message, resolved_ctx = evaluate_digest_preview_access(
+    login_required=login_required,
+    is_authenticated=is_authenticated,
+    auth_role=auth_role,
+    user_context=resolved_ctx,
+  )
+  if not access_ok:
+    return _finalize(
+      {"ok": False, "error": access_error, "message": access_message},
+      operation_metadata=digest_preview_safety_metadata(uses_web_signals=False),
+    )
 
   pack, resolved_path, source_type = resolve_latest_web_signal_pack(output_root)
   pack_path = resolved_path
@@ -549,7 +610,7 @@ def create_live_digest_preview_from_latest_pack(
       "error": "invalid_source_pack",
       "message": "source pack の読み込みに失敗しました。",
     },
-      source_path=str(pack_path),
+      source_paths=[str(pack_path)],
     )
 
   try:
@@ -562,7 +623,7 @@ def create_live_digest_preview_from_latest_pack(
     )
     review = build_web_signal_review(output_root)
     preview = integrate_review_into_preview(preview, review)
-    preview = attach_user_run_metadata(preview, user_context=user_context, run_id=run_id)
+    preview = attach_user_run_metadata(preview, user_context=resolved_ctx, run_id=run_id)
     active, active_path = get_active_watch_profile(output_root)
     if active_path:
       preview["active_watch_profile_path"] = active_path
@@ -573,25 +634,28 @@ def create_live_digest_preview_from_latest_pack(
       record_web_signal_review_run(
         review=review,
         output_root=output_root,
-        user_context=user_context,
+        user_context=resolved_ctx,
         saved_paths=review_saved,
       )
     except (OSError, ValueError):
       review_saved = None
     saved_paths = save_live_digest_preview(preview, output_root)
-    if review.get("artifact_exists"):
-      record_digest_preview_with_web_signals(
-        review=review,
-        digest_paths=saved_paths,
-        output_root=output_root,
-        user_context=user_context,
-        theme_name=str(preview.get("theme_name") or ""),
-      )
+    uses_web_signals = bool(review.get("artifact_exists"))
+    source_paths = [str(pack_path)]
+    web_signal_path = review.get("source_artifact_path")
+    if uses_web_signals and web_signal_path:
+      source_paths.append(str(web_signal_path))
+    action_type = DIGEST_WITH_SIGNALS_ACTION if uses_web_signals else "live_digest_preview"
+    run_metadata = digest_preview_safety_metadata(
+      uses_web_signals=uses_web_signals,
+      signal_count=int(review.get("total_signal_count") or 0),
+    )
   except (OSError, ValueError) as exc:
     return _finalize(
       {"ok": False, "error": "save_failed", "message": str(exc)},
-      source_path=str(pack_path),
+      source_paths=[str(pack_path)],
       theme=str(pack.get("theme_name") or ""),
+      operation_metadata=digest_preview_safety_metadata(uses_web_signals=False),
     )
 
   return _finalize(
@@ -603,7 +667,10 @@ def create_live_digest_preview_from_latest_pack(
     "saved_paths": saved_paths,
     "email_send_disabled": email_send_is_disabled(),
     "source_type": source_type or preview.get("source_type"),
+    "uses_web_signals": uses_web_signals,
   },
-    source_path=str(pack_path),
+    source_paths=source_paths,
     theme=str(preview.get("theme_name") or pack.get("theme_name") or ""),
+    action_type=action_type,
+    operation_metadata=run_metadata,
   )

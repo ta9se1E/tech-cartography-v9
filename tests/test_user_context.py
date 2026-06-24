@@ -73,3 +73,19 @@ def test_evaluate_live_admin_access_requires_login_when_anonymous() -> None:
   )
   assert allowed is False
   assert reason == "login_required"
+
+
+def test_evaluate_live_admin_access_blocks_iap_member() -> None:
+  from tech_cartography.runtime.user_context import build_user_context_from_iap_identity, evaluate_live_admin_access
+
+  member_ctx = build_user_context_from_iap_identity(
+    {"email": "member@example.com", "user_id": "member@example.com", "role": "member"},
+  )
+  allowed, reason, _ = evaluate_live_admin_access(
+    login_required=True,
+    is_authenticated=True,
+    auth_role="member",
+    user_context=member_ctx,
+  )
+  assert allowed is False
+  assert reason == "admin_required"

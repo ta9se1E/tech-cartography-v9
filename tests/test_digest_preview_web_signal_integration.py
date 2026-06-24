@@ -59,3 +59,4 @@ def test_digest_preview_source_no_auto_collect() -> None:
     "src/tech_cartography/services/live_digest_preview.py",
   ).read_text(encoding="utf-8")
   assert "collect_live_web_signals" not in text
+  assert "evaluate_digest_preview_access" in text

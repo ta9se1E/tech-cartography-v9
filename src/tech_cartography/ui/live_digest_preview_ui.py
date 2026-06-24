@@ -15,8 +15,10 @@ from tech_cartography.services.live_digest_preview import (
   can_create_live_digest_preview,
   create_live_digest_preview_from_latest_pack,
   email_send_is_disabled,
+  evaluate_digest_preview_access,
   load_latest_live_digest_preview,
 )
+from tech_cartography.services.live_web_signal_artifact_reader import read_latest_web_signal_artifact_summary
 from tech_cartography.services.live_web_signal_pack import (
   find_latest_live_web_signal_pack_path,
   load_latest_live_web_signal_pack,
@@ -25,7 +27,7 @@ from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info
 from tech_cartography.ui.login_ui import (
   can_use_admin_features,
   get_auth_role,
-  is_basic_authenticated,
+  is_app_authenticated,
 )
 
 
@@ -43,7 +45,15 @@ def render_live_digest_preview_section(
 
   pack_path = find_latest_live_web_signal_pack_path(project_root)
   pack = load_latest_live_web_signal_pack(project_root)
+  web_signal_summary = read_latest_web_signal_artifact_summary(project_root)
+  user_context = resolve_user_context()
   _allowed, guard_message = can_create_live_digest_preview()
+  access_ok, _access_error, access_message, _resolved_ctx = evaluate_digest_preview_access(
+    login_required=is_login_required(),
+    is_authenticated=is_app_authenticated(),
+    auth_role=get_auth_role(),
+    user_context=user_context,
+  )
 
   with st.expander("Live Digest Mail Preview（送信なし）", expanded=False):
     st.markdown(
@@ -58,6 +68,22 @@ def render_live_digest_preview_section(
     if email_send_is_disabled():
       st.caption("メール送信: 無効（DISABLE_EMAIL_SEND=true）— preview のみ")
 
+    if access_ok:
+      st.markdown(render_info_box("Digest Preview 作成: 実行可能（admin）"), unsafe_allow_html=True)
+    else:
+      st.markdown(render_warning_box(f"Digest Preview 作成: {access_message}"), unsafe_allow_html=True)
+
+    if web_signal_summary.get("artifact_exists"):
+      st.markdown(
+        render_info_box(
+          "既存 Web Signal artifact を Digest Preview へ参照統合します。外部 API は呼びません。"
+        ),
+        unsafe_allow_html=True,
+      )
+      st.caption(f"web signal artifact: {web_signal_summary.get('artifact_path')}")
+    else:
+      st.caption("Web Signal候補はまだ収集されていません。")
+
     if not pack_path or not pack:
       st.markdown(
         render_warning_box("latest live_web_signal_pack が見つかりません。先に Web Signal Pack を作成してください。"),
@@ -67,6 +93,10 @@ def render_live_digest_preview_section(
 
     st.caption(f"source pack: {pack_path}")
     st.markdown(f"**theme_name:** {pack.get('theme_name')}")
+    st.caption(
+      f"auth: user_id={user_context.get('user_id')} | "
+      f"provider={user_context.get('auth_provider')} | role={user_context.get('role')}"
+    )
     st.caption(guard_message)
 
     recipient_group_name = st.text_input(
@@ -81,16 +111,16 @@ def render_live_digest_preview_section(
       height=80,
     )
 
-    if st.button("メール下書きを作成", key=f"{key_prefix}_create", type="primary"):
+    if st.button("メール下書きを作成", key=f"{key_prefix}_create", type="primary", disabled=not access_ok):
       result = create_live_digest_preview_from_latest_pack(
         output_root=project_root,
         theme_name=str(pack.get("theme_name") or ""),
         recipient_group_name=recipient_group_name,
         user_note=user_note,
         login_required=is_login_required(),
-        is_authenticated=is_basic_authenticated(),
+        is_authenticated=is_app_authenticated(),
         auth_role=get_auth_role(),
-        user_context=resolve_user_context(),
+        user_context=user_context,
       )
       st.session_state[f"{key_prefix}_last_result"] = result
 

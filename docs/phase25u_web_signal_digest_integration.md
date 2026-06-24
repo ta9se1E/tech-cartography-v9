@@ -49,8 +49,35 @@ artifact がない場合: 「Web Signal候補はまだ収集されていませ�
 
 | action_type | 意味 |
 |-------------|------|
+| `live_digest_preview` | Web Signal artifact なしで Digest 保存（`uses_web_signals=false`） |
 | `live_web_signal_review` | Review 生成・保存 |
-| `live_digest_preview_with_web_signals` | Web Signal 統合付き Digest 保存 |
+| `live_digest_preview_with_web_signals` | Web Signal artifact 参照付き Digest 保存 |
+
+### IAP admin で Digest Preview を実行
+
+IAP ログイン済み admin（例: `ta9se1@gmail.com`）は Digest Preview 作成が許可されます。
+UI / サービスは `user_context`（`auth_provider=google_iap`, `role=admin`）を優先し、
+旧 Basic ログイン session だけを見て blocked にしません。
+
+### 成功時の Run History 期待値
+
+| フィールド | 期待値 |
+|-----------|--------|
+| `user_id` | `ta9se1@gmail.com`（IAP email） |
+| `auth_provider` | `google_iap` |
+| `role` | `admin` |
+| `status` | `success` |
+| `output_artifact_paths` | Digest Preview の `json` / `markdown` / `text` |
+| `source_artifact_paths` | pack path +（Web Signal あり時）collection artifact path |
+| `operation_metadata.uses_web_signals` | `true` / `false` |
+
+### blocked 時の見方
+
+- `status=blocked` かつ `error_summary=ログイン後に実行できます。` だが
+  `auth_provider=google_iap` / `role=admin` が記録されている場合 → **認証ガード不整合**（Phase 25U.1 で修正対象）
+- `admin権限が必要です。` → IAP member など admin 以外
+- Digest Preview 作成は外部 API を呼びません（Tavily なし）
+- Web Signal は候補情報のみ（FTO / 侵害 / 有効性判断なし）
 
 ## デモ時の見せ方
 

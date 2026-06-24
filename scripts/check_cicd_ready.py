@@ -248,6 +248,18 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
     if "candidate_information_only" not in review_text:
       failures.append("live_web_signal_review missing candidate_information_only flag")
 
+  digest_service = PROJECT_ROOT / "src/tech_cartography/services/live_digest_preview.py"
+  if digest_service.exists():
+    digest_svc_text = _read(digest_service)
+    if "collect_live_web_signals" in digest_svc_text:
+      failures.append("live_digest_preview must not auto-call web signal collector")
+    if "evaluate_digest_preview_access" not in digest_svc_text and "evaluate_live_admin_access" not in digest_svc_text:
+      failures.append("live_digest_preview missing IAP-safe auth guard")
+    if "candidate_information_only" not in digest_svc_text:
+      failures.append("live_digest_preview missing candidate_information_only metadata")
+    if "fto_judgement" not in digest_svc_text:
+      failures.append("live_digest_preview missing fto_judgement safety flag")
+
   send_safety_docs = PROJECT_ROOT / "docs/phase25q2_send_safety_reset.md"
   if send_safety_docs.exists():
     passes.append(f"artifact exists: {send_safety_docs.relative_to(PROJECT_ROOT)}")

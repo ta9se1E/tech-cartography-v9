@@ -137,6 +137,7 @@ def test_create_blocked_for_non_admin(tmp_path: Path, sample_pack: dict) -> None
   )
   assert result["ok"] is False
   assert result["error"] == "admin_required"
+  assert result["message"] == "admin権限が必要です。"
 
 
 def test_no_email_send_function_called(tmp_path: Path, sample_pack: dict) -> None:

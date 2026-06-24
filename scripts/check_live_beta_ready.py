@@ -683,6 +683,17 @@ def main() -> int:
     failures.append("phase25u docs に Digest Preview 説明がありません")
   if "外部API" not in review_ui_text and "候補情報" not in review_ui_text:
     failures.append("live_web_signal_review_ui に safety notice がありません")
+  if "evaluate_live_admin_access" not in digest_text and "evaluate_digest_preview_access" not in digest_text:
+    failures.append("live_digest_preview が IAP-safe admin access guard を使っていません")
+  if "is_basic_authenticated" in digest_text:
+    failures.append("live_digest_preview が旧 Basic ログイン専用ガードに依存しています")
+  if "admin権限が必要です" not in digest_text:
+    failures.append("live_digest_preview に admin権限メッセージがありません")
+  digest_ui_text = _read(digest_ui)
+  if "is_app_authenticated" not in digest_ui_text:
+    failures.append("live_digest_preview_ui が is_app_authenticated を使っていません")
+  if "is_basic_authenticated" in digest_ui_text:
+    failures.append("live_digest_preview_ui が旧 Basic ログイン専用ガードに依存しています")
 
   pack_service_text = _read(pack_service)
   if "live_artifact_paths" not in pack_service_text:

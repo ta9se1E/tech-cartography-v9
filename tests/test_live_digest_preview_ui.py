@@ -35,6 +35,10 @@ def test_digest_preview_ui_has_no_send_button() -> None:
   assert "smtp" not in text.lower()
   assert "sendgrid" not in text.lower()
   assert "gmail" not in text.lower()
+  assert "is_app_authenticated" in text
+  assert "is_basic_authenticated" not in text
+  assert "admin権限が必要です" in text or "evaluate_digest_preview_access" in text
+  assert "既存 Web Signal artifact" in text
 
 
 def test_demo_mode_hides_admin_digest_ui(monkeypatch: pytest.MonkeyPatch) -> None:

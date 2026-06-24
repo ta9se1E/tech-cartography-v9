@@ -151,6 +151,11 @@ def sanitize_operation_metadata(metadata: dict[str, Any] | None) -> dict[str, An
       "candidate_information_only",
       "no_external_api_call",
       "signal_count",
+      "uses_web_signals",
+      "legal_judgement",
+      "fto_judgement",
+      "infringement_judgement",
+      "validity_judgement",
     },
   )
   safe: dict[str, Any] = {}

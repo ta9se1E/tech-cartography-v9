@@ -22,6 +22,7 @@ def test_digest_integrates_without_auto_collect() -> None:
   text = DIGEST_PATH.read_text(encoding="utf-8")
   assert "integrate_review_into_preview" in text
   assert "collect_live_web_signals" not in text
+  assert "evaluate_digest_preview_access" in text
 
 
 def test_review_has_candidate_only_notice() -> None:
