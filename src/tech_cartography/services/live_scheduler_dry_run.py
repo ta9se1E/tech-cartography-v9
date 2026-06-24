@@ -20,6 +20,8 @@ from tech_cartography.services.live_run_history import (
   map_result_status,
   record_live_run,
 )
+from tech_cartography.services.live_evidence_gap_builder import find_latest_evidence_gap_path
+from tech_cartography.services.live_strategic_watch_brief import find_latest_strategic_watch_brief_path
 from tech_cartography.services.live_web_signal_collector import find_latest_web_signal_collection_path
 from tech_cartography.services.live_watch_profile_manager import (
   describe_watch_profile_status,
@@ -46,6 +48,8 @@ def _planned_steps(*, has_active_profile: bool, has_web_signal_collection: bool)
     "confirm_existing_web_signal_artifact",
     "review_latest_web_signal_collection",
     "review_digest_preview_artifact",
+    "confirm_evidence_gap_artifact",
+    "confirm_strategic_watch_brief_artifact",
     "review_next_cycle_search_plan",
     "human_approval_checkpoint",
   ]
@@ -77,12 +81,18 @@ def run_live_scheduler_dry_run(
 
   active, active_path = get_active_watch_profile(output_root)
   collection_path = find_latest_web_signal_collection_path(output_root)
+  evidence_gap_path = find_latest_evidence_gap_path(output_root)
+  strategic_brief_path = find_latest_strategic_watch_brief_path(output_root)
   profile_status = describe_watch_profile_status(output_root)
   warnings: list[str] = []
   if not active:
     warnings.append("active Watch Profile がありません。dry-run は計画のみで実行しません。")
   if not collection_path:
     warnings.append("最新 Web Signal collection artifact がありません。")
+  if not evidence_gap_path:
+    warnings.append("最新 Evidence Gap artifact がありません。")
+  if not strategic_brief_path:
+    warnings.append("最新 Strategic Watch Brief artifact がありません。")
   if not is_scheduler_disabled():
     warnings.append("DISABLE_SCHEDULER=false です。本番 scheduler は起動しませんが env を確認してください。")
 
@@ -94,6 +104,8 @@ def run_live_scheduler_dry_run(
     "active_watch_profile_path": active_path,
     "active_watch_profile_theme": (active or {}).get("theme_name"),
     "latest_web_signal_collection_path": str(collection_path) if collection_path else None,
+    "latest_evidence_gap_artifact_path": str(evidence_gap_path) if evidence_gap_path else None,
+    "latest_strategic_watch_brief_path": str(strategic_brief_path) if strategic_brief_path else None,
     "planned_steps": _planned_steps(
       has_active_profile=bool(active),
       has_web_signal_collection=bool(collection_path),

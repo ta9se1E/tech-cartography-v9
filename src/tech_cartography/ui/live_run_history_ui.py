@@ -55,7 +55,8 @@ def render_run_history_section(
         filter_action = st.selectbox(
           "action_type",
           options=["(all)", "live_web_signal_pack", "live_digest_preview", "live_digest_preview_with_web_signals",
-                   "live_web_signal_review", "live_web_signal_collection", "self_only_email_send",
+                   "live_web_signal_review", "live_web_signal_collection", "live_evidence_gap_build",
+                   "live_strategic_watch_brief_build", "self_only_email_send",
                    "watch_expansion_proposal", "watch_profile_draft", "next_cycle_search_plan",
                    "next_cycle_web_signal_pack", "live_operation_status", "live_beta_release_pack"],
           key=f"{key_prefix}_filter_action",

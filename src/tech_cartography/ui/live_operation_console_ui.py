@@ -155,7 +155,19 @@ def render_live_operation_console_section(
     st.caption(f"digest uses web signals: {status.get('latest_digest_preview_uses_web_signals')}")
     st.caption(str(status.get("web_signal_collection_next_recommended_action") or ""))
     st.caption(str(status.get("web_signal_digest_next_recommended_action") or ""))
+    st.markdown("**Evidence Gap / Strategic Watch Brief**")
+    st.caption(
+      f"evidence_gap={status.get('latest_evidence_gap_artifact_path') or '(none)'} | "
+      f"count={status.get('latest_evidence_gap_count')}"
+    )
+    st.caption(
+      f"strategic_brief={status.get('latest_strategic_watch_brief_path') or '(none)'} | "
+      f"next_actions={status.get('latest_next_verification_action_count')}"
+    )
+    st.caption(str(status.get("evidence_gap_brief_next_recommended_action") or ""))
 
+    from tech_cartography.ui.live_evidence_gap_ui import render_live_evidence_gap_section
+    from tech_cartography.ui.live_strategic_watch_brief_ui import render_live_strategic_watch_brief_section
     from tech_cartography.ui.live_web_signal_review_ui import render_live_web_signal_review_section
     from tech_cartography.ui.live_web_signal_collection_ui import render_live_web_signal_collection_section
     from tech_cartography.ui.live_watch_profile_ui import render_live_watch_profile_section
@@ -170,6 +182,8 @@ def render_live_operation_console_section(
       key_prefix=f"{key_prefix}_web_signal_collection",
     )
     render_live_watch_profile_section(project_root=project_root, key_prefix=f"{key_prefix}_watch_profile")
+    render_live_evidence_gap_section(project_root=project_root, key_prefix=f"{key_prefix}_evidence_gap")
+    render_live_strategic_watch_brief_section(project_root=project_root, key_prefix=f"{key_prefix}_strategic_brief")
     render_live_scheduler_dry_run_section(project_root=project_root, key_prefix=f"{key_prefix}_scheduler_dry_run")
 
     history_summary = status.get("run_history_summary") or {}

@@ -141,9 +141,15 @@ def render_live_digest_preview_section(
 
     if preview.get("web_signal_section_markdown"):
       st.markdown("---")
+      st.markdown("**Web Signal候補**")
       st.markdown(preview["web_signal_section_markdown"])
     elif preview.get("uses_web_signals") is False:
       st.caption("Web Signal候補はまだ収集されていません。")
+
+    if preview.get("strategic_watch_reference_markdown"):
+      st.markdown("---")
+      st.markdown("**Strategic Watch References（Evidence Gap / Brief — 参照のみ）**")
+      st.markdown(preview["strategic_watch_reference_markdown"])
 
     saved_paths = last_result.get("saved_paths") or {}
     for label in ("json", "markdown", "text"):

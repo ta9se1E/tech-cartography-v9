@@ -260,6 +260,29 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
     if "fto_judgement" not in digest_svc_text:
       failures.append("live_digest_preview missing fto_judgement safety flag")
 
+  phase25v_docs = PROJECT_ROOT / "docs/phase25v_evidence_gap_strategic_watch_brief.md"
+  evidence_gap_builder = PROJECT_ROOT / "src/tech_cartography/services/live_evidence_gap_builder.py"
+  strategic_brief = PROJECT_ROOT / "src/tech_cartography/services/live_strategic_watch_brief.py"
+  if not phase25v_docs.exists():
+    failures.append("missing: docs/phase25v_evidence_gap_strategic_watch_brief.md")
+  else:
+    passes.append("phase25v evidence gap docs present")
+  for path, label in (
+    (PROJECT_ROOT / "src/tech_cartography/runtime/evidence_gap_schema.py", "evidence_gap_schema.py"),
+    (evidence_gap_builder, "live_evidence_gap_builder.py"),
+    (strategic_brief, "live_strategic_watch_brief.py"),
+    (PROJECT_ROOT / "src/tech_cartography/ui/live_evidence_gap_ui.py", "live_evidence_gap_ui.py"),
+    (PROJECT_ROOT / "src/tech_cartography/ui/live_strategic_watch_brief_ui.py", "live_strategic_watch_brief_ui.py"),
+  ):
+    if not path.exists():
+      failures.append(f"missing: {label}")
+    else:
+      passes.append(f"artifact exists: {path.relative_to(PROJECT_ROOT)}")
+  if evidence_gap_builder.exists():
+    gap_text = _read(evidence_gap_builder)
+    if "deep_research" in gap_text.lower() or "collect_live_web_signals" in gap_text:
+      failures.append("live_evidence_gap_builder must not call external API")
+
   send_safety_docs = PROJECT_ROOT / "docs/phase25q2_send_safety_reset.md"
   if send_safety_docs.exists():
     passes.append(f"artifact exists: {send_safety_docs.relative_to(PROJECT_ROOT)}")

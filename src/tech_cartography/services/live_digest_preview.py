@@ -40,6 +40,62 @@ from tech_cartography.services.live_web_signal_review import (
   save_web_signal_review,
 )
 
+
+def attach_strategic_watch_artifact_references(
+  preview: dict[str, Any],
+  output_root: Path | str,
+) -> dict[str, Any]:
+  """Attach latest Evidence Gap / Strategic Watch Brief paths — read only, no rebuild."""
+  from tech_cartography.services.live_evidence_gap_builder import (
+    find_latest_evidence_gap_path,
+    load_evidence_gap_artifact,
+  )
+  from tech_cartography.services.live_strategic_watch_brief import (
+    find_latest_strategic_watch_brief_path,
+    load_strategic_watch_brief,
+  )
+
+  merged = dict(preview)
+  gap_path = find_latest_evidence_gap_path(output_root)
+  brief_path = find_latest_strategic_watch_brief_path(output_root)
+  gap_artifact = load_evidence_gap_artifact(gap_path) if gap_path else None
+  brief_artifact = load_strategic_watch_brief(brief_path) if brief_path else None
+
+  merged["latest_evidence_gap_artifact_path"] = str(gap_path) if gap_path else None
+  merged["latest_strategic_watch_brief_path"] = str(brief_path) if brief_path else None
+  merged["latest_evidence_gap_count"] = len((gap_artifact or {}).get("evidence_gaps") or [])
+  merged["latest_next_verification_action_count"] = len(
+    (gap_artifact or {}).get("next_verification_actions")
+    or (brief_artifact or {}).get("next_verification_actions")
+    or [],
+  )
+
+  ref_lines = ["## Strategic Watch References", ""]
+  if gap_path:
+    ref_lines.extend(
+      [
+        "### Evidence Gap（参照のみ）",
+        f"- artifact: {gap_path}",
+        f"- gap_count: {merged['latest_evidence_gap_count']}",
+        "",
+      ],
+    )
+  if brief_path:
+    ref_lines.extend(
+      [
+        "### Strategic Watch Brief（参照のみ）",
+        f"- artifact: {brief_path}",
+        "",
+      ],
+    )
+  if gap_path or brief_path:
+    ref_lines.append("> Evidence Gap / Brief は別 artifact です。Digest 作成時に自動再生成しません。")
+    section = "\n".join(ref_lines).strip() + "\n"
+    merged["strategic_watch_reference_markdown"] = section
+    merged["markdown_body"] = str(merged.get("markdown_body") or "").rstrip() + "\n\n" + section
+    merged["plain_text_body"] = str(merged.get("plain_text_body") or "").rstrip() + "\n\n" + section.replace("##", "===").replace("###", "---")
+  return merged
+
 def resolve_latest_web_signal_pack(
   output_root: Path | str,
 ) -> tuple[dict[str, Any] | None, Path | None, str | None]:
@@ -470,6 +526,10 @@ def build_save_payload(preview: dict[str, Any], *, output_root: Path | str | Non
     "source_web_signal_artifact": preview.get("source_web_signal_artifact"),
     "web_signal_result_count": (preview.get("web_signal_review") or {}).get("total_signal_count"),
     "web_signal_review_id": (preview.get("web_signal_review") or {}).get("review_id"),
+    "latest_evidence_gap_artifact_path": preview.get("latest_evidence_gap_artifact_path"),
+    "latest_strategic_watch_brief_path": preview.get("latest_strategic_watch_brief_path"),
+    "latest_evidence_gap_count": preview.get("latest_evidence_gap_count"),
+    "latest_next_verification_action_count": preview.get("latest_next_verification_action_count"),
   }
   return copy_user_run_metadata(payload, preview)
 
@@ -623,6 +683,7 @@ def create_live_digest_preview_from_latest_pack(
     )
     review = build_web_signal_review(output_root)
     preview = integrate_review_into_preview(preview, review)
+    preview = attach_strategic_watch_artifact_references(preview, output_root)
     preview = attach_user_run_metadata(preview, user_context=resolved_ctx, run_id=run_id)
     active, active_path = get_active_watch_profile(output_root)
     if active_path:

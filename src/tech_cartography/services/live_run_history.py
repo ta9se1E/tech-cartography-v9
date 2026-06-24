@@ -33,6 +33,8 @@ ACTION_TYPES: frozenset[str] = frozenset(
     "live_web_signal_collection",
     "live_web_signal_review",
     "live_digest_preview_with_web_signals",
+    "live_evidence_gap_build",
+    "live_strategic_watch_brief_build",
     "watch_expansion_proposal",
     "watch_profile_draft",
     "next_cycle_search_plan",
@@ -156,6 +158,8 @@ def sanitize_operation_metadata(metadata: dict[str, Any] | None) -> dict[str, An
       "fto_judgement",
       "infringement_judgement",
       "validity_judgement",
+      "gap_count",
+      "next_action_count",
     },
   )
   safe: dict[str, Any] = {}

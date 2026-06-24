@@ -139,6 +139,12 @@ def main() -> int:
   web_signal_review_service = PROJECT_ROOT / "src/tech_cartography/services/live_web_signal_review.py"
   web_signal_review_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_web_signal_review_ui.py"
   web_signal_digest_docs = PROJECT_ROOT / "docs/phase25u_web_signal_digest_integration.md"
+  evidence_gap_schema = PROJECT_ROOT / "src/tech_cartography/runtime/evidence_gap_schema.py"
+  evidence_gap_builder = PROJECT_ROOT / "src/tech_cartography/services/live_evidence_gap_builder.py"
+  strategic_watch_brief = PROJECT_ROOT / "src/tech_cartography/services/live_strategic_watch_brief.py"
+  evidence_gap_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_evidence_gap_ui.py"
+  strategic_watch_brief_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_strategic_watch_brief_ui.py"
+  phase25v_docs = PROJECT_ROOT / "docs/phase25v_evidence_gap_strategic_watch_brief.md"
 
   for path in (
     module_path,
@@ -214,6 +220,12 @@ def main() -> int:
     web_signal_artifact_reader,
     web_signal_review_service,
     web_signal_review_ui,
+    evidence_gap_schema,
+    evidence_gap_builder,
+    strategic_watch_brief,
+    evidence_gap_ui,
+    strategic_watch_brief_ui,
+    phase25v_docs,
     web_signal_digest_docs,
   ):
     if not path.exists():
@@ -695,6 +707,27 @@ def main() -> int:
   if "is_basic_authenticated" in digest_ui_text:
     failures.append("live_digest_preview_ui が旧 Basic ログイン専用ガードに依存しています")
 
+  gap_builder_text = _read(evidence_gap_builder)
+  brief_text = _read(strategic_watch_brief)
+  for action in ("live_evidence_gap_build", "live_strategic_watch_brief_build"):
+    if action not in run_history_text:
+      failures.append(f"live_run_history に {action} がありません")
+  for forbidden in ("smtplib", "send_email", "urllib", "deep_research", "collect_live_web_signals"):
+    if forbidden in gap_builder_text.lower():
+      failures.append(f"live_evidence_gap_builder が禁止操作 {forbidden} を含みます")
+    if forbidden in brief_text.lower():
+      failures.append(f"live_strategic_watch_brief が禁止操作 {forbidden} を含みます")
+  if "default_safety_flags" not in gap_builder_text:
+    failures.append("live_evidence_gap_builder に safety flags がありません")
+  if "WHAT_NOT_TO_CONCLUDE" not in gap_builder_text:
+    failures.append("live_evidence_gap_builder に What Not To Conclude がありません")
+  if "attach_strategic_watch_artifact_references" not in digest_text:
+    failures.append("live_digest_preview が Strategic Watch artifact 参照を含みません")
+  if "confirm_evidence_gap_artifact" not in scheduler_text:
+    failures.append("live_scheduler_dry_run に confirm_evidence_gap_artifact がありません")
+  if "Evidence Gap" not in _read(phase25v_docs):
+    failures.append("phase25v docs に Evidence Gap 説明がありません")
+
   pack_service_text = _read(pack_service)
   if "live_artifact_paths" not in pack_service_text:
     failures.append("live_web_signal_pack が live_artifact_paths を使っていません")
@@ -749,6 +782,7 @@ def main() -> int:
   print(f"scheduler dry-run: {'yes' if scheduler_dry_run_service.exists() else 'no'}")
   print(f"controlled web signal collection: {'yes' if web_signal_collector.exists() else 'no'}")
   print(f"web signal digest integration: {'yes' if web_signal_review_service.exists() else 'no'}")
+  print(f"evidence gap strategic brief: {'yes' if evidence_gap_builder.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

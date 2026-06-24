@@ -41,6 +41,8 @@ from tech_cartography.runtime.external_api_operation_config import describe_exte
 from tech_cartography.services.live_watch_profile_manager import describe_watch_profile_status
 from tech_cartography.services.live_web_signal_artifact_reader import describe_latest_web_signal_artifact
 from tech_cartography.services.live_web_signal_collector import describe_latest_web_signal_collection
+from tech_cartography.services.live_evidence_gap_builder import describe_latest_evidence_gap
+from tech_cartography.services.live_strategic_watch_brief import describe_latest_strategic_watch_brief
 from tech_cartography.services.watch_profile_draft import (
   find_latest_watch_profile_draft_path,
   load_watch_profile_draft_with_status,
@@ -227,6 +229,17 @@ def _digest_preview_uses_web_signals(project_root: Path | str | None) -> bool:
   if preview.get("uses_web_signals"):
     return True
   return bool(preview.get("source_web_signal_artifact") or preview.get("web_signal_review_id"))
+
+
+def _evidence_gap_brief_next_action(
+  gap_info: dict[str, Any],
+  brief_info: dict[str, Any],
+) -> str:
+  if not gap_info.get("latest_evidence_gap_artifact_exists"):
+    return "Evidence Gap を手動生成し、未確認事項を構造化してください。"
+  if not brief_info.get("latest_strategic_watch_brief_exists"):
+    return "Strategic Watch Brief を手動生成し、週30分で読める優先確認事項を確認してください。"
+  return "Strategic Watch Brief の Next Verification Actions（優先3件）を人間が確認してください。"
 
 
 def _web_signal_collection_next_action(
@@ -445,6 +458,8 @@ def build_operation_cycle_status(
   external_api_info = describe_external_api_collection_runtime()
   web_signal_collection_info = describe_latest_web_signal_collection(project_root or Path.cwd())
   web_signal_artifact_info = describe_latest_web_signal_artifact(project_root or Path.cwd())
+  evidence_gap_info = describe_latest_evidence_gap(project_root or Path.cwd())
+  strategic_brief_info = describe_latest_strategic_watch_brief(project_root or Path.cwd())
   digest_uses_web_signals = _digest_preview_uses_web_signals(project_root)
   if watch_profile_info.get("watch_profile_status") == "no_active_profile":
     warnings.append("active Watch Profile がありません。週次監視条件を draft 作成後に active 化してください。")
@@ -509,6 +524,19 @@ def build_operation_cycle_status(
     "web_signal_digest_next_recommended_action": _web_signal_digest_next_action(
       web_signal_artifact_info,
       digest_uses_web_signals,
+    ),
+    "latest_evidence_gap_artifact_exists": evidence_gap_info.get("latest_evidence_gap_artifact_exists"),
+    "latest_evidence_gap_artifact_path": evidence_gap_info.get("latest_evidence_gap_artifact_path"),
+    "latest_evidence_gap_count": evidence_gap_info.get("latest_evidence_gap_count"),
+    "latest_strategic_watch_brief_exists": strategic_brief_info.get("latest_strategic_watch_brief_exists"),
+    "latest_strategic_watch_brief_path": strategic_brief_info.get("latest_strategic_watch_brief_path"),
+    "latest_next_verification_action_count": max(
+      int(evidence_gap_info.get("latest_next_verification_action_count") or 0),
+      int(strategic_brief_info.get("latest_next_verification_action_count") or 0),
+    ),
+    "evidence_gap_brief_next_recommended_action": _evidence_gap_brief_next_action(
+      evidence_gap_info,
+      strategic_brief_info,
     ),
     "latest_artifact_paths": latest_artifact_paths,
     "operation_cycle_status": step_statuses,
