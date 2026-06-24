@@ -150,12 +150,21 @@ def render_live_operation_console_section(
         f"status={status.get('latest_web_signal_collection_status')} | "
         f"results={status.get('latest_web_signal_result_count')}"
       )
+    if status.get("latest_web_signal_artifact_path"):
+      st.caption(f"latest web signal artifact: {status.get('latest_web_signal_artifact_path')}")
+    st.caption(f"digest uses web signals: {status.get('latest_digest_preview_uses_web_signals')}")
     st.caption(str(status.get("web_signal_collection_next_recommended_action") or ""))
+    st.caption(str(status.get("web_signal_digest_next_recommended_action") or ""))
 
+    from tech_cartography.ui.live_web_signal_review_ui import render_live_web_signal_review_section
     from tech_cartography.ui.live_web_signal_collection_ui import render_live_web_signal_collection_section
     from tech_cartography.ui.live_watch_profile_ui import render_live_watch_profile_section
     from tech_cartography.ui.live_scheduler_dry_run_ui import render_live_scheduler_dry_run_section
 
+    render_live_web_signal_review_section(
+      project_root=project_root,
+      key_prefix=f"{key_prefix}_web_signal_review",
+    )
     render_live_web_signal_collection_section(
       project_root=project_root,
       key_prefix=f"{key_prefix}_web_signal_collection",

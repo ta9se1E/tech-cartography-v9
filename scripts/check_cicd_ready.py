@@ -224,6 +224,30 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
     if "legal_judgement" not in coll:
       failures.append("live_web_signal_collector missing legal_judgement safety flag")
 
+  web_signal_digest_docs = PROJECT_ROOT / "docs/phase25u_web_signal_digest_integration.md"
+  web_signal_artifact_reader = PROJECT_ROOT / "src/tech_cartography/services/live_web_signal_artifact_reader.py"
+  web_signal_review_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_web_signal_review_ui.py"
+  web_signal_review = PROJECT_ROOT / "src/tech_cartography/services/live_web_signal_review.py"
+  if not web_signal_digest_docs.exists():
+    failures.append("missing: docs/phase25u_web_signal_digest_integration.md")
+  else:
+    passes.append("phase25u web signal digest docs present")
+  for path, label in (
+    (web_signal_artifact_reader, "live_web_signal_artifact_reader.py"),
+    (web_signal_review, "live_web_signal_review.py"),
+    (web_signal_review_ui, "live_web_signal_review_ui.py"),
+  ):
+    if not path.exists():
+      failures.append(f"missing: {label}")
+    else:
+      passes.append(f"artifact exists: {path.relative_to(PROJECT_ROOT)}")
+  if web_signal_review.exists():
+    review_text = _read(web_signal_review)
+    if "collect_live_web_signals" in review_text or "_default_post_tavily" in review_text:
+      failures.append("live_web_signal_review must not call external API")
+    if "candidate_information_only" not in review_text:
+      failures.append("live_web_signal_review missing candidate_information_only flag")
+
   send_safety_docs = PROJECT_ROOT / "docs/phase25q2_send_safety_reset.md"
   if send_safety_docs.exists():
     passes.append(f"artifact exists: {send_safety_docs.relative_to(PROJECT_ROOT)}")

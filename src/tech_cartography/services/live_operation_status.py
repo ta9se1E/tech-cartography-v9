@@ -39,6 +39,7 @@ from tech_cartography.services.live_run_history import (
 )
 from tech_cartography.runtime.external_api_operation_config import describe_external_api_collection_runtime
 from tech_cartography.services.live_watch_profile_manager import describe_watch_profile_status
+from tech_cartography.services.live_web_signal_artifact_reader import describe_latest_web_signal_artifact
 from tech_cartography.services.live_web_signal_collector import describe_latest_web_signal_collection
 from tech_cartography.services.watch_profile_draft import (
   find_latest_watch_profile_draft_path,
@@ -204,6 +205,28 @@ def _build_step(
     "next_action": next_action,
     "guidance": STEP_GUIDANCE.get(step_name, ""),
   }
+
+
+def _web_signal_digest_next_action(
+  artifact_info: dict[str, Any],
+  digest_uses_web_signals: bool,
+) -> str:
+  if not artifact_info.get("latest_web_signal_artifact_exists"):
+    return "Web Signal 手動収集後、Digest Preview に候補セクションを統合してください。"
+  if not digest_uses_web_signals:
+    return "最新 Web Signal artifact を確認し、Digest Preview を手動作成してください。"
+  return "Digest Preview の Web Signal候補セクションを人間が確認してください（候補情報のみ）。"
+
+
+def _digest_preview_uses_web_signals(project_root: Path | str | None) -> bool:
+  from tech_cartography.services.live_digest_preview import load_latest_live_digest_preview
+
+  preview = load_latest_live_digest_preview(project_root or Path.cwd())
+  if not preview:
+    return False
+  if preview.get("uses_web_signals"):
+    return True
+  return bool(preview.get("source_web_signal_artifact") or preview.get("web_signal_review_id"))
 
 
 def _web_signal_collection_next_action(
@@ -421,6 +444,8 @@ def build_operation_cycle_status(
   watch_profile_info = describe_watch_profile_status(project_root or Path.cwd())
   external_api_info = describe_external_api_collection_runtime()
   web_signal_collection_info = describe_latest_web_signal_collection(project_root or Path.cwd())
+  web_signal_artifact_info = describe_latest_web_signal_artifact(project_root or Path.cwd())
+  digest_uses_web_signals = _digest_preview_uses_web_signals(project_root)
   if watch_profile_info.get("watch_profile_status") == "no_active_profile":
     warnings.append("active Watch Profile がありません。週次監視条件を draft 作成後に active 化してください。")
   elif watch_profile_info.get("watch_profile_status") == "draft_waiting_approval":
@@ -477,6 +502,13 @@ def build_operation_cycle_status(
       external_api_info,
       watch_profile_info,
       web_signal_collection_info,
+    ),
+    "latest_web_signal_artifact_exists": web_signal_artifact_info.get("latest_web_signal_artifact_exists"),
+    "latest_web_signal_artifact_path": web_signal_artifact_info.get("latest_web_signal_artifact_path"),
+    "latest_digest_preview_uses_web_signals": digest_uses_web_signals,
+    "web_signal_digest_next_recommended_action": _web_signal_digest_next_action(
+      web_signal_artifact_info,
+      digest_uses_web_signals,
     ),
     "latest_artifact_paths": latest_artifact_paths,
     "operation_cycle_status": step_statuses,

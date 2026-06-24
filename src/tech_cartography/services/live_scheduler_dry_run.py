@@ -43,6 +43,7 @@ def _planned_steps(*, has_active_profile: bool, has_web_signal_collection: bool)
   steps = [
     "verify_runtime_flags",
     "verify_active_watch_profile",
+    "confirm_existing_web_signal_artifact",
     "review_latest_web_signal_collection",
     "review_digest_preview_artifact",
     "review_next_cycle_search_plan",

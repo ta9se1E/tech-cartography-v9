@@ -135,6 +135,10 @@ def main() -> int:
   web_signal_collector = PROJECT_ROOT / "src/tech_cartography/services/live_web_signal_collector.py"
   web_signal_collection_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_web_signal_collection_ui.py"
   web_signal_collection_docs = PROJECT_ROOT / "docs/phase25t_controlled_web_signal_collection.md"
+  web_signal_artifact_reader = PROJECT_ROOT / "src/tech_cartography/services/live_web_signal_artifact_reader.py"
+  web_signal_review_service = PROJECT_ROOT / "src/tech_cartography/services/live_web_signal_review.py"
+  web_signal_review_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_web_signal_review_ui.py"
+  web_signal_digest_docs = PROJECT_ROOT / "docs/phase25u_web_signal_digest_integration.md"
 
   for path in (
     module_path,
@@ -207,6 +211,10 @@ def main() -> int:
     web_signal_collector,
     web_signal_collection_ui,
     web_signal_collection_docs,
+    web_signal_artifact_reader,
+    web_signal_review_service,
+    web_signal_review_ui,
+    web_signal_digest_docs,
   ):
     if not path.exists():
       failures.append(f"missing: {path.relative_to(PROJECT_ROOT)}")
@@ -650,6 +658,32 @@ def main() -> int:
   if is_manual_web_signal_collection_enabled():
     warnings.append("ENABLE_MANUAL_WEB_SIGNAL_COLLECTION=true — deploy デフォルトは false 推奨")
 
+  review_service_text = _read(web_signal_review_service)
+  review_ui_text = _read(web_signal_review_ui)
+  for action in ("live_web_signal_review", "live_digest_preview_with_web_signals"):
+    if action not in run_history_text:
+      failures.append(f"live_run_history に {action} がありません")
+  if "collect_live_web_signals" in review_service_text:
+    failures.append("live_web_signal_review が collector を自動呼び出ししています")
+  if "urllib" in review_service_text or "_default_post_tavily" in review_service_text:
+    failures.append("live_web_signal_review が外部APIを呼びます")
+  if "candidate_only_notice" not in review_service_text:
+    failures.append("live_web_signal_review に candidate_only_notice がありません")
+  if "fto_judgement" not in review_service_text:
+    failures.append("live_web_signal_review に fto_judgement safety flag がありません")
+  if "integrate_review_into_preview" not in digest_text:
+    failures.append("live_digest_preview が Web Signal Review 統合を含みません")
+  if "Web Signal候補" not in review_service_text:
+    failures.append("live_web_signal_review に Web Signal候補 section がありません")
+  if "smtplib" in review_service_text or "send_email" in review_service_text:
+    failures.append("live_web_signal_review がメール送信コードを含みます")
+  if "confirm_existing_web_signal_artifact" not in scheduler_text:
+    failures.append("live_scheduler_dry_run に confirm_existing_web_signal_artifact がありません")
+  if "phase25u" not in _read(web_signal_digest_docs).lower() and "Digest Preview" not in _read(web_signal_digest_docs):
+    failures.append("phase25u docs に Digest Preview 説明がありません")
+  if "外部API" not in review_ui_text and "候補情報" not in review_ui_text:
+    failures.append("live_web_signal_review_ui に safety notice がありません")
+
   pack_service_text = _read(pack_service)
   if "live_artifact_paths" not in pack_service_text:
     failures.append("live_web_signal_pack が live_artifact_paths を使っていません")
@@ -703,6 +737,7 @@ def main() -> int:
   print(f"watch profile management: {'yes' if watch_profile_manager.exists() else 'no'}")
   print(f"scheduler dry-run: {'yes' if scheduler_dry_run_service.exists() else 'no'}")
   print(f"controlled web signal collection: {'yes' if web_signal_collector.exists() else 'no'}")
+  print(f"web signal digest integration: {'yes' if web_signal_review_service.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

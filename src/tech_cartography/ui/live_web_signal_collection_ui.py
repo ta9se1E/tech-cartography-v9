@@ -129,4 +129,11 @@ def render_live_web_signal_collection_section(
           st.caption(f"artifact ({label}): {saved[label]}")
       st.caption("Run History に live_web_signal_collection が記録されます。")
 
+    from tech_cartography.ui.live_web_signal_review_ui import render_live_web_signal_review_section
+
+    render_live_web_signal_review_section(
+      project_root=project_root,
+      key_prefix=f"{key_prefix}_web_signal_review",
+    )
+
     st.markdown(render_info_box("Web Signalは候補情報です。原典確認が必要です。"), unsafe_allow_html=True)

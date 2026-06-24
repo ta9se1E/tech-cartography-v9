@@ -31,6 +31,13 @@ from tech_cartography.services.live_web_signal_collector import (
   find_latest_web_signal_collection_path,
   load_web_signal_collection,
 )
+from tech_cartography.services.live_web_signal_review import (
+  build_web_signal_review,
+  integrate_review_into_preview,
+  record_digest_preview_with_web_signals,
+  record_web_signal_review_run,
+  save_web_signal_review,
+)
 
 def resolve_latest_web_signal_pack(
   output_root: Path | str,
@@ -415,6 +422,10 @@ def build_save_payload(preview: dict[str, Any], *, output_root: Path | str | Non
     "active_watch_profile_id": active_profile_id or preview.get("active_watch_profile_id"),
     "latest_web_signal_collection_path": collection_path or preview.get("latest_web_signal_collection_path"),
     "latest_web_signal_collection_run_id": collection_run_id or preview.get("latest_web_signal_collection_run_id"),
+    "uses_web_signals": preview.get("uses_web_signals"),
+    "source_web_signal_artifact": preview.get("source_web_signal_artifact"),
+    "web_signal_result_count": (preview.get("web_signal_review") or {}).get("total_signal_count"),
+    "web_signal_review_id": (preview.get("web_signal_review") or {}).get("review_id"),
   }
   return copy_user_run_metadata(payload, preview)
 
@@ -549,12 +560,33 @@ def create_live_digest_preview_from_latest_pack(
       recipient_group_name=recipient_group_name,
       user_note=user_note,
     )
+    review = build_web_signal_review(output_root)
+    preview = integrate_review_into_preview(preview, review)
     preview = attach_user_run_metadata(preview, user_context=user_context, run_id=run_id)
     active, active_path = get_active_watch_profile(output_root)
     if active_path:
       preview["active_watch_profile_path"] = active_path
       preview["active_watch_profile_id"] = active.get("profile_id")
+    review_saved: dict[str, str] | None = None
+    try:
+      review_saved = save_web_signal_review(review, output_root)
+      record_web_signal_review_run(
+        review=review,
+        output_root=output_root,
+        user_context=user_context,
+        saved_paths=review_saved,
+      )
+    except (OSError, ValueError):
+      review_saved = None
     saved_paths = save_live_digest_preview(preview, output_root)
+    if review.get("artifact_exists"):
+      record_digest_preview_with_web_signals(
+        review=review,
+        digest_paths=saved_paths,
+        output_root=output_root,
+        user_context=user_context,
+        theme_name=str(preview.get("theme_name") or ""),
+      )
   except (OSError, ValueError) as exc:
     return _finalize(
       {"ok": False, "error": "save_failed", "message": str(exc)},
