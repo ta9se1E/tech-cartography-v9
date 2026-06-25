@@ -26,6 +26,7 @@ LIVE_RELEASE_PACK_SUBDIR = "live_release_pack"
 LIVE_RUN_HISTORY_SUBDIR = "live_run_history"
 LIVE_EVIDENCE_GAPS_SUBDIR = "live_evidence_gaps"
 LIVE_STRATEGIC_WATCH_BRIEF_SUBDIR = "live_strategic_watch_brief"
+LIVE_WEEKLY_DECISION_COCKPIT_SUBDIR = "live_weekly_decision_cockpit"
 
 LOCAL_OUTPUTS_DIRNAME = "outputs"
 
@@ -130,6 +131,10 @@ def get_live_strategic_watch_brief_dir(project_root: Path | str | None = None) -
   return get_live_outputs_root(project_root) / LIVE_STRATEGIC_WATCH_BRIEF_SUBDIR
 
 
+def get_live_weekly_decision_cockpit_dir(project_root: Path | str | None = None) -> Path:
+  return get_live_outputs_root(project_root) / LIVE_WEEKLY_DECISION_COCKPIT_SUBDIR
+
+
 def _count_json_artifacts(directory: Path, pattern: str) -> int:
   if not directory.exists():
     return 0
@@ -167,6 +172,7 @@ def ensure_live_artifact_dirs(project_root: Path | str | None = None) -> tuple[b
     get_live_run_history_dir(project_root),
     get_live_evidence_gaps_dir(project_root),
     get_live_strategic_watch_brief_dir(project_root),
+    get_live_weekly_decision_cockpit_dir(project_root),
   ):
     ok, message = check_directory_writable(directory)
     if not ok:
@@ -190,6 +196,7 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
   run_history_dir = get_live_run_history_dir(project_root)
   evidence_gaps_dir = get_live_evidence_gaps_dir(project_root)
   strategic_brief_dir = get_live_strategic_watch_brief_dir(project_root)
+  cockpit_dir = get_live_weekly_decision_cockpit_dir(project_root)
 
   root_ok, root_message = check_directory_writable(root)
   web_ok, web_message = check_directory_writable(web_dir)
@@ -205,6 +212,7 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
   run_history_ok, run_history_message = check_directory_writable(run_history_dir)
   evidence_gaps_ok, evidence_gaps_message = check_directory_writable(evidence_gaps_dir)
   strategic_brief_ok, strategic_brief_message = check_directory_writable(strategic_brief_dir)
+  cockpit_ok, cockpit_message = check_directory_writable(cockpit_dir)
 
   env_value = _env_live_outputs_root()
   return {
@@ -224,6 +232,7 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
     "run_history_dir": str(run_history_dir),
     "evidence_gaps_dir": str(evidence_gaps_dir),
     "strategic_watch_brief_dir": str(strategic_brief_dir),
+    "weekly_decision_cockpit_dir": str(cockpit_dir),
     "writable": {
       "active_storage_root": root_ok,
       "web_signal_dir": web_ok,
@@ -239,6 +248,7 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
       "run_history_dir": run_history_ok,
       "evidence_gaps_dir": evidence_gaps_ok,
       "strategic_watch_brief_dir": strategic_brief_ok,
+      "weekly_decision_cockpit_dir": cockpit_ok,
     },
     "writable_messages": {
       "active_storage_root": root_message,
@@ -255,6 +265,7 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
       "run_history_dir": run_history_message,
       "evidence_gaps_dir": evidence_gaps_message,
       "strategic_watch_brief_dir": strategic_brief_message,
+      "weekly_decision_cockpit_dir": cockpit_message,
     },
     "artifact_counts": {
       "web_signal_packs": _count_json_artifacts(web_dir, "live_web_signal_pack_*.json"),
@@ -293,6 +304,10 @@ def describe_live_artifact_storage(project_root: Path | str | None = None) -> di
       "strategic_watch_briefs": _count_json_artifacts(
         strategic_brief_dir,
         "live_strategic_watch_brief_*.json",
+      ),
+      "weekly_decision_cockpits": _count_json_artifacts(
+        cockpit_dir,
+        "live_weekly_decision_cockpit_*.json",
       ),
     },
   }

@@ -145,6 +145,9 @@ def main() -> int:
   evidence_gap_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_evidence_gap_ui.py"
   strategic_watch_brief_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_strategic_watch_brief_ui.py"
   phase25v_docs = PROJECT_ROOT / "docs/phase25v_evidence_gap_strategic_watch_brief.md"
+  weekly_cockpit_service = PROJECT_ROOT / "src/tech_cartography/services/live_weekly_decision_cockpit.py"
+  weekly_cockpit_ui = PROJECT_ROOT / "src/tech_cartography/ui/live_weekly_decision_cockpit_ui.py"
+  phase25w_docs = PROJECT_ROOT / "docs/phase25w_weekly_decision_cockpit.md"
 
   for path in (
     module_path,
@@ -226,6 +229,9 @@ def main() -> int:
     evidence_gap_ui,
     strategic_watch_brief_ui,
     phase25v_docs,
+    weekly_cockpit_service,
+    weekly_cockpit_ui,
+    phase25w_docs,
     web_signal_digest_docs,
   ):
     if not path.exists():
@@ -728,6 +734,20 @@ def main() -> int:
   if "Evidence Gap" not in _read(phase25v_docs):
     failures.append("phase25v docs に Evidence Gap 説明がありません")
 
+  cockpit_text = _read(weekly_cockpit_service)
+  cockpit_ui_text = _read(weekly_cockpit_ui)
+  if "live_weekly_decision_cockpit_build" not in run_history_text:
+    failures.append("live_run_history に live_weekly_decision_cockpit_build がありません")
+  for forbidden in ("smtplib", "send_email", "urllib", "deep_research", "collect_live_web_signals"):
+    if forbidden in cockpit_text.lower():
+      failures.append(f"live_weekly_decision_cockpit が禁止操作 {forbidden} を含みます")
+  if "COCKPIT_NOTICE_JA" not in cockpit_text and "候補情報" not in cockpit_ui_text:
+    failures.append("weekly decision cockpit に candidate only notice がありません")
+  if "weekly_decision" not in _read(PROJECT_ROOT / "src/tech_cartography/ui/demo_safe_ui.py"):
+    failures.append("ANALYST_TAB_IDS に weekly_decision がありません")
+  if "Weekly Decision Cockpit" not in _read(phase25w_docs):
+    failures.append("phase25w docs に Cockpit 説明がありません")
+
   pack_service_text = _read(pack_service)
   if "live_artifact_paths" not in pack_service_text:
     failures.append("live_web_signal_pack が live_artifact_paths を使っていません")
@@ -783,6 +803,7 @@ def main() -> int:
   print(f"controlled web signal collection: {'yes' if web_signal_collector.exists() else 'no'}")
   print(f"web signal digest integration: {'yes' if web_signal_review_service.exists() else 'no'}")
   print(f"evidence gap strategic brief: {'yes' if evidence_gap_builder.exists() else 'no'}")
+  print(f"weekly decision cockpit: {'yes' if weekly_cockpit_service.exists() else 'no'}")
 
   for warning in warnings:
     print(f"WARN: {warning}")

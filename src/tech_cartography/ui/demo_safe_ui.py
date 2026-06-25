@@ -43,6 +43,7 @@ UI_MODE_LABELS: dict[str, str] = {
 
 DEMO_TAB_IDS: tuple[str, ...] = ("start", "evidence", "market", "reports", "settings")
 ANALYST_TAB_IDS: tuple[str, ...] = (
+  "weekly_decision",
   "analyst_input",
   "start",
   "evidence",

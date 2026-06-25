@@ -54,15 +54,20 @@ def attach_strategic_watch_artifact_references(
     find_latest_strategic_watch_brief_path,
     load_strategic_watch_brief,
   )
+  from tech_cartography.services.live_weekly_decision_cockpit import (
+    find_latest_weekly_decision_cockpit_path,
+  )
 
   merged = dict(preview)
   gap_path = find_latest_evidence_gap_path(output_root)
   brief_path = find_latest_strategic_watch_brief_path(output_root)
+  cockpit_path = find_latest_weekly_decision_cockpit_path(output_root)
   gap_artifact = load_evidence_gap_artifact(gap_path) if gap_path else None
   brief_artifact = load_strategic_watch_brief(brief_path) if brief_path else None
 
   merged["latest_evidence_gap_artifact_path"] = str(gap_path) if gap_path else None
   merged["latest_strategic_watch_brief_path"] = str(brief_path) if brief_path else None
+  merged["latest_weekly_decision_cockpit_path"] = str(cockpit_path) if cockpit_path else None
   merged["latest_evidence_gap_count"] = len((gap_artifact or {}).get("evidence_gaps") or [])
   merged["latest_next_verification_action_count"] = len(
     (gap_artifact or {}).get("next_verification_actions")
@@ -88,7 +93,15 @@ def attach_strategic_watch_artifact_references(
         "",
       ],
     )
-  if gap_path or brief_path:
+  if cockpit_path:
+    ref_lines.extend(
+      [
+        "### Weekly Decision Cockpit（参照のみ）",
+        f"- artifact: {cockpit_path}",
+        "",
+      ],
+    )
+  if gap_path or brief_path or cockpit_path:
     ref_lines.append("> Evidence Gap / Brief は別 artifact です。Digest 作成時に自動再生成しません。")
     section = "\n".join(ref_lines).strip() + "\n"
     merged["strategic_watch_reference_markdown"] = section
@@ -528,6 +541,7 @@ def build_save_payload(preview: dict[str, Any], *, output_root: Path | str | Non
     "web_signal_review_id": (preview.get("web_signal_review") or {}).get("review_id"),
     "latest_evidence_gap_artifact_path": preview.get("latest_evidence_gap_artifact_path"),
     "latest_strategic_watch_brief_path": preview.get("latest_strategic_watch_brief_path"),
+    "latest_weekly_decision_cockpit_path": preview.get("latest_weekly_decision_cockpit_path"),
     "latest_evidence_gap_count": preview.get("latest_evidence_gap_count"),
     "latest_next_verification_action_count": preview.get("latest_next_verification_action_count"),
   }

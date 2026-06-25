@@ -140,12 +140,16 @@ def build_strategic_watch_brief_payload(
   gap_path = find_latest_evidence_gap_path(output_root)
   if gap_path:
     source_paths.append(str(gap_path))
+  from tech_cartography.services.live_weekly_decision_cockpit import find_latest_weekly_decision_cockpit_path
+
+  cockpit_path = find_latest_weekly_decision_cockpit_path(output_root)
 
   return {
     "action_type": ACTION_TYPE,
     "status": "success",
     "theme_name": theme_name,
     "source_artifact_paths": source_paths,
+    "latest_weekly_decision_cockpit_path": str(cockpit_path) if cockpit_path else None,
     "weekly_conclusion_candidates": _conclusion_candidates(digest, web_summary),
     "weekly_change_candidates": _weekly_change_candidates(digest, web_summary),
     "evidence_gaps": gap_payload.get("evidence_gaps") or [],

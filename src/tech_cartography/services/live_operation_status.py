@@ -43,6 +43,7 @@ from tech_cartography.services.live_web_signal_artifact_reader import describe_l
 from tech_cartography.services.live_web_signal_collector import describe_latest_web_signal_collection
 from tech_cartography.services.live_evidence_gap_builder import describe_latest_evidence_gap
 from tech_cartography.services.live_strategic_watch_brief import describe_latest_strategic_watch_brief
+from tech_cartography.services.live_weekly_decision_cockpit import describe_latest_weekly_decision_cockpit
 from tech_cartography.services.watch_profile_draft import (
   find_latest_watch_profile_draft_path,
   load_watch_profile_draft_with_status,
@@ -460,6 +461,7 @@ def build_operation_cycle_status(
   web_signal_artifact_info = describe_latest_web_signal_artifact(project_root or Path.cwd())
   evidence_gap_info = describe_latest_evidence_gap(project_root or Path.cwd())
   strategic_brief_info = describe_latest_strategic_watch_brief(project_root or Path.cwd())
+  cockpit_info = describe_latest_weekly_decision_cockpit(project_root or Path.cwd())
   digest_uses_web_signals = _digest_preview_uses_web_signals(project_root)
   if watch_profile_info.get("watch_profile_status") == "no_active_profile":
     warnings.append("active Watch Profile がありません。週次監視条件を draft 作成後に active 化してください。")
@@ -538,6 +540,10 @@ def build_operation_cycle_status(
       evidence_gap_info,
       strategic_brief_info,
     ),
+    "latest_weekly_decision_cockpit_exists": cockpit_info.get("latest_weekly_decision_cockpit_exists"),
+    "latest_weekly_decision_cockpit_path": cockpit_info.get("latest_weekly_decision_cockpit_path"),
+    "latest_readiness_level": cockpit_info.get("latest_readiness_level"),
+    "cockpit_next_recommended_action": cockpit_info.get("latest_next_recommended_action"),
     "latest_artifact_paths": latest_artifact_paths,
     "operation_cycle_status": step_statuses,
     "run_history_summary": run_history_summary,

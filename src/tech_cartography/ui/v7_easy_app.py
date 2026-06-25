@@ -688,6 +688,14 @@ def _tab_market(manifest: dict[str, Any] | None, *, demo_mode: bool = False) -> 
       render_small_table(company_df.head(15))
 
 
+def _tab_weekly_decision() -> None:
+  from tech_cartography.ui.live_weekly_decision_cockpit_ui import render_live_weekly_decision_cockpit_section
+
+  st.markdown("### 今週の判断 — Weekly Decision Cockpit")
+  st.caption("週30分で「何が変わったか / 何が未確認か / 次に何を確認するか」を一覧します。詳細機能は下のタブへ。")
+  render_live_weekly_decision_cockpit_section(project_root=PROJECT_ROOT, key_prefix="weekly_decision_tab", expanded=True)
+
+
 def _tab_analyst_input() -> None:
   render_analyst_input_execution_section(key_prefix=ANALYST_INPUT_KEY_PREFIX)
 
@@ -913,6 +921,8 @@ def _render_tab_by_id(
     )
   elif tab_id == "market":
     _tab_market(manifest, demo_mode=demo_mode)
+  elif tab_id == "weekly_decision":
+    _tab_weekly_decision()
   elif tab_id == "analyst_input":
     _tab_analyst_input()
   elif tab_id == "theme_validation":

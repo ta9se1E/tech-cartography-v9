@@ -283,6 +283,19 @@ def run_checks(*, project: str, region: str, service: str, skip_gcloud: bool) ->
     if "deep_research" in gap_text.lower() or "collect_live_web_signals" in gap_text:
       failures.append("live_evidence_gap_builder must not call external API")
 
+  phase25w_docs = PROJECT_ROOT / "docs/phase25w_weekly_decision_cockpit.md"
+  weekly_cockpit = PROJECT_ROOT / "src/tech_cartography/services/live_weekly_decision_cockpit.py"
+  if not phase25w_docs.exists():
+    failures.append("missing: docs/phase25w_weekly_decision_cockpit.md")
+  else:
+    passes.append("phase25w weekly decision cockpit docs present")
+  if weekly_cockpit.exists():
+    cockpit_text = _read(weekly_cockpit)
+    if "collect_live_web_signals" in cockpit_text or "deep_research" in cockpit_text.lower():
+      failures.append("live_weekly_decision_cockpit must not call external API")
+    if "default_safety_flags" not in cockpit_text:
+      failures.append("live_weekly_decision_cockpit missing safety flags")
+
   send_safety_docs = PROJECT_ROOT / "docs/phase25q2_send_safety_reset.md"
   if send_safety_docs.exists():
     passes.append(f"artifact exists: {send_safety_docs.relative_to(PROJECT_ROOT)}")

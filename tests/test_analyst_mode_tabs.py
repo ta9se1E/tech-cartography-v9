@@ -15,6 +15,7 @@ def test_analyst_tab_order_matches_demo_style() -> None:
   analyst_ids = demo_safe_ui.ANALYST_TAB_IDS
   demo_ids = demo_safe_ui.DEMO_TAB_IDS
   assert analyst_ids == (
+    "weekly_decision",
     "analyst_input",
     "start",
     "evidence",
@@ -22,8 +23,8 @@ def test_analyst_tab_order_matches_demo_style() -> None:
     "reports",
     "settings",
   )
-  assert analyst_ids[1:] == ("start", "evidence", "market", "reports", "settings")
-  assert set(analyst_ids) - set(demo_ids) == {"analyst_input"}
+  assert analyst_ids[2:] == ("start", "evidence", "market", "reports", "settings")
+  assert set(analyst_ids) - set(demo_ids) == {"analyst_input", "weekly_decision"}
   assert "patents" not in analyst_ids
   assert "fulltext" not in analyst_ids
   assert "theme_validation" not in analyst_ids
@@ -32,6 +33,7 @@ def test_analyst_tab_order_matches_demo_style() -> None:
 def test_analyst_tab_labels() -> None:
   labels = demo_safe_ui.tab_labels_for_ui_mode(demo_safe_ui.UI_MODE_ANALYST)
   assert labels == [
+    "今週の判断",
     "入力・実行",
     "はじめる",
     "技術の裏取り",
@@ -46,6 +48,7 @@ def test_hidden_tabs_not_in_analyst_routing() -> None:
   render_section = text.split("def _render_tab_by_id", 1)[1].split("def render_tabbed_easy_app", 1)[0]
   assert 'tab_id == "patents"' in render_section
   assert 'tab_id == "analyst_input"' in render_section
+  assert 'tab_id == "weekly_decision"' in render_section
   assert demo_safe_ui.tab_ids_for_ui_mode(demo_safe_ui.UI_MODE_ANALYST).count("patents") == 0
 
 

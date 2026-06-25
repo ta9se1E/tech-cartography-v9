@@ -21,9 +21,11 @@ DEMO_SAFE_UI = PROJECT_ROOT / "src" / "tech_cartography" / "ui" / "demo_safe_ui.
 
 def test_analyst_mode_shows_input_execution_tab() -> None:
   analyst_ids = demo_safe_ui.tab_ids_for_ui_mode(demo_safe_ui.UI_MODE_ANALYST)
-  assert analyst_ids[0] == "analyst_input"
+  assert analyst_ids[0] == "weekly_decision"
+  assert analyst_ids[1] == "analyst_input"
   labels = demo_safe_ui.tab_labels_for_ui_mode(demo_safe_ui.UI_MODE_ANALYST)
-  assert labels[0] == "入力・実行"
+  assert labels[0] == "今週の判断"
+  assert labels[1] == "入力・実行"
   assert "別テーマ検証" not in labels
   assert "本番実行" not in labels[1:]
 

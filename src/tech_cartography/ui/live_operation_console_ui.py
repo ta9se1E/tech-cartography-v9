@@ -49,6 +49,14 @@ def render_live_operation_console_section(
     return
 
   with st.expander("Live Operation Console（手動週次運用）", expanded=True):
+    from tech_cartography.ui.live_weekly_decision_cockpit_ui import render_live_weekly_decision_cockpit_section
+
+    st.markdown("**今週の判断（概要）**")
+    render_live_weekly_decision_cockpit_section(
+      project_root=project_root,
+      key_prefix=f"{key_prefix}_cockpit_summary",
+      expanded=False,
+    )
     st.markdown(
       render_caution_box(
         "Live 成果物の週次サイクル状態を<strong>一覧表示</strong>します。"
@@ -165,6 +173,10 @@ def render_live_operation_console_section(
       f"next_actions={status.get('latest_next_verification_action_count')}"
     )
     st.caption(str(status.get("evidence_gap_brief_next_recommended_action") or ""))
+    st.markdown("**Weekly Decision Cockpit**")
+    st.caption(f"cockpit={status.get('latest_weekly_decision_cockpit_path') or '(none)'}")
+    st.caption(f"readiness={status.get('latest_readiness_level') or '(unknown)'}")
+    st.caption(str(status.get("cockpit_next_recommended_action") or ""))
 
     from tech_cartography.ui.live_evidence_gap_ui import render_live_evidence_gap_section
     from tech_cartography.ui.live_strategic_watch_brief_ui import render_live_strategic_watch_brief_section
