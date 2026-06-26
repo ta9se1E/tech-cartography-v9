@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import re
 import sys
 from pathlib import Path
 
@@ -136,6 +137,23 @@ def _docs_blob() -> str:
   return "\n".join(parts)
 
 
+DEPRECATED_PATTERN = re.compile(r"use_container_width\s*=")
+
+
+def _scan_deprecated_streamlit_width() -> list[str]:
+  hits: list[str] = []
+  for scan_root in (PROJECT_ROOT / "app.py", PROJECT_ROOT / "src", PROJECT_ROOT / "tests"):
+    paths = [scan_root] if scan_root.is_file() else sorted(scan_root.rglob("*.py"))
+    for path in paths:
+      rel = str(path.relative_to(PROJECT_ROOT))
+      if rel in {"scripts/check_v8_reframe_ready.py", "tests/test_streamlit_width_deprecation.py"}:
+        continue
+      for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if DEPRECATED_PATTERN.search(line):
+          hits.append(f"{rel}:{line_no}")
+  return hits
+
+
 def _keyword_present(blob: str, keywords: tuple[str, ...]) -> bool:
   lowered = blob.lower()
   return any(kw.lower() in lowered for kw in keywords)
@@ -186,6 +204,12 @@ def main(argv: list[str] | None = None) -> int:
     print("PASS: app.py wires v8 UI with APP_UI_VERSION switch")
   else:
     failures.append("app.py missing APP_UI_VERSION or v8_user_flow_app wiring")
+
+  width_hits = _scan_deprecated_streamlit_width()
+  if width_hits:
+    failures.append(f"deprecated use_container_width= remains: {', '.join(width_hits)}")
+  else:
+    print("PASS: Streamlit width migration: yes")
 
   for case_id in CASE_IDS:
     case_dir = PROJECT_ROOT / "cases" / case_id

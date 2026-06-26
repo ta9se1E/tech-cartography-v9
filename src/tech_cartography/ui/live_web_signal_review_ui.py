@@ -75,14 +75,14 @@ def render_live_web_signal_review_section(
       st.markdown("**domain summary**")
       st.dataframe(
         [{"domain": domain, "count": count} for domain, count in domain_counts.items()],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
       )
 
     top = review.get("top_candidate_signals") or []
     if top:
       st.markdown("**top candidate signals**")
-      st.dataframe(pd.DataFrame(top), use_container_width=True, hide_index=True)
+      st.dataframe(pd.DataFrame(top), width="stretch", hide_index=True)
 
     for note in review.get("caution_notes") or []:
       st.caption(note)

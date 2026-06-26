@@ -63,10 +63,7 @@ apply_pending_widget_state_updates()
 
 
 def _sidebar_button(label: str, **kwargs: Any) -> bool:
-  try:
-    return st.button(label, width="stretch", **kwargs)
-  except TypeError:
-    return st.button(label, use_container_width=True, **kwargs)
+  return st.button(label, width="stretch", **kwargs)
 
 
 if _ui_version == "v8":

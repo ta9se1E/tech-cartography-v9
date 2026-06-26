@@ -57,7 +57,7 @@ def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
 
   draft_rows = _draft_patent_rows(patent_rows, limit=5)
   df = pd.DataFrame(draft_rows)
-  st.dataframe(df, use_container_width=True, hide_index=True)
+  st.dataframe(df, width="stretch", hide_index=True)
 
   st.markdown(render_info_box("各行は draft / placeholder です。確定ランキングではありません。"), unsafe_allow_html=True)
 

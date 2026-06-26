@@ -39,7 +39,7 @@ def render_v8_sources_tab(*, project_root: Path | str) -> None:
     st.caption("全案件の source_candidates.csv を表示しています。")
 
   df = pd.DataFrame(rows, columns=list(SOURCE_CSV_COLUMNS))
-  st.dataframe(df, use_container_width=True, hide_index=True)
+  st.dataframe(df, width="stretch", hide_index=True)
 
   web_rows = [r for r in rows if "web" in str(r.get("type") or "").lower()]
   if web_rows:

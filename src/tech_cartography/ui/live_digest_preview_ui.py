@@ -181,7 +181,7 @@ def render_live_digest_preview_reports_section(
     if key_signals:
       display_df = pd.DataFrame(key_signals)
       cols = [c for c in ("title", "url", "signal_type", "confidence_label", "review_status", "why_review") if c in display_df.columns]
-      st.dataframe(display_df[cols], use_container_width=True, hide_index=True)
+      st.dataframe(display_df[cols], width="stretch", hide_index=True)
 
     next_actions = preview.get("next_actions") or []
     if next_actions:

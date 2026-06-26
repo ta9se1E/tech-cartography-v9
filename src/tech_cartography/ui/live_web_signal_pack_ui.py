@@ -122,7 +122,7 @@ def render_live_web_signal_pack_section(
     if rows:
       display_df = pd.DataFrame(rows)
       cols = [c for c in LIVE_CANDIDATE_COLUMNS if c in display_df.columns]
-      st.dataframe(display_df[cols], use_container_width=True, hide_index=True)
+      st.dataframe(display_df[cols], width="stretch", hide_index=True)
 
     saved_paths = last_result.get("saved_paths") or {}
     for label in ("json", "csv", "markdown"):
@@ -163,7 +163,7 @@ def render_live_web_signal_candidates_section(
     )
     display_df = pd.DataFrame(candidates)
     cols = [c for c in LIVE_CANDIDATE_COLUMNS if c in display_df.columns]
-    st.dataframe(display_df[cols], use_container_width=True, hide_index=True)
+    st.dataframe(display_df[cols], width="stretch", hide_index=True)
     st.markdown(render_info_box(str(pack.get("safety_notice") or SAFETY_NOTICE)), unsafe_allow_html=True)
 
     next_actions = pack.get("next_actions") or []

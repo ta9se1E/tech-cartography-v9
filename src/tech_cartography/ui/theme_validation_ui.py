@@ -851,7 +851,7 @@ def render_end_to_end_chain_section(
     result = st.session_state.get(STATE_END_TO_END_RESULT)
     if result is not None and seeds_ready:
       st.markdown("**End-to-End Stage 表（前回結果）**")
-      st.dataframe(_end_to_end_display_dataframe(result), use_container_width=True, hide_index=True)
+      st.dataframe(_end_to_end_display_dataframe(result), width="stretch", hide_index=True)
     st.caption(CHAIN_CAUTION)
     return
 
@@ -959,7 +959,7 @@ def render_end_to_end_chain_section(
   result = st.session_state.get(STATE_END_TO_END_RESULT)
   if result is not None:
     st.markdown("**End-to-End Stage 表**")
-    st.dataframe(_end_to_end_display_dataframe(result), use_container_width=True, hide_index=True)
+    st.dataframe(_end_to_end_display_dataframe(result), width="stretch", hide_index=True)
     _show_output_path("保存先", end_to_end_output_dir(root, case.theme_id))
     st.caption(CHAIN_CAUTION)
 

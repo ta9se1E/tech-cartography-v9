@@ -264,7 +264,7 @@ def render_basic_login_screen(*, hybrid_fallback: bool = False) -> None:
   with st.form("basic_login_form", clear_on_submit=False):
     username = st.text_input("username", placeholder="username")
     password = st.text_input("password", type="password", placeholder="password")
-    submitted = st.form_submit_button("ログイン", type="primary", use_container_width=True)
+    submitted = st.form_submit_button("ログイン", type="primary", width="stretch")
 
   if submitted:
     auth_user = authenticate(username, password)

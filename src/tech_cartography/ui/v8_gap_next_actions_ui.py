@@ -83,7 +83,7 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
           for g in gaps
         ],
       ),
-      use_container_width=True,
+      width="stretch",
       hide_index=True,
     )
   else:

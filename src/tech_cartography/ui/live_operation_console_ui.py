@@ -108,7 +108,7 @@ def render_live_operation_console_section(
         "meaning": "scheduler",
       },
     ]
-    st.dataframe(flag_rows, use_container_width=True, hide_index=True)
+    st.dataframe(flag_rows, width="stretch", hide_index=True)
 
     render_email_operation_status_panel(
       project_root=project_root,
@@ -128,7 +128,7 @@ def render_live_operation_console_section(
           "latest_path": info.get("latest_path"),
         },
       )
-    st.dataframe(step_rows, use_container_width=True, hide_index=True)
+    st.dataframe(step_rows, width="stretch", hide_index=True)
 
     st.markdown(f"**next recommended action:** {status.get('next_recommended_action')}")
 

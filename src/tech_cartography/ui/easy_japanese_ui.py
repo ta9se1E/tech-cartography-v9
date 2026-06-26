@@ -281,10 +281,7 @@ def _render_dataframe_stretch(df: pd.DataFrame, **kwargs: Any) -> None:
     st.info("表示するデータがありません。")
     return
   display_df = deduplicate_dataframe_columns(df)
-  try:
-    st.dataframe(display_df, width="stretch", **kwargs)
-  except TypeError:
-    st.dataframe(display_df, use_container_width=True, **kwargs)
+  st.dataframe(display_df, width="stretch", **kwargs)
 
 
 def render_dataframe_stretch(df: pd.DataFrame, **kwargs: Any) -> None:

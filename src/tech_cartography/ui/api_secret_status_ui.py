@@ -27,7 +27,7 @@ def render_api_secret_status_expander(*, expanded: bool = False, key: str = "api
       label = "configured" if state == "configured" else "missing"
       rows.append({"APIキー名": name, "設定状態": label})
 
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width="stretch", hide_index=True)
 
     missing = status["missing_keys"]
     if missing:

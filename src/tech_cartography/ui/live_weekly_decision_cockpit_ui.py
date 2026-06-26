@@ -79,7 +79,7 @@ def render_live_weekly_decision_cockpit_section(
             for g in gaps
           ],
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
       )
     else:

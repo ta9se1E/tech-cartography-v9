@@ -62,6 +62,22 @@
 
 ---
 
+## Phase27B.1: Streamlit width 移行
+
+**目的:** deprecated `use_container_width` を `width="stretch"` / `width="content"` へ置換し、ローカル起動警告を解消する。
+
+**状態:** ✅ 完了（Phase27C 前の UI 警告解消）
+
+**対象:** `app.py`, `src/tech_cartography/ui/`（v8 + v7 由来）、`easy_japanese_ui.py`
+
+**完了条件:**
+- `app.py` / `src` / `tests` に `use_container_width=` が残らない
+- `check_v8_reframe_ready.py` が `Streamlit width migration: yes` を表示
+
+**Cloud Build:** 不要
+
+---
+
 ## Phase27C: Sources一覧 + Export
 
 **目的:** Sources 統合テーブルと case 単位 Export。

@@ -143,7 +143,7 @@ def render_live_watch_expansion_section(
     ]
     st.dataframe(
       pd.DataFrame(display_rows).drop(columns=["select"]),
-      use_container_width=True,
+      width="stretch",
       hide_index=True,
     )
 

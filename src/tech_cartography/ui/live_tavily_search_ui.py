@@ -110,7 +110,7 @@ def render_live_tavily_smoke_test_section(
     rows = last_result.get("results") or []
     if rows:
       display_df = pd.DataFrame(rows)[["title", "url", "snippet", "score", "provider", "fetched_at"]]
-      st.dataframe(display_df, use_container_width=True, hide_index=True)
+      st.dataframe(display_df, width="stretch", hide_index=True)
 
     saved_paths = last_result.get("saved_paths") or {}
     if saved_paths:

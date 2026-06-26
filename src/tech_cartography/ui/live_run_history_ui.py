@@ -103,7 +103,7 @@ def render_run_history_section(
           "error_summary": entry.get("error_summary"),
         },
       )
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
     with st.expander("詳細 preview", expanded=False):
       for entry in entries[:5]:

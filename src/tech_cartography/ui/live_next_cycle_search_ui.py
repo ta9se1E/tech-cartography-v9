@@ -137,7 +137,7 @@ def render_live_next_cycle_search_section(
       )
       if column in display_df.columns
     ]
-    st.dataframe(display_df[cols], use_container_width=True, hide_index=True)
+    st.dataframe(display_df[cols], width="stretch", hide_index=True)
 
     if is_external_api_disabled():
       st.markdown(
@@ -202,7 +202,7 @@ def render_live_next_cycle_search_section(
 
     query_runs = run_result.get("query_runs") or []
     if query_runs:
-      st.dataframe(pd.DataFrame(query_runs), use_container_width=True, hide_index=True)
+      st.dataframe(pd.DataFrame(query_runs), width="stretch", hide_index=True)
 
     candidates = run_result.get("candidates") or []
     if candidates:
@@ -212,7 +212,7 @@ def render_live_next_cycle_search_section(
         for column in ("query", "title", "url", "signal_type", "confidence_label", "review_status", "safety_label")
         if column in result_df.columns
       ]
-      st.dataframe(result_df[show_cols], use_container_width=True, hide_index=True)
+      st.dataframe(result_df[show_cols], width="stretch", hide_index=True)
 
     saved_paths = run_result.get("saved_paths") or {}
     for label in ("json", "csv", "markdown"):
@@ -244,5 +244,5 @@ def render_live_next_cycle_search_reports_section(
     if candidates:
       df = pd.DataFrame(candidates)
       cols = [c for c in ("query", "title", "url", "signal_type", "confidence_label", "review_status") if c in df.columns]
-      st.dataframe(df[cols], use_container_width=True, hide_index=True)
+      st.dataframe(df[cols], width="stretch", hide_index=True)
     st.markdown(render_info_box(str(pack.get("safety_notice") or PACK_SAFETY_NOTICE)), unsafe_allow_html=True)

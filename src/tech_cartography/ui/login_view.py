@@ -66,7 +66,7 @@ def render_login_screen() -> dict[str, Any] | None:
     email = st.text_input("メールアドレス", placeholder="example@company.co.jp")
     display_name = st.text_input("表示名（任意）", placeholder="山田 太郎")
     company_name = st.text_input("会社名（任意）", placeholder="株式会社サンプル")
-    submitted = st.form_submit_button("ログイン", type="primary", use_container_width=True)
+    submitted = st.form_submit_button("ログイン", type="primary", width="stretch")
 
   if submitted:
     user, error = process_login_submission(email, display_name=display_name, company_name=company_name)
