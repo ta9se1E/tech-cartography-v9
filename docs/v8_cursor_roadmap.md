@@ -310,10 +310,33 @@
 **Cloud Build:** 不要
 
 **次 Phase 候補:**
-- Phase27J.1 — Large Candidate UI polish and ranking explanation
+- Phase27J.1 — Large Candidate UI polish and ranking explanation ✅
 - Phase27K — Manual Claim Injection（継続）
 - Phase27L — Evidence Map / Gap Demo Polish
-- Phase27M — Cloud Run v8 preparation
+- Phase27M — UI最終調整
+- Phase27N — Cloud Run v8 preparation
+
+---
+
+## Phase27J.1: Ranking Explanation and Patent Triage Adapter
+
+**目的:** Large Candidate Shortlist の選抜理由を説明し、既存 `patent_triage.py` を再利用する。
+
+**追加/修正ファイル:**
+- `src/tech_cartography/services/patent_triage.py`
+- `src/tech_cartography/services/v8_patent_triage_adapter.py`
+- `src/tech_cartography/runtime/v8_ranking_explanation_schema.py`
+- `src/tech_cartography/services/v8_large_candidate_ranking_explanation.py`
+
+**状態:** ✅ 完了
+
+**完了条件:**
+- patent_triage adapter 経由でスコアリング（fallback heuristic + warning 対応）
+- Ranking Explanation Pack 出力
+- score は読む優先度のみ（技術/法的証明ではない）
+- 1000件全件 Deep Dive しない
+
+**Cloud Build:** 不要
 
 ---
 

@@ -226,6 +226,8 @@ def records_to_csv(records: list[V8LargeCandidateRecord], path: Path) -> None:
     for rec in records:
       row = rec.to_dict()
       row["matched_keywords"] = "|".join(rec.matched_keywords)
+      row["positive_reasons"] = "|".join(rec.positive_reasons)
+      row["negative_reasons"] = "|".join(rec.negative_reasons)
       writer.writerow(row)
 
 
@@ -238,6 +240,9 @@ def load_large_candidates_csv(path: Path) -> list[V8LargeCandidateRecord]:
     for raw in reader:
       kw = str(raw.get("matched_keywords") or "")
       raw["matched_keywords"] = [k for k in kw.split("|") if k] if kw else []
+      for list_field in ("positive_reasons", "negative_reasons"):
+        lv = str(raw.get(list_field) or "")
+        raw[list_field] = [k for k in lv.split("|") if k] if lv else []
       for bool_key in ("candidate_information_only", "human_review_required", "is_duplicate"):
         if bool_key in raw:
           raw[bool_key] = str(raw.get(bool_key, "")).lower() in {"true", "1", "yes"}
@@ -251,6 +256,11 @@ def load_large_candidates_csv(path: Path) -> list[V8LargeCandidateRecord]:
           raw["keyword_match_count"] = int(raw.get("keyword_match_count") or 0)
         except ValueError:
           raw["keyword_match_count"] = 0
+      if "rank" in raw:
+        try:
+          raw["rank"] = int(raw.get("rank") or 0)
+        except ValueError:
+          raw["rank"] = 0
       records.append(V8LargeCandidateRecord.from_dict(raw))
   return records
 

@@ -103,7 +103,13 @@ conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
 - fake patent / fake DOI / fake URL を作らない
 - メール送信・Scheduler は必須機能として残す（本 Phase では実行しない）
 
-**次 Phase:** Phase27J.1（UI polish）→ Phase27K（Manual Claim）→ Phase27L（Evidence polish）→ Phase27M（Cloud Run）
+**次 Phase:** Phase27J.1（Ranking Explanation）→ Phase27K（Manual Claim）→ Phase27L（Evidence polish）→ Phase27M（UI）→ Phase27N（Cloud Run）
+
+## Phase27J.1 — Ranking Explanation
+
+- `patent_triage.py` 再利用 / adapter 経由で Large Candidate をスコアリング
+- Ranking Explanation Pack: why_selected, positive_reasons, negative_reasons
+- 1000件母集団 — Top5 のみ Deep Dive
 
 ## テストコマンド
 

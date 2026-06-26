@@ -153,6 +153,15 @@ conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
 
 **Cloud Build:** 不要
 
+## Phase27J.1: Ranking Explanation and Patent Triage Adapter
+
+- 既存 `patent_triage.py` を再利用（存在しない場合は fallback heuristic）
+- Top100/Top20/Top5 の選抜理由・スコア内訳を ranking explanation として出力
+- score は読む優先度であり、技術的正しさ・特許価値・法的価値ではない
+- 1000件全件 Deep Dive しない
+
+**次 Phase:** Phase27K（Manual Claim）→ Phase27L（Evidence polish）→ Phase27M（UI）→ Phase27N（Cloud Run）
+
 ## Phase27J: Manual Claim Injection
 
 **目的:** 各 Case で少なくとも 1 件、実 claim 本文を安全に手動投入し、Claim Map / Evidence Map / Gap / 定点観測を再生成する。

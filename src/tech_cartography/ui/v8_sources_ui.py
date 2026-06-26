@@ -84,11 +84,22 @@ def _render_large_candidate_sources(*, root: Path, default_case: str) -> None:
     filtered = [r for r in filtered if r.human_review_required]
 
   dup_count = sum(1 for r in records if r.is_duplicate)
-  m1, m2, m3, m4 = st.columns(4)
+  quality_issue_count = 0
+  qi_path = paths.get("quality_issues")
+  if qi_path and qi_path.exists():
+    quality_issue_count = max(0, sum(1 for _ in qi_path.open(encoding="utf-8")) - 1)
+
+  m1, m2, m3, m4, m5 = st.columns(5)
   m1.metric("total_candidates", len(records))
   m2.metric("displayed", len(filtered))
   m3.metric("duplicate_count", dup_count)
   m4.metric("missing_title", sum(1 for r in records if not r.title))
+  m5.metric("quality_issues", quality_issue_count)
+
+  st.info(
+    f"1000件母集団は全件深掘りではありません。"
+    f"「{V8_TAB_LABELS['patent_shortlist']}」で段階選抜（Top100/Top20/Top5）と Ranking Explanation を確認してください。"
+  )
 
   display_cols = [
     "publication_number", "title", "organization", "year", "source_type",
@@ -104,6 +115,7 @@ def _render_large_candidate_sources(*, root: Path, default_case: str) -> None:
     ("source_candidates_large.csv", paths["population"]),
     ("source_candidates_large_deduped.csv", paths["deduped"]),
     ("quality report", paths["quality_report"]),
+    ("dedupe report", paths["dedupe_report"]),
   ):
     if path.exists():
       st.download_button(

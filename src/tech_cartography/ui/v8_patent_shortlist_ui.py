@@ -121,12 +121,14 @@ def _render_large_candidate_table(records: list, *, title: str) -> None:
     st.caption("（なし）")
     return
   cols = [
-    "publication_number", "title", "organization", "year", "heuristic_score",
-    "score_reason", "matched_keywords", "stage_label", "next_verification_action",
+    "rank", "publication_number", "title", "organization", "year", "heuristic_score",
+    "score_reason", "matched_keywords", "positive_reasons", "negative_reasons",
+    "stage_label", "ranking_policy", "next_verification_action",
   ]
   rows = []
   for r in records:
     rows.append({
+      "rank": r.rank,
       "publication_number": r.publication_number,
       "title": (r.title or "")[:80],
       "organization": r.organization or r.assignee,
@@ -134,15 +136,22 @@ def _render_large_candidate_table(records: list, *, title: str) -> None:
       "heuristic_score": r.heuristic_score,
       "score_reason": r.score_reason,
       "matched_keywords": ", ".join(r.matched_keywords[:5]),
+      "positive_reasons": ", ".join(r.positive_reasons[:3]),
+      "negative_reasons": ", ".join(r.negative_reasons[:3]),
       "stage_label": r.stage_label,
+      "ranking_policy": (r.ranking_policy or "")[:40],
       "next_verification_action": r.next_verification_action,
     })
   st.dataframe(pd.DataFrame(rows, columns=cols), width="stretch", hide_index=True)
 
 
 def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
-  st.markdown("#### Large Candidate mode (Phase27J.0)")
-  st.caption("1000件母集団 → Top100 → Top20 → Top5。Claim Map / Evidence Map は Top5 のみ深掘り。")
+  st.markdown("#### Large Candidate mode (Phase27J.0 / 27J.1)")
+  st.caption(
+    "1000件母集団 → Top100 → Top20 → Top5。"
+    " score は読む優先度の暫定値であり、技術的正しさ・特許価値・法的価値ではありません。"
+    " Claim Map / Evidence Map は Top5 のみ深掘り。"
+  )
   b1, b2, b3 = st.columns(3)
   with b1:
     gen100 = st.button("Generate Top100", key="v8_lc_top100")
@@ -156,22 +165,110 @@ def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
     st.session_state[STATE_V8_LARGE_SHORTLIST] = pack.to_dict()
 
   cached = st.session_state.get(STATE_V8_LARGE_SHORTLIST)
+  latest = find_latest_large_shortlist_dir(selected_case, root)
+  manifest = {}
+  if latest and (latest / "large_candidate_shortlist_manifest.json").exists():
+    import json as _json
+    manifest = _json.loads((latest / "large_candidate_shortlist_manifest.json").read_text(encoding="utf-8"))
+
+  triage_engine = manifest.get("triage_engine") or (cached or {}).get("selection", {}).get("triage_engine", "—")
+  ranking_policy = manifest.get("ranking_policy") or (cached or {}).get("selection", {}).get("ranking_policy", "—")
+  st.markdown(f"**Ranking Policy:** `{ranking_policy}`")
+  st.markdown(f"**Triage engine:** `{triage_engine}`")
+
   if isinstance(cached, dict) and cached.get("case_id") == selected_case:
     sel = cached.get("selection") or {}
-    st.markdown(
-      f"**ファネル:** imported {sel.get('population_count', 0)} → "
-      f"deduped {sel.get('deduped_count', 0)} → scored {sel.get('scored_count', 0)} → "
-      f"Top100 {sel.get('top100_count', 0)} → Top20 {sel.get('top20_count', 0)} → "
-      f"Top5 {sel.get('top5_count', 0)}"
-    )
-    latest = find_latest_large_shortlist_dir(selected_case, root)
+    funnel_cols = st.columns(6)
+    labels = [
+      ("Imported", sel.get("population_count", 0)),
+      ("Deduped", sel.get("deduped_count", 0)),
+      ("Scored", sel.get("scored_count", 0)),
+      ("Top100", sel.get("top100_count", 0)),
+      ("Top20", sel.get("top20_count", 0)),
+      ("Top5", sel.get("top5_count", 0)),
+    ]
+    for col, (label, count) in zip(funnel_cols, labels):
+      col.metric(label, count)
+
     if latest:
       top100 = load_large_candidates_csv(latest / "large_candidate_top100.csv")
       top20 = load_large_candidates_csv(latest / "large_candidate_top20.csv")
       top5 = load_large_candidates_csv(latest / "large_candidate_top5.csv")
-      _render_large_candidate_table(top100, title="Top100")
-      _render_large_candidate_table(top20, title="Top20")
-      _render_large_candidate_table(top5, title="Top5 Deep Dive")
+
+      with st.expander("スコアリング方針", expanded=False):
+        st.markdown(
+          "- **patent_triage**: include_terms +2/term, target_companies +3, US +1, pub/title/abstract +1, exclude -5/term\n"
+          "- **fallback**: Phase27J.0 keyword heuristic\n"
+          "- いずれも読む優先度のみ。FTO/侵害/有効性判断ではありません。"
+        )
+        st.caption(f"ranking_policy: {ranking_policy}")
+
+      if top5:
+        st.markdown("#### Top5 Deep Dive カード")
+        for rec in top5:
+          with st.container(border=True):
+            st.markdown(f"**{rec.rank}. {rec.publication_number}** — {rec.title[:80]}")
+            st.caption(f"{rec.organization or rec.assignee} / {rec.year} / score={rec.heuristic_score}")
+            st.markdown(f"**why_selected:** {rec.why_selected or '—'}")
+            if rec.positive_reasons:
+              st.markdown(f"**positive_reasons:** {', '.join(rec.positive_reasons[:5])}")
+            if rec.negative_reasons:
+              st.markdown(f"**negative_reasons:** {', '.join(rec.negative_reasons[:3])}")
+            st.caption(rec.next_verification_action)
+
+      with st.expander("なぜTop5に残ったか", expanded=False):
+        for rec in top5:
+          st.markdown(f"- **{rec.publication_number}**: {rec.why_selected or rec.score_reason}")
+
+      with st.expander("Top20から落ちた候補の要約", expanded=False):
+        top5_ids = {r.candidate_id for r in top5}
+        dropped = [r for r in top20 if r.candidate_id not in top5_ids]
+        if dropped:
+          for rec in dropped[:10]:
+            st.markdown(
+              f"- **{rec.publication_number}** (score={rec.heuristic_score}): "
+              f"Top5より include term 一致数が少ない、またはスコアが低いため除外"
+            )
+        else:
+          st.caption("（Top20件以下のため該当なし）")
+
+      dropped_md = latest / "dropped_candidate_summary.md"
+      if dropped_md.exists():
+        st.caption("詳細: dropped_candidate_summary.md を Export タブからダウンロード")
+
+      st.markdown("#### Top100 / Top20 テーブル")
+      score_min, score_max = st.slider(
+        "score range",
+        0.0,
+        20.0,
+        (0.0, 20.0),
+        key="v8_lc_score_range",
+      )
+      kw_filter = st.text_input("matched keyword", key="v8_lc_kw_filter")
+      org_filter = st.text_input("organization / assignee", key="v8_lc_org_filter")
+      year_filter = st.text_input("year", key="v8_lc_year_filter")
+      country_filter = st.text_input("country", key="v8_lc_country_filter")
+
+      def _filter_records(records: list) -> list:
+        out = []
+        for r in records:
+          if r.heuristic_score < score_min or r.heuristic_score > score_max:
+            continue
+          if kw_filter and kw_filter.lower() not in " ".join(r.matched_keywords).lower():
+            continue
+          org = f"{r.organization} {r.assignee}".lower()
+          if org_filter and org_filter.lower() not in org:
+            continue
+          if year_filter and year_filter not in str(r.year):
+            continue
+          if country_filter and country_filter.upper() not in str(r.country_code).upper():
+            continue
+          out.append(r)
+        return out
+
+      _render_large_candidate_table(_filter_records(top100), title="Top100")
+      _render_large_candidate_table(_filter_records(top20), title="Top20")
+
       if top5:
         pick = st.selectbox(
           "Claim Map へ進む特許（Top5のみ）",
@@ -180,6 +277,7 @@ def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
         )
         if pick:
           st.session_state[STATE_V8_SELECTED_PUBLICATION] = pick
+          st.session_state[STATE_V8_SELECTED_CASE] = selected_case
           st.caption(f"selected_publication_number={pick}")
   else:
     st.info("Large Candidate を取り込み後、Generate Top5 を押してください。")

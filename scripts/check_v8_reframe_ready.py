@@ -249,6 +249,22 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     "phase27j0 no fake patent",
     ("fake", "架空"),
   ),
+  (
+    "phase27j1 ranking explanation",
+    ("Ranking Explanation", "ranking explanation"),
+  ),
+  (
+    "phase27j1 patent_triage reuse",
+    ("patent_triage",),
+  ),
+  (
+    "phase27j1 score not legal proof",
+    ("読む優先度", "法的価値"),
+  ),
+  (
+    "phase27j1 no deep dive all 1000",
+    ("1000", "Deep Dive"),
+  ),
 )
 
 
@@ -873,7 +889,47 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("v8_export_ui missing Large Candidate Pack section")
 
+  phase27j1_files = (
+    "src/tech_cartography/services/patent_triage.py",
+    "src/tech_cartography/services/v8_patent_triage_adapter.py",
+    "src/tech_cartography/runtime/v8_ranking_explanation_schema.py",
+    "src/tech_cartography/services/v8_large_candidate_ranking_explanation.py",
+  )
+  for rel in phase27j1_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  shortlist_svc = _read(PROJECT_ROOT / "src/tech_cartography/services/v8_large_candidate_shortlist.py")
+  if "score_large_candidates_with_triage" in shortlist_svc and "ranking_policy" in shortlist_svc:
+    print("PASS: v8_large_candidate_shortlist references triage adapter / ranking_policy")
+  else:
+    failures.append("v8_large_candidate_shortlist missing triage adapter / ranking_policy")
+
+  if "Ranking Policy" in shortlist_ui:
+    print("PASS: v8_patent_shortlist_ui references Ranking Policy")
+  else:
+    failures.append("v8_patent_shortlist_ui missing Ranking Policy")
+
+  for token, label in (
+    ("why_selected", "why_selected"),
+    ("positive_reasons", "positive_reasons"),
+    ("negative_reasons", "negative_reasons"),
+  ):
+    if token in shortlist_ui:
+      print(f"PASS: v8_patent_shortlist_ui references {label}")
+    else:
+      failures.append(f"v8_patent_shortlist_ui missing {label}")
+
+  if "Ranking Explanation Pack" in export_ui:
+    print("PASS: v8_export_ui references Ranking Explanation Pack")
+  else:
+    failures.append("v8_export_ui missing Ranking Explanation Pack section")
+
   for rel in phase27j0_files:
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
+
+  for rel in phase27j1_files:
     text = _read(PROJECT_ROOT / rel)
     if legal_forbidden.search(text) and "no_legal" not in text.lower():
       failures.append(f"{rel} may claim legal judgement without disclaimer")
@@ -915,6 +971,8 @@ def main(argv: list[str] | None = None) -> int:
 
   if "Phase27I" in tab_config and ("3案件" in tab_config or "検証パック" in tab_config):
     print("PASS: current label mentions Phase27I / three case validation pack")
+  elif "Phase27J.1" in tab_config and ("Ranking" in tab_config or "ranking" in tab_config.lower()):
+    print("PASS: current label mentions Phase27J.1 / ranking explanation")
   elif "Phase27J.0" in tab_config and ("1000" in tab_config or "母集団" in tab_config):
     print("PASS: current label mentions Phase27J.0 / large candidate")
   elif "Phase27J" in tab_config and "Manual Claim" in tab_config:

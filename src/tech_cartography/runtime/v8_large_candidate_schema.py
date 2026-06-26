@@ -101,6 +101,12 @@ class V8LargeCandidateRecord:
   heuristic_score: float = 0.0
   score_reason: str = ""
   next_verification_action: str = ""
+  rank: int = 0
+  positive_reasons: list[str] = field(default_factory=list)
+  negative_reasons: list[str] = field(default_factory=list)
+  ranking_policy: str = ""
+  selected_stage: str = ""
+  why_selected: str = ""
   stage_label: str = "population"
   exclusion_reason: str = ""
   created_at: str = field(default_factory=utc_now_iso)
@@ -108,6 +114,8 @@ class V8LargeCandidateRecord:
   def to_dict(self) -> dict[str, Any]:
     d = asdict(self)
     d["matched_keywords"] = list(self.matched_keywords)
+    d["positive_reasons"] = list(self.positive_reasons)
+    d["negative_reasons"] = list(self.negative_reasons)
     return d
 
   @classmethod
@@ -116,6 +124,18 @@ class V8LargeCandidateRecord:
     filtered = {k: data[k] for k in known if k in data}
     if "matched_keywords" not in filtered:
       filtered["matched_keywords"] = []
+    for list_key in ("positive_reasons", "negative_reasons"):
+      if list_key not in filtered:
+        val = data.get(list_key)
+        if isinstance(val, str) and val:
+          filtered[list_key] = [k for k in val.split("|") if k]
+        else:
+          filtered[list_key] = []
+    if "rank" in filtered:
+      try:
+        filtered["rank"] = int(filtered.get("rank") or 0)
+      except (TypeError, ValueError):
+        filtered["rank"] = 0
     return cls(**filtered)
 
 
@@ -189,6 +209,8 @@ class V8LargeCandidateStageSelection:
   top20_path: str = ""
   top5_path: str = ""
   scoring_policy: str = "keyword_heuristic_v1"
+  ranking_policy: str = ""
+  triage_engine: str = ""
   selection_summary: str = ""
   warnings: list[str] = field(default_factory=list)
   candidate_information_only: bool = True

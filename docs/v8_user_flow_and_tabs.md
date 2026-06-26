@@ -110,7 +110,17 @@
 - メール送信・Scheduler は必須機能として残す（本 Phase では実行しない）
 - Export: **Large Candidate Pack** — `outputs/local_v8_large_shortlists/`
 - BigQuery SQL テンプレート: `docs/bigquery_templates/case_*_1000.sql`（参考のみ、課金・dry-run 確認が必要）
-- 次 Phase: **Phase27J.1** UI polish / **Phase27K** Manual Claim / **Phase27L** Evidence polish / **Phase27M** Cloud Run
+- 次 Phase: **Phase27J.1** UI polish / **Phase27K** Manual Claim / **Phase27L** Evidence polish / **Phase27M** UI最終調整 / **Phase27N** Cloud Run
+
+## Phase27J.1（Ranking Explanation and Patent Triage Adapter）
+
+- `patent_triage.py` を再利用（Phase4 スコアリング: include +2/term, target_companies +3, US +1, exclude -5/term）
+- `v8_patent_triage_adapter.py` — Large Candidate → patent_triage 変換
+- `v8_ranking_explanation_schema.py` / `v8_large_candidate_ranking_explanation.py`
+- Top5 に **why_selected** / **positive_reasons** / **negative_reasons** / スコア内訳
+- ranking explanation は読む優先度の説明（技術的正しさ・特許価値・法的価値ではない）
+- 1000件母集団の全件 Deep Dive はしない — Claim Map / Evidence Map は Top5 またはユーザー選択のみ
+- Export: **Ranking Explanation Pack**（ranking_explanation.md/json/csv, top5_ranking_explanation.md, dropped_candidate_summary.md）
 
 ## Phase27J（Manual Claim Injection）
 

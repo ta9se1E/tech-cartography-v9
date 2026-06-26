@@ -91,7 +91,7 @@ STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 V8_STATUS_CAPTION = (
-  "v8 local-first — Phase27J.0: 1000件候補母集団 / staged shortlist（Cloud Build はまだ不要）"
+  "v8 local-first — Phase27J.1: Ranking Explanation / patent triage adapter（Cloud Build はまだ不要）"
 )
 
 V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
@@ -106,7 +106,7 @@ V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
 )
 
 V8_SIDEBAR_NEXT_STEP = (
-  "入力タブで1000件候補CSVを取り込み、読むべき特許で Top100/Top20/Top5 を生成する"
+  "読むべき特許タブで Large Candidate の Top5 と Ranking Explanation を確認し、Claim Map へ進む"
 )
 
 

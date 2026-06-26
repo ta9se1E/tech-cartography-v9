@@ -1,4 +1,4 @@
-"""v8 Large Candidate staged shortlist (Phase 27J.0)."""
+"""v8 Large Candidate staged shortlist (Phase 27J.0 / 27J.1)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 from tech_cartography.runtime.v8_large_candidate_schema import (
-  CASE_KEYWORDS,
   LARGE_CANDIDATE_SAFETY_NOTICES,
   V8LargeCandidateRecord,
   V8LargeCandidateShortlistPack,
@@ -19,6 +18,11 @@ from tech_cartography.services.v8_large_candidate_import import (
   records_to_csv,
 )
 from tech_cartography.services.v8_large_candidate_normalizer import normalize_and_dedupe_large_candidates
+from tech_cartography.services.v8_large_candidate_ranking_explanation import (
+  build_ranking_explanation_report,
+  export_ranking_explanation,
+)
+from tech_cartography.services.v8_patent_triage_adapter import score_large_candidates_with_triage
 from tech_cartography.services.v8_sources_table import project_root_from_here
 
 LOCAL_LARGE_SHORTLIST_SUBDIR = "local_v8_large_shortlists"
@@ -71,6 +75,9 @@ def score_candidate(
   include_keywords: tuple[str, ...] = (),
   exclude_keywords: tuple[str, ...] = (),
 ) -> tuple[float, str, list[str]]:
+  """Phase27J.0 fallback heuristic — used when patent_triage adapter falls back."""
+  from tech_cartography.runtime.v8_large_candidate_schema import CASE_KEYWORDS
+
   keywords = list(CASE_KEYWORDS.get(case_id, ())) + list(include_keywords)
   blob = _search_blob(rec)
   matched = [kw for kw in keywords if kw.lower() in blob]
@@ -88,6 +95,7 @@ def score_candidate(
     reasons.append("has_year")
   if rec.title:
     score += 0.05
+    reasons.append("title present")
   else:
     score -= 0.2
     reasons.append("missing_title_penalty")
@@ -104,6 +112,36 @@ def score_candidate(
   score = max(0.0, min(1.0, score))
   reason = "; ".join(reasons) or "baseline_heuristic"
   return score, reason, matched
+
+
+def _enrich_stage_records(
+  items: list[V8LargeCandidateRecord],
+  *,
+  label: str,
+  ranking_policy: str,
+  start_rank: int = 1,
+) -> list[V8LargeCandidateRecord]:
+  out: list[V8LargeCandidateRecord] = []
+  for i, rec in enumerate(items):
+    copy = V8LargeCandidateRecord.from_dict(rec.to_dict())
+    copy.stage_label = label
+    copy.selected_stage = label
+    copy.rank = start_rank + i
+    copy.ranking_policy = ranking_policy
+    copy.next_verification_action = (
+      f"原典で {copy.publication_number or copy.title[:30]} を人手確認"
+      if label == "top5"
+      else f"候補スクリーニング: {copy.publication_number or 'no pub'}"
+    )
+    if label == "top5":
+      terms = ", ".join(f'"{k}"' for k in copy.matched_keywords[:3])
+      copy.why_selected = (
+        f"include term {terms} 等により Top5 に選抜（読む優先度のみ）"
+        if terms
+        else "heuristic score により Top5 に選抜（読む優先度のみ）"
+      )
+    out.append(copy)
+  return out
 
 
 def build_staged_shortlist(
@@ -128,40 +166,27 @@ def build_staged_shortlist(
     if not deduped:
       deduped = population
 
-  scored: list[V8LargeCandidateRecord] = []
-  for rec in deduped:
-    copy = V8LargeCandidateRecord.from_dict(rec.to_dict())
-    copy.stage_label = "scored"
-    score, reason, matched = score_candidate(
-      copy, case_id=case_id, include_keywords=include_keywords, exclude_keywords=exclude_keywords,
-    )
-    copy.heuristic_score = round(score, 4)
-    copy.score_reason = reason
-    copy.matched_keywords = matched
-    copy.keyword_match_count = len(matched)
-    scored.append(copy)
+  adapter = score_large_candidates_with_triage(
+    deduped,
+    case_id=case_id,
+    include_keywords=include_keywords,
+    exclude_keywords=exclude_keywords,
+    project_root=root,
+  )
+  scored = sorted(
+    adapter.scored_records,
+    key=lambda r: (-r.heuristic_score, r.publication_number or r.title),
+  )
+  for rec in scored:
+    rec.stage_label = "scored"
 
-  scored.sort(key=lambda r: (-r.heuristic_score, r.publication_number or r.title))
   top100_n = min(top100, len(scored))
   top20_n = min(top20, top100_n)
   top5_n = min(top5, top20_n)
 
-  def _stage_slice(items: list[V8LargeCandidateRecord], label: str, n: int) -> list[V8LargeCandidateRecord]:
-    out: list[V8LargeCandidateRecord] = []
-    for rec in items[:n]:
-      copy = V8LargeCandidateRecord.from_dict(rec.to_dict())
-      copy.stage_label = label
-      copy.next_verification_action = (
-        f"原典で {copy.publication_number or copy.title[:30]} を人手確認"
-        if label == "top5"
-        else f"候補スクリーニング: {copy.publication_number or 'no pub'}"
-      )
-      out.append(copy)
-    return out
-
-  top100_list = _stage_slice(scored, "top100", top100_n)
-  top20_list = _stage_slice(scored[:top20_n], "top20", top20_n)
-  top5_list = _stage_slice(scored[:top5_n], "top5", top5_n)
+  top100_list = _enrich_stage_records(scored[:top100_n], label="top100", ranking_policy=adapter.ranking_policy)
+  top20_list = _enrich_stage_records(scored[:top20_n], label="top20", ranking_policy=adapter.ranking_policy)
+  top5_list = _enrich_stage_records(scored[:top5_n], label="top5", ranking_policy=adapter.ranking_policy)
 
   stamp = utc_now_iso().replace(":", "").replace("-", "").replace("+00:00", "Z")
   output_dir = get_large_shortlist_dir(case_id, root) / f"pack_{stamp}"
@@ -179,6 +204,11 @@ def build_staged_shortlist(
     "top5": output_dir / "large_candidate_top5.csv",
     "summary": output_dir / "large_candidate_shortlist_summary.md",
     "manifest": output_dir / "large_candidate_shortlist_manifest.json",
+    "ranking_explanation_json": output_dir / "ranking_explanation.json",
+    "ranking_explanation_md": output_dir / "ranking_explanation.md",
+    "ranking_explanation_csv": output_dir / "ranking_explanation.csv",
+    "top5_ranking_explanation": output_dir / "top5_ranking_explanation.md",
+    "dropped_candidate_summary": output_dir / "dropped_candidate_summary.md",
   }
   records_to_csv(pop_copy, paths["population"])
   records_to_csv(ded_copy, paths["deduped"])
@@ -200,12 +230,14 @@ def build_staged_shortlist(
     top100_path=str(paths["top100"]),
     top20_path=str(paths["top20"]),
     top5_path=str(paths["top5"]),
-    scoring_policy="keyword_heuristic_v1 — not legal judgement",
+    scoring_policy=adapter.ranking_policy,
+    ranking_policy=adapter.ranking_policy,
+    triage_engine=adapter.triage_engine,
     selection_summary=(
       f"population {len(population)} → deduped {len(deduped)} → "
       f"Top100 {len(top100_list)} → Top20 {len(top20_list)} → Top5 {len(top5_list)}"
     ),
-    warnings=list(LARGE_CANDIDATE_SAFETY_NOTICES[:4]),
+    warnings=list(LARGE_CANDIDATE_SAFETY_NOTICES[:4]) + list(adapter.warnings),
   )
 
   summary = "\n".join([
@@ -213,7 +245,8 @@ def build_staged_shortlist(
     "",
     selection.selection_summary,
     "",
-    f"- scoring_policy: {selection.scoring_policy}",
+    f"- triage_engine: {adapter.triage_engine}",
+    f"- ranking_policy: {adapter.ranking_policy}",
     f"- top5 deep dive only — Claim Map / Evidence Map は Top5 またはユーザー選択に限定",
     "",
     "## Safety",
@@ -221,13 +254,35 @@ def build_staged_shortlist(
   ])
   paths["summary"].write_text(summary, encoding="utf-8")
 
+  ranking_report = build_ranking_explanation_report(
+    case_id=case_id,
+    population=pop_copy,
+    deduped=ded_copy,
+    scored=scored,
+    top100=top100_list,
+    top20=top20_list,
+    top5=top5_list,
+    ranking_policy=adapter.ranking_policy,
+    triage_engine=adapter.triage_engine,
+    adapter_result=adapter,
+    warnings=adapter.warnings,
+  )
+  export_ranking_explanation(ranking_report, output_dir)
+
   manifest = {
     "pack_id": _pack_id(case_id),
     "case_id": case_id,
     "generated_at": selection.generated_at,
+    "triage_engine": adapter.triage_engine,
+    "ranking_policy": adapter.ranking_policy,
     "selection": selection.to_dict(),
     "files": {k: str(v) for k, v in paths.items()},
     "safety_notices": list(LARGE_CANDIDATE_SAFETY_NOTICES),
+    "ranking_explanation": {
+      "report_id": ranking_report.report_id,
+      "common_selection_reasons": ranking_report.common_selection_reasons,
+      "common_exclusion_reasons": ranking_report.common_exclusion_reasons,
+    },
   }
   paths["manifest"].write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -242,7 +297,7 @@ def build_staged_shortlist(
     summary_path=str(paths["summary"]),
     manifest_path=str(paths["manifest"]),
     output_dir=str(output_dir),
-    warnings=list(LARGE_CANDIDATE_SAFETY_NOTICES[:3]),
+    warnings=list(LARGE_CANDIDATE_SAFETY_NOTICES[:3]) + list(adapter.warnings),
   )
 
 

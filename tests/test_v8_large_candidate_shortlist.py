@@ -33,7 +33,11 @@ def test_staged_shortlist_top_counts(imported_root: Path) -> None:
 def test_heuristic_score_and_reason(imported_root: Path) -> None:
   pack = build_staged_shortlist(CASE_ID, project_root=imported_root)
   from tech_cartography.services.v8_large_candidate_import import load_large_candidates_csv
+  import json
 
   scored = load_large_candidates_csv(Path(pack.scored_path))
   assert scored
   assert all(r.score_reason for r in scored if r.heuristic_score > 0)
+  manifest = json.loads(Path(pack.manifest_path).read_text(encoding="utf-8"))
+  assert manifest.get("triage_engine")
+  assert manifest.get("ranking_policy")

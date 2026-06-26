@@ -260,9 +260,11 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Fixed Point Observation は未生成 — 「定点観測」タブで Generate してください。")
 
-  st.markdown("#### Large Candidate Pack (Phase27J.0)")
+  st.markdown("#### Large Candidate Pack (Phase27J.0 / 27J.1)")
   st.caption(
-    "1000件は母集団。Top5 のみ Deep Dive。Cloud Build / 外部 API / BigQuery 実行は行いません。"
+    "1000件は母集団。Top5 のみ Deep Dive。Ranking explanation は読む優先度の説明であり、"
+    "技術的正しさ・特許価値・法的価値ではありません。"
+    " Cloud Build / 外部 API / BigQuery 実行は行いません。"
   )
   lc_case = export_case if export_case != "all" else V8_CASE_SAMPLES[0]["case_id"]
   lc_dir = find_latest_large_shortlist_dir(lc_case, root)
@@ -274,11 +276,41 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
       manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
       sel = manifest.get("selection") or {}
       st.markdown(f"- **case_id**: {lc_case}")
+      st.markdown(f"- **triage_engine**: {manifest.get('triage_engine', '—')}")
+      st.markdown(f"- **ranking_policy**: {manifest.get('ranking_policy', '—')}")
       st.markdown(f"- imported: {sel.get('population_count', '—')}")
       st.markdown(f"- deduped: {sel.get('deduped_count', '—')}")
       st.markdown(f"- Top100: {sel.get('top100_count', '—')}")
       st.markdown(f"- Top20: {sel.get('top20_count', '—')}")
       st.markdown(f"- Top5: {sel.get('top5_count', '—')}")
+      re_info = manifest.get("ranking_explanation") or {}
+      if re_info.get("common_selection_reasons"):
+        st.markdown("**common_selection_reasons:**")
+        for r in re_info["common_selection_reasons"][:5]:
+          st.caption(f"- {r}")
+      if re_info.get("common_exclusion_reasons"):
+        st.markdown("**common_exclusion_reasons:**")
+        for r in re_info["common_exclusion_reasons"][:5]:
+          st.caption(f"- {r}")
+
+    st.markdown("##### Ranking Explanation Pack")
+    for fname, mime in (
+      ("ranking_explanation.md", "text/markdown"),
+      ("ranking_explanation.json", "application/json"),
+      ("ranking_explanation.csv", "text/csv"),
+      ("top5_ranking_explanation.md", "text/markdown"),
+      ("dropped_candidate_summary.md", "text/markdown"),
+    ):
+      path = lc_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_re_{fname}",
+        )
+
     for fname, mime in (
       ("large_candidate_population.csv", "text/csv"),
       ("large_candidate_deduped.csv", "text/csv"),
