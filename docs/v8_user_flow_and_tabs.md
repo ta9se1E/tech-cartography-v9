@@ -162,6 +162,18 @@
 - Sidebar / はじめに: Phase27N — deploy 前チェック段階
 - 次 Phase: **Phase27O** Cloud Run v8反映 / **Phase27P** 提出用 README
 
+## Phase27N.5（One Case Real Demo Data End-to-End Run）
+
+- 対象: **case_01_pan_graphitization** のみ
+- 実在 CSV: `cases/case_01_pan_graphitization/large_candidates/case_01_bigquery_export_1000.csv`
+- runbook: `docs/one_case_real_demo_runbook.md`
+- script: `scripts/run_v8_one_case_demo_e2e_check.py`
+- Top5 生成 → claim **1件** 手動投入 → refresh → Demo Polish / Demo Readiness
+- claim 自動生成しない / fixture を本物扱いしない / 架空1000件 CSV を作らない
+- Cloud Build / Cloud Run deploy は Phase27O まで実行しない
+- Export UI: **One Case Real Demo E2E** セクション
+- Sidebar / はじめに: Phase27N.5 — Case 1 実データ E2E
+
 ## Phase27L（Evidence Map / Gap Demo Polish）
 
 - schema: `V8EvidenceDemoStatus` / `V8GapDemoStatus` / `V8DemoStoryCard` / `V8DemoPolishReport`

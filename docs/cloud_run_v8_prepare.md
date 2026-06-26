@@ -76,6 +76,16 @@ streamlit run app.py \
 - Cloud Run 上では **デフォルト OFF**: `DISABLE_EMAIL_SEND=true`, `DISABLE_SCHEDULER=true`
 - 定点観測タブでは計画・プレビューのみ — 本 Phase では実行しない
 
+## Demo data 準備（Phase27N.5）
+
+Cloud Run 前に **Case 1** だけ実在 CSV で E2E を通してください。
+
+```bash
+conda run -n 2026hack python scripts/run_v8_one_case_demo_e2e_check.py
+```
+
+詳細: `docs/one_case_real_demo_runbook.md`
+
 ## Demo data 準備
 
 Phase27M Demo Readiness が `not_ready`（Large Candidate CSV 未投入等）でも **Cloud deploy の技術ブロッカーではありません**。

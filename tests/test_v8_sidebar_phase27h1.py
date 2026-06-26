@@ -10,7 +10,8 @@ from tech_cartography.ui.v8_tab_config import V8_STATUS_CAPTION, v8_sidebar_prog
 
 def test_v8_status_caption_mentions_current_phase() -> None:
   assert (
-    "Phase27N" in V8_STATUS_CAPTION
+    "Phase27N.5" in V8_STATUS_CAPTION
+    or "Phase27N" in V8_STATUS_CAPTION
     or "Phase27M" in V8_STATUS_CAPTION
     or "Phase27L" in V8_STATUS_CAPTION
     or "Phase27K" in V8_STATUS_CAPTION
@@ -18,7 +19,8 @@ def test_v8_status_caption_mentions_current_phase() -> None:
     or "Phase27I" in V8_STATUS_CAPTION
   )
   assert (
-    "Cloud Run" in V8_STATUS_CAPTION
+    "One Case" in V8_STATUS_CAPTION
+    or "Cloud Run" in V8_STATUS_CAPTION
     or "Demo Readiness" in V8_STATUS_CAPTION
     or "Readiness" in V8_STATUS_CAPTION
     or "Demo Polish" in V8_STATUS_CAPTION

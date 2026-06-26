@@ -198,9 +198,9 @@ def _render_v8_demo_readiness_sidebar(project_root: Path) -> None:
   from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_STATUS_CAPTION
 
   st.divider()
-  st.markdown("**v8 Cloud Run Prep (Phase27N)**")
+  st.markdown("**v8 One Case Demo (Phase27N.5)**")
   st.caption(V8_STATUS_CAPTION)
-  st.caption("deploy 前チェック — build/deploy はまだしない")
+  st.caption("Case 1 実データ E2E — Cloud Run deploy は Phase27O")
   case_id = str(
     get_v8_input_state().get("selected_case_id")
     or st.session_state.get(STATE_V8_SELECTED_CASE)
@@ -209,6 +209,15 @@ def _render_v8_demo_readiness_sidebar(project_root: Path) -> None:
   if case_id:
     st.caption(f"selected case: {case_id}")
   try:
+    from tech_cartography.runtime.v8_one_case_demo_schema import DEFAULT_ONE_CASE_INPUT_CSV
+    from tech_cartography.services.v8_one_case_demo_e2e import assess_one_case_demo_status
+
+    oc = assess_one_case_demo_status(project_root=project_root)
+    st.caption(f"Case 1 E2E: {oc.overall_status}")
+    if not oc.input_csv_exists:
+      st.caption(f"CSV未配置: {DEFAULT_ONE_CASE_INPUT_CSV}")
+    if oc.top5_publication_numbers:
+      st.caption(f"Top5: {oc.top5_publication_numbers[0][:20]}...")
     cr = build_cloud_run_readiness_report(project_root=project_root)
     st.caption(f"cloud run prep: {cr.overall_status}")
     st.caption(f"demo data: {cr.demo_data_status}")

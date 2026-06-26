@@ -21,6 +21,8 @@ from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap
 from tech_cartography.services.v8_fixed_point_observation_export import find_latest_fixed_point_observation_dir
 from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
 from tech_cartography.services.v8_demo_readiness_export import export_demo_readiness, find_latest_demo_readiness_dir
+from tech_cartography.runtime.v8_one_case_demo_schema import DEFAULT_ONE_CASE_INPUT_CSV, DEFAULT_ONE_CASE_ID
+from tech_cartography.services.v8_one_case_demo_e2e import assess_one_case_demo_status
 from tech_cartography.services.v8_cloud_run_readiness import build_cloud_run_readiness_report
 from tech_cartography.services.v8_cloud_run_readiness_export import (
   export_cloud_run_readiness,
@@ -401,8 +403,39 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   st.markdown("#### デモ提出用 — 最低限の Pack")
   st.caption(
     "Large Candidate Pack / Ranking Explanation / Manual Claim Refresh / "
-    "Demo Polish Pack / Demo Readiness Pack / Cloud Run Readiness Pack"
+    "Demo Polish Pack / Demo Readiness Pack / Cloud Run Readiness Pack / One Case Real Demo E2E"
   )
+
+  st.markdown("#### One Case Real Demo E2E (Phase27N.5)")
+  st.caption(
+    f"Case 1 ({DEFAULT_ONE_CASE_ID}) — 実在 CSV で E2E。"
+    " claim 自動生成なし / Cloud Build・Cloud Run deploy なし。"
+  )
+  try:
+    oc_status = assess_one_case_demo_status(case_id=DEFAULT_ONE_CASE_ID, project_root=root)
+    st.markdown(f"- **overall_status**: {oc_status.overall_status}")
+    st.markdown(f"- **input_csv_exists**: {oc_status.input_csv_exists}")
+    if not oc_status.input_csv_exists:
+      st.warning(
+        f"実在特許 CSV を配置してください: `{DEFAULT_ONE_CASE_INPUT_CSV}` — "
+        "入力タブまたは docs/one_case_real_demo_runbook.md を参照"
+      )
+    if oc_status.top5_count is not None:
+      st.markdown(f"- **top5_count**: {oc_status.top5_count}")
+    if oc_status.top5_publication_numbers:
+      st.markdown(f"- **top5_publication_numbers**: {', '.join(oc_status.top5_publication_numbers)}")
+    st.markdown(f"- **manual_claim_count**: {oc_status.manual_claim_count}")
+    st.markdown(f"- **demo_readiness_status**: {oc_status.demo_readiness_status or '—'}")
+    st.caption(f"next: {oc_status.next_user_action}")
+    if oc_status.manual_claim_count < 1 and oc_status.top5_publication_numbers:
+      st.info(
+        "Claim Map タブで Top5 のうち1件だけ claim 本文を手動投入してください。"
+        " システムは claim を生成しません。"
+      )
+    if oc_status.demo_polish_pack_path:
+      st.caption(f"demo polish: {oc_status.demo_polish_pack_path}")
+  except Exception as exc:
+    st.warning(f"One Case E2E 状態取得エラー: {exc}")
 
   st.markdown("#### Cloud Run Readiness Pack (Phase27N)")
   st.caption(

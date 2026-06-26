@@ -91,7 +91,7 @@ STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 V8_STATUS_CAPTION = (
-  "v8 local-first — Phase27N: Cloud Run反映準備（deploy 前チェック — まだ build/deploy しない）"
+  "v8 local-first — Phase27N.5: One Case Real Demo Data Run（Case 1 実データ E2E — deploy は Phase27O）"
 )
 
 V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
@@ -106,7 +106,7 @@ V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
 )
 
 V8_SIDEBAR_NEXT_STEP = (
-  "Demo Readiness を確認し、artifact missing の step から順に進める"
+  "Case 1 に実在特許 CSV を投入し、Top5 生成まで通す — claim は1件手動投入"
 )
 
 

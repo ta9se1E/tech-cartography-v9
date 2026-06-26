@@ -162,6 +162,13 @@ conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
 
 **次 Phase:** Phase27N（Cloud Run）
 
+## Phase27N.5: One Case Real Demo E2E
+
+- Case 1 代表ケース — 実在 CSV E2E
+- `docs/one_case_real_demo_runbook.md`
+- Top5 + claim 1件手動投入 + Demo Readiness 改善
+- Cloud Run deploy は Phase27O
+
 ## Phase27N: Cloud Run Preparation and Deployment Readiness
 
 - Cloud Run Readiness Pack — app/PORT/Dockerfile/artifact policy

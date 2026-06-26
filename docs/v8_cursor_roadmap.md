@@ -377,6 +377,22 @@
 
 ---
 
+## Phase27N.5: One Case Real Demo Data End-to-End Run
+
+**目的:** Cloud Run 前に Case 1 だけ実在 CSV で E2E を通す。
+
+**状態:** ✅ 完了
+
+**完了条件:**
+- `docs/one_case_real_demo_runbook.md`
+- `scripts/run_v8_one_case_demo_e2e_check.py`
+- Export / Intro / Sidebar Phase27N.5 導線
+- claim 自動生成なし / 架空 CSV 生成なし
+
+**Cloud Build / Cloud Run deploy:** Phase27O まで **実行しない**
+
+---
+
 ## Phase27M: Final UI Demo Flow & Readiness Guidance
 
 **目的:** 初見ユーザーが迷わずデモ操作できる UI 最終導線。

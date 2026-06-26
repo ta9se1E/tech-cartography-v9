@@ -337,6 +337,22 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     "phase27n email scheduler default off",
     ("DISABLE_EMAIL_SEND", "DISABLE_SCHEDULER", "デフォルト OFF"),
   ),
+  (
+    "phase27n5 one case real demo",
+    ("Phase27N.5", "One Case", "実データ"),
+  ),
+  (
+    "phase27n5 real csv required",
+    ("case_01_bigquery_export_1000", "実在"),
+  ),
+  (
+    "phase27n5 no generated claim text",
+    ("claim", "自動生成", "しません"),
+  ),
+  (
+    "phase27n5 no cloud run deploy",
+    ("Phase27N.5", "Cloud Run deploy", "実行しません"),
+  ),
 )
 
 
@@ -1040,17 +1056,35 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("v8_admin_settings_ui missing Cloud Run readiness section")
 
-  if "Phase27N" in intro_ui_early:
+  if "Phase27N.5" in intro_ui_early or "Case 1 実データ" in intro_ui_early:
+    print("PASS: v8_intro_ui references Case 1 real demo data run")
+  elif "Phase27N" in intro_ui_early:
     print("PASS: v8_intro_ui references Phase27N")
   else:
-    failures.append("v8_intro_ui missing Phase27N")
+    failures.append("v8_intro_ui missing Phase27N.5 / Case 1 real demo")
 
-  if "Phase27N" in tab_config:
+  if "Phase27N.5" in tab_config:
+    print("PASS: Sidebar/tab config references Phase27N.5")
+  elif "Phase27N" in tab_config:
     print("PASS: Sidebar/tab config references Phase27N")
   elif "Phase27M" in tab_config:
-    failures.append("v8_tab_config still Phase27M only — update to Phase27N")
+    failures.append("v8_tab_config still Phase27M only — update to Phase27N.5")
   else:
-    failures.append("v8_tab_config missing Phase27N")
+    failures.append("v8_tab_config missing Phase27N.5")
+
+  phase27n5_files = (
+    "docs/one_case_real_demo_runbook.md",
+    "scripts/run_v8_one_case_demo_e2e_check.py",
+    "src/tech_cartography/runtime/v8_one_case_demo_schema.py",
+    "src/tech_cartography/services/v8_one_case_demo_e2e.py",
+  )
+  for rel in phase27n5_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  if "One Case Real Demo E2E" in export_ui:
+    print("PASS: v8_export_ui references One Case Real Demo E2E")
+  else:
+    failures.append("v8_export_ui missing One Case Real Demo E2E section")
 
   dockerignore = _read(PROJECT_ROOT / ".dockerignore")
   if ".env" in dockerignore and "outputs" in dockerignore:
@@ -1241,7 +1275,9 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("stale Phase27B label remains in v8 UI")
 
-  if "Phase27N" in tab_config and ("Cloud Run" in tab_config or "Readiness" in tab_config):
+  if "Phase27N.5" in tab_config and ("One Case" in tab_config or "Case 1" in tab_config or "実データ" in tab_config):
+    print("PASS: current label mentions Phase27N.5 / one case real demo")
+  elif "Phase27N" in tab_config and ("Cloud Run" in tab_config or "Readiness" in tab_config):
     print("PASS: current label mentions Phase27N / Cloud Run readiness")
   elif "Phase27M" in tab_config and ("Demo Readiness" in tab_config or "Readiness" in tab_config):
     print("PASS: current label mentions Phase27M / demo readiness")
@@ -1260,7 +1296,7 @@ def main(argv: list[str] | None = None) -> int:
   elif "Phase27H" in tab_config and "定点観測" in tab_config:
     print("PASS: current label mentions Phase27H / fixed point observation")
   else:
-    failures.append("v8_tab_config missing Phase27N or Phase27H status caption")
+    failures.append("v8_tab_config missing Phase27N.5 or Phase27H status caption")
 
   if "v8_sidebar_progress_text" in demo_safe and "_is_v8_user_flow_ui" in demo_safe:
     print("PASS: v8 sidebar mentions v8 flow")

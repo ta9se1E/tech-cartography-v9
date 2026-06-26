@@ -27,6 +27,37 @@ def render_v8_intro_tab() -> None:
     unsafe_allow_html=True,
   )
 
+  st.markdown("#### Phase27N.5 — Case 1 実データ E2E（最優先）")
+  st.markdown(
+    render_info_box(
+      "<strong>Cloud Run deploy 前に、Case 1 だけ実在特許 CSV で最後まで通す</strong>。"
+      " 1000件は母集団 — Top5 のみ Deep Dive。"
+      " claim 本文は自動生成しません。"
+    ),
+    unsafe_allow_html=True,
+  )
+  n5_steps = [
+    "実在 CSV を cases/case_01_pan_graphitization/large_candidates/case_01_bigquery_export_1000.csv に配置",
+    "Import（入力タブまたは CLI）",
+    "Top100 / Top20 / Top5 生成",
+    "Top5 から1件選び claim 本文を手動投入",
+    "refresh（Claim Map 投入後 または CLI）",
+    "Demo Polish Pack / Demo Readiness Pack 生成",
+  ]
+  for index, step in enumerate(n5_steps, start=1):
+    st.markdown(f"{index}. {step}")
+  st.markdown(
+    render_next_action_card(
+      "Case 1 次にやること",
+      [
+        "実在特許 CSV を配置（fixture/架空CSV不可）",
+        "scripts/run_v8_one_case_demo_e2e_check.py を実行",
+        "claim 未投入なら Claim Map タブで1件手動投入",
+      ],
+    ),
+    unsafe_allow_html=True,
+  )
+
   st.markdown("#### 最短デモ操作")
   demo_steps = [
     "Case を選ぶ",

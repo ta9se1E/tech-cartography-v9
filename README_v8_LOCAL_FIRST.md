@@ -188,6 +188,18 @@ conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
 4. **Phase27O** で Cloud Build / Cloud Run deploy
 5. それまでは v7 の本番環境を壊さない
 
+## Phase27N.5 — One Case Real Demo E2E
+
+```bash
+conda run -n 2026hack python scripts/run_v8_one_case_demo_e2e_check.py
+```
+
+- 対象: `case_01_pan_graphitization` のみ
+- 実在 CSV: `cases/case_01_pan_graphitization/large_candidates/case_01_bigquery_export_1000.csv`
+- claim 本文は **手動投入のみ** — 自動生成しない
+- Cloud Build / Cloud Run deploy は **Phase27O** まで実行しない
+- 詳細: `docs/one_case_real_demo_runbook.md`
+
 ## Phase27N — Cloud Run Readiness Pack
 
 ```bash
