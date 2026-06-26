@@ -1,5 +1,24 @@
 # v8 User Flow and Tabs
 
+## Phase27B 実装状況（UI骨格）
+
+| タブ | モジュール | 状態 |
+|------|-----------|------|
+| はじめに | `v8_intro_ui.py` | ✅ 説明・フロー |
+| 入力 | `v8_input_ui.py` | ✅ session_state 保存 |
+| Sources一覧 | `v8_sources_ui.py` + `v8_sources_table.py` | ✅ case CSV 表示 |
+| 読むべき特許 | `v8_patent_shortlist_ui.py` | 🔶 draft Top5 |
+| Claim Map | `v8_claim_map_ui.py` | 🔶 Phase27E 予定表示 |
+| Evidence Map | `v8_evidence_map_ui.py` | 🔶 Phase27F 予定表示 |
+| Gap / Next Actions | `v8_gap_next_actions_ui.py` | ✅ 既存 artifact 閲覧 |
+| 定点観測 | `v8_fixed_point_observation_ui.py` | ✅ ループ説明 + 導線 |
+| Export | `v8_export_ui.py` | 🔶 CSV + artifact path |
+| 管理者設定 | `v8_admin_settings_ui.py` | ✅ 運用 UI 隔離 |
+
+- エントリポイント: `app.py` → `render_v8_user_flow_app`（`APP_UI_VERSION` 未設定時 v8）
+- v7 UI は削除せず `APP_UI_VERSION=v7` で切替
+- メール送信・Scheduler は削除せず、定点観測タブで必須機能として説明、詳細は管理者設定へ
+
 ## 設計方針
 
 - ユーザー向け主役: **Sources → 読むべき特許 → Claim → Evidence → Gap/Actions → 定点観測 → Export**

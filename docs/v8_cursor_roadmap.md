@@ -39,14 +39,24 @@
 
 **目的:** analyst モードのタブを v8 10タブ構成に再配置。管理者設定を隔離。
 
-**追加/修正ファイル候補:**
-- `src/tech_cartography/ui/` タブ定義
-- `app.py` ルーティング
-- `tests/test_v8_ui_tabs.py`
+**状態:** ✅ 完了（UI骨格 — 本格分析ロジックは Phase27C 以降）
 
-**完了条件:** 10タブが表示され、管理者タブは role 制御
+**追加/修正ファイル:**
+- `src/tech_cartography/ui/v8_user_flow_app.py`
+- `src/tech_cartography/ui/v8_tab_config.py`
+- `src/tech_cartography/ui/v8_*_ui.py`（10タブ分）
+- `src/tech_cartography/services/v8_sources_table.py`
+- `app.py` — `APP_UI_VERSION=v8`（デフォルト）/ `v7` 切替
+- `scripts/check_v8_reframe_ready.py` — Phase27B チェック追加
+- `tests/test_v8_*.py`
 
-**テスト観点:** タブ順序、非管理者に SMTP 非表示
+**完了条件:**
+- 10タブが `render_v8_user_flow_app` で表示
+- 管理者タブは admin のみ詳細、member は最小表示
+- user-facing タブに SMTP_PASSWORD / TAVILY_API_KEY なし
+- メール送信・Scheduler は定点観測タブで必須機能として説明
+
+**テスト観点:** タブ順序、import、Sources CSV 読取、安全ラベル
 
 **Cloud Build:** 不要
 

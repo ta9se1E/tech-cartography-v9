@@ -348,6 +348,17 @@ TAB_LABELS: dict[str, str] = {
   "theme_validation": "別テーマ検証",
   "reports": "レポート",
   "settings": "設定",
+  # v8 user-flow tabs (Phase 27B)
+  "intro": "はじめに",
+  "input": "入力",
+  "sources": "Sources一覧",
+  "patent_shortlist": "読むべき特許",
+  "claim_map": "Claim Map",
+  "evidence_map": "Evidence Map",
+  "gap_next_actions": "Gap / Next Actions",
+  "fixed_point_observation": "定点観測",
+  "export": "Export",
+  "admin_settings": "管理者設定",
 }
 
 USER_SETTING_LABELS: dict[str, str] = {

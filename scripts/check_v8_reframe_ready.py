@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase27A readiness check for v8 reframe and three-case validation plan."""
+"""Phase27A/27B readiness check for v8 reframe and user-flow UI."""
 
 from __future__ import annotations
 
@@ -15,6 +15,46 @@ REQUIRED_DOCS = (
   "docs/v8_user_flow_and_tabs.md",
   "docs/v8_cursor_roadmap.md",
   "README_v8_LOCAL_FIRST.md",
+)
+
+V8_UI_FILES = (
+  "src/tech_cartography/ui/v8_user_flow_app.py",
+  "src/tech_cartography/ui/v8_tab_config.py",
+  "src/tech_cartography/ui/v8_intro_ui.py",
+  "src/tech_cartography/ui/v8_input_ui.py",
+  "src/tech_cartography/ui/v8_sources_ui.py",
+  "src/tech_cartography/ui/v8_patent_shortlist_ui.py",
+  "src/tech_cartography/ui/v8_claim_map_ui.py",
+  "src/tech_cartography/ui/v8_evidence_map_ui.py",
+  "src/tech_cartography/ui/v8_gap_next_actions_ui.py",
+  "src/tech_cartography/ui/v8_fixed_point_observation_ui.py",
+  "src/tech_cartography/ui/v8_export_ui.py",
+  "src/tech_cartography/ui/v8_admin_settings_ui.py",
+)
+
+V8_TAB_LABELS_REQUIRED = (
+  "はじめに",
+  "入力",
+  "Sources一覧",
+  "読むべき特許",
+  "Claim Map",
+  "Evidence Map",
+  "Gap / Next Actions",
+  "定点観測",
+  "Export",
+  "管理者設定",
+)
+
+USER_FACING_UI_FILES = tuple(
+  path
+  for path in V8_UI_FILES
+  if "admin_settings" not in path
+)
+
+FORBIDDEN_USER_FACING = (
+  "SMTP_PASSWORD",
+  "TAVILY_API_KEY",
+  "eyJhbGci",
 )
 
 CASE_IDS = (
@@ -109,6 +149,43 @@ def main(argv: list[str] | None = None) -> int:
 
   for rel in REQUIRED_DOCS:
     _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  for rel in V8_UI_FILES:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  tab_config = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_tab_config.py")
+  for label in V8_TAB_LABELS_REQUIRED:
+    if label in tab_config:
+      print(f"PASS: v8 tab label present: {label}")
+    else:
+      failures.append(f"v8_tab_config missing label: {label}")
+
+  fixed_point = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_fixed_point_observation_ui.py")
+  if "メール送信" in fixed_point and "Scheduler" in fixed_point:
+    print("PASS: fixed point observation UI mentions email send and scheduler")
+  else:
+    failures.append("v8_fixed_point_observation_ui missing email/scheduler mention")
+
+  admin_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_admin_settings_ui.py")
+  admin_tokens = ("operation", "admin", "IAP", "Scheduler")
+  if all(token.lower() in admin_ui.lower() for token in admin_tokens):
+    print("PASS: admin settings UI contains operation/admin related functions")
+  else:
+    failures.append("v8_admin_settings_ui missing operation/admin related content")
+
+  for rel in USER_FACING_UI_FILES:
+    text = _read(PROJECT_ROOT / rel)
+    for token in FORBIDDEN_USER_FACING:
+      if token in text:
+        failures.append(f"user-facing UI {rel} mentions forbidden token: {token}")
+  if not any("forbidden token" in f for f in failures):
+    print("PASS: user-facing tabs do not mention SMTP_PASSWORD or TAVILY_API_KEY")
+
+  app_py = _read(PROJECT_ROOT / "app.py")
+  if "APP_UI_VERSION" in app_py and "v8_user_flow_app" in app_py:
+    print("PASS: app.py wires v8 UI with APP_UI_VERSION switch")
+  else:
+    failures.append("app.py missing APP_UI_VERSION or v8_user_flow_app wiring")
 
   for case_id in CASE_IDS:
     case_dir = PROJECT_ROOT / "cases" / case_id
