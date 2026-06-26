@@ -18,6 +18,7 @@ from tech_cartography.services.v8_evidence_map_export import (
 from tech_cartography.services.v8_large_candidate_shortlist import load_top5_publications
 from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
+from tech_cartography.ui.v8_demo_flow_ui import render_artifact_count_metric, render_demo_flow_banner
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
@@ -178,6 +179,12 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
   st.markdown("### Evidence Map v2")
+  render_demo_flow_banner(
+    project_root=root,
+    current_tab="evidence_map",
+    tab_purpose="supporting evidence candidate — Evidence Map is not proof",
+    next_tab_key="gap_next_actions",
+  )
   _render_how_to_read_card()
   st.markdown(
     render_caution_box(
@@ -319,6 +326,7 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
 
   evidence_map = _to_map(cached["evidence_map"])
   export_info = cached.get("export") or {}
+  st.caption("artifact missing と true zero を区別 — 未生成時は件数0として表示しません")
   _render_metrics(evidence_map)
   _render_aggregation_chips(evidence_map)
 

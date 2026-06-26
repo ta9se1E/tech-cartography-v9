@@ -160,7 +160,14 @@ conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
 - score は読む優先度であり、技術的正しさ・特許価値・法的価値ではない
 - 1000件全件 Deep Dive しない
 
-**次 Phase:** Phase27M（UI）→ Phase27N（Cloud Run）
+**次 Phase:** Phase27N（Cloud Run）
+
+## Phase27M: Final UI Demo Flow & Readiness
+
+- Demo Readiness — artifact missing vs true zero
+- 最短デモ操作 / ステップガイド / Sidebar Phase27M
+- `scripts/run_v8_demo_readiness_check.py`
+- Cloud Build / Cloud Run deploy はこの Phase では実行しない
 
 ## Phase27L: Evidence Map / Gap Demo Polish
 

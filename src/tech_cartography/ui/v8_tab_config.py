@@ -91,7 +91,7 @@ STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 V8_STATUS_CAPTION = (
-  "v8 local-first — Phase27L: Evidence Map / Gap Demo Polish（Cloud Build はまだ不要）"
+  "v8 local-first — Phase27M: Final UI Demo Flow & Readiness（Cloud Build はまだ不要）"
 )
 
 V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
@@ -106,7 +106,7 @@ V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
 )
 
 V8_SIDEBAR_NEXT_STEP = (
-  "Evidence Map → Gap / Next Actions → Export で Demo Polish Pack を確認する"
+  "Demo Readiness を確認し、artifact missing の step から順に進める"
 )
 
 

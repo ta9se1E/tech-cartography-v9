@@ -10,6 +10,7 @@ import streamlit as st
 from tech_cartography.services.v8_large_candidate_import import import_large_candidates
 from tech_cartography.services.v8_sources_table import load_case_profile
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box
+from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
 from tech_cartography.ui.v8_tab_config import STATE_V8_INPUT, STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
 
 
@@ -39,6 +40,19 @@ def render_v8_input_tab(*, project_root: Path | str) -> None:
   state = get_v8_input_state()
 
   st.markdown("### 研究テーマと入力")
+  st.markdown(
+    render_info_box(
+      "<strong>まずここから (Phase27M)</strong> — Case を選び、1000件候補 CSV/Excel を取り込みます。"
+      " この UI から BigQuery は実行しません。SQL テンプレート: docs/bigquery_templates/"
+    ),
+    unsafe_allow_html=True,
+  )
+  render_demo_flow_banner(
+    project_root=root,
+    current_tab="input",
+    tab_purpose="入力 — Large Candidate CSV 取込の起点",
+    next_tab_key="sources",
+  )
   st.caption("このタブでは外部API・BigQuery・メール送信・Scheduler は実行しません。")
 
   case_options = ["（案件を選ばない）"] + [sample["case_id"] for sample in V8_CASE_SAMPLES]

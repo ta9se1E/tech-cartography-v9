@@ -27,6 +27,7 @@ from tech_cartography.services.v8_gap_next_actions_export import (
 from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
+from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
@@ -151,7 +152,7 @@ def _render_single_report(
 ) -> None:
   _render_metrics(report)
 
-  refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
+  st.caption("artifact missing と true zero を区別 — Gap artifact 未生成時は gap_count=0 と表示しません")
   if isinstance(refresh_cached, dict):
     rpt = refresh_cached.get("report") or {}
     if rpt.get("case_id") == report.case_id:
@@ -253,6 +254,12 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
   st.markdown("### Gap / Next Actions")
+  render_demo_flow_banner(
+    project_root=root,
+    current_tab="gap_next_actions",
+    tab_purpose="Gap is not invalidity / weakness — 未確認事項と Top 3 Actions",
+    next_tab_key="fixed_point_observation",
+  )
   st.markdown(
     render_info_box(
       "<strong>Gapの見方 (Phase27L)</strong><br>"

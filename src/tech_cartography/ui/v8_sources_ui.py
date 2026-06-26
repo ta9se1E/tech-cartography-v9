@@ -15,6 +15,7 @@ from tech_cartography.services.v8_large_candidate_import import (
 )
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
+from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
 
@@ -144,6 +145,12 @@ def render_v8_sources_tab(*, project_root: Path | str) -> None:
   default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
 
   st.markdown("### Sources一覧")
+  render_demo_flow_banner(
+    project_root=root,
+    current_tab="sources",
+    tab_purpose="ここでは母集団を見る — 1000件は Deep Dive 対象ではない",
+    next_tab_key="patent_shortlist",
+  )
   st.markdown(
     render_caution_box(
       "FTO、侵害、有効性判断、法的結論は行いません。"

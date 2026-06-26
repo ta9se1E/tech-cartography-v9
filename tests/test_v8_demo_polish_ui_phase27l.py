@@ -48,7 +48,7 @@ def test_export_ui_demo_polish_pack() -> None:
 
 def test_intro_ui_demo_flow() -> None:
   text = _read("tech_cartography/ui/v8_intro_ui.py")
-  assert "Phase27L" in text
+  assert "Phase27M" in text or "Phase27L" in text
   assert "デモ操作" in text
   assert "render_next_action_card" in text
   assert "use_container_width" not in text

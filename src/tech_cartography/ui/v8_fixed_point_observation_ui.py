@@ -34,6 +34,7 @@ from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info
 from tech_cartography.ui.live_run_history_ui import render_run_history_section
 from tech_cartography.ui.live_watch_expansion_ui import render_live_watch_expansion_section
 from tech_cartography.ui.login_ui import can_use_admin_features
+from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
@@ -204,6 +205,12 @@ def render_v8_fixed_point_observation_tab(*, project_root: Path | str) -> None:
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
   st.markdown("### 定点観測ループ")
+  render_demo_flow_banner(
+    project_root=root,
+    current_tab="fixed_point_observation",
+    tab_purpose="定点観測ループ — no_email_send / no_scheduler_start（機能は保持）",
+    next_tab_key="export",
+  )
   st.markdown(
     render_info_box(
       "<strong>定点観測で回る流れ (Phase27L)</strong><br>"

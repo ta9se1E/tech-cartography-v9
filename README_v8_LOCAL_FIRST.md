@@ -99,7 +99,17 @@ conda run -n 2026hack python scripts/run_v8_demo_polish_pack.py \
 - 実施例本文・論文本文を読んだことにはしない
 - 出力: `outputs/local_v8_demo_polish/`
 
-**次 Phase:** Phase27M（UI最終調整）→ Phase27N（Cloud Run v8反映準備）→ Phase27O（Cloud Run v8反映）
+**次 Phase:** Phase27N（Cloud Run v8反映準備）→ Phase27O（Cloud Run v8反映）→ Phase27P（提出準備）
+
+## Phase27M — Final UI Demo Flow & Readiness Guidance
+
+```bash
+conda run -n 2026hack python scripts/run_v8_demo_readiness_check.py
+```
+
+- artifact 未生成は「0件」ではなく「未生成 / artifact missing」
+- 出力: `outputs/local_v8_demo_readiness/`
+- Cloud Build / Cloud Run deploy はこの Phase では実行しない
 
 ## Phase27J — Manual Claim Injection
 

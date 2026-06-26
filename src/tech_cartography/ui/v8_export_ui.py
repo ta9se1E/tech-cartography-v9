@@ -19,6 +19,8 @@ from tech_cartography.services.v8_claim_map_export import find_latest_claim_map_
 from tech_cartography.services.v8_evidence_map_export import find_latest_evidence_map_dir
 from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
 from tech_cartography.services.v8_fixed_point_observation_export import find_latest_fixed_point_observation_dir
+from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
+from tech_cartography.services.v8_demo_readiness_export import export_demo_readiness, find_latest_demo_readiness_dir
 from tech_cartography.services.v8_demo_polish import build_demo_polish_report
 from tech_cartography.services.v8_demo_polish_export import export_demo_polish, find_latest_demo_polish_dir
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
@@ -335,6 +337,68 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Large Candidate Pack 未生成 — 入力タブで取り込み後、読むべき特許で Top5 を生成してください。")
 
+  st.markdown("#### Demo Readiness Pack (Phase27M)")
+  st.caption(
+    "3案件の Demo Readiness — artifact missing と true zero を区別。"
+    " Cloud Build / Cloud Run deploy はまだ実行しません。"
+  )
+  if st.button("Generate Demo Readiness Pack", key="v8_export_demo_readiness", type="primary"):
+    report = build_demo_readiness_report(project_root=root)
+    export_result = export_demo_readiness(report, project_root=root)
+    st.session_state["v8_last_demo_readiness"] = {
+      "report": report.to_dict(),
+      "export": export_result.to_dict(),
+    }
+    st.success(f"Demo Readiness Pack 生成 — overall={report.overall_status}")
+
+  cached_readiness = st.session_state.get("v8_last_demo_readiness")
+  readiness_dir = find_latest_demo_readiness_dir(root)
+  if isinstance(cached_readiness, dict):
+    report = cached_readiness.get("report") or {}
+    st.markdown(f"- **overall_status**: {report.get('overall_status', '—')}")
+    for case in report.get("cases") or []:
+      ev = case.get("evidence_link_count")
+      gap = case.get("gap_count")
+      ev_label = ev if ev is not None else "artifact_missing"
+      gap_label = gap if gap is not None else "artifact_missing"
+      st.markdown(
+        f"- **{case.get('case_id')}**: {case.get('overall_status')} — "
+        f"next={case.get('current_recommended_step')} / evidence={ev_label} / gap={gap_label}"
+      )
+    for action in (report.get("common_next_actions") or [])[:3]:
+      st.caption(f"next: {action}")
+    dl_dir = Path(str((cached_readiness.get("export") or {}).get("output_dir", "")))
+  elif readiness_dir and readiness_dir.exists():
+    st.caption(f"latest demo readiness: {readiness_dir}")
+    dl_dir = readiness_dir
+  else:
+    st.caption("Demo Readiness Pack 未生成")
+    dl_dir = None
+
+  if dl_dir and dl_dir.exists():
+    for fname, mime in (
+      ("demo_readiness_report.md", "text/markdown"),
+      ("demo_readiness_report.json", "application/json"),
+      ("demo_operator_checklist.md", "text/markdown"),
+      ("cloud_preparation_checklist.md", "text/markdown"),
+      ("demo_readiness_manifest.json", "application/json"),
+    ):
+      path = dl_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_dr_{fname}",
+        )
+
+  st.markdown("#### デモ提出用 — 最低限の Pack")
+  st.caption(
+    "Large Candidate Pack / Ranking Explanation / Manual Claim Refresh / "
+    "Demo Polish Pack / Demo Readiness Pack"
+  )
+
   st.markdown("#### Demo Polish Pack (Phase27L)")
   st.caption(
     "Evidence Map / Gap / Next Actions をデモ向けに要約。"
@@ -506,6 +570,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   _artifact_link(find_latest_fixed_point_observation_dir(None if export_case == "all" else export_case, root))
   _artifact_link(find_latest_validation_pack_dir(root))
   _artifact_link(find_latest_manual_claim_refresh_dir(root))
+  _artifact_link(find_latest_demo_readiness_dir(root))
   _artifact_link(find_latest_demo_polish_dir(None if export_case == "all" else export_case, root))
   _artifact_link(find_latest_large_shortlist_dir(None if export_case == "all" else export_case, root))
   brief_path = find_latest_strategic_watch_brief_path(root)

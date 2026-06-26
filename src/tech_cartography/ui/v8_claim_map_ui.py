@@ -22,6 +22,7 @@ from tech_cartography.services.v8_manual_claim_refresh_export import export_manu
 from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_text_rendering import render_next_action_card
+from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
@@ -246,6 +247,12 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
   st.markdown("### Claim Map v1")
+  render_demo_flow_banner(
+    project_root=root,
+    current_tab="claim_map",
+    tab_purpose="Claim Map は技術整理 — 権利範囲解釈ではない。Top5 claim 状態を確認",
+    next_tab_key="evidence_map",
+  )
   st.markdown(
     render_caution_box(
       "<strong>Claim Map は技術整理の暫定分類（heuristic / draft）</strong> です。"

@@ -19,7 +19,8 @@ from tech_cartography.services.v8_patent_shortlist_export import (
   shortlist_to_csv_text,
   shortlist_to_markdown,
 )
-from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_next_action_box
+from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box
+from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, STATE_V8_SELECTED_PUBLICATION, V8_CASE_SAMPLES, V8_TAB_LABELS
 
@@ -289,6 +290,12 @@ def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
   default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
 
   st.markdown("### 読むべき特許 Top N")
+  render_demo_flow_banner(
+    project_root=root,
+    current_tab="patent_shortlist",
+    tab_purpose="1000件から Top100 → Top20 → Top5 を絞る — Top5 のみ Deep Dive",
+    next_tab_key="claim_map",
+  )
   st.markdown(
     render_caution_box(
       "<strong>読む優先度の暫定スコア（heuristic / draft selection）</strong> です。"

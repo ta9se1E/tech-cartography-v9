@@ -10,13 +10,16 @@ from tech_cartography.ui.v8_tab_config import V8_STATUS_CAPTION, v8_sidebar_prog
 
 def test_v8_status_caption_mentions_current_phase() -> None:
   assert (
-    "Phase27L" in V8_STATUS_CAPTION
+    "Phase27M" in V8_STATUS_CAPTION
+    or "Phase27L" in V8_STATUS_CAPTION
     or "Phase27K" in V8_STATUS_CAPTION
     or "Phase27J" in V8_STATUS_CAPTION
     or "Phase27I" in V8_STATUS_CAPTION
   )
   assert (
-    "Demo Polish" in V8_STATUS_CAPTION
+    "Demo Readiness" in V8_STATUS_CAPTION
+    or "Readiness" in V8_STATUS_CAPTION
+    or "Demo Polish" in V8_STATUS_CAPTION
     or "1000" in V8_STATUS_CAPTION
     or "Ranking" in V8_STATUS_CAPTION
     or "Manual Claim" in V8_STATUS_CAPTION
@@ -53,6 +56,8 @@ def test_v8_sidebar_helpers_via_demo_safe(monkeypatch) -> None:
     or "Ranking" in next_steps
     or "Manual Claim" in next_steps
     or "Demo Polish" in next_steps
+    or "Demo Readiness" in next_steps
+    or "Readiness" in next_steps
   )
   assert "Final Validation" not in progress
   assert "Paper/Web" not in progress

@@ -132,6 +132,20 @@
 - Export: **Manual Claim Refresh Pack** — `outputs/local_v8_manual_claim_refresh/`
 - CLI: `scripts/run_v8_manual_claim_refresh.py`
 
+- 次 Phase: **Phase27M** UI最終調整 / **Phase27N** Cloud Run v8反映準備 / **Phase27O** Cloud Run v8反映
+
+## Phase27M（Final UI Demo Flow & Readiness Guidance）
+
+- schema: `V8DemoStepStatus` / `V8CaseDemoReadiness` / `V8DemoReadinessReport`
+- services: `v8_demo_readiness.py` / `v8_demo_readiness_export.py` / `v8_demo_flow_ui.py`
+- **artifact missing と true zero を区別** — 未生成を0件として ready 扱いしない
+- 各タブに「次にやること」/ Demo Readiness banner
+- はじめに: 最短デモ操作 / Demo Readiness summary
+- Sidebar: Phase27M / selected case / next recommended step
+- Export: **Demo Readiness Pack** — `outputs/local_v8_demo_readiness/`
+- CLI: `scripts/run_v8_demo_readiness_check.py`
+- Cloud Build / Cloud Run deploy はこの Phase では実行しない
+
 ## Phase27L（Evidence Map / Gap Demo Polish）
 
 - schema: `V8EvidenceDemoStatus` / `V8GapDemoStatus` / `V8DemoStoryCard` / `V8DemoPolishReport`

@@ -297,6 +297,22 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     "phase27l demo polish pack",
     ("Demo Polish Pack", "Phase27L"),
   ),
+  (
+    "phase27m artifact missing vs true zero",
+    ("artifact missing", "true zero"),
+  ),
+  (
+    "phase27m initial user operation flow",
+    ("Phase27M", "最短デモ"),
+  ),
+  (
+    "phase27m no cloud build this phase",
+    ("Phase27M", "Cloud Build", "実行しません"),
+  ),
+  (
+    "phase27m demo readiness pack",
+    ("Demo Readiness Pack", "Phase27M"),
+  ),
 )
 
 
@@ -923,10 +939,85 @@ def main(argv: list[str] | None = None) -> int:
     failures.append("v8_export_ui missing Demo Polish Pack section")
 
   intro_ui_early = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_intro_ui.py")
-  if "Phase27L" in intro_ui_early and "デモ操作" in intro_ui_early:
+  if "Phase27M" in intro_ui_early and "最短デモ操作" in intro_ui_early:
+    print("PASS: v8_intro_ui references shortest demo operation flow")
+  elif "Phase27L" in intro_ui_early and "デモ操作" in intro_ui_early:
     print("PASS: v8_intro_ui references demo operation flow")
   else:
     failures.append("v8_intro_ui missing demo operation flow")
+
+  phase27m_files = (
+    "src/tech_cartography/runtime/v8_demo_readiness_schema.py",
+    "src/tech_cartography/services/v8_demo_readiness.py",
+    "src/tech_cartography/services/v8_demo_readiness_export.py",
+    "src/tech_cartography/ui/v8_demo_flow_ui.py",
+    "scripts/run_v8_demo_readiness_check.py",
+  )
+  for rel in phase27m_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  input_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_input_ui.py")
+  if "まずここから" in input_ui:
+    print("PASS: v8_input_ui references first step")
+  else:
+    failures.append("v8_input_ui missing first step guidance")
+
+  sources_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_sources_ui.py")
+  if "母集団" in sources_ui and "Deep Dive" in sources_ui:
+    print("PASS: v8_sources_ui references population not deep dive")
+  else:
+    failures.append("v8_sources_ui missing population not deep dive notice")
+
+  shortlist_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_patent_shortlist_ui.py")
+  if "Top100" in shortlist_ui and "Top5" in shortlist_ui:
+    print("PASS: v8_patent_shortlist_ui references Top100 / Top20 / Top5 flow")
+  else:
+    failures.append("v8_patent_shortlist_ui missing Top100/Top20/Top5 flow")
+
+  claim_map_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_claim_map_ui.py")
+  if "技術整理" in claim_map_ui or "権利範囲" in claim_map_ui:
+    print("PASS: v8_claim_map_ui references technical organization not legal interpretation")
+  else:
+    failures.append("v8_claim_map_ui missing legal disclaimer")
+
+  if "artifact missing" in evidence_map_ui.lower() or "未生成" in evidence_map_ui:
+    print("PASS: v8_evidence_map_ui distinguishes missing artifact and zero count")
+  else:
+    failures.append("v8_evidence_map_ui missing artifact missing distinction")
+
+  if "artifact missing" in gap_ui.lower() or "未生成" in gap_ui or "true zero" in gap_ui.lower():
+    print("PASS: v8_gap_next_actions_ui distinguishes missing artifact and zero count")
+  else:
+    failures.append("v8_gap_next_actions_ui missing artifact missing distinction")
+
+  if "Demo Readiness Pack" in export_ui:
+    print("PASS: v8_export_ui references Demo Readiness Pack")
+  else:
+    failures.append("v8_export_ui missing Demo Readiness Pack section")
+
+  if "Phase27M" in tab_config:
+    print("PASS: Sidebar/tab config references Phase27M")
+  else:
+    failures.append("v8_tab_config missing Phase27M")
+
+  try:
+    from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
+
+    dr = build_demo_readiness_report(project_root=PROJECT_ROOT)
+    ev_case = dr.cases[0]
+    ev_step = next(s for s in ev_case.step_statuses if s.step_name == "evidence_map")
+    if ev_step.status == "not_generated":
+      assert ev_case.evidence_link_count is None
+      print("PASS: missing evidence artifact not reported as zero count ready")
+    else:
+      print("PASS: evidence artifact exists for readiness check case")
+  except Exception as exc:
+    failures.append(f"demo readiness service failed: {exc}")
+
+  for rel in phase27m_files:
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
 
   try:
     from tech_cartography.services.v8_demo_polish import build_demo_polish_report
@@ -1065,7 +1156,9 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("stale Phase27B label remains in v8 UI")
 
-  if "Phase27L" in tab_config and ("Demo Polish" in tab_config or "demo polish" in tab_config.lower()):
+  if "Phase27M" in tab_config and ("Demo Readiness" in tab_config or "Readiness" in tab_config):
+    print("PASS: current label mentions Phase27M / demo readiness")
+  elif "Phase27L" in tab_config and ("Demo Polish" in tab_config or "demo polish" in tab_config.lower()):
     print("PASS: current label mentions Phase27L / demo polish")
   elif "Phase27K" in tab_config and "Manual Claim" in tab_config:
     print("PASS: current label mentions Phase27K / manual claim injection")
@@ -1080,7 +1173,7 @@ def main(argv: list[str] | None = None) -> int:
   elif "Phase27H" in tab_config and "定点観測" in tab_config:
     print("PASS: current label mentions Phase27H / fixed point observation")
   else:
-    failures.append("v8_tab_config missing Phase27L or Phase27H status caption")
+    failures.append("v8_tab_config missing Phase27M or Phase27H status caption")
 
   if "v8_sidebar_progress_text" in demo_safe and "_is_v8_user_flow_ui" in demo_safe:
     print("PASS: v8 sidebar mentions v8 flow")

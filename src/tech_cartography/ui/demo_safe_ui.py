@@ -189,6 +189,41 @@ def _is_v8_user_flow_ui() -> bool:
   return str(os.environ.get("APP_UI_VERSION", "v8")).strip().lower() != "v7"
 
 
+def _render_v8_demo_readiness_sidebar(project_root: Path) -> None:
+  import streamlit as st
+
+  from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
+  from tech_cartography.ui.v8_input_ui import get_v8_input_state
+  from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_STATUS_CAPTION
+
+  st.divider()
+  st.markdown("**v8 Demo Readiness (Phase27M)**")
+  st.caption(V8_STATUS_CAPTION)
+  case_id = str(
+    get_v8_input_state().get("selected_case_id")
+    or st.session_state.get(STATE_V8_SELECTED_CASE)
+    or ""
+  )
+  if case_id:
+    st.caption(f"selected case: {case_id}")
+  try:
+    report = build_demo_readiness_report(project_root=project_root)
+    st.caption(f"overall: {report.overall_status}")
+    if case_id:
+      match = next((c for c in report.cases if c.case_id == case_id), None)
+      if match:
+        st.caption(f"next step: {match.current_recommended_step}")
+        if match.evidence_link_count is None:
+          st.caption("evidence: artifact missing")
+        if match.gap_count is None:
+          st.caption("gap: artifact missing")
+        if match.next_3_user_actions:
+          st.caption(f"action: {match.next_3_user_actions[0][:60]}")
+    st.caption("no_email_send / no_scheduler_start")
+  except Exception:
+    st.caption("Readiness 未取得 — はじめにタブを確認")
+
+
 def sidebar_progress_text(ui_mode: str, *, project_root: Path | None = None) -> str:
   if _is_v8_user_flow_ui():
     from tech_cartography.ui.v8_tab_config import v8_sidebar_progress_text
@@ -371,6 +406,9 @@ def render_app_sidebar(
 
   st.markdown("**次にやること**")
   st.caption(sidebar_next_steps_text(ui_mode_input, project_root=project_root))
+
+  if _is_v8_user_flow_ui():
+    _render_v8_demo_readiness_sidebar(project_root)
 
   if ui_mode_input == UI_MODE_DEVELOPER and is_show_developer_mode_enabled():
     pipeline_root = str(st.session_state.get(STATE_PIPELINE_ROOT, project_root / "outputs" / "pipeline_runs"))

@@ -360,6 +360,22 @@
 
 ---
 
+## Phase27M: Final UI Demo Flow & Readiness Guidance
+
+**目的:** 初見ユーザーが迷わずデモ操作できる UI 最終導線。
+
+**状態:** ✅ 完了
+
+**完了条件:**
+- Demo Readiness Pack（artifact missing vs true zero 区別）
+- 各タブに next action banner
+- Sidebar Phase27M / selected case / next step
+- はじめに: 最短デモ操作
+
+**Cloud Build:** 不要
+
+---
+
 ## Phase27L: Evidence Map / Gap Demo Polish
 
 **目的:** Evidence Map / Gap / Next Actions をデモで見せやすい形に磨き込む。
