@@ -91,7 +91,7 @@ STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 V8_STATUS_CAPTION = (
-  "v8 local-first — Phase27M: Final UI Demo Flow & Readiness（Cloud Build はまだ不要）"
+  "v8 local-first — Phase27N: Cloud Run反映準備（deploy 前チェック — まだ build/deploy しない）"
 )
 
 V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (

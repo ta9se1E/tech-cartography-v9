@@ -18,7 +18,7 @@ git branch --show-current   # v8-claim-evidence-gap
 ## 開発方針
 
 - **ローカルファースト**: Phase27B〜27I はローカルで分析品質を詰める
-- **Cloud Build は節目だけ**: 日常開発では必須にしない（Phase27L で Cloud Run 反映）
+- **Cloud Build は節目だけ**: 日常開発では必須にしない（Phase27O で Cloud Run 反映）
 - **3案件検証を最優先**: `cases/case_01_*` 〜 `case_03_*`
 - **既存 v7 機能を削除しない**
 
@@ -184,8 +184,23 @@ conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
 
 1. Phase27I で **3案件すべて** validation pack を生成し `readiness_for_demo` を確認
 2. ローカル pytest + readiness 全 PASS
-3. **Phase27L** で Cloud Build / Cloud Run deploy
-4. それまでは v7 の本番環境を壊さない
+3. **Phase27N** で Cloud Run Readiness Pack を生成し deploy 前チェック
+4. **Phase27O** で Cloud Build / Cloud Run deploy
+5. それまでは v7 の本番環境を壊さない
+
+## Phase27N — Cloud Run Readiness Pack
+
+```bash
+conda run -n 2026hack python scripts/run_v8_cloud_run_readiness_check.py
+```
+
+- 出力: `outputs/local_v8_cloud_run_readiness/`
+- **この Phase では Cloud Build / Cloud Run deploy を実行しない**
+- Demo data not_ready は提出デモのブロッカー（deploy 技術ブロッカーではない）
+- Secret 値は export / docs / UI に含めない
+- Cloud Run 推奨: `LIVE_OUTPUTS_ROOT=/tmp/tech_cartography_outputs`, `DISABLE_EMAIL_SEND=true`, `DISABLE_SCHEDULER=true`
+
+詳細: `docs/cloud_run_v8_prepare.md`
 
 ## 関連ドキュメント
 
@@ -193,3 +208,4 @@ conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
 - `docs/v8_three_case_validation_plan.md` — 検証計画
 - `docs/v8_user_flow_and_tabs.md` — UI タブ設計
 - `docs/v8_cursor_roadmap.md` — 実装ロードマップ
+- `docs/cloud_run_v8_prepare.md` — Cloud Run v8 反映準備

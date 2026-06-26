@@ -313,6 +313,30 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     "phase27m demo readiness pack",
     ("Demo Readiness Pack", "Phase27M"),
   ),
+  (
+    "phase27n no cloud build this phase",
+    ("Phase27N", "Cloud Build", "実行しません"),
+  ),
+  (
+    "phase27n no cloud run deploy this phase",
+    ("Phase27N", "Cloud Run deploy", "実行しません"),
+  ),
+  (
+    "phase27n cloud run readiness pack",
+    ("Cloud Run Readiness Pack", "Phase27N"),
+  ),
+  (
+    "phase27n output root artifact policy",
+    ("LIVE_OUTPUTS_ROOT", "/tmp", "Cloud Storage"),
+  ),
+  (
+    "phase27n secret manager no secret values",
+    ("Secret Manager", "Secret", "書かない"),
+  ),
+  (
+    "phase27n email scheduler default off",
+    ("DISABLE_EMAIL_SEND", "DISABLE_SCHEDULER", "デフォルト OFF"),
+  ),
 )
 
 
@@ -995,10 +1019,71 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("v8_export_ui missing Demo Readiness Pack section")
 
-  if "Phase27M" in tab_config:
-    print("PASS: Sidebar/tab config references Phase27M")
+  phase27n_files = (
+    "src/tech_cartography/runtime/v8_cloud_run_readiness_schema.py",
+    "src/tech_cartography/services/v8_cloud_run_readiness.py",
+    "src/tech_cartography/services/v8_cloud_run_readiness_export.py",
+    "scripts/run_v8_cloud_run_readiness_check.py",
+    "docs/cloud_run_v8_prepare.md",
+  )
+  for rel in phase27n_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  if "Cloud Run Readiness Pack" in export_ui:
+    print("PASS: v8_export_ui references Cloud Run Readiness Pack")
   else:
-    failures.append("v8_tab_config missing Phase27M")
+    failures.append("v8_export_ui missing Cloud Run Readiness Pack section")
+
+  admin_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_admin_settings_ui.py")
+  if "Cloud Run" in admin_ui and "readiness" in admin_ui.lower():
+    print("PASS: v8_admin_settings_ui references Cloud Run readiness")
+  else:
+    failures.append("v8_admin_settings_ui missing Cloud Run readiness section")
+
+  if "Phase27N" in intro_ui_early:
+    print("PASS: v8_intro_ui references Phase27N")
+  else:
+    failures.append("v8_intro_ui missing Phase27N")
+
+  if "Phase27N" in tab_config:
+    print("PASS: Sidebar/tab config references Phase27N")
+  elif "Phase27M" in tab_config:
+    failures.append("v8_tab_config still Phase27M only — update to Phase27N")
+  else:
+    failures.append("v8_tab_config missing Phase27N")
+
+  dockerignore = _read(PROJECT_ROOT / ".dockerignore")
+  if ".env" in dockerignore and "outputs" in dockerignore:
+    print("PASS: .dockerignore excludes .env and outputs")
+  else:
+    failures.append(".dockerignore missing .env or outputs exclusion")
+
+  port_sources = " ".join(
+    _read(PROJECT_ROOT / p)
+    for p in ("Procfile", "Dockerfile", "docs/cloud_run_v8_prepare.md")
+    if (PROJECT_ROOT / p).exists()
+  )
+  if "${PORT" in port_sources or "$PORT" in port_sources:
+    print("PASS: PORT-aware streamlit command in Procfile/Dockerfile/docs")
+  else:
+    failures.append("missing PORT-aware streamlit command")
+
+  try:
+    from tech_cartography.services.v8_cloud_run_readiness import build_cloud_run_readiness_report
+
+    cr = build_cloud_run_readiness_report(project_root=PROJECT_ROOT)
+    assert cr.no_cloud_build_executed is True
+    assert cr.no_cloud_run_deploy_executed is True
+    assert cr.no_email_send is True
+    assert cr.no_scheduler_start is True
+    print("PASS: cloud run readiness report flags no build/deploy/email/scheduler")
+  except Exception as exc:
+    failures.append(f"cloud run readiness service failed: {exc}")
+
+  if "Phase27N" in tab_config or "Phase27M" in tab_config:
+    print("PASS: Sidebar/tab config references Phase27M/Phase27N era")
+  else:
+    failures.append("v8_tab_config missing Phase27N")
 
   try:
     from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
@@ -1156,7 +1241,9 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("stale Phase27B label remains in v8 UI")
 
-  if "Phase27M" in tab_config and ("Demo Readiness" in tab_config or "Readiness" in tab_config):
+  if "Phase27N" in tab_config and ("Cloud Run" in tab_config or "Readiness" in tab_config):
+    print("PASS: current label mentions Phase27N / Cloud Run readiness")
+  elif "Phase27M" in tab_config and ("Demo Readiness" in tab_config or "Readiness" in tab_config):
     print("PASS: current label mentions Phase27M / demo readiness")
   elif "Phase27L" in tab_config and ("Demo Polish" in tab_config or "demo polish" in tab_config.lower()):
     print("PASS: current label mentions Phase27L / demo polish")
@@ -1173,7 +1260,7 @@ def main(argv: list[str] | None = None) -> int:
   elif "Phase27H" in tab_config and "定点観測" in tab_config:
     print("PASS: current label mentions Phase27H / fixed point observation")
   else:
-    failures.append("v8_tab_config missing Phase27M or Phase27H status caption")
+    failures.append("v8_tab_config missing Phase27N or Phase27H status caption")
 
   if "v8_sidebar_progress_text" in demo_safe and "_is_v8_user_flow_ui" in demo_safe:
     print("PASS: v8 sidebar mentions v8 flow")

@@ -3,6 +3,7 @@
 .venv
 **/__pycache__
 *.pyc
+.pytest_cache
 .env
 .streamlit/secrets.toml
 credentials
@@ -15,3 +16,5 @@ inputs/manual/*
 !inputs/manual/.gitkeep
 .DS_Store
 outputs
+cases/*/source_candidates_large.csv
+cases/*/source_candidates_large_deduped.csv

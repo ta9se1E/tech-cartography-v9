@@ -1,4 +1,4 @@
-"""v8 intro tab (Phase 27B / 27M)."""
+"""v8 intro tab (Phase 27B / 27M / 27N)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from tech_cartography.services.v8_cloud_run_readiness import build_cloud_run_readiness_report
 from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box
 from tech_cartography.ui.v8_demo_flow_ui import format_count_label
@@ -76,6 +77,31 @@ def render_v8_intro_tab() -> None:
     )
   except Exception as exc:
     st.warning(f"Demo Readiness 取得エラー: {exc}")
+
+  st.markdown("#### Cloud Run Readiness Summary (Phase27N)")
+  st.caption("今は **deploy 前チェックの段階** — Cloud Build / Cloud Run deploy はまだ実行しません。")
+  try:
+    cr = build_cloud_run_readiness_report(project_root=PROJECT_ROOT)
+    st.markdown(f"- **overall_status**: {cr.overall_status}")
+    st.markdown(f"- **app_entrypoint**: {cr.app_entrypoint_status}")
+    st.markdown(f"- **streamlit_command**: {cr.streamlit_command_status}")
+    st.markdown(f"- **demo_data**: {cr.demo_data_status}")
+    if cr.known_blockers:
+      st.markdown("- **known_blockers**:")
+      for b in cr.known_blockers[:3]:
+        st.caption(f"  - {b}")
+    next_actions = [
+      "Export タブで Cloud Run Readiness Pack を生成する",
+    ]
+    if cr.demo_data_status in {"not_ready", "needs_large_candidate_csv", "unknown"}:
+      next_actions.append("Demo Readiness が not_ready なら、1ケース分の CSV 投入と Top5 生成を行う")
+    next_actions.append("Phase27O まで Cloud Build / Cloud Run deploy を実行しない")
+    st.markdown(
+      render_next_action_card("次にやること (Cloud Run 準備)", next_actions),
+      unsafe_allow_html=True,
+    )
+  except Exception as exc:
+    st.warning(f"Cloud Run Readiness 取得エラー: {exc}")
 
   st.markdown(
     render_caution_box(

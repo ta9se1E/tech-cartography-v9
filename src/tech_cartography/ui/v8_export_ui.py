@@ -21,6 +21,11 @@ from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap
 from tech_cartography.services.v8_fixed_point_observation_export import find_latest_fixed_point_observation_dir
 from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
 from tech_cartography.services.v8_demo_readiness_export import export_demo_readiness, find_latest_demo_readiness_dir
+from tech_cartography.services.v8_cloud_run_readiness import build_cloud_run_readiness_report
+from tech_cartography.services.v8_cloud_run_readiness_export import (
+  export_cloud_run_readiness,
+  find_latest_cloud_run_readiness_dir,
+)
 from tech_cartography.services.v8_demo_polish import build_demo_polish_report
 from tech_cartography.services.v8_demo_polish_export import export_demo_polish, find_latest_demo_polish_dir
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
@@ -396,8 +401,67 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   st.markdown("#### デモ提出用 — 最低限の Pack")
   st.caption(
     "Large Candidate Pack / Ranking Explanation / Manual Claim Refresh / "
-    "Demo Polish Pack / Demo Readiness Pack"
+    "Demo Polish Pack / Demo Readiness Pack / Cloud Run Readiness Pack"
   )
+
+  st.markdown("#### Cloud Run Readiness Pack (Phase27N)")
+  st.caption(
+    "Cloud Run deploy 前の構成点検 — Secret 値は表示しません。"
+    " この Phase では Cloud Build / Cloud Run deploy を実行しません。"
+  )
+  if st.button("Generate Cloud Run Readiness Pack", key="v8_export_cloud_run_readiness", type="primary"):
+    cr_report = build_cloud_run_readiness_report(project_root=root)
+    cr_export = export_cloud_run_readiness(cr_report, project_root=root)
+    st.session_state["v8_last_cloud_run_readiness"] = {
+      "report": cr_report.to_dict(),
+      "export": cr_export.to_dict(),
+    }
+    st.success(f"Cloud Run Readiness Pack 生成 — overall={cr_report.overall_status}")
+
+  cached_cr = st.session_state.get("v8_last_cloud_run_readiness")
+  cr_dir = find_latest_cloud_run_readiness_dir(root)
+  if isinstance(cached_cr, dict):
+    cr_report = cached_cr.get("report") or {}
+    st.markdown(f"- **overall_status**: {cr_report.get('overall_status', '—')}")
+    st.markdown(f"- **app_entrypoint**: {cr_report.get('app_entrypoint_status', '—')}")
+    st.markdown(f"- **streamlit_command**: {cr_report.get('streamlit_command_status', '—')}")
+    st.markdown(f"- **demo_data**: {cr_report.get('demo_data_status', '—')}")
+    st.markdown(f"- **output_artifact_policy**: {cr_report.get('output_artifact_policy_status', '—')}")
+    blockers = cr_report.get("known_blockers") or []
+    if blockers:
+      st.markdown("- **known_blockers**:")
+      for b in blockers[:5]:
+        st.caption(f"  - {b}")
+    else:
+      st.caption("known_blockers: (none)")
+    cr_dl_dir = Path(str((cached_cr.get("export") or {}).get("output_dir", "")))
+  elif cr_dir and cr_dir.exists():
+    st.caption(f"latest cloud run readiness: {cr_dir}")
+    cr_dl_dir = cr_dir
+  else:
+    st.caption("Cloud Run Readiness Pack 未生成")
+    cr_dl_dir = None
+
+  if cr_dl_dir and cr_dl_dir.exists():
+    for fname, mime in (
+      ("cloud_run_readiness_report.md", "text/markdown"),
+      ("cloud_run_readiness_report.json", "application/json"),
+      ("deploy_preparation_checklist.md", "text/markdown"),
+      ("demo_data_checklist.md", "text/markdown"),
+      ("operator_checklist.md", "text/markdown"),
+      ("env_var_template.md", "text/markdown"),
+      ("artifact_policy.md", "text/markdown"),
+      ("cloud_run_readiness_manifest.json", "application/json"),
+    ):
+      path = cr_dl_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_cr_{fname}",
+        )
 
   st.markdown("#### Demo Polish Pack (Phase27L)")
   st.caption(

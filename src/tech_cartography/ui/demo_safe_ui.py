@@ -192,13 +192,15 @@ def _is_v8_user_flow_ui() -> bool:
 def _render_v8_demo_readiness_sidebar(project_root: Path) -> None:
   import streamlit as st
 
+  from tech_cartography.services.v8_cloud_run_readiness import build_cloud_run_readiness_report
   from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
   from tech_cartography.ui.v8_input_ui import get_v8_input_state
   from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_STATUS_CAPTION
 
   st.divider()
-  st.markdown("**v8 Demo Readiness (Phase27M)**")
+  st.markdown("**v8 Cloud Run Prep (Phase27N)**")
   st.caption(V8_STATUS_CAPTION)
+  st.caption("deploy 前チェック — build/deploy はまだしない")
   case_id = str(
     get_v8_input_state().get("selected_case_id")
     or st.session_state.get(STATE_V8_SELECTED_CASE)
@@ -207,8 +209,13 @@ def _render_v8_demo_readiness_sidebar(project_root: Path) -> None:
   if case_id:
     st.caption(f"selected case: {case_id}")
   try:
+    cr = build_cloud_run_readiness_report(project_root=project_root)
+    st.caption(f"cloud run prep: {cr.overall_status}")
+    st.caption(f"demo data: {cr.demo_data_status}")
+    if cr.known_blockers:
+      st.caption(f"blocker: {cr.known_blockers[0][:50]}")
     report = build_demo_readiness_report(project_root=project_root)
-    st.caption(f"overall: {report.overall_status}")
+    st.caption(f"demo readiness: {report.overall_status}")
     if case_id:
       match = next((c for c in report.cases if c.case_id == case_id), None)
       if match:

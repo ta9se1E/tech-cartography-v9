@@ -10,7 +10,7 @@ from tech_cartography.auth.basic_auth import is_login_required
 from tech_cartography.ui.api_secret_status_ui import render_api_secret_status_expander
 from tech_cartography.ui.auth_status_ui import render_auth_status_expander
 from tech_cartography.ui.demo_safe_ui import render_usage_notices_expander
-from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_warning_box
+from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_warning_box
 from tech_cartography.ui.email_operation_status_ui import render_email_operation_status_panel
 from tech_cartography.ui.iap_cutover_status_ui import render_iap_cutover_status_expander
 from tech_cartography.ui.live_approved_member_email_send_ui import render_live_approved_member_email_send_section
@@ -79,6 +79,28 @@ def render_v8_admin_settings_tab(
   st.caption(f"DISABLE_EMAIL_SEND={disable_email}")
   st.caption(f"DISABLE_SCHEDULER={disable_scheduler}")
   st.caption("メール送信と Scheduler は必須機能として保持（デフォルト OFF）。")
+
+  st.markdown("#### Phase27N — Cloud Run 反映準備")
+  try:
+    from tech_cartography.services.v8_cloud_run_readiness import build_cloud_run_readiness_report
+
+    cr = build_cloud_run_readiness_report(project_root=root)
+    st.markdown(
+      render_info_box(
+        f"Cloud Run readiness: <strong>{cr.overall_status}</strong> — "
+        f"app={cr.app_entrypoint_status} / streamlit={cr.streamlit_command_status} / "
+        f"demo_data={cr.demo_data_status}。"
+        " この Phase では Cloud Build / Cloud Run deploy を実行しません。"
+        " Secret 値は表示しません。"
+      ),
+      unsafe_allow_html=True,
+    )
+    st.caption(f"LIVE_OUTPUTS_ROOT — ローカル outputs/ / Cloud Run 推奨 /tmp/tech_cartography_outputs")
+    st.caption("DISABLE_EMAIL_SEND=true / DISABLE_SCHEDULER=true を Cloud Run では推奨")
+    if cr.known_blockers:
+      st.caption(f"known_blockers: {cr.known_blockers[0][:80]}")
+  except Exception as exc:
+    st.warning(f"Cloud Run Readiness 取得エラー: {exc}")
 
   st.markdown("#### Phase27J — Manual Claim Injection")
   st.markdown(

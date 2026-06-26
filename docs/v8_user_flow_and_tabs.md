@@ -146,6 +146,22 @@
 - CLI: `scripts/run_v8_demo_readiness_check.py`
 - Cloud Build / Cloud Run deploy はこの Phase では実行しない
 
+## Phase27N（Cloud Run Preparation and Deployment Readiness Pack）
+
+- schema: `V8CloudRunCheckResult` / `V8CloudRunReadinessReport` / `V8CloudRunArtifactPolicy`
+- services: `v8_cloud_run_readiness.py` / `v8_cloud_run_readiness_export.py`
+- docs: `docs/cloud_run_v8_prepare.md`
+- **Cloud Build / Cloud Run deploy はこの Phase では実行しない** — prepare only
+- app.py v8 default / PORT-aware streamlit command / Dockerfile / .dockerignore 点検
+- **OUTPUT_ROOT / LIVE_OUTPUTS_ROOT** — ローカル `outputs/local_*` / Cloud Run `/tmp/tech_cartography_outputs` / 将来 Cloud Storage
+- Secret Manager 方針 — Secret 値を export/docs/UI に含めない
+- メール送信 / Scheduler — 必須機能として保持、Cloud Run では **デフォルト OFF**
+- Demo data not_ready — deploy 技術ブロッカーではないが **提出デモのブロッカー**
+- Export: **Cloud Run Readiness Pack** — `outputs/local_v8_cloud_run_readiness/`
+- CLI: `scripts/run_v8_cloud_run_readiness_check.py`
+- Sidebar / はじめに: Phase27N — deploy 前チェック段階
+- 次 Phase: **Phase27O** Cloud Run v8反映 / **Phase27P** 提出用 README
+
 ## Phase27L（Evidence Map / Gap Demo Polish）
 
 - schema: `V8EvidenceDemoStatus` / `V8GapDemoStatus` / `V8DemoStoryCard` / `V8DemoPolishReport`

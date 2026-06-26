@@ -23,14 +23,14 @@ def test_demo_flow_ui_phase27m() -> None:
 def test_intro_shortest_demo_flow() -> None:
   text = _read("tech_cartography/ui/v8_intro_ui.py")
   assert "最短デモ操作" in text
-  assert "Phase27M" in text
+  assert "Phase27N" in text or "Phase27M" in text
   assert "artifact missing" in text.lower() or "未生成" in text
   assert "render_next_action_card" in text
 
 
 def test_tab_config_phase27m() -> None:
   text = _read("tech_cartography/ui/v8_tab_config.py")
-  assert "Phase27M" in text
+  assert "Phase27N" in text or "Phase27M" in text
 
 
 def test_input_first_step() -> None:

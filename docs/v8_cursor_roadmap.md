@@ -360,6 +360,23 @@
 
 ---
 
+## Phase27N: Cloud Run Preparation and Deployment Readiness Pack
+
+**目的:** Cloud Run v8 反映の **事前準備** — deploy は Phase27O。
+
+**状態:** ✅ 完了
+
+**完了条件:**
+- Cloud Run Readiness Pack（app/PORT/Dockerfile/artifact policy/secret policy）
+- `docs/cloud_run_v8_prepare.md`
+- Dockerfile / .dockerignore v8 向け整理（build は Phase27O）
+- Demo data not_ready を提出ブロッカーとして明示
+- メール/Scheduler デフォルト OFF 方針
+
+**Cloud Build / Cloud Run deploy:** この Phase では **実行しない**
+
+---
+
 ## Phase27M: Final UI Demo Flow & Readiness Guidance
 
 **目的:** 初見ユーザーが迷わずデモ操作できる UI 最終導線。

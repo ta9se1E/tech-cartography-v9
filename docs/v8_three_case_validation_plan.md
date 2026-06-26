@@ -162,6 +162,15 @@ conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
 
 **次 Phase:** Phase27N（Cloud Run）
 
+## Phase27N: Cloud Run Preparation and Deployment Readiness
+
+- Cloud Run Readiness Pack — app/PORT/Dockerfile/artifact policy
+- `docs/cloud_run_v8_prepare.md` — deploy 前手順（**build/deploy は Phase27O**）
+- Demo data not_ready — deploy 技術ブロッカーではない / 提出デモブロッカー
+- LIVE_OUTPUTS_ROOT / `/tmp/tech_cartography_outputs` / 将来 Cloud Storage
+- Secret Manager — Secret 値を export に含めない
+- メール/Scheduler デフォルト OFF（機能は保持）
+
 ## Phase27M: Final UI Demo Flow & Readiness
 
 - Demo Readiness — artifact missing vs true zero
