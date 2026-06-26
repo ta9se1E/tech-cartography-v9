@@ -1,0 +1,80 @@
+case_id: case_02_sizing_interface
+case_name: サイジング・表面処理・界面・複合材料
+theme: 炭素繊維のサイジング・表面処理とマトリックス界面、複合材料物性の対応
+target_user: 複合材料・界面技術を扱う研究者・中小製造業技術者
+target_materials:
+  - 炭素繊維（サイジング付き）
+  - エポキシ・熱可塑性マトリックス
+  - プリプレグ・積層複合材
+target_processes:
+  - サイジング塗布・乾燥
+  - 表面処理（酸化・プラズマ等）
+  - プリプレグ化
+  - 積層・硬化
+target_properties:
+  - 界面せん断強度（ILSS）
+  - マトリックス接着
+  - 湿潤性・接触角
+  - 層間靭性
+target_applications:
+  - 航空機主構造
+  - 自動車軽量化部品
+  - スポーツ用品ラケット
+seed_keywords:
+  - carbon fiber sizing
+  - surface treatment interface
+  - matrix adhesion
+  - ILSS composite
+  - epoxy carbon fiber interface
+seed_queries:
+  - carbon fiber sizing epoxy interface patent
+  - サイジング 界面 炭素繊維 複合材料 特許
+  - ILSS carbon fiber surface treatment paper
+seed_patent_ids:
+  - US5916936
+  - US6287695
+  - EP1022334
+expected_claim_axes:
+  - サイジング組成（官能基・ポリマー）
+  - 表面処理条件
+  - 界面強度・湿潤性の主張
+  - 複合材料物性（ILSS・引張）との対応
+expected_evidence_types:
+  - 特許請求項・実施例
+  - 論文（界面・ILSS）
+  - 公報一次 URL
+  - Web Signal（候補のみ）
+watch_profile_update_policy:
+  description: sizing / interface / ILSS を重点化、金属接合・無関係樹脂を縮小
+  expand_on: new sizing chemistry evidence gap
+  narrow_on: metal adhesive unrelated
+  focus_on: epoxy carbon fiber interface
+fixed_point_observation_policy:
+  cadence: weekly
+  diff_fields:
+    - new_patents
+    - evidence_map_changes
+    - interface_claim_gaps
+  scheduler_required: true
+  email_digest_required: true
+email_digest_policy:
+  include_sections:
+    - new_sizing_patents
+    - evidence_gaps
+    - next_verification_actions
+  web_signal_label: candidate_information_only
+scheduler_policy:
+  default_enabled: false
+  dry_run_first: true
+  connects_to: watch_profile_and_digest_preview
+exclusion_keywords:
+  - glass fiber only
+  - concrete reinforcement
+  - unrelated coating cosmetic
+safety_policy:
+  no_fto_judgement: true
+  no_infringement_judgement: true
+  no_validity_judgement: true
+  no_legal_conclusion: true
+  no_fake_evidence: true
+  web_signal_is_candidate_only: true

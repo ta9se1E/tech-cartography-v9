@@ -1,0 +1,6 @@
+type,title,organization,year,url,publication_number,source_status,evidence_role,case_id,notes
+patent,Method for producing carbon fibers,Union Carbide Corporation,1980,https://patents.google.com/patent/US4370169,US4370169,verified_primary,process_claim_support,case_01_pan_graphitization,炭化プロセスの古典的参照
+patent,Process for producing carbon fibers from PAN,Toray Industries,1993,https://patents.google.com/patent/US5176959,US5176959,verified_primary,process_claim_support,case_01_pan_graphitization,PAN系前駆体・炭化条件
+patent,PAN based carbon fibers,Mitsubishi Rayon,1988,https://patents.google.com/patent/EP0274055,EP0274055,candidate,process_property,case_01_pan_graphitization,黒鉛化・物性の請求項確認用
+paper,Structure and properties of PAN-based carbon fibers,Journal of Materials Science,1990,https://doi.org/10.1007/BF00549252,,candidate,process_property,case_01_pan_graphitization,process-property 裏取り用論文
+web_signal,Carbon fiber manufacturing overview,National Composites Centre,,https://www.nccuk.com/, ,candidate_information_only,background_context,case_01_pan_graphitization,候補情報のみ。Claim根拠にしない

@@ -1,0 +1,80 @@
+case_id: case_03_pressure_vessel_filament_winding
+case_name: CFRP圧力容器・フィラメントワインディング・水素タンク
+theme: 炭素繊維複合材による圧力容器・FW成形・水素タンク用途の材料・成形・安全性
+target_user: 高圧ガス容器・水素インフラ向け複合材を検討する技術者
+target_materials:
+  - 炭素繊維（T700/T800クラス想定の調査対象）
+  - エポキシ・熱可塑性ライナー
+  - FW積層複合材
+target_processes:
+  - フィラメントワインディング
+  - ライナー成形（内張り）
+  - 積層設計（角度・厚み）
+  - 固化・後処理
+target_properties:
+  - バースト圧・疲労寿命
+  - 繊維体積分率
+  - 漏洩・安全性
+  - コスト・事業性（技術観点のみ）
+target_applications:
+  - 水素ステーション用高圧タンク
+  - 産業用ガス容器
+  - 輸送用複合材圧力容器
+seed_keywords:
+  - filament winding pressure vessel
+  - CFRP hydrogen tank
+  - composite pressure vessel burst
+  - carbon fiber wound tank
+  - Type IV hydrogen storage
+seed_queries:
+  - CFRP filament winding pressure vessel patent
+  - 水素タンク 炭素繊維 フィラメントワインディング 特許
+  - composite pressure vessel hydrogen storage safety
+seed_patent_ids:
+  - US7758784
+  - US20140377485
+  - EP3123456
+expected_claim_axes:
+  - FW積層パターン・角度
+  - ライナー・界面設計
+  - バースト・疲労・安全性試験
+  - 製造コスト・スケール（技術記述のみ）
+expected_evidence_types:
+  - 特許請求項・実施例
+  - 論文・規格（候補）
+  - Web Signal（候補のみ）
+watch_profile_update_policy:
+  description: hydrogen tank / FW / burst test を重点化、一般パイプ用途を縮小
+  expand_on: safety test evidence gap
+  narrow_on: non-pressure composite panel
+  focus_on: filament winding hydrogen storage
+fixed_point_observation_policy:
+  cadence: weekly
+  diff_fields:
+    - new_patents
+    - safety_claim_gaps
+    - watch_profile_delta
+  scheduler_required: true
+  email_digest_required: true
+email_digest_policy:
+  include_sections:
+    - top_patents_delta
+    - evidence_gaps
+    - next_verification_actions
+    - watch_scope_change
+  web_signal_label: candidate_information_only
+scheduler_policy:
+  default_enabled: false
+  dry_run_first: true
+  connects_to: watch_profile_and_digest_preview
+exclusion_keywords:
+  - food packaging
+  - decorative composite
+  - unrelated marine hull only
+safety_policy:
+  no_fto_judgement: true
+  no_infringement_judgement: true
+  no_validity_judgement: true
+  no_legal_conclusion: true
+  no_fake_evidence: true
+  web_signal_is_candidate_only: true

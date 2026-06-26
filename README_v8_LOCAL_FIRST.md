@@ -1,0 +1,86 @@
+# README — v8 Local-First Development
+
+## 作業場所
+
+この v8 作業は **git worktree** 上で行います。
+
+| 項目 | 値 |
+|------|-----|
+| 作業フォルダ | `/Users/esakitakusei/Documents/python/practice/portfolio/2026_Hackathon/PatentScout_AI_v8` |
+| 元プロジェクト | `PatentScout_AI_v7`（**触らない**） |
+| branch | `v8-claim-evidence-gap` |
+
+```bash
+cd /Users/esakitakusei/Documents/python/practice/portfolio/2026_Hackathon/PatentScout_AI_v8
+git branch --show-current   # v8-claim-evidence-gap
+```
+
+## 開発方針
+
+- **ローカルファースト**: Phase27B〜27H はローカルで分析品質を詰める
+- **Cloud Build は節目だけ**: 日常開発では必須にしない（Phase27I で反映）
+- **3案件検証を最優先**: `cases/case_01_*` 〜 `case_03_*`
+- **既存 v7 機能を削除しない**
+
+## 必須で残す機能
+
+以下は v8 でも **削除しない**（デフォルト OFF でも機能は保持）:
+
+- **メール送信** — 定点観測ループの Digest 配信
+- **Scheduler** — 定点観測の自動トリガー
+- **Watch Profile** — 検索範囲管理
+- **Scope Expansion / Feedback** — 範囲調整
+- **Run History** — 操作追跡
+- Cloud Storage artifact / Digest Preview
+
+## やらないこと
+
+- FTO / 侵害 / 有効性 / 法的結論
+- 架空情報（fake evidence）の表示
+- Deep Research API 本番導線
+- Cloud SQL 追加
+- メール送信・Scheduler・外部 API のデフォルト ON
+
+## ローカル実行コマンド
+
+```bash
+cd /Users/esakitakusei/Documents/python/practice/portfolio/2026_Hackathon/PatentScout_AI_v8
+
+# Streamlit アプリ
+conda run -n 2026hack streamlit run app.py
+
+# v8 Phase27A readiness
+conda run -n 2026hack python scripts/check_v8_reframe_ready.py
+```
+
+## テストコマンド
+
+```bash
+conda run -n 2026hack python -m compileall scripts src tests app.py
+conda run -n 2026hack python -m pytest -q
+conda run -n 2026hack python scripts/check_v8_reframe_ready.py
+```
+
+## 3案件
+
+| case_id | テーマ |
+|---------|--------|
+| `case_01_pan_graphitization` | PAN前駆体・炭化・黒鉛化 |
+| `case_02_sizing_interface` | サイジング・界面・複合材 |
+| `case_03_pressure_vessel_filament_winding` | CFRP圧力容器・FW・水素タンク |
+
+各案件: `cases/<case_id>/case_profile.yaml`, `source_candidates.csv`, `expected_outputs.md`, `validation_checklist.md`
+
+## Cloud 反映のタイミング
+
+1. Phase27H で **3案件すべて** validation checklist Pass
+2. ローカル pytest + readiness 全 PASS
+3. **Phase27I** で Cloud Build / Cloud Run deploy
+4. それまでは v7 の本番環境を壊さない
+
+## 関連ドキュメント
+
+- `docs/v8_product_reframe.md` — サービス定義
+- `docs/v8_three_case_validation_plan.md` — 検証計画
+- `docs/v8_user_flow_and_tabs.md` — UI タブ設計
+- `docs/v8_cursor_roadmap.md` — 実装ロードマップ
