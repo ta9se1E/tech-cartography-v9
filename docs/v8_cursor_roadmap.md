@@ -255,25 +255,46 @@
 
 ---
 
-## Phase27I: 3案件検証
+## Phase27I: Three Case Local Validation Pack
 
-**目的:** 3案件をローカルで end-to-end 検証し checklist を Pass。
+**目的:** 3案件それぞれについて v8 の一連の流れがローカルで成立しているか検証し、Cloud 反映前の検証パックを作成する。
 
 **追加/修正ファイル候補:**
-- `outputs/cases/` 成果物
-- `docs/v8_three_case_validation_report.md`
+- `src/tech_cartography/runtime/v8_case_validation_schema.py`
+- `src/tech_cartography/services/v8_case_validation_pack.py`
+- `src/tech_cartography/services/v8_case_validation_export.py`
+- `scripts/run_v8_three_case_validation_pack.py`
+- `src/tech_cartography/ui/v8_export_ui.py`（3案件検証パックセクション）
 
-**完了条件:** 3案件すべて validation_checklist Pass
+**完了条件:**
+- 3案件で Sources → Patent Shortlist → Claim Map → Evidence Map → Gap / Next Actions → 定点観測 → Export を検証
+- `readiness_for_demo` を案件別に判定（claim 本文未取得は `needs_claim_text`）
+- Validation Pack を `outputs/local_v8_case_validation_packs/` に出力
+- 外部 API / メール送信 / Scheduler 起動なし
 
-**テスト観点:** 実データ、FTO 文言なし、Next Actions 3件
+**テスト観点:** JSON serializable、架空 claim なし、common_blocking_issues / common_next_actions、secret 非表示
 
 **Cloud Build:** 不要
 
 ---
 
-## Phase27I: Cloud反映・提出準備
+## Phase27J: Claim 本文投入（数件）
 
-**目的:** ローカル品質確認後に Cloud Build / Cloud Run へ反映。
+**目的:** `claims_input.csv` に claim 本文を数件投入し、Evidence Map の見栄えを改善する。
+
+**Cloud Build:** 不要
+
+---
+
+## Phase27K: UI 最終調整
+
+**目的:** v8 UI の最終 polish。
+
+**Cloud Build:** 不要
+
+---
+
+## Phase27L: Cloud Run v8 反映準備
 
 **追加/修正ファイル候補:**
 - `cloudbuild.yaml`（必要時のみ）

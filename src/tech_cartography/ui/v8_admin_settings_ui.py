@@ -80,6 +80,16 @@ def render_v8_admin_settings_tab(
   st.caption(f"DISABLE_SCHEDULER={disable_scheduler}")
   st.caption("メール送信と Scheduler は必須機能として保持（デフォルト OFF）。")
 
+  st.markdown("#### Phase27I — ローカル検証")
+  st.markdown(
+    render_info_box(
+      "Phase27I は Cloud 反映前のローカル検証です。"
+      " Cloud Build / Cloud Run deploy はこの Phase では実行しません。"
+      " メール送信と Scheduler は設定として残しますが、この Phase では実行しません。"
+    ),
+    unsafe_allow_html=True,
+  )
+
   render_auth_status_expander(project_root=root, key="v8_admin_auth")
   render_iap_cutover_status_expander(project_root=root, key="v8_admin_iap")
   render_api_secret_status_expander(key="v8_admin_api")

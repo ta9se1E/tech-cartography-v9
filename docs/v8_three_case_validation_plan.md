@@ -73,6 +73,54 @@ v8 の Claim / Evidence / Gap / 定点観測ループを、**3つの実案件**�
 
 **Cloud Build:** 不要
 
+## Phase27I: Three Case Local Validation Pack
+
+**目的:** 3案件それぞれについて v8 の一連の流れがローカルで成立しているか検証し、Cloud 反映前の検証パックを作成する。
+
+**追加/修正ファイル:**
+- `src/tech_cartography/runtime/v8_case_validation_schema.py`
+- `src/tech_cartography/services/v8_case_validation_pack.py`
+- `src/tech_cartography/services/v8_case_validation_export.py`
+- `scripts/run_v8_three_case_validation_pack.py`
+
+**各案件で確認する流れ:**
+
+| # | step | 確認内容 |
+|---|------|----------|
+| 1 | Sources一覧 | source_candidates.csv、patent 5件以上、fake URL なし |
+| 2 | 読むべき特許 Top N | Top3以上、why_read / next_verification_action |
+| 3 | Claim Map | claims_input.csv、not_loaded 明示、架空 claim なし |
+| 4 | Evidence Map | candidate 扱い、claim_text_required、not proof |
+| 5 | Gap / Next Actions | Top 3、Gap は未確認事項 |
+| 6 | 定点観測ループ | Watch Profile / Scheduler / Email 計画（実行しない） |
+| 7 | Export | artifact path 収集、secret なし |
+
+**readiness_for_demo 判定:**
+
+| 値 | 意味 |
+|----|------|
+| `ready` | 一連の artifact がありデモ説明可能 |
+| `needs_claim_text` | 流れは通るが claim 本文未取得が主要 blocking |
+| `needs_more_sources` | Sources が不足 |
+| `needs_manual_review` | human_review が多い |
+| `not_ready` | 主要 step が生成できない |
+
+**現状:** `claims_input.csv` の claim_text は空欄のため、3案件とも `needs_claim_text` になるのが正しい評価。
+
+**Validation Pack 出力:** `outputs/local_v8_case_validation_packs/three_case_pack_*/`
+
+- three_case_validation_pack.json / .md / .xlsx
+- three_case_validation_manifest.json
+- case_01〜03_validation_report.md
+- demo_readiness_summary.md / cloud_readiness_summary.md
+
+**Cloud Build:** 不要（Phase27L で反映準備）
+
+**次 Phase 候補:**
+- Phase27J — claim 本文を数件投入
+- Phase27K — UI 最終調整
+- Phase27L — Cloud Run v8 反映準備
+
 ## Case 1: PAN 系炭素繊維の前駆体・炭化・黒鉛化
 
 | 項目 | 内容 |

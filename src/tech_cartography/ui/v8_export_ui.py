@@ -10,6 +10,11 @@ from tech_cartography.runtime.v8_sources_schema import FIXED_POINT_OBSERVATION_N
 from tech_cartography.services.live_evidence_gap_builder import find_latest_evidence_gap_path
 from tech_cartography.services.live_strategic_watch_brief import find_latest_strategic_watch_brief_path
 from tech_cartography.services.live_weekly_decision_cockpit import find_latest_weekly_decision_cockpit_path
+from tech_cartography.services.v8_case_validation_export import (
+  export_validation_pack,
+  find_latest_validation_pack_dir,
+)
+from tech_cartography.services.v8_case_validation_pack import build_three_case_validation_pack
 from tech_cartography.services.v8_claim_map_export import find_latest_claim_map_dir
 from tech_cartography.services.v8_evidence_map_export import find_latest_evidence_map_dir
 from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
@@ -253,10 +258,62 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Fixed Point Observation は未生成 — 「定点観測」タブで Generate してください。")
 
+  st.markdown("#### 3案件検証パック (Phase27I)")
+  st.caption(
+    "Cloud Build はまだ実行しません。claim 本文未取得は needs_claim_text として正しく評価します。"
+    " 架空 claim は生成しません。FTO/侵害/有効性判断ではありません。"
+  )
+  if st.button("Generate Three Case Validation Pack", key="v8_export_validation_pack", type="primary"):
+    pack = build_three_case_validation_pack(project_root=root, ensure_artifacts=True)
+    export_result = export_validation_pack(pack, project_root=root)
+    st.session_state["v8_last_validation_pack"] = {
+      "pack": pack.to_dict(),
+      "export": export_result.to_dict(),
+    }
+    st.success(f"Validation Pack 生成完了 — overall_status={pack.overall_status}")
+
+  cached_pack = st.session_state.get("v8_last_validation_pack")
+  val_dir = find_latest_validation_pack_dir(root)
+  if isinstance(cached_pack, dict):
+    pack_data = cached_pack.get("pack") or {}
+    st.markdown(f"- **overall_status**: {pack_data.get('overall_status', '—')}")
+    for case in pack_data.get("cases") or []:
+      st.markdown(
+        f"- **{case.get('case_id')}**: readiness={case.get('readiness_for_demo')} "
+        f"({case.get('overall_status')})"
+      )
+    for issue in (pack_data.get("common_blocking_issues") or [])[:5]:
+      st.caption(f"blocking: {issue}")
+    for action in (pack_data.get("common_next_actions") or [])[:3]:
+      st.caption(f"next: {action}")
+  elif val_dir and val_dir.exists():
+    st.caption(f"latest validation pack: {val_dir}")
+
+  dl_dir = Path(str((cached_pack or {}).get("export", {}).get("output_dir", ""))) if cached_pack else val_dir
+  if dl_dir and dl_dir.exists():
+    for fname, mime in (
+      ("three_case_validation_pack.md", "text/markdown"),
+      ("three_case_validation_pack.json", "application/json"),
+      ("three_case_validation_pack.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+      ("three_case_validation_manifest.json", "application/json"),
+      ("demo_readiness_summary.md", "text/markdown"),
+      ("cloud_readiness_summary.md", "text/markdown"),
+    ):
+      path = dl_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_val_{fname}",
+        )
+
   st.markdown("#### 既存 artifact 参照")
   _artifact_link(find_latest_evidence_gap_path(root))
   _artifact_link(find_latest_gap_next_actions_dir(None if export_case == "all" else export_case, root))
   _artifact_link(find_latest_fixed_point_observation_dir(None if export_case == "all" else export_case, root))
+  _artifact_link(find_latest_validation_pack_dir(root))
   brief_path = find_latest_strategic_watch_brief_path(root)
   _artifact_link(brief_path)
   if brief_path and brief_path.exists():
@@ -267,7 +324,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
 
   st.markdown("#### 今後追加予定")
   for item in (
-    "Export Package への Gap / Next Actions / Fixed Point Observation 同梱",
+    "Export Package への Validation Pack 同梱",
     "Watch Profile 自動反映（人手承認後）",
   ):
     st.markdown(f"- {item}")

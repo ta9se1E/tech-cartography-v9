@@ -8,9 +8,9 @@ from tech_cartography.ui.demo_safe_ui import sidebar_next_steps_text, sidebar_pr
 from tech_cartography.ui.v8_tab_config import V8_STATUS_CAPTION, v8_sidebar_progress_text
 
 
-def test_v8_status_caption_mentions_phase27h() -> None:
-  assert "Phase27H" in V8_STATUS_CAPTION
-  assert "定点観測" in V8_STATUS_CAPTION
+def test_v8_status_caption_mentions_current_phase() -> None:
+  assert "Phase27I" in V8_STATUS_CAPTION or "Phase27H" in V8_STATUS_CAPTION
+  assert "3案件" in V8_STATUS_CAPTION or "定点観測" in V8_STATUS_CAPTION
   assert "UI骨格 Phase27B" not in V8_STATUS_CAPTION
 
 

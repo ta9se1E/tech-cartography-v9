@@ -91,7 +91,7 @@ STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 V8_STATUS_CAPTION = (
-  "v8 local-first — Phase27H: 定点観測ループまで接続済み（次は3案件検証パック）"
+  "v8 local-first — Phase27I: 3案件ローカル検証パック対応（Cloud Build はまだ不要）"
 )
 
 V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
@@ -106,7 +106,7 @@ V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
 )
 
 V8_SIDEBAR_NEXT_STEP = (
-  "3案件検証パックを作成し、各Caseで一連の出力が揃うか確認する"
+  "Exportタブで3案件検証パックを作成し、各Caseで一連の出力が揃うか確認する"
 )
 
 

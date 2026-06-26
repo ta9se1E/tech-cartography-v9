@@ -17,8 +17,8 @@ git branch --show-current   # v8-claim-evidence-gap
 
 ## 開発方針
 
-- **ローカルファースト**: Phase27B〜27H はローカルで分析品質を詰める
-- **Cloud Build は節目だけ**: 日常開発では必須にしない（Phase27I で反映）
+- **ローカルファースト**: Phase27B〜27I はローカルで分析品質を詰める
+- **Cloud Build は節目だけ**: 日常開発では必須にしない（Phase27L で Cloud Run 反映）
 - **3案件検証を最優先**: `cases/case_01_*` 〜 `case_03_*`
 - **既存 v7 機能を削除しない**
 
@@ -51,7 +51,21 @@ conda run -n 2026hack streamlit run app.py
 
 # v8 Phase27A readiness
 conda run -n 2026hack python scripts/check_v8_reframe_ready.py
+
+# Phase27I: 3案件ローカル検証パック
+conda run -n 2026hack python scripts/run_v8_three_case_validation_pack.py
 ```
+
+## Phase27I — Three Case Validation Pack
+
+3案件（case_01〜03）について、Sources → Patent Shortlist → Claim Map → Evidence Map → Gap / Next Actions → 定点観測 → Export の一連の流れをローカル検証します。
+
+- 出力先: `outputs/local_v8_case_validation_packs/`
+- **readiness_for_demo**: claim 本文未取得は `needs_claim_text`（架空 claim を作らない）
+- 外部 API / メール送信 / Scheduler 起動は行わない
+- **Cloud Build はこの Phase では実行しない**
+
+次 Phase: Phase27J（claim 本文投入）→ Phase27K（UI 調整）→ Phase27L（Cloud Run 反映）
 
 ## テストコマンド
 
@@ -59,6 +73,7 @@ conda run -n 2026hack python scripts/check_v8_reframe_ready.py
 conda run -n 2026hack python -m compileall scripts src tests app.py
 conda run -n 2026hack python -m pytest -q
 conda run -n 2026hack python scripts/check_v8_reframe_ready.py
+conda run -n 2026hack python scripts/run_v8_three_case_validation_pack.py
 ```
 
 ## 3案件
@@ -73,9 +88,9 @@ conda run -n 2026hack python scripts/check_v8_reframe_ready.py
 
 ## Cloud 反映のタイミング
 
-1. Phase27H で **3案件すべて** validation checklist Pass
+1. Phase27I で **3案件すべて** validation pack を生成し `readiness_for_demo` を確認
 2. ローカル pytest + readiness 全 PASS
-3. **Phase27I** で Cloud Build / Cloud Run deploy
+3. **Phase27L** で Cloud Build / Cloud Run deploy
 4. それまでは v7 の本番環境を壊さない
 
 ## 関連ドキュメント

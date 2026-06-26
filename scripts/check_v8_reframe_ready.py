@@ -197,6 +197,22 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     "cloud build only at milestones",
     ("Cloud Build", "節目"),
   ),
+  (
+    "phase27i three case validation pack",
+    ("three case validation pack", "Phase27I"),
+  ),
+  (
+    "phase27i readiness_for_demo",
+    ("readiness_for_demo",),
+  ),
+  (
+    "phase27i needs_claim_text",
+    ("needs_claim_text",),
+  ),
+  (
+    "phase27i no cloud build this phase",
+    ("Phase27I", "Cloud Build", "実行しません"),
+  ),
 )
 
 
@@ -675,6 +691,70 @@ def main(argv: list[str] | None = None) -> int:
     if legal_forbidden.search(text) and "no_legal" not in text.lower():
       failures.append(f"{rel} may claim legal judgement without disclaimer")
 
+  phase27i_files = (
+    "src/tech_cartography/runtime/v8_case_validation_schema.py",
+    "src/tech_cartography/services/v8_case_validation_pack.py",
+    "src/tech_cartography/services/v8_case_validation_export.py",
+    "scripts/run_v8_three_case_validation_pack.py",
+  )
+  for rel in phase27i_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  if "Three Case Validation Pack" in export_ui or "3案件検証パック" in export_ui:
+    print("PASS: v8_export_ui references Three Case Validation Pack")
+  else:
+    failures.append("v8_export_ui missing Three Case Validation Pack section")
+
+  intro_ui_phase27i = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_intro_ui.py")
+  if "Phase27I" in intro_ui_phase27i and "3案件検証パック" in intro_ui_phase27i:
+    print("PASS: v8_intro_ui mentions Phase27I validation pack")
+  else:
+    failures.append("v8_intro_ui missing Phase27I validation pack guidance")
+
+  try:
+    from tech_cartography.services.v8_case_validation_pack import build_three_case_validation_pack
+
+    pack = build_three_case_validation_pack(project_root=PROJECT_ROOT, ensure_artifacts=False)
+    if len(pack.cases) == 3:
+      print("PASS: three case validation pack builds 3 case reports")
+    else:
+      failures.append(f"validation pack has {len(pack.cases)} cases (expected 3)")
+    if pack.common_blocking_issues:
+      print("PASS: validation pack has common_blocking_issues")
+    else:
+      failures.append("validation pack missing common_blocking_issues")
+    if pack.common_next_actions:
+      print("PASS: validation pack has common_next_actions")
+    else:
+      failures.append("validation pack missing common_next_actions")
+    if pack.demo_readiness_summary.strip():
+      print("PASS: validation pack has demo_readiness_summary")
+    else:
+      failures.append("validation pack missing demo_readiness_summary")
+    if pack.cloud_readiness_summary.strip():
+      print("PASS: validation pack has cloud_readiness_summary")
+    else:
+      failures.append("validation pack missing cloud_readiness_summary")
+    for report in pack.cases:
+      step_ids = {s.step_id for s in report.step_results}
+      missing_steps = [s for s in (
+        "sources", "patent_shortlist", "claim_map", "evidence_map",
+        "gap_next_actions", "fixed_point_observation", "export",
+      ) if s not in step_ids]
+      if missing_steps:
+        failures.append(f"{report.case_id} missing validation steps: {missing_steps}")
+      elif report.readiness_for_demo == "needs_claim_text":
+        print(f"PASS: {report.case_id} readiness_for_demo=needs_claim_text")
+      else:
+        print(f"PASS: {report.case_id} readiness_for_demo={report.readiness_for_demo}")
+  except Exception as exc:
+    failures.append(f"three case validation pack build failed: {exc}")
+
+  for rel in phase27i_files:
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
+
   _check_file_exists(PROJECT_ROOT / "src/tech_cartography/ui/v8_text_rendering.py", failures)
 
   text_rendering = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_text_rendering.py")
@@ -710,10 +790,12 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("stale Phase27B label remains in v8 UI")
 
-  if "Phase27H" in tab_config and "定点観測" in tab_config:
+  if "Phase27I" in tab_config and ("3案件" in tab_config or "検証パック" in tab_config):
+    print("PASS: current label mentions Phase27I / three case validation pack")
+  elif "Phase27H" in tab_config and "定点観測" in tab_config:
     print("PASS: current label mentions Phase27H / fixed point observation")
   else:
-    failures.append("v8_tab_config missing Phase27H status caption")
+    failures.append("v8_tab_config missing Phase27I or Phase27H status caption")
 
   if "v8_sidebar_progress_text" in demo_safe and "_is_v8_user_flow_ui" in demo_safe:
     print("PASS: v8 sidebar mentions v8 flow")

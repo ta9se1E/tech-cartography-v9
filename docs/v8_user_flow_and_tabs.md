@@ -86,6 +86,19 @@
 - サイドバーの「現在の進捗」「次にやること」を v8 10タブ構成に整理
 - 次 Phase: **Phase27I** — 3案件ローカル検証パック
 
+## Phase27I（Three Case Local Validation Pack）
+
+- schema: `V8CaseValidationStepResult` / `V8CaseValidationReport` / `V8ThreeCaseValidationPack` / `V8ThreeCaseValidationExport`
+- 3案件（case_01〜03）で Sources → Patent Shortlist → Claim Map → Evidence Map → Gap / Next Actions → 定点観測 → Export をローカル検証
+- **readiness_for_demo**: `ready` / `needs_claim_text` / `needs_more_sources` / `needs_manual_review` / `not_ready`
+  - `ready` = デモ説明可能（技術的正しさ・特許的有効性ではない）
+  - claim 本文未取得は `needs_claim_text`（架空 claim を作らない）
+- Export タブで **3案件検証パック** を生成 — `outputs/local_v8_case_validation_packs/`
+- 出力: json / md / xlsx / manifest / 案件別 report / demo_readiness_summary / cloud_readiness_summary
+- 外部 API / BigQuery / Web 検索 / LLM / メール送信 / Scheduler 起動は **行わない**（計画の確認のみ）
+- **Cloud Build はこの Phase では実行しない**
+- 次 Phase: **Phase27J** — claim 本文を数件投入 / **Phase27K** UI 最終調整 / **Phase27L** Cloud Run 反映
+
 - エントリポイント: `app.py` → `render_v8_user_flow_app`（`APP_UI_VERSION` 未設定時 v8）
 - v7 UI は削除せず `APP_UI_VERSION=v7` で切替
 - メール送信・Scheduler は削除せず、定点観測タブで必須機能として説明、詳細は管理者設定へ

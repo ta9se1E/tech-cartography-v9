@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box
+from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box
+from tech_cartography.ui.v8_text_rendering import render_next_action_card
 from tech_cartography.ui.v8_tab_config import V8_STATUS_CAPTION, V8_TAB_LABELS
 
 
@@ -63,10 +64,24 @@ def render_v8_intro_tab() -> None:
   for index, step in enumerate(flow, start=1):
     st.markdown(f"{index}. {step}")
 
+  st.markdown("#### Phase27I — 3案件ローカル検証")
+  st.markdown(
+    render_info_box(
+      "Cloud 反映前に、Export タブで<strong>3案件検証パック</strong>を作成し、"
+      " Sources → Top特許 → Claim Map → Evidence Map → Gap / Next Actions → 定点観測 → Export "
+      "の一連の流れがローカルで成立するか確認します。"
+      " claim 本文未取得は needs_claim_text として正しく warning 扱いです。"
+    ),
+    unsafe_allow_html=True,
+  )
+
   st.markdown("#### 現在の開発状態")
   st.caption(V8_STATUS_CAPTION)
 
   st.markdown(
-    render_next_action_box(f"次は「{V8_TAB_LABELS['input']}」タブでテーマと案件を選んでください。"),
+    render_next_action_card(
+      "次にやること",
+      f"「{V8_TAB_LABELS['export']}」タブで3案件検証パックを作成してください。",
+    ),
     unsafe_allow_html=True,
   )
