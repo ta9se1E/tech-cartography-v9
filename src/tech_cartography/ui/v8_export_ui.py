@@ -20,6 +20,7 @@ from tech_cartography.services.v8_evidence_map_export import find_latest_evidenc
 from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
 from tech_cartography.services.v8_fixed_point_observation_export import find_latest_fixed_point_observation_dir
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
+from tech_cartography.services.v8_large_candidate_shortlist import find_latest_large_shortlist_dir
 from tech_cartography.services.v8_manual_claim_refresh_export import find_latest_manual_claim_refresh_dir
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
@@ -259,6 +260,47 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Fixed Point Observation は未生成 — 「定点観測」タブで Generate してください。")
 
+  st.markdown("#### Large Candidate Pack (Phase27J.0)")
+  st.caption(
+    "1000件は母集団。Top5 のみ Deep Dive。Cloud Build / 外部 API / BigQuery 実行は行いません。"
+  )
+  lc_case = export_case if export_case != "all" else V8_CASE_SAMPLES[0]["case_id"]
+  lc_dir = find_latest_large_shortlist_dir(lc_case, root)
+  if lc_dir and lc_dir.exists():
+    import json as _json
+
+    manifest_path = lc_dir / "large_candidate_shortlist_manifest.json"
+    if manifest_path.exists():
+      manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+      sel = manifest.get("selection") or {}
+      st.markdown(f"- **case_id**: {lc_case}")
+      st.markdown(f"- imported: {sel.get('population_count', '—')}")
+      st.markdown(f"- deduped: {sel.get('deduped_count', '—')}")
+      st.markdown(f"- Top100: {sel.get('top100_count', '—')}")
+      st.markdown(f"- Top20: {sel.get('top20_count', '—')}")
+      st.markdown(f"- Top5: {sel.get('top5_count', '—')}")
+    for fname, mime in (
+      ("large_candidate_population.csv", "text/csv"),
+      ("large_candidate_deduped.csv", "text/csv"),
+      ("large_candidate_scored.csv", "text/csv"),
+      ("large_candidate_top100.csv", "text/csv"),
+      ("large_candidate_top20.csv", "text/csv"),
+      ("large_candidate_top5.csv", "text/csv"),
+      ("large_candidate_shortlist_summary.md", "text/markdown"),
+      ("large_candidate_shortlist_manifest.json", "application/json"),
+    ):
+      path = lc_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_lc_{fname}",
+        )
+  else:
+    st.caption("Large Candidate Pack 未生成 — 入力タブで取り込み後、読むべき特許で Top5 を生成してください。")
+
   st.markdown("#### Manual Claim Refresh Pack (Phase27J)")
   st.caption(
     "claim 本文はユーザー提供のみ。システムは生成しません。"
@@ -363,6 +405,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   _artifact_link(find_latest_fixed_point_observation_dir(None if export_case == "all" else export_case, root))
   _artifact_link(find_latest_validation_pack_dir(root))
   _artifact_link(find_latest_manual_claim_refresh_dir(root))
+  _artifact_link(find_latest_large_shortlist_dir(None if export_case == "all" else export_case, root))
   brief_path = find_latest_strategic_watch_brief_path(root)
   _artifact_link(brief_path)
   if brief_path and brief_path.exists():

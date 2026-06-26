@@ -278,6 +278,45 @@
 
 ---
 
+**Cloud Build:** 不要
+
+---
+
+## Phase27J.0: Large Candidate Import and 1000-scale Shortlisting Foundation
+
+**目的:** 各 Case 最大1000件の実在特許候補を CSV/Excel から取り込み、母集団として段階選抜（Top100/20/5）する基盤を追加する。
+
+**追加/修正ファイル:**
+- `src/tech_cartography/runtime/v8_large_candidate_schema.py`
+- `src/tech_cartography/services/v8_large_candidate_import.py`
+- `src/tech_cartography/services/v8_large_candidate_normalizer.py`
+- `src/tech_cartography/services/v8_large_candidate_shortlist.py`
+- `scripts/run_v8_large_candidate_import.py`
+- `scripts/run_v8_large_candidate_shortlist.py`
+- `src/tech_cartography/ui/v8_input_ui.py` / `v8_sources_ui.py` / `v8_patent_shortlist_ui.py` / `v8_claim_map_ui.py` / `v8_evidence_map_ui.py` / `v8_export_ui.py`
+- `cases/*/large_candidates/README.md`
+- `docs/bigquery_templates/case_*_1000.sql`
+
+**状態:** ✅ 完了
+
+**完了条件:**
+- CSV/Excel から最大1000件を取り込み、正規化・重複除去・品質チェック・heuristic スコアリング
+- Top100 / Top20 / Top5 を生成
+- Claim Map / Evidence Map は Top5 またはユーザー選択に限定
+- BigQuery はアプリから実行しない（SQL テンプレートは参考のみ）
+- fake patent / fake DOI / fake URL を作らない
+- メール送信・Scheduler は必須機能として残す（本 Phase では実行しない）
+
+**Cloud Build:** 不要
+
+**次 Phase 候補:**
+- Phase27J.1 — Large Candidate UI polish and ranking explanation
+- Phase27K — Manual Claim Injection（継続）
+- Phase27L — Evidence Map / Gap Demo Polish
+- Phase27M — Cloud Run v8 preparation
+
+---
+
 ## Phase27J: Manual Claim Text Injection
 
 **目的:** ユーザーが一次情報から取得した実 claim 本文を手動投入し、Evidence Map の見え方を改善する。

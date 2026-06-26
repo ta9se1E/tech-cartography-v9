@@ -1,0 +1,9 @@
+publication_number,title,abstract,assignee,year,country_code,family_id,url,source_type,notes
+US5176959,Process for producing carbon fibers from PAN precursor,test fixture only - stabilization and carbonization process,Example Corp,1993,US,FAM001,,patent,test fixture only not real patent data
+US4370169,Method for producing carbon fibers,test fixture only - PAN based fiber production,Example Corp,1983,US,FAM002,,patent,test fixture only
+US3969557,High strength carbon fibers process,test fixture only - graphitization step,Example Corp,1976,US,FAM003,,patent,test fixture only
+US4532173,Manufacture of carbon fibers,test fixture only - precursor fiber treatment,Example Corp,1985,US,FAM004,,patent,test fixture only
+US5176959,Process for producing carbon fibers from PAN precursor,duplicate row test fixture,Example Corp,1993,US,FAM001,,patent,test fixture duplicate
+US1111111,Short title,test fixture only,Example Corp,2010,US,,,patent,test fixture only
+,Title without publication number,test fixture only missing pub,Example Corp,2015,US,,,patent,test fixture only
+US2222222,Polyacrylonitrile precursor stabilization oxidation carbonization graphitization tensile modulus carbon fiber,test fixture only keyword rich abstract,Example Corp,2018,US,FAM005,,patent,test fixture only

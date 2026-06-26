@@ -97,7 +97,20 @@
 - 出力: json / md / xlsx / manifest / 案件別 report / demo_readiness_summary / cloud_readiness_summary
 - 外部 API / BigQuery / Web 検索 / LLM / メール送信 / Scheduler 起動は **行わない**（計画の確認のみ）
 - **Cloud Build はこの Phase では実行しない**
-- 次 Phase: **Phase27J** — claim 本文を数件投入 / **Phase27K** UI 最終調整 / **Phase27L** Cloud Run 反映
+- 次 Phase: **Phase27J** — claim 本文を数件投入 / **Phase27J.0** — 1000件母集団 / **Phase27J.1** UI polish / **Phase27K** Manual Claim / **Phase27L** Evidence polish / **Phase27M** Cloud Run
+
+## Phase27J.0（Large Candidate Import and 1000-scale Shortlisting）
+
+- schema: `V8LargeCandidateRecord` / `V8LargeCandidateImportResult` / `V8LargeCandidatePopulationProfile` / `V8LargeCandidateStageSelection` / `V8LargeCandidateShortlistPack`
+- services: `v8_large_candidate_import.py` / `v8_large_candidate_normalizer.py` / `v8_large_candidate_shortlist.py`
+- 各 Case 最大1000件の実在特許候補を CSV/Excel から取り込み（BigQuery は実行せず、抽出済み CSV を取り込むのみ）
+- 1000件は **母集団** — Top100 / Top20 / Top5 の段階選抜後、Top5 またはユーザー選択だけ Deep Dive
+- Claim Map / Evidence Map / Gap は Top N 限定（全件 Deep Dive しない）
+- fake patent / fake DOI / fake URL を作らない
+- メール送信・Scheduler は必須機能として残す（本 Phase では実行しない）
+- Export: **Large Candidate Pack** — `outputs/local_v8_large_shortlists/`
+- BigQuery SQL テンプレート: `docs/bigquery_templates/case_*_1000.sql`（参考のみ、課金・dry-run 確認が必要）
+- 次 Phase: **Phase27J.1** UI polish / **Phase27K** Manual Claim / **Phase27L** Evidence polish / **Phase27M** Cloud Run
 
 ## Phase27J（Manual Claim Injection）
 

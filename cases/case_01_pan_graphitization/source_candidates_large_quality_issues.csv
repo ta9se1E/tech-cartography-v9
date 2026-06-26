@@ -1,0 +1,3 @@
+issue_id,case_id,candidate_id,issue_type,severity,message,publication_number,raw_row_number
+case_01_pan_graphitization:qi:pub:case_01_pan_graphitization:lc:b5e93706e8,case_01_pan_graphitization,case_01_pan_graphitization:lc:b5e93706e8,missing_publication_number,warning,publication_number missing,,8
+case_01_pan_graphitization:dup:case_01_pan_graphitization:lc:9a78276332,case_01_pan_graphitization,case_01_pan_graphitization:lc:9a78276332,duplicate,info,duplicate_of=case_01_pan_graphitization:lc:5279a0ffcb,US5176959,6

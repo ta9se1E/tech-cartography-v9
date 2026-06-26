@@ -15,6 +15,7 @@ from tech_cartography.services.v8_claim_map_export import (
   claim_map_to_markdown,
   export_claim_map,
 )
+from tech_cartography.services.v8_large_candidate_shortlist import load_top5_publications
 from tech_cartography.services.v8_manual_claim_injection import inject_manual_claim, list_claims_needing_text
 from tech_cartography.services.v8_manual_claim_refresh import refresh_after_manual_claim
 from tech_cartography.services.v8_manual_claim_refresh_export import export_manual_claim_refresh
@@ -260,16 +261,24 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
 
   active_case = case_ids[1] if selected_case == "all" else selected_case
   shortlist = build_patent_shortlist(case_id=active_case, top_n=5, project_root=root)
-  pub_options = ["（Shortlist 全件）"] + [p.publication_number for p in shortlist.patent_candidates]
+  top5_large = load_top5_publications(active_case, root)
+  shortlist_pubs = [p.publication_number for p in shortlist.patent_candidates]
+  deep_dive_pubs = top5_large if top5_large else shortlist_pubs
+  if top5_large:
+    st.caption(
+      f"Large Candidate Top5 深掘り対象: {', '.join(top5_large)}"
+      " — 1000件母集団から選抜。Top100/Top20 全件は Claim Map 対象にしません。"
+    )
+  pub_options = ["（Deep Dive 全件 — Top5）"] + deep_dive_pubs
   default_pub_idx = pub_options.index(default_pub) if default_pub in pub_options else 0
   with col2:
     selected_pub_label = st.selectbox(
-      "特許（Patent Shortlist）",
+      "特許（Top5 Deep Dive / Large Candidate）",
       options=pub_options,
       index=default_pub_idx,
       key="v8_claim_map_pub",
     )
-  publication_number = None if selected_pub_label == "（Shortlist 全件）" else selected_pub_label
+  publication_number = None if selected_pub_label.startswith("（") else selected_pub_label
   if publication_number:
     st.session_state[STATE_V8_SELECTED_PUBLICATION] = publication_number
 

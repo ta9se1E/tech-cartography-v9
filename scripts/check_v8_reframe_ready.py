@@ -225,6 +225,30 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     "phase27j manual claim workbench",
     ("manual_claim_workbench",),
   ),
+  (
+    "phase27j0 1000 candidate population",
+    ("1000件", "母集団"),
+  ),
+  (
+    "phase27j0 csv excel import",
+    ("CSV/Excel", "取り込"),
+  ),
+  (
+    "phase27j0 no bigquery execution",
+    ("BigQuery", "実行しません"),
+  ),
+  (
+    "phase27j0 top100 top20 top5",
+    ("Top100", "Top20", "Top5"),
+  ),
+  (
+    "phase27j0 claim map top n only",
+    ("Top5", "Claim Map"),
+  ),
+  (
+    "phase27j0 no fake patent",
+    ("fake", "架空"),
+  ),
 )
 
 
@@ -812,6 +836,48 @@ def main(argv: list[str] | None = None) -> int:
     if legal_forbidden.search(text) and "no_legal" not in text.lower():
       failures.append(f"{rel} may claim legal judgement without disclaimer")
 
+  phase27j0_files = (
+    "src/tech_cartography/runtime/v8_large_candidate_schema.py",
+    "src/tech_cartography/services/v8_large_candidate_import.py",
+    "src/tech_cartography/services/v8_large_candidate_normalizer.py",
+    "src/tech_cartography/services/v8_large_candidate_shortlist.py",
+    "scripts/run_v8_large_candidate_import.py",
+    "scripts/run_v8_large_candidate_shortlist.py",
+  )
+  for rel in phase27j0_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  for case_id in CASE_IDS:
+    _check_file_exists(PROJECT_ROOT / "cases" / case_id / "large_candidates" / "README.md", failures)
+
+  input_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_input_ui.py")
+  if "Import Large Candidate File" in input_ui:
+    print("PASS: v8_input_ui references Large Candidate Import")
+  else:
+    failures.append("v8_input_ui missing Large Candidate Import")
+
+  sources_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_sources_ui.py")
+  if "source_candidates_large" in sources_ui:
+    print("PASS: v8_sources_ui references source_candidates_large")
+  else:
+    failures.append("v8_sources_ui missing source_candidates_large")
+
+  shortlist_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_patent_shortlist_ui.py")
+  if "Top100" in shortlist_ui and "Top5" in shortlist_ui:
+    print("PASS: v8_patent_shortlist_ui references Top100/Top20/Top5")
+  else:
+    failures.append("v8_patent_shortlist_ui missing staged Top100/Top20/Top5")
+
+  if "Large Candidate Pack" in export_ui:
+    print("PASS: v8_export_ui references Large Candidate Pack")
+  else:
+    failures.append("v8_export_ui missing Large Candidate Pack section")
+
+  for rel in phase27j0_files:
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
+
   _check_file_exists(PROJECT_ROOT / "src/tech_cartography/ui/v8_text_rendering.py", failures)
 
   text_rendering = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_text_rendering.py")
@@ -849,6 +915,8 @@ def main(argv: list[str] | None = None) -> int:
 
   if "Phase27I" in tab_config and ("3案件" in tab_config or "検証パック" in tab_config):
     print("PASS: current label mentions Phase27I / three case validation pack")
+  elif "Phase27J.0" in tab_config and ("1000" in tab_config or "母集団" in tab_config):
+    print("PASS: current label mentions Phase27J.0 / large candidate")
   elif "Phase27J" in tab_config and "Manual Claim" in tab_config:
     print("PASS: current label mentions Phase27J / manual claim injection")
   elif "Phase27H" in tab_config and "定点観測" in tab_config:

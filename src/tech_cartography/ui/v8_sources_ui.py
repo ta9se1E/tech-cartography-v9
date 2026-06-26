@@ -9,6 +9,10 @@ import streamlit as st
 
 from tech_cartography.runtime.v8_sources_schema import SAFETY_EXPORT_NOTICES
 from tech_cartography.services.v8_export_package import build_export_package, records_to_csv_text, records_to_markdown
+from tech_cartography.services.v8_large_candidate_import import (
+  large_candidates_paths,
+  load_large_candidates_csv,
+)
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
@@ -39,6 +43,89 @@ def _case_filter_options() -> list[tuple[str, str]]:
   return options
 
 
+def _render_large_candidate_sources(*, root: Path, default_case: str) -> None:
+  case_options = _case_filter_options()
+  case_ids = [cid for cid, _ in case_options if cid != "all"]
+  case_labels = {cid: label for cid, label in case_options}
+  default_idx = case_ids.index(default_case) if default_case in case_ids else 0
+  selected_case = st.selectbox(
+    "案件",
+    options=case_ids,
+    index=default_idx,
+    format_func=lambda cid: case_labels[cid],
+    key="v8_large_sources_case",
+  )
+  paths = large_candidates_paths(selected_case, root)
+  records = load_large_candidates_csv(paths["population"])
+  if not records and paths["deduped"].exists():
+    records = load_large_candidates_csv(paths["deduped"])
+  if not records:
+    st.warning("source_candidates_large.csv がありません。入力タブで Large Candidate を取り込んでください。")
+    return
+
+  stype = st.selectbox("source_type", ["all", "patent", "paper", "web", "company"], key="v8_large_stype")
+  stage = st.selectbox(
+    "stage_label",
+    ["all", "population", "deduped", "scored", "top100", "top20", "top5"],
+    key="v8_large_stage",
+  )
+  keyword = st.text_input("keyword", key="v8_large_kw")
+  hr_only = st.checkbox("human_review_required only", key="v8_large_hr")
+
+  filtered = records
+  if stype != "all":
+    filtered = [r for r in filtered if r.source_type == stype]
+  if stage != "all":
+    filtered = [r for r in filtered if r.stage_label == stage]
+  if keyword.strip():
+    kw = keyword.lower()
+    filtered = [r for r in filtered if kw in _search_blob_lc(r)]
+  if hr_only:
+    filtered = [r for r in filtered if r.human_review_required]
+
+  dup_count = sum(1 for r in records if r.is_duplicate)
+  m1, m2, m3, m4 = st.columns(4)
+  m1.metric("total_candidates", len(records))
+  m2.metric("displayed", len(filtered))
+  m3.metric("duplicate_count", dup_count)
+  m4.metric("missing_title", sum(1 for r in records if not r.title))
+
+  display_cols = [
+    "publication_number", "title", "organization", "year", "source_type",
+    "heuristic_score", "stage_label", "keyword_match_count", "human_review_required",
+  ]
+  preview = filtered[:100]
+  rows = [{c: getattr(r, c, "") for c in display_cols} for r in preview]
+  st.dataframe(pd.DataFrame(rows, columns=display_cols), width="stretch", hide_index=True)
+  if len(filtered) > 100:
+    st.caption(f"先頭100件のみ表示（全 {len(filtered)} 件）")
+
+  for label, path in (
+    ("source_candidates_large.csv", paths["population"]),
+    ("source_candidates_large_deduped.csv", paths["deduped"]),
+    ("quality report", paths["quality_report"]),
+  ):
+    if path.exists():
+      st.download_button(
+        f"Download {label}",
+        data=path.read_bytes(),
+        file_name=path.name,
+        mime="text/csv" if path.suffix == ".csv" else "text/markdown",
+        key=f"v8_large_dl_{path.name}",
+      )
+
+  st.markdown(
+    render_next_action_box(
+      f"次は「{V8_TAB_LABELS['patent_shortlist']}」で Large Candidate mode の Top100/Top20/Top5 を生成してください。"
+    ),
+    unsafe_allow_html=True,
+  )
+
+
+def _search_blob_lc(rec) -> str:
+  return f"{rec.title} {rec.organization} {rec.publication_number} {rec.abstract}".lower()
+
+
 def render_v8_sources_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
   state = get_v8_input_state()
@@ -49,9 +136,21 @@ def render_v8_sources_tab(*, project_root: Path | str) -> None:
     render_caution_box(
       "FTO、侵害、有効性判断、法的結論は行いません。"
       " Web / company source は <strong>candidate information only</strong> です。"
+      " 1000件母集団は全件深掘りしたわけではありません。"
     ),
     unsafe_allow_html=True,
   )
+
+  source_mode = st.radio(
+    "Sources 表示モード",
+    options=["small demo sources", "large candidate population"],
+    horizontal=True,
+    key="v8_sources_mode",
+  )
+
+  if source_mode == "large candidate population":
+    _render_large_candidate_sources(root=root, default_case=default_case)
+    return
 
   base_table = load_sources_table(project_root=root)
   if not base_table.records:

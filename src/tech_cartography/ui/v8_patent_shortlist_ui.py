@@ -8,6 +8,11 @@ import pandas as pd
 import streamlit as st
 
 from tech_cartography.runtime.v8_patent_shortlist_schema import V8PatentCandidate, V8PatentShortlist
+from tech_cartography.services.v8_large_candidate_shortlist import (
+  build_staged_shortlist,
+  find_latest_large_shortlist_dir,
+  load_large_candidates_csv,
+)
 from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
 from tech_cartography.services.v8_patent_shortlist_export import (
   export_patent_shortlist,
@@ -106,6 +111,80 @@ def _render_downloads(
   st.caption(f"export dir: {export_info.get('output_dir', '')}")
 
 
+STATE_V8_PATENT_SHORTLIST = "v8_patent_shortlist_cache"
+STATE_V8_LARGE_SHORTLIST = "v8_large_shortlist_pack"
+
+
+def _render_large_candidate_table(records: list, *, title: str) -> None:
+  st.markdown(f"#### {title}")
+  if not records:
+    st.caption("（なし）")
+    return
+  cols = [
+    "publication_number", "title", "organization", "year", "heuristic_score",
+    "score_reason", "matched_keywords", "stage_label", "next_verification_action",
+  ]
+  rows = []
+  for r in records:
+    rows.append({
+      "publication_number": r.publication_number,
+      "title": (r.title or "")[:80],
+      "organization": r.organization or r.assignee,
+      "year": r.year,
+      "heuristic_score": r.heuristic_score,
+      "score_reason": r.score_reason,
+      "matched_keywords": ", ".join(r.matched_keywords[:5]),
+      "stage_label": r.stage_label,
+      "next_verification_action": r.next_verification_action,
+    })
+  st.dataframe(pd.DataFrame(rows, columns=cols), width="stretch", hide_index=True)
+
+
+def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
+  st.markdown("#### Large Candidate mode (Phase27J.0)")
+  st.caption("1000件母集団 → Top100 → Top20 → Top5。Claim Map / Evidence Map は Top5 のみ深掘り。")
+  b1, b2, b3 = st.columns(3)
+  with b1:
+    gen100 = st.button("Generate Top100", key="v8_lc_top100")
+  with b2:
+    gen20 = st.button("Generate Top20", key="v8_lc_top20")
+  with b3:
+    gen5 = st.button("Generate Top5", key="v8_lc_top5", type="primary")
+  if gen100 or gen20 or gen5 or st.session_state.get("v8_large_shortlist_force"):
+    st.session_state.pop("v8_large_shortlist_force", None)
+    pack = build_staged_shortlist(selected_case, project_root=root)
+    st.session_state[STATE_V8_LARGE_SHORTLIST] = pack.to_dict()
+
+  cached = st.session_state.get(STATE_V8_LARGE_SHORTLIST)
+  if isinstance(cached, dict) and cached.get("case_id") == selected_case:
+    sel = cached.get("selection") or {}
+    st.markdown(
+      f"**ファネル:** imported {sel.get('population_count', 0)} → "
+      f"deduped {sel.get('deduped_count', 0)} → scored {sel.get('scored_count', 0)} → "
+      f"Top100 {sel.get('top100_count', 0)} → Top20 {sel.get('top20_count', 0)} → "
+      f"Top5 {sel.get('top5_count', 0)}"
+    )
+    latest = find_latest_large_shortlist_dir(selected_case, root)
+    if latest:
+      top100 = load_large_candidates_csv(latest / "large_candidate_top100.csv")
+      top20 = load_large_candidates_csv(latest / "large_candidate_top20.csv")
+      top5 = load_large_candidates_csv(latest / "large_candidate_top5.csv")
+      _render_large_candidate_table(top100, title="Top100")
+      _render_large_candidate_table(top20, title="Top20")
+      _render_large_candidate_table(top5, title="Top5 Deep Dive")
+      if top5:
+        pick = st.selectbox(
+          "Claim Map へ進む特許（Top5のみ）",
+          [r.publication_number for r in top5 if r.publication_number],
+          key="v8_lc_top5_pick",
+        )
+        if pick:
+          st.session_state[STATE_V8_SELECTED_PUBLICATION] = pick
+          st.caption(f"selected_publication_number={pick}")
+  else:
+    st.info("Large Candidate を取り込み後、Generate Top5 を押してください。")
+
+
 def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
   state = get_v8_input_state()
@@ -143,6 +222,22 @@ def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
 
   if selected_case != "all":
     st.session_state[STATE_V8_SELECTED_CASE] = selected_case
+
+  shortlist_mode = st.radio(
+    "Shortlist モード",
+    options=["small demo (Top N)", "large candidate staged"],
+    horizontal=True,
+    key="v8_patent_shortlist_mode",
+  )
+  if shortlist_mode == "large candidate staged" and selected_case != "all":
+    _render_large_candidate_mode(root=root, selected_case=selected_case)
+    st.markdown(
+      render_next_action_box(
+        f"Top5 を選択後、「{V8_TAB_LABELS['claim_map']}」へ（Top5 のみ深掘り対象）。"
+      ),
+      unsafe_allow_html=True,
+    )
+    return
 
   cache_key = f"{selected_case}:{top_n}"
   if refresh or st.session_state.get("v8_patent_shortlist_cache_key") != cache_key:

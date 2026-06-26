@@ -118,8 +118,40 @@ v8 の Claim / Evidence / Gap / 定点観測ループを、**3つの実案件**�
 
 **次 Phase 候補:**
 - Phase27J — Manual Claim Injection（ユーザー提供 claim 本文の手動投入）✅
-- Phase27K — UI 最終調整
-- Phase27L — Cloud Run v8 反映準備
+- Phase27J.0 — Large Candidate Import and 1000-scale Shortlisting ✅
+- Phase27J.1 — Large Candidate UI polish
+- Phase27K — Manual Claim Injection（継続）
+- Phase27L — Evidence Map / Gap Demo Polish
+- Phase27M — Cloud Run v8 反映準備
+
+## Phase27J.0: Large Candidate Import and 1000-scale Shortlisting
+
+**目的:** 各 Case 最大1000件の実在特許候補を CSV/Excel から取り込み、母集団として段階選抜する。
+
+**重要:**
+- 1000件は **母集団** — 全件 Deep Dive しない
+- Top100 → Top20 → Top5 の段階選抜
+- Claim Map / Evidence Map は Top5 またはユーザー選択に限定
+- BigQuery はこの Phase では **実行しない** — 抽出済み CSV を UI/CLI で取り込む
+- fake patent / fake DOI / fake URL を作らない
+- cases/ 配下に架空1000件 CSV を入れない
+
+**入力フォルダ:** `cases/<case_id>/large_candidates/README.md` を参照
+
+**BigQuery SQL テンプレート:** `docs/bigquery_templates/case_*_1000.sql`（参考のみ、課金・dry-run 確認が必要）
+
+**CLI:**
+```bash
+conda run -n 2026hack python scripts/run_v8_large_candidate_import.py \
+  --case-id case_01_pan_graphitization \
+  --input cases/case_01_pan_graphitization/large_candidates/case_01_bigquery_export_1000.csv \
+  --max-rows 1000
+
+conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
+  --case-id case_01_pan_graphitization
+```
+
+**Cloud Build:** 不要
 
 ## Phase27J: Manual Claim Injection
 

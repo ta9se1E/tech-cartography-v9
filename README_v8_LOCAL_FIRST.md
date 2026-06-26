@@ -82,6 +82,29 @@ conda run -n 2026hack python scripts/run_v8_manual_claim_refresh.py \
 - `cases/<case_id>/manual_claim_workbench.md` を参照
 - cases/ 配下に架空 claim は入れない
 
+## Phase27J.0 — Large Candidate Import and 1000-scale Shortlisting
+
+各 Case 最大 **1000件** の実在特許候補を CSV/Excel から取り込みます。1000件は母集団であり、全件 Deep Dive しません。
+
+```bash
+conda run -n 2026hack python scripts/run_v8_large_candidate_import.py \
+  --case-id case_01_pan_graphitization \
+  --input cases/case_01_pan_graphitization/large_candidates/case_01_bigquery_export_1000.csv \
+  --max-rows 1000
+
+conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
+  --case-id case_01_pan_graphitization
+```
+
+- 入力: `cases/<case_id>/large_candidates/` に BigQuery 等で抽出した実在特許 CSV
+- BigQuery はアプリから **実行しない**（SQL テンプレートは `docs/bigquery_templates/` に参考のみ）
+- 段階選抜: Top100 → Top20 → Top5
+- Claim Map / Evidence Map は Top5 またはユーザー選択に限定
+- fake patent / fake DOI / fake URL を作らない
+- メール送信・Scheduler は必須機能として残す（本 Phase では実行しない）
+
+**次 Phase:** Phase27J.1（UI polish）→ Phase27K（Manual Claim）→ Phase27L（Evidence polish）→ Phase27M（Cloud Run）
+
 ## テストコマンド
 
 ```bash
@@ -89,6 +112,12 @@ conda run -n 2026hack python -m compileall scripts src tests app.py
 conda run -n 2026hack python -m pytest -q
 conda run -n 2026hack python scripts/check_v8_reframe_ready.py
 conda run -n 2026hack python scripts/run_v8_three_case_validation_pack.py
+conda run -n 2026hack python scripts/run_v8_large_candidate_import.py \
+  --case-id case_01_pan_graphitization \
+  --input tests/fixtures/v8_large_candidate_fixture.csv \
+  --max-rows 100
+conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
+  --case-id case_01_pan_graphitization
 ```
 
 ## 3案件
