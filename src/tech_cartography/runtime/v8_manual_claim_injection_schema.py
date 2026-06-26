@@ -1,4 +1,4 @@
-"""v8 Manual Claim Injection schema (Phase 27J)."""
+"""v8 Manual Claim Injection schema (Phase 27K)."""
 
 from __future__ import annotations
 
@@ -31,11 +31,13 @@ VALID_INJECTION_STATUSES: tuple[str, ...] = (
   "rejected_empty",
   "rejected_too_short",
   "rejected_placeholder",
+  "rejected_invalid_target",
 )
 
 REFRESH_NEXT_PHASES: tuple[str, ...] = (
-  "Phase27K — UI 最終調整",
-  "Phase27L — Cloud Run v8 反映準備",
+  "Phase27L — Evidence Map / Gap Demo Polish",
+  "Phase27M — UI最終調整",
+  "Phase27N — Cloud Run v8反映準備",
 )
 
 
@@ -71,9 +73,11 @@ class V8ManualClaimInjectionResult:
   claim_text_length: int = 0
   saved_to_claims_input_csv: bool = False
   updated_claims_input_path: str = ""
+  backup_path: str = ""
   warnings: list[str] = field(default_factory=list)
   next_refresh_steps: list[str] = field(default_factory=list)
   human_review_required: bool = True
+  candidate_information_only: bool = True
   no_legal_judgement: bool = True
   created_at: str = field(default_factory=utc_now_iso)
 

@@ -55,10 +55,23 @@ def test_fixture_claim_is_valid() -> None:
   assert "test fixture only, not real patent claim" in claim_text
   status, normalized, _ = validate_claim_text(claim_text)
   assert status == "manual_input"
-  assert len(normalized) >= 20
+  assert len(normalized) >= 40
 
 
-def test_inject_saves_to_claims_csv_with_backup(isolated_case_root: Path) -> None:
+def test_reject_invalid_case_id(isolated_case_root: Path) -> None:
+  claim_text = FIXTURE_PATH.read_text(encoding="utf-8").strip()
+  result = inject_manual_claim(
+    case_id="invalid_case",
+    publication_number=PUB,
+    claim_no="1",
+    claim_text=claim_text,
+    project_root=isolated_case_root,
+  )
+  assert result.claim_text_status == "rejected_invalid_target"
+  assert not result.saved_to_claims_input_csv
+
+
+def test_inject_saves_backup_path(isolated_case_root: Path) -> None:
   claim_text = FIXTURE_PATH.read_text(encoding="utf-8").strip()
   csv_path = claims_input_path(CASE_ID, isolated_case_root)
   assert csv_path.exists()
@@ -73,7 +86,7 @@ def test_inject_saves_to_claims_csv_with_backup(isolated_case_root: Path) -> Non
   )
   assert result.saved_to_claims_input_csv is True
   assert result.claim_text_status == "manual_input"
-  assert any("backup created" in w for w in result.warnings)
+  assert result.backup_path or any("backup created" in w for w in result.warnings)
 
   with csv_path.open(encoding="utf-8", newline="") as handle:
     rows = list(csv.DictReader(handle))

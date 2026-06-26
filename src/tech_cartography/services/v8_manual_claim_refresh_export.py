@@ -1,4 +1,4 @@
-"""v8 Manual Claim Refresh export (Phase 27J)."""
+"""v8 Manual Claim Refresh export (Phase 27K)."""
 
 from __future__ import annotations
 
@@ -62,6 +62,7 @@ def report_to_markdown(report: V8ManualClaimRefreshReport) -> str:
       f"- claim_text_length: {inj.claim_text_length}",
       f"- saved_to_claims_input_csv: {inj.saved_to_claims_input_csv}",
       f"- updated_claims_input_path: {inj.updated_claims_input_path}",
+      f"- backup_path: {inj.backup_path or '（なし）'}",
       "",
     ])
   lines.extend([

@@ -92,8 +92,9 @@ def _render_manual_claim_injection_section(
   publication_number: str | None,
   patent_title: str,
   project_root: Path,
+  top5_publications: list[str],
 ) -> None:
-  st.markdown("#### claim本文を手動投入する (Phase27J)")
+  st.markdown("#### claim本文を手動投入する (Phase27K)")
   st.markdown(
     render_caution_box(
       "<strong>claim 本文はユーザーが一次情報からコピーしたものだけを入力してください。</strong>"
@@ -114,12 +115,23 @@ def _render_manual_claim_injection_section(
   st.caption(f"workbench: cases/{active_case}/manual_claim_workbench.md")
 
   inj_col1, inj_col2 = st.columns(2)
+  pub_choices = list(dict.fromkeys([*top5_publications, publication_number or ""]))
+  pub_choices = [p for p in pub_choices if p]
   with inj_col1:
-    inj_pub = st.text_input(
-      "publication_number",
-      value=publication_number or "",
-      key="v8_manual_inj_pub",
-    )
+    if pub_choices:
+      default_pub_idx = pub_choices.index(publication_number) if publication_number in pub_choices else 0
+      inj_pub = st.selectbox(
+        "publication_number（Top5 / 選択候補）",
+        options=pub_choices,
+        index=default_pub_idx,
+        key="v8_manual_inj_pub_select",
+      )
+    else:
+      inj_pub = st.text_input(
+        "publication_number",
+        value=publication_number or "",
+        key="v8_manual_inj_pub",
+      )
     inj_claim_no = st.text_input("claim_no", value="1", key="v8_manual_inj_no")
     inj_title = st.text_input("patent_title（任意）", value=patent_title, key="v8_manual_inj_title")
     inj_source_type = st.selectbox(
@@ -163,6 +175,7 @@ def _render_manual_claim_injection_section(
       f"- **claim_text_status**: {saved.get('claim_text_status')}\n"
       f"- **saved_to_claims_input_csv**: {saved.get('saved_to_claims_input_csv')}\n"
       f"- **updated_claims_input_path**: {saved.get('updated_claims_input_path')}\n"
+      f"- **backup_path**: {saved.get('backup_path') or '（なし）'}\n"
       f"- **claim_text_length**: {saved.get('claim_text_length')}"
     )
     for w in saved.get("warnings") or []:
@@ -174,7 +187,7 @@ def _render_manual_claim_injection_section(
       st.session_state["v8_claim_map_force_refresh"] = True
       st.rerun()
   with btn_col2:
-    if st.button("Evidence Mapまで再生成", key="v8_manual_refresh_full", type="secondary"):
+    if st.button("Manual Claim Refresh Packを作成", key="v8_manual_refresh_full", type="secondary"):
       pub = (inj_pub or publication_number or "").strip()
       if not pub:
         st.warning("publication_number を指定してください。")
@@ -291,6 +304,7 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
         "",
       ) if publication_number else "",
       project_root=root,
+      top5_publications=deep_dive_pubs,
     )
 
   input_mode = st.radio(

@@ -333,7 +333,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Large Candidate Pack 未生成 — 入力タブで取り込み後、読むべき特許で Top5 を生成してください。")
 
-  st.markdown("#### Manual Claim Refresh Pack (Phase27J)")
+  st.markdown("#### Manual Claim Refresh Pack (Phase27K)")
   st.caption(
     "claim 本文はユーザー提供のみ。システムは生成しません。"
     " Cloud Build / メール送信 / Scheduler 起動は行いません。"
@@ -347,6 +347,10 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
     st.markdown(f"- **publication_number**: {report.get('publication_number', '—')}")
     inj = report.get("claim_injection_result") or {}
     st.markdown(f"- **claim_text_status**: {inj.get('claim_text_status', 'loaded')}")
+    st.markdown(
+      f"- **claim_text_required_count**: {report.get('claim_text_required_count_before', '—')} → "
+      f"{report.get('claim_text_required_count_after', '—')}"
+    )
     st.markdown(
       f"- **validation_readiness**: {report.get('validation_readiness_before')} → "
       f"{report.get('validation_readiness_after')}"

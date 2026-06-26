@@ -91,7 +91,7 @@ STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 V8_STATUS_CAPTION = (
-  "v8 local-first — Phase27J.1: Ranking Explanation / patent triage adapter（Cloud Build はまだ不要）"
+  "v8 local-first — Phase27K: Manual Claim Injection / Refresh（Cloud Build はまだ不要）"
 )
 
 V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
@@ -106,7 +106,7 @@ V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
 )
 
 V8_SIDEBAR_NEXT_STEP = (
-  "読むべき特許タブで Large Candidate の Top5 と Ranking Explanation を確認し、Claim Map へ進む"
+  "Claim Map タブで Top5 から claim 本文を手動投入し、Manual Claim Refresh Pack を作成する"
 )
 
 

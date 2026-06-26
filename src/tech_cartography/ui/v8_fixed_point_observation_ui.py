@@ -104,7 +104,7 @@ def _render_single_report(
     if rpt.get("case_id") == report.case_id:
       st.markdown(
         render_info_box(
-          "<strong>claim投入後の次回タスク変化 (Phase27J)</strong><br>"
+          "<strong>claim投入後の次回タスク変化 (Phase27K)</strong><br>"
           "before: claim本文取得 / load_claim_text<br>"
           "after: 実施例確認 / paper evidence確認 / property data確認<br>"
           "no_email_send=true / no_scheduler_start=true — メール/Scheduler は必須機能として保持。"

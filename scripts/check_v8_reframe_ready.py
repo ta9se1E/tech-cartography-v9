@@ -265,6 +265,22 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     "phase27j1 no deep dive all 1000",
     ("1000", "Deep Dive"),
   ),
+  (
+    "phase27k manual claim injection",
+    ("Phase27K", "Manual Claim"),
+  ),
+  (
+    "phase27k claim text user provided",
+    ("ユーザー提供", "claim"),
+  ),
+  (
+    "phase27k no generated claim text",
+    ("生成しません", "claim 本文"),
+  ),
+  (
+    "phase27k no legal judgement",
+    ("FTO", "侵害"),
+  ),
 )
 
 
@@ -971,6 +987,8 @@ def main(argv: list[str] | None = None) -> int:
 
   if "Phase27I" in tab_config and ("3案件" in tab_config or "検証パック" in tab_config):
     print("PASS: current label mentions Phase27I / three case validation pack")
+  elif "Phase27K" in tab_config and "Manual Claim" in tab_config:
+    print("PASS: current label mentions Phase27K / manual claim injection")
   elif "Phase27J.1" in tab_config and ("Ranking" in tab_config or "ranking" in tab_config.lower()):
     print("PASS: current label mentions Phase27J.1 / ranking explanation")
   elif "Phase27J.0" in tab_config and ("1000" in tab_config or "母集団" in tab_config):

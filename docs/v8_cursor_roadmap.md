@@ -340,6 +340,26 @@
 
 ---
 
+**Cloud Build:** 不要
+
+---
+
+## Phase27K: Manual Claim Injection and Refresh Pipeline
+
+**目的:** Top5 候補からユーザー提供 claim 本文を安全に投入し、Claim Map 以降を再生成する。
+
+**状態:** ✅ 完了
+
+**完了条件:**
+- 空 / placeholder / 短すぎる claim を拒否
+- claims_input.csv バックアップ付き保存
+- claim_text_required_count 改善確認
+- Manual Claim Refresh Pack 出力
+
+**Cloud Build:** 不要
+
+---
+
 ## Phase27J: Manual Claim Text Injection
 
 **目的:** ユーザーが一次情報から取得した実 claim 本文を手動投入し、Evidence Map の見え方を改善する。

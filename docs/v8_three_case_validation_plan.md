@@ -160,7 +160,15 @@ conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
 - score は読む優先度であり、技術的正しさ・特許価値・法的価値ではない
 - 1000件全件 Deep Dive しない
 
-**次 Phase:** Phase27K（Manual Claim）→ Phase27L（Evidence polish）→ Phase27M（UI）→ Phase27N（Cloud Run）
+**次 Phase:** Phase27L（Evidence polish）→ Phase27M（UI）→ Phase27N（Cloud Run）
+
+## Phase27K: Manual Claim Injection and Refresh
+
+- Top5 から claim 投入対象を選択
+- claim 本文はユーザー提供のみ（40文字未満 / placeholder は拒否）
+- 投入後 Claim Map / Evidence Map / Gap / 定点観測を再生成
+- claim_text_required_count が減ることを確認
+- paper/web/company は candidate 扱いを維持
 
 ## Phase27J: Manual Claim Injection
 

@@ -1,4 +1,4 @@
-"""v8 Manual Claim Refresh service (Phase 27J)."""
+"""v8 Manual Claim Refresh service (Phase 27K)."""
 
 from __future__ import annotations
 

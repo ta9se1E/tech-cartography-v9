@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run v8 manual claim refresh after user-provided claim text (Phase 27J)."""
+"""Run v8 manual claim refresh after user-provided claim text (Phase 27K)."""
 
 from __future__ import annotations
 

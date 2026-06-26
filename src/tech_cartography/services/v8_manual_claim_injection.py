@@ -1,4 +1,4 @@
-"""v8 Manual Claim Injection service (Phase 27J)."""
+"""v8 Manual Claim Injection service (Phase 27K)."""
 
 from __future__ import annotations
 
@@ -24,11 +24,18 @@ from tech_cartography.services.v8_claim_input_loader import (
 )
 from tech_cartography.services.v8_sources_table import load_case_profile, project_root_from_here
 
-MIN_CLAIM_TEXT_LENGTH = 20
+MIN_CLAIM_TEXT_LENGTH = 40
+
+VALID_CASE_IDS: frozenset[str] = frozenset({
+  "case_01_pan_graphitization",
+  "case_02_sizing_interface",
+  "case_03_pressure_vessel_filament_winding",
+})
 
 PLACEHOLDER_PATTERNS: tuple[re.Pattern[str], ...] = (
   re.compile(r"claim\s*text\s*not\s*loaded", re.IGNORECASE),
   re.compile(r"claim\s*text\s*loading\s*required", re.IGNORECASE),
+  re.compile(r"\bnot\s+loaded\b", re.IGNORECASE),
   re.compile(r"\bplaceholder\b", re.IGNORECASE),
   re.compile(r"\blorem\s+ipsum\b", re.IGNORECASE),
   re.compile(r"\btbd\b", re.IGNORECASE),
@@ -133,6 +140,18 @@ def inject_manual_claim(
 ) -> V8ManualClaimInjectionResult:
   """Validate and save user-provided claim text to claims_input.csv. No external API calls."""
   root = Path(project_root or project_root_from_here())
+  if case_id not in VALID_CASE_IDS:
+    return V8ManualClaimInjectionResult(
+      result_id=_result_id(case_id, publication_number, claim_no),
+      case_id=case_id,
+      publication_number=publication_number.strip(),
+      claim_no=(claim_no or "1").strip(),
+      claim_text_status="rejected_invalid_target",
+      updated_claims_input_path=str(claims_input_path(case_id, root)),
+      warnings=[f"invalid case_id: {case_id} — expected one of {sorted(VALID_CASE_IDS)}"],
+      next_refresh_steps=["有効な case_id を指定してください"],
+    )
+
   pub = publication_number.strip()
   cno = (claim_no or "1").strip()
   profile = load_case_profile(case_id, root) or {}
@@ -229,6 +248,7 @@ def inject_manual_claim(
     claim_text_length=len(normalized),
     saved_to_claims_input_csv=True,
     updated_claims_input_path=str(csv_path),
+    backup_path=backup_path,
     warnings=warnings,
     next_refresh_steps=[
       "Claim Map を再生成",

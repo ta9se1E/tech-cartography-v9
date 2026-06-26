@@ -122,7 +122,17 @@
 - 1000件母集団の全件 Deep Dive はしない — Claim Map / Evidence Map は Top5 またはユーザー選択のみ
 - Export: **Ranking Explanation Pack**（ranking_explanation.md/json/csv, top5_ranking_explanation.md, dropped_candidate_summary.md）
 
-## Phase27J（Manual Claim Injection）
+## Phase27K（Manual Claim Injection and Refresh Pipeline）
+
+- Top5 から publication_number を選び、Claim Map タブで **ユーザー提供 claim 本文** を手動投入
+- 空欄 / placeholder / 40文字未満は拒否 — `claims_input.csv.bak_<timestamp>` バックアップ
+- 投入後: Claim Map → Evidence Map → Gap / Next Actions → Fixed Point Observation → Validation 再評価
+- `claim_text_status=manual_input` / `claim_text_required_count` 改善確認
+- paper / web / company は **candidate**（not proof）— 実施例・論文本文を読んだことにはしない
+- Export: **Manual Claim Refresh Pack** — `outputs/local_v8_manual_claim_refresh/`
+- CLI: `scripts/run_v8_manual_claim_refresh.py`
+
+## Phase27J（Manual Claim Injection — 初期実装）
 
 - schema: `V8ManualClaimInjectionRequest` / `V8ManualClaimInjectionResult` / `V8ManualClaimRefreshReport`
 - **claim 本文はユーザー提供のみ** — システムは生成しない

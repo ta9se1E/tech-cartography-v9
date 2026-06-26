@@ -67,6 +67,23 @@ conda run -n 2026hack python scripts/run_v8_three_case_validation_pack.py
 
 次 Phase: Phase27K（UI 調整）→ Phase27L（Cloud Run 反映）
 
+## Phase27K — Manual Claim Injection and Refresh Pipeline
+
+各 Case の Top5 から選んだ特許について、ユーザーが一次情報から取得した **実 claim 本文** を手動投入し、下流 artifact を再生成します。
+
+```bash
+conda run -n 2026hack python scripts/run_v8_manual_claim_refresh.py \
+  --case-id case_01_pan_graphitization \
+  --publication-number US5176959 \
+  --claim-no 1
+```
+
+- claim 本文は **ユーザー提供のみ**（自動生成しない）
+- `cases/` 配下に架空 claim は入れない
+- 出力: `outputs/local_v8_manual_claim_refresh/`
+
+**次 Phase:** Phase27L（Evidence polish）→ Phase27M（UI）→ Phase27N（Cloud Run）
+
 ## Phase27J — Manual Claim Injection
 
 claim 本文は **ユーザーが一次情報からコピーしたもののみ** を Claim Map タブで投入します。システムは生成しません。
