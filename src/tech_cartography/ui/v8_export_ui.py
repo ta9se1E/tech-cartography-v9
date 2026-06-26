@@ -20,6 +20,7 @@ from tech_cartography.services.v8_evidence_map_export import find_latest_evidenc
 from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
 from tech_cartography.services.v8_fixed_point_observation_export import find_latest_fixed_point_observation_dir
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
+from tech_cartography.services.v8_manual_claim_refresh_export import find_latest_manual_claim_refresh_dir
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box
@@ -258,6 +259,53 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Fixed Point Observation は未生成 — 「定点観測」タブで Generate してください。")
 
+  st.markdown("#### Manual Claim Refresh Pack (Phase27J)")
+  st.caption(
+    "claim 本文はユーザー提供のみ。システムは生成しません。"
+    " Cloud Build / メール送信 / Scheduler 起動は行いません。"
+  )
+  refresh_dir = find_latest_manual_claim_refresh_dir(root)
+  cached_refresh = st.session_state.get("v8_manual_claim_refresh_result")
+  if isinstance(cached_refresh, dict):
+    report = cached_refresh.get("report") or {}
+    export_info = cached_refresh.get("export") or {}
+    st.markdown(f"- **case_id**: {report.get('case_id', '—')}")
+    st.markdown(f"- **publication_number**: {report.get('publication_number', '—')}")
+    inj = report.get("claim_injection_result") or {}
+    st.markdown(f"- **claim_text_status**: {inj.get('claim_text_status', 'loaded')}")
+    st.markdown(
+      f"- **validation_readiness**: {report.get('validation_readiness_before')} → "
+      f"{report.get('validation_readiness_after')}"
+    )
+    for issue in (report.get("remaining_blocking_issues") or [])[:5]:
+      st.caption(f"blocking: {issue}")
+    for action in (report.get("next_human_actions") or [])[:3]:
+      st.caption(f"next: {action}")
+    dl_dir = Path(str(export_info.get("output_dir", "")))
+  elif refresh_dir and refresh_dir.exists():
+    st.caption(f"latest manual claim refresh: {refresh_dir}")
+    dl_dir = refresh_dir
+  else:
+    st.caption("Manual Claim Refresh Pack 未生成 — Claim Map タブで claim 投入後に再生成してください。")
+    dl_dir = None
+
+  if dl_dir and dl_dir.exists():
+    for fname, mime in (
+      ("manual_claim_refresh_report.md", "text/markdown"),
+      ("manual_claim_refresh_report.json", "application/json"),
+      ("refreshed_artifact_trace.md", "text/markdown"),
+      ("manual_claim_refresh_manifest.json", "application/json"),
+    ):
+      path = dl_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_mcr_{fname}",
+        )
+
   st.markdown("#### 3案件検証パック (Phase27I)")
   st.caption(
     "Cloud Build はまだ実行しません。claim 本文未取得は needs_claim_text として正しく評価します。"
@@ -314,6 +362,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   _artifact_link(find_latest_gap_next_actions_dir(None if export_case == "all" else export_case, root))
   _artifact_link(find_latest_fixed_point_observation_dir(None if export_case == "all" else export_case, root))
   _artifact_link(find_latest_validation_pack_dir(root))
+  _artifact_link(find_latest_manual_claim_refresh_dir(root))
   brief_path = find_latest_strategic_watch_brief_path(root)
   _artifact_link(brief_path)
   if brief_path and brief_path.exists():

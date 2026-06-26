@@ -187,7 +187,12 @@ def _map_source_status(row: V8ClaimInputRow) -> tuple[str, str]:
   if not row.has_loaded_text():
     return "claim text not loaded", "not_loaded"
   source = row.claim_source_type.lower()
-  if source == "manual":
+  if source in {
+    "manual",
+    "google_patents_user_copy",
+    "bigquery_user_copy",
+    "other_user_provided",
+  }:
     return row.claim_text, "manual_input"
   if source == "csv":
     return row.claim_text, "csv_imported"

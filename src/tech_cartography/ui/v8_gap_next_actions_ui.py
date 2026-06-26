@@ -134,6 +134,24 @@ def _render_single_report(
   key_suffix: str,
 ) -> None:
   _render_metrics(report)
+
+  refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
+  if isinstance(refresh_cached, dict):
+    rpt = refresh_cached.get("report") or {}
+    if rpt.get("case_id") == report.case_id:
+      before = rpt.get("claim_text_required_count_before")
+      after = rpt.get("claim_text_required_count_after")
+      if before is not None and after is not None:
+        st.markdown(
+          render_info_box(
+            f"<strong>claim投入後の変化 (Phase27J)</strong> — "
+            f"claim_text_required: {before} → {after}。"
+            " 次アクションが claim取得 から example/paper 確認へ進む場合があります。"
+            " Gap は未確認事項であり、特許の弱点ではありません。"
+          ),
+          unsafe_allow_html=True,
+        )
+
   st.markdown("#### Top 3 Next Actions")
   _render_top_actions(report.top_3_actions)
   st.markdown("#### Gap table")

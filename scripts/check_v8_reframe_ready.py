@@ -213,6 +213,18 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     "phase27i no cloud build this phase",
     ("Phase27I", "Cloud Build", "実行しません"),
   ),
+  (
+    "phase27j manual claim injection user provided",
+    ("Phase27J", "ユーザー提供", "claim"),
+  ),
+  (
+    "phase27j no generated claim text",
+    ("生成しません", "claim 本文"),
+  ),
+  (
+    "phase27j manual claim workbench",
+    ("manual_claim_workbench",),
+  ),
 )
 
 
@@ -755,6 +767,51 @@ def main(argv: list[str] | None = None) -> int:
     if legal_forbidden.search(text) and "no_legal" not in text.lower():
       failures.append(f"{rel} may claim legal judgement without disclaimer")
 
+  phase27j_files = (
+    "src/tech_cartography/runtime/v8_manual_claim_injection_schema.py",
+    "src/tech_cartography/services/v8_manual_claim_injection.py",
+    "src/tech_cartography/services/v8_manual_claim_refresh.py",
+    "src/tech_cartography/services/v8_manual_claim_refresh_export.py",
+    "scripts/run_v8_manual_claim_refresh.py",
+  )
+  for rel in phase27j_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  for case_id in CASE_IDS:
+    _check_file_exists(PROJECT_ROOT / "cases" / case_id / "manual_claim_workbench.md", failures)
+
+  claim_map_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_claim_map_ui.py")
+  if "手動投入" in claim_map_ui or "manual claim" in claim_map_ui.lower():
+    print("PASS: v8_claim_map_ui references manual claim injection")
+  else:
+    failures.append("v8_claim_map_ui missing manual claim injection section")
+
+  if "Manual Claim Refresh Pack" in export_ui:
+    print("PASS: v8_export_ui references Manual Claim Refresh Pack")
+  else:
+    failures.append("v8_export_ui missing Manual Claim Refresh Pack section")
+
+  try:
+    from tech_cartography.services.v8_manual_claim_injection import validate_claim_text
+
+    status, _, _ = validate_claim_text("")
+    if status == "rejected_empty":
+      print("PASS: empty claim text rejected")
+    else:
+      failures.append("validate_claim_text should reject empty")
+    status2, _, _ = validate_claim_text("claim text not loaded")
+    if status2 == "rejected_placeholder":
+      print("PASS: placeholder claim text rejected")
+    else:
+      failures.append("validate_claim_text should reject placeholder")
+  except Exception as exc:
+    failures.append(f"manual claim injection import failed: {exc}")
+
+  for rel in phase27j_files:
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
+
   _check_file_exists(PROJECT_ROOT / "src/tech_cartography/ui/v8_text_rendering.py", failures)
 
   text_rendering = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_text_rendering.py")
@@ -792,6 +849,8 @@ def main(argv: list[str] | None = None) -> int:
 
   if "Phase27I" in tab_config and ("3案件" in tab_config or "検証パック" in tab_config):
     print("PASS: current label mentions Phase27I / three case validation pack")
+  elif "Phase27J" in tab_config and "Manual Claim" in tab_config:
+    print("PASS: current label mentions Phase27J / manual claim injection")
   elif "Phase27H" in tab_config and "定点観測" in tab_config:
     print("PASS: current label mentions Phase27H / fixed point observation")
   else:

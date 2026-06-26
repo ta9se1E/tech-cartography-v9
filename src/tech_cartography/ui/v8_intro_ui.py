@@ -64,6 +64,17 @@ def render_v8_intro_tab() -> None:
   for index, step in enumerate(flow, start=1):
     st.markdown(f"{index}. {step}")
 
+  st.markdown("#### Phase27J — Manual Claim Injection")
+  st.markdown(
+    render_info_box(
+      "<strong>claim 本文はユーザーが一次情報からコピーしたもののみ</strong>を投入します。"
+      " システムは claim 本文を生成しません。"
+      " Claim Map タブで手動投入 → Evidence Map / Gap / 定点観測を再生成し、"
+      " Evidence Map の見え方を改善します（paper/web/company は引き続き candidate）。"
+    ),
+    unsafe_allow_html=True,
+  )
+
   st.markdown("#### Phase27I — 3案件ローカル検証")
   st.markdown(
     render_info_box(
@@ -81,7 +92,7 @@ def render_v8_intro_tab() -> None:
   st.markdown(
     render_next_action_card(
       "次にやること",
-      f"「{V8_TAB_LABELS['export']}」タブで3案件検証パックを作成してください。",
+      f"「{V8_TAB_LABELS['claim_map']}」タブで実 claim 本文を手動投入してください。",
     ),
     unsafe_allow_html=True,
   )

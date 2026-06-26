@@ -91,7 +91,7 @@ STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 V8_STATUS_CAPTION = (
-  "v8 local-first — Phase27I: 3案件ローカル検証パック対応（Cloud Build はまだ不要）"
+  "v8 local-first — Phase27J: Manual Claim Injection（Cloud Build はまだ不要）"
 )
 
 V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
@@ -106,7 +106,7 @@ V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
 )
 
 V8_SIDEBAR_NEXT_STEP = (
-  "Exportタブで3案件検証パックを作成し、各Caseで一連の出力が揃うか確認する"
+  "Claim Mapタブで実claim本文を手動投入し、Evidence Mapまで再生成する"
 )
 
 

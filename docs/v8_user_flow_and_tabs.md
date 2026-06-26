@@ -99,6 +99,18 @@
 - **Cloud Build はこの Phase では実行しない**
 - 次 Phase: **Phase27J** — claim 本文を数件投入 / **Phase27K** UI 最終調整 / **Phase27L** Cloud Run 反映
 
+## Phase27J（Manual Claim Injection）
+
+- schema: `V8ManualClaimInjectionRequest` / `V8ManualClaimInjectionResult` / `V8ManualClaimRefreshReport`
+- **claim 本文はユーザー提供のみ** — システムは生成しない
+- Claim Map タブで手動投入 → `claims_input.csv` へ保存（バックアップ付き）
+- 投入後: Claim Map → Evidence Map → Gap / Next Actions → Fixed Point Observation を再生成
+- `claim_text_status=manual_input` / `partial_claim_loaded` readiness
+- paper / web / company は引き続き **candidate**（not proof）
+- Export: `outputs/local_v8_manual_claim_refresh/`
+- 各 case: `cases/<case_id>/manual_claim_workbench.md`（placeholder のみ、架空 claim なし）
+- **Cloud Build はこの Phase では実行しない**
+
 - エントリポイント: `app.py` → `render_v8_user_flow_app`（`APP_UI_VERSION` 未設定時 v8）
 - v7 UI は削除せず `APP_UI_VERSION=v7` で切替
 - メール送信・Scheduler は削除せず、定点観測タブで必須機能として説明、詳細は管理者設定へ

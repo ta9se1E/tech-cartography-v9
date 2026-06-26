@@ -8,14 +8,19 @@ import pandas as pd
 import streamlit as st
 
 from tech_cartography.runtime.v8_claim_map_schema import V8ClaimMap, V8ClaimRecord
+from tech_cartography.runtime.v8_manual_claim_injection_schema import VALID_CLAIM_SOURCE_TYPES
 from tech_cartography.services.v8_claim_map import build_claim_map
 from tech_cartography.services.v8_claim_map_export import (
   claim_map_to_csv_text,
   claim_map_to_markdown,
   export_claim_map,
 )
+from tech_cartography.services.v8_manual_claim_injection import inject_manual_claim, list_claims_needing_text
+from tech_cartography.services.v8_manual_claim_refresh import refresh_after_manual_claim
+from tech_cartography.services.v8_manual_claim_refresh_export import export_manual_claim_refresh
 from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_next_action_box, render_warning_box
+from tech_cartography.ui.v8_text_rendering import render_next_action_card
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
@@ -25,6 +30,8 @@ from tech_cartography.ui.v8_tab_config import (
 )
 
 STATE_V8_CLAIM_MAP = "v8_claim_map_cache"
+STATE_V8_MANUAL_CLAIM_RESULT = "v8_manual_claim_injection_result"
+STATE_V8_MANUAL_CLAIM_REFRESH = "v8_manual_claim_refresh_result"
 
 
 def _case_options() -> list[tuple[str, str]]:
@@ -78,6 +85,146 @@ def _render_claim_detail(records: list[V8ClaimRecord], *, key_prefix: str) -> No
   st.caption(f"next_phase: {detail.next_phase}")
 
 
+def _render_manual_claim_injection_section(
+  *,
+  active_case: str,
+  publication_number: str | None,
+  patent_title: str,
+  project_root: Path,
+) -> None:
+  st.markdown("#### claim本文を手動投入する (Phase27J)")
+  st.markdown(
+    render_caution_box(
+      "<strong>claim 本文はユーザーが一次情報からコピーしたものだけを入力してください。</strong>"
+      " システムは claim 本文を生成しません。"
+      " Claim Map は技術整理であり、権利範囲解釈・FTO・侵害・有効性判断ではありません。"
+    ),
+    unsafe_allow_html=True,
+  )
+
+  needing = list_claims_needing_text(active_case, project_root=project_root)
+  if needing:
+    st.markdown("**claim本文投入が必要な特許:**")
+    for row in needing[:8]:
+      st.caption(
+        f"- {row['publication_number']} claim {row['claim_no']}"
+        f" — {row.get('patent_title') or '（title 未設定）'}"
+      )
+  st.caption(f"workbench: cases/{active_case}/manual_claim_workbench.md")
+
+  inj_col1, inj_col2 = st.columns(2)
+  with inj_col1:
+    inj_pub = st.text_input(
+      "publication_number",
+      value=publication_number or "",
+      key="v8_manual_inj_pub",
+    )
+    inj_claim_no = st.text_input("claim_no", value="1", key="v8_manual_inj_no")
+    inj_title = st.text_input("patent_title（任意）", value=patent_title, key="v8_manual_inj_title")
+    inj_source_type = st.selectbox(
+      "claim_source_type",
+      options=list(VALID_CLAIM_SOURCE_TYPES),
+      index=0,
+      key="v8_manual_inj_source_type",
+    )
+  with inj_col2:
+    inj_source_url = st.text_input("claim_source_url（任意）", key="v8_manual_inj_url")
+    inj_user_note = st.text_input("user_note（任意）", key="v8_manual_inj_note")
+
+  inj_claim_text = st.text_area(
+    "claim_text（ユーザー提供のみ）",
+    height=180,
+    key="v8_manual_inj_text",
+    placeholder="Google Patents / BigQuery / PDF 等からコピーした実 claim 本文を貼り付け",
+  )
+
+  if st.button("claims_input.csvへ保存", key="v8_manual_inj_save", type="primary"):
+    result = inject_manual_claim(
+      case_id=active_case,
+      publication_number=inj_pub,
+      claim_no=inj_claim_no,
+      claim_text=inj_claim_text,
+      claim_source_type=inj_source_type,
+      claim_source_url=inj_source_url,
+      user_note=inj_user_note,
+      patent_title=inj_title,
+      project_root=project_root,
+    )
+    st.session_state[STATE_V8_MANUAL_CLAIM_RESULT] = result.to_dict()
+    if result.saved_to_claims_input_csv:
+      st.success(f"保存完了 — claim_text_status={result.claim_text_status}")
+    else:
+      st.error(f"保存失敗 — claim_text_status={result.claim_text_status}")
+
+  saved = st.session_state.get(STATE_V8_MANUAL_CLAIM_RESULT)
+  if isinstance(saved, dict) and saved.get("case_id") == active_case:
+    st.markdown(
+      f"- **claim_text_status**: {saved.get('claim_text_status')}\n"
+      f"- **saved_to_claims_input_csv**: {saved.get('saved_to_claims_input_csv')}\n"
+      f"- **updated_claims_input_path**: {saved.get('updated_claims_input_path')}\n"
+      f"- **claim_text_length**: {saved.get('claim_text_length')}"
+    )
+    for w in saved.get("warnings") or []:
+      st.caption(f"warning: {w}")
+
+  btn_col1, btn_col2 = st.columns(2)
+  with btn_col1:
+    if st.button("Claim Mapを再生成", key="v8_manual_refresh_claim_map"):
+      st.session_state["v8_claim_map_force_refresh"] = True
+      st.rerun()
+  with btn_col2:
+    if st.button("Evidence Mapまで再生成", key="v8_manual_refresh_full", type="secondary"):
+      pub = (inj_pub or publication_number or "").strip()
+      if not pub:
+        st.warning("publication_number を指定してください。")
+      elif not claim_text_loaded_hint(active_case, pub, inj_claim_no, project_root):
+        st.warning("先に claim 本文を claims_input.csv へ保存してください。")
+      else:
+        try:
+          refresh_report = refresh_after_manual_claim(
+            case_id=active_case,
+            publication_number=pub,
+            claim_no=inj_claim_no,
+            project_root=project_root,
+          )
+          refresh_export = export_manual_claim_refresh(refresh_report, project_root=project_root)
+          st.session_state[STATE_V8_MANUAL_CLAIM_REFRESH] = {
+            "report": refresh_report.to_dict(),
+            "export": refresh_export.to_dict(),
+          }
+          st.session_state["v8_claim_map_force_refresh"] = True
+          st.success(
+            f"再生成完了 — claim_text_required "
+            f"{refresh_report.claim_text_required_count_before}→"
+            f"{refresh_report.claim_text_required_count_after}"
+          )
+        except ValueError as exc:
+          st.error(str(exc))
+
+  refresh_cached = st.session_state.get(STATE_V8_MANUAL_CLAIM_REFRESH)
+  if isinstance(refresh_cached, dict):
+    report = refresh_cached.get("report") or {}
+    st.caption(
+      f"readiness: {report.get('validation_readiness_before')} → "
+      f"{report.get('validation_readiness_after')}"
+    )
+
+  st.markdown(
+    render_next_action_card(
+      f"保存後は「Claim Mapを再生成」を押し、"
+      f"「{V8_TAB_LABELS['evidence_map']}」で Evidence Map を確認してください。"
+    ),
+    unsafe_allow_html=True,
+  )
+
+
+def claim_text_loaded_hint(case_id: str, pub: str, claim_no: str, root: Path) -> bool:
+  from tech_cartography.services.v8_manual_claim_injection import claim_text_loaded_in_csv
+
+  loaded, _ = claim_text_loaded_in_csv(case_id, pub, claim_no, project_root=root)
+  return loaded
+
+
 def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
   state = get_v8_input_state()
@@ -126,6 +273,17 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
   if publication_number:
     st.session_state[STATE_V8_SELECTED_PUBLICATION] = publication_number
 
+  if selected_case != "all":
+    _render_manual_claim_injection_section(
+      active_case=active_case,
+      publication_number=publication_number,
+      patent_title=next(
+        (p.title for p in shortlist.patent_candidates if p.publication_number == publication_number),
+        "",
+      ) if publication_number else "",
+      project_root=root,
+    )
+
   input_mode = st.radio(
     "claim入力方法",
     options=["claims_input.csv", "手動claim text貼り付け", "claim text未取得でMap作成"],
@@ -148,7 +306,8 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
       })
 
   use_shortlist_only = input_mode == "claim text未取得でMap作成"
-  refresh = st.button("Generate / Refresh Claim Map", key="v8_claim_map_refresh", type="primary")
+  force_refresh = st.session_state.pop("v8_claim_map_force_refresh", False)
+  refresh = st.button("Generate / Refresh Claim Map", key="v8_claim_map_refresh", type="primary") or force_refresh
 
   cache_key = f"{selected_case}:{publication_number}:{input_mode}:{bool(manual_rows)}"
   if refresh or st.session_state.get("v8_claim_map_cache_key") != cache_key:

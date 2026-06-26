@@ -278,9 +278,21 @@
 
 ---
 
-## Phase27J: Claim 本文投入（数件）
+## Phase27J: Manual Claim Text Injection
 
-**目的:** `claims_input.csv` に claim 本文を数件投入し、Evidence Map の見栄えを改善する。
+**目的:** ユーザーが一次情報から取得した実 claim 本文を手動投入し、Evidence Map の見え方を改善する。
+
+**追加/修正ファイル候補:**
+- `src/tech_cartography/runtime/v8_manual_claim_injection_schema.py`
+- `src/tech_cartography/services/v8_manual_claim_injection.py`
+- `src/tech_cartography/services/v8_manual_claim_refresh.py`
+- `cases/*/manual_claim_workbench.md`
+
+**完了条件:**
+- 各 Case で 1 件以上 claim 本文を手動投入できる導線
+- claim 本文はユーザー提供のみ（自動生成しない）
+- claim_text_required_count が減ることを確認
+- paper/web/company は candidate 扱いを維持
 
 **Cloud Build:** 不要
 

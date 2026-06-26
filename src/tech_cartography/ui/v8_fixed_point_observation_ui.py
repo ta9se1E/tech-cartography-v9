@@ -98,6 +98,20 @@ def _render_single_report(
   st.markdown(f"**current_state_summary:** {report.current_state_summary}")
   st.caption(f"no_scheduler_start={report.no_scheduler_start}")
 
+  refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
+  if isinstance(refresh_cached, dict):
+    rpt = refresh_cached.get("report") or {}
+    if rpt.get("case_id") == report.case_id:
+      st.markdown(
+        render_info_box(
+          "<strong>claim投入後の次回タスク変化 (Phase27J)</strong><br>"
+          "before: claim本文取得 / load_claim_text<br>"
+          "after: 実施例確認 / paper evidence確認 / property data確認<br>"
+          "no_email_send=true / no_scheduler_start=true — メール/Scheduler は必須機能として保持。"
+        ),
+        unsafe_allow_html=True,
+      )
+
   st.markdown("#### Top 3 Next Cycle Tasks")
   for task in report.top_3_next_cycle_tasks:
     st.markdown(f"- {task}")

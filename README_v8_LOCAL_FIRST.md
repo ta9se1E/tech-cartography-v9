@@ -65,7 +65,22 @@ conda run -n 2026hack python scripts/run_v8_three_case_validation_pack.py
 - 外部 API / メール送信 / Scheduler 起動は行わない
 - **Cloud Build はこの Phase では実行しない**
 
-次 Phase: Phase27J（claim 本文投入）→ Phase27K（UI 調整）→ Phase27L（Cloud Run 反映）
+次 Phase: Phase27K（UI 調整）→ Phase27L（Cloud Run 反映）
+
+## Phase27J — Manual Claim Injection
+
+claim 本文は **ユーザーが一次情報からコピーしたもののみ** を Claim Map タブで投入します。システムは生成しません。
+
+```bash
+conda run -n 2026hack python scripts/run_v8_manual_claim_refresh.py \
+  --case-id case_01_pan_graphitization \
+  --publication-number US5176959 \
+  --claim-no 1
+```
+
+- 出力先: `outputs/local_v8_manual_claim_refresh/`
+- `cases/<case_id>/manual_claim_workbench.md` を参照
+- cases/ 配下に架空 claim は入れない
 
 ## テストコマンド
 

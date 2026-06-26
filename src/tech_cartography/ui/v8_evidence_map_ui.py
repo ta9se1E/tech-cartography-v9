@@ -16,7 +16,7 @@ from tech_cartography.services.v8_evidence_map_export import (
   export_evidence_map,
 )
 from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
-from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_next_action_box, render_warning_box
+from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
@@ -248,6 +248,34 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
   evidence_map = _to_map(cached["evidence_map"])
   export_info = cached.get("export") or {}
   _render_metrics(evidence_map)
+
+  loaded_links = [
+    l for l in evidence_map.links
+    if l.claim_text_status in {"manual_input", "loaded", "csv_imported", "artifact_imported"}
+  ]
+  if loaded_links:
+    st.markdown(
+      render_info_box(
+        f"<strong>manual claim 投入後の Evidence Map</strong> — "
+        f"loaded/manual_input claims: {len(loaded_links)}。"
+        " paper / web / company は引き続き <strong>candidate</strong> 扱い（not proof）。"
+      ),
+      unsafe_allow_html=True,
+    )
+    for link in loaded_links[:5]:
+      st.caption(
+        f"- {link.publication_number} claim {link.claim_no}: "
+        f"status={link.claim_text_status}, axis={link.primary_axis}, "
+        f"evidence_needed={', '.join(link.evidence_needed[:3])}"
+      )
+
+  refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
+  if isinstance(refresh_cached, dict):
+    report = refresh_cached.get("report") or {}
+    before = report.get("claim_text_required_count_before")
+    after = report.get("claim_text_required_count_after")
+    if before is not None and after is not None and before != after:
+      st.success(f"claim_text_required_count 改善: {before} → {after}")
 
   if evidence_map.claim_text_required_count > 0:
     st.markdown(

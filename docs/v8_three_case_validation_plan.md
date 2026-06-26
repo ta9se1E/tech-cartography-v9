@@ -117,9 +117,31 @@ v8 の Claim / Evidence / Gap / 定点観測ループを、**3つの実案件**�
 **Cloud Build:** 不要（Phase27L で反映準備）
 
 **次 Phase 候補:**
-- Phase27J — claim 本文を数件投入
+- Phase27J — Manual Claim Injection（ユーザー提供 claim 本文の手動投入）✅
 - Phase27K — UI 最終調整
 - Phase27L — Cloud Run v8 反映準備
+
+## Phase27J: Manual Claim Injection
+
+**目的:** 各 Case で少なくとも 1 件、実 claim 本文を安全に手動投入し、Claim Map / Evidence Map / Gap / 定点観測を再生成する。
+
+**重要:**
+- claim 本文は **ユーザー提供のみ**（Google Patents / BigQuery / PDF / 手元資料からコピー）
+- システムは claim 本文を **生成しない**
+- `cases/` 配下に架空 claim を入れない
+- `tests/fixtures/` のみ toy claim 可（`test fixture only, not real patent claim`）
+
+**workbench:** `cases/<case_id>/manual_claim_workbench.md`
+
+**CLI:**
+```bash
+conda run -n 2026hack python scripts/run_v8_manual_claim_refresh.py \
+  --case-id case_01_pan_graphitization \
+  --publication-number US5176959 \
+  --claim-no 1
+```
+
+**Cloud Build:** 不要
 
 ## Case 1: PAN 系炭素繊維の前駆体・炭化・黒鉛化
 

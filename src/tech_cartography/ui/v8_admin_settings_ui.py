@@ -80,6 +80,15 @@ def render_v8_admin_settings_tab(
   st.caption(f"DISABLE_SCHEDULER={disable_scheduler}")
   st.caption("メール送信と Scheduler は必須機能として保持（デフォルト OFF）。")
 
+  st.markdown("#### Phase27J — Manual Claim Injection")
+  st.markdown(
+    render_info_box(
+      "Phase27J では claim 本文をユーザーが手動投入します。システムは生成しません。"
+      " Cloud Build / Cloud Run deploy / メール送信 / Scheduler 起動はこの Phase では実行しません。"
+    ),
+    unsafe_allow_html=True,
+  )
+
   st.markdown("#### Phase27I — ローカル検証")
   st.markdown(
     render_info_box(

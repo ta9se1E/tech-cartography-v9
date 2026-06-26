@@ -9,8 +9,8 @@ from tech_cartography.ui.v8_tab_config import V8_STATUS_CAPTION, v8_sidebar_prog
 
 
 def test_v8_status_caption_mentions_current_phase() -> None:
-  assert "Phase27I" in V8_STATUS_CAPTION or "Phase27H" in V8_STATUS_CAPTION
-  assert "3案件" in V8_STATUS_CAPTION or "定点観測" in V8_STATUS_CAPTION
+  assert "Phase27J" in V8_STATUS_CAPTION or "Phase27I" in V8_STATUS_CAPTION
+  assert "Manual Claim" in V8_STATUS_CAPTION or "3案件" in V8_STATUS_CAPTION or "定点観測" in V8_STATUS_CAPTION
   assert "UI骨格 Phase27B" not in V8_STATUS_CAPTION
 
 
@@ -34,7 +34,7 @@ def test_v8_sidebar_helpers_via_demo_safe(monkeypatch) -> None:
   progress = sidebar_progress_text("analyst", project_root=root)
   next_steps = sidebar_next_steps_text("analyst", project_root=root)
   assert "Sources一覧" in progress
-  assert "3案件検証パック" in next_steps
+  assert "3案件検証パック" in next_steps or "claim" in next_steps.lower()
   assert "Final Validation" not in progress
   assert "Paper/Web" not in progress
 
