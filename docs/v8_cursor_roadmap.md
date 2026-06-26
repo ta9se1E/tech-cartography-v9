@@ -80,16 +80,20 @@
 
 ## Phase27C: Sources一覧 + Export
 
-**目的:** Sources 統合テーブルと case 単位 Export。
+**目的:** 3案件の source_candidates と統合 schema で Sources 一覧・Export Package を本格化。
 
-**追加/修正ファイル候補:**
-- `src/tech_cartography/services/sources_index.py`
-- `src/tech_cartography/ui/sources_index_ui.py`
-- `cases/*/source_candidates.csv` ローダー
+**状態:** ✅ 完了
 
-**完了条件:** 3案件で sources_index artifact が出る
+**追加/修正:**
+- `runtime/v8_sources_schema.py` — V8SourceRecord / V8SourcesTable / V8SourceExportPackage
+- `services/v8_sources_loader.py`, `v8_sources_repository.py`, `v8_export_package.py`
+- `ui/v8_sources_ui.py`, `ui/v8_export_ui.py` 本格化
+- `cases/*/source_candidates.csv` 充実（各case patent 5+）
 
-**テスト観点:** url / publication_number / artifact path
+**完了条件:**
+- 3案件 Sources 読込・フィルタ・CSV/MD/Excel/Package export
+- Web/company = candidate information only
+- 定点観測・メール Digest 引き継ぎ note を Export に含む
 
 **Cloud Build:** 不要
 

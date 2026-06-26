@@ -1,4 +1,4 @@
-"""v8 Sources tab skeleton (Phase 27B)."""
+"""v8 unified Sources tab (Phase 27C)."""
 
 from __future__ import annotations
 
@@ -7,59 +7,210 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from tech_cartography.services.v8_sources_table import (
-  SOURCE_CSV_COLUMNS,
-  load_source_candidates,
-  sources_to_csv_text,
-)
-from tech_cartography.ui.easy_japanese_ui import render_info_box, render_next_action_box, render_warning_box
+from tech_cartography.runtime.v8_sources_schema import SAFETY_EXPORT_NOTICES
+from tech_cartography.services.v8_export_package import build_export_package, records_to_csv_text, records_to_markdown
+from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
+from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
-from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_TAB_LABELS
+from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
+
+DISPLAY_COLUMNS = [
+  "source_id",
+  "case_id",
+  "source_type",
+  "title",
+  "organization",
+  "year",
+  "publication_number",
+  "url",
+  "source_status",
+  "evidence_role",
+  "reliability_label",
+  "verification_status",
+  "candidate_information_only",
+  "human_review_required",
+]
+
+
+def _case_filter_options() -> list[tuple[str, str]]:
+  options: list[tuple[str, str]] = [("all", "All cases")]
+  for sample in V8_CASE_SAMPLES:
+    options.append((sample["case_id"], sample["label"]))
+  return options
 
 
 def render_v8_sources_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
   state = get_v8_input_state()
-  case_id = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
+  default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
 
   st.markdown("### Sources一覧")
-  st.caption(
-    "特許・論文・Web情報を同じ表で確認します。"
-    " Web Signal 行は候補情報（candidate_information_only）であり確定事実ではありません。"
+  st.markdown(
+    render_caution_box(
+      "FTO、侵害、有効性判断、法的結論は行いません。"
+      " Web / company source は <strong>candidate information only</strong> です。"
+    ),
+    unsafe_allow_html=True,
   )
 
-  rows = load_source_candidates(case_id or None, project_root=root)
-  if not rows:
-    st.markdown(render_warning_box("まだ Sources がありません。入力タブで案件を選ぶか、Phase27C で統合生成します。"), unsafe_allow_html=True)
-    return
-
-  if case_id:
-    st.caption(f"表示案件: {case_id}")
-  else:
-    st.caption("全案件の source_candidates.csv を表示しています。")
-
-  df = pd.DataFrame(rows, columns=list(SOURCE_CSV_COLUMNS))
-  st.dataframe(df, width="stretch", hide_index=True)
-
-  web_rows = [r for r in rows if "web" in str(r.get("type") or "").lower()]
-  if web_rows:
+  base_table = load_sources_table(project_root=root)
+  if not base_table.records:
     st.markdown(
-      render_info_box(
-        f"Web Signal {len(web_rows)} 件 — candidate_information_only。"
-        " Claim の根拠として断定しません。"
+      render_warning_box(
+        "まだ Sources がありません。入力タブで案件を選ぶか、"
+        " cases/*/source_candidates.csv を確認してください。"
       ),
       unsafe_allow_html=True,
     )
+    st.markdown(
+      render_next_action_box(f"まず「{V8_TAB_LABELS['input']}」で3案件サンプルを選択してください。"),
+      unsafe_allow_html=True,
+    )
+    return
 
-  st.download_button(
-    "Sources一覧 CSV をダウンロード",
-    data=sources_to_csv_text(rows).encode("utf-8"),
-    file_name="sources_index.csv",
-    mime="text/csv",
-    key="v8_sources_csv_download",
+  case_options = _case_filter_options()
+  case_ids = [cid for cid, _ in case_options]
+  case_labels = {cid: label for cid, label in case_options}
+  default_case_filter = default_case if default_case in case_ids else "all"
+
+  col1, col2, col3 = st.columns(3)
+  with col1:
+    selected_case = st.selectbox(
+      "案件",
+      options=case_ids,
+      index=case_ids.index(default_case_filter),
+      format_func=lambda cid: case_labels[cid],
+      key="v8_sources_case_filter",
+    )
+  with col2:
+    type_filter = st.selectbox(
+      "source_type",
+      options=["all", "patent", "paper", "web", "company", "manual", "unknown"],
+      key="v8_sources_type_filter",
+    )
+  with col3:
+    role_options = sorted({r.evidence_role for r in base_table.records})
+    evidence_filter = st.selectbox(
+      "evidence_role",
+      options=["all", *role_options],
+      key="v8_sources_role_filter",
+    )
+
+  col4, col5, col6 = st.columns(3)
+  with col4:
+    verification_filter = st.selectbox(
+      "verification_status",
+      options=["all", "unverified", "needs_human_review", "source_url_available"],
+      key="v8_sources_verification_filter",
+    )
+  with col5:
+    candidate_filter = st.selectbox(
+      "candidate_information_only",
+      options=["all", "only", "exclude"],
+      key="v8_sources_candidate_filter",
+    )
+  with col6:
+    search_text = st.text_input("検索（title / org / pub / notes）", key="v8_sources_search")
+
+  candidate_only: bool | None = None
+  if candidate_filter == "only":
+    candidate_only = True
+  elif candidate_filter == "exclude":
+    candidate_only = False
+
+  filtered = filter_sources_table(
+    base_table,
+    case_id=selected_case,
+    source_type=type_filter,
+    evidence_role=evidence_filter,
+    verification_status=verification_filter,
+    candidate_only=candidate_only,
+    search_text=search_text,
   )
 
+  patents = filtered.count_by_type.get("patent", 0)
+  papers = filtered.count_by_type.get("paper", 0)
+  web_company = filtered.count_by_type.get("web", 0) + filtered.count_by_type.get("company", 0)
+  needs_review = sum(1 for r in filtered.records if r.human_review_required)
+  candidate_only_count = sum(1 for r in filtered.records if r.candidate_information_only)
+
+  m1, m2, m3, m4, m5, m6 = st.columns(6)
+  m1.metric("total", filtered.source_count)
+  m2.metric("patents", patents)
+  m3.metric("papers", papers)
+  m4.metric("web/company", web_company)
+  m5.metric("human review", needs_review)
+  m6.metric("candidate only", candidate_only_count)
+
+  if filtered.warnings:
+    for warning in filtered.warnings:
+      st.caption(f"warning: {warning}")
+
+  if not filtered.records:
+    st.info("フィルタ条件に一致する Sources がありません。")
+    return
+
+  df = pd.DataFrame([{col: getattr(r, col) for col in DISPLAY_COLUMNS} for r in filtered.records])
+  st.dataframe(df, width="stretch", hide_index=True)
+
+  st.markdown("#### 選択 source の詳細")
+  titles = [f"{r.publication_number or r.title[:40]} ({r.source_id})" for r in filtered.records]
+  selected_idx = st.selectbox("詳細を見る source", options=range(len(filtered.records)), format_func=lambda i: titles[i], key="v8_sources_detail_pick")
+  detail = filtered.records[selected_idx]
+  st.markdown(f"**{detail.title}**")
+  st.markdown(f"- organization: {detail.organization}")
+  st.markdown(f"- year: {detail.year}")
+  st.markdown(f"- url: {detail.url or '（なし — human review required）'}")
+  st.markdown(f"- publication_number: {detail.publication_number}")
+  st.markdown(f"- doi: {detail.doi}")
+  st.markdown(f"- evidence_role: {detail.evidence_role}")
+  st.markdown(f"- reliability_label: {detail.reliability_label}")
+  st.markdown(f"- verification_status: {detail.verification_status}")
+  if detail.candidate_information_only:
+    st.markdown(render_warning_box("candidate information only — 確定事実として扱いません。"), unsafe_allow_html=True)
+  if detail.human_review_required:
+    st.markdown(render_warning_box("human review required — 一次情報の人手確認が必要です。"), unsafe_allow_html=True)
+  st.caption(detail.notes)
+
+  case_name = resolve_case_name(selected_case, root)
+  st.markdown("#### ダウンロード / Export Package")
+  st.download_button(
+    "CSV",
+    data=records_to_csv_text(filtered.records).encode("utf-8"),
+    file_name=f"sources_{selected_case}.csv",
+    mime="text/csv",
+    key="v8_sources_dl_csv",
+  )
+  st.download_button(
+    "Markdown",
+    data=records_to_markdown(filtered.records, case_name=case_name, table=filtered).encode("utf-8"),
+    file_name=f"sources_{selected_case}.md",
+    mime="text/markdown",
+    key="v8_sources_dl_md",
+  )
+
+  if st.button("Export Package を生成", key="v8_sources_build_package", type="primary"):
+    package = build_export_package(filtered, case_id=selected_case, project_root=root)
+    st.session_state["v8_last_export_package"] = package.to_dict()
+    st.success(f"Export Package を保存しました: {package.output_dir}")
+
+  last_pkg = st.session_state.get("v8_last_export_package")
+  if isinstance(last_pkg, dict) and last_pkg.get("output_dir"):
+    st.caption(f"last package: {last_pkg.get('output_dir')}")
+    xlsx_path = Path(str(last_pkg.get("sources_xlsx_path", "")))
+    if xlsx_path.exists():
+      st.download_button(
+        "Excel (sources.xlsx)",
+        data=xlsx_path.read_bytes(),
+        file_name=xlsx_path.name,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="v8_sources_dl_xlsx",
+      )
+    if last_pkg.get("excel_warning"):
+      st.caption(str(last_pkg.get("excel_warning")))
+
+  st.markdown(render_info_box(SAFETY_EXPORT_NOTICES[0]), unsafe_allow_html=True)
   st.markdown(
-    render_next_action_box(f"次は「{V8_TAB_LABELS['patent_shortlist']}」で読むべき特許を確認してください。"),
+    render_next_action_box(f"次は「{V8_TAB_LABELS['patent_shortlist']}」で読むべき特許（Phase27D）を確認してください。"),
     unsafe_allow_html=True,
   )

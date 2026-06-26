@@ -1,6 +1,11 @@
 type,title,organization,year,url,publication_number,source_status,evidence_role,case_id,notes
 patent,Filament wound composite pressure vessel,Quantum Fuel Systems,2010,https://patents.google.com/patent/US7758784,US7758784,verified_primary,process_claim_support,case_03_pressure_vessel_filament_winding,FW圧力容器の代表特許
 patent,Composite pressure vessel for gas storage,Hexagon Composites,2014,https://patents.google.com/patent/US20140377485,US20140377485,candidate,safety_claim,case_03_pressure_vessel_filament_winding,ガス貯蔵・安全性請求項
-patent,Filament wound vessel with liner,Toyota,2017,https://patents.google.com/patent/EP3123456,EP3123456,candidate,process_property,case_03_pressure_vessel_filament_winding,ライナー・FW設計（番号は検証時に確認）
+patent,Filament reinforced pressure vessel,Owens-Corning Fiberglas,1989,https://patents.google.com/patent/US4878636,US4878636,candidate,process_claim_support,case_03_pressure_vessel_filament_winding,FW・ライナー設計
+patent,Composite pressure vessel,Smith Industries,1980,https://patents.google.com/patent/US4214937,US4214937,candidate,process_property,case_03_pressure_vessel_filament_winding,複合圧力容器の古典的参照
+patent,Hydrogen storage tank with composite vessel,Toyota,2005,https://patents.google.com/patent/US6887393,US6887393,candidate,safety_claim,case_03_pressure_vessel_filament_winding,水素貯蔵・安全性
+patent,Composite pressure vessel with improved fatigue resistance,Quantum Technologies,2008,https://patents.google.com/patent/US7431237,US7431237,candidate,safety_claim,case_03_pressure_vessel_filament_winding,疲労・バースト
 paper,Design of composite pressure vessels for hydrogen storage,International Journal of Hydrogen Energy,2012,https://doi.org/10.1016/j.ijhydene.2011.11.058,,candidate,safety_evidence,case_03_pressure_vessel_filament_winding,水素タンク設計の論文
-web_signal,Hydrogen storage composite tank overview,Hydrogen Council,,https://hydrogencouncil.com/, ,candidate_information_only,background_context,case_03_pressure_vessel_filament_winding,候補情報のみ。事業性は一次確認要
+paper,Filament winding of composite pressure vessels,Composites Science and Technology,2010,https://doi.org/10.1016/j.compscitech.2010.03.017,,candidate,process_property,case_03_pressure_vessel_filament_winding,FW積層・成形
+web_signal,Hydrogen storage composite tank overview,Hydrogen Council,,https://hydrogencouncil.com/, ,weak_signal,background_context,case_03_pressure_vessel_filament_winding,候補情報のみ。事業性は一次確認要
+company,Hexagon Purus composite pressure vessels,Hexagon Purus,,https://www.hexagonpurus.com/, ,weak_signal,company_signal,case_03_pressure_vessel_filament_winding,候補情報のみ

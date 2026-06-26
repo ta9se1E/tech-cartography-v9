@@ -211,6 +211,56 @@ def main(argv: list[str] | None = None) -> int:
   else:
     print("PASS: Streamlit width migration: yes")
 
+  phase27c_files = (
+    "src/tech_cartography/runtime/v8_sources_schema.py",
+    "src/tech_cartography/services/v8_sources_loader.py",
+    "src/tech_cartography/services/v8_sources_repository.py",
+    "src/tech_cartography/services/v8_export_package.py",
+  )
+  for rel in phase27c_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  sources_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_sources_ui.py")
+  export_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_export_ui.py")
+  export_pkg = _read(PROJECT_ROOT / "src/tech_cartography/services/v8_export_package.py")
+  export_schema = _read(PROJECT_ROOT / "src/tech_cartography/runtime/v8_sources_schema.py")
+  export_blob = export_pkg + export_schema
+  if "Export Package" in sources_ui and "CSV" in sources_ui:
+    print("PASS: v8_sources_ui has export controls")
+  else:
+    failures.append("v8_sources_ui missing export controls")
+  if "Export Package" in export_ui and "manifest" in export_ui:
+    print("PASS: v8_export_ui has export package controls")
+  else:
+    failures.append("v8_export_ui missing export package controls")
+
+  for token in ("candidate information only", "human review", "FTO"):
+    if token.lower() in export_blob.lower():
+      continue
+    failures.append(f"v8_export_package missing notice token: {token}")
+  if not any("v8_export_package missing" in f for f in failures):
+    print("PASS: export package docs mention safety notices")
+
+  import csv as csv_mod
+
+  fake_doi_re = re.compile(r"10\.(0000|1234)/|example\.com|fake-doi|placeholder", re.IGNORECASE)
+  for case_id in CASE_IDS:
+    csv_path = PROJECT_ROOT / "cases" / case_id / "source_candidates.csv"
+    if not csv_path.exists():
+      continue
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+      reader = csv_mod.DictReader(handle)
+      rows = list(reader)
+    patent_count = sum(1 for r in rows if str(r.get("type") or "").lower() == "patent")
+    if patent_count >= 5:
+      print(f"PASS: {case_id} has {patent_count} patent rows")
+    else:
+      failures.append(f"{case_id} has only {patent_count} patent rows (need >=5)")
+    for row in rows:
+      url = str(row.get("url") or "")
+      if fake_doi_re.search(url):
+        failures.append(f"{case_id} has fake-like DOI/url: {url}")
+
   for case_id in CASE_IDS:
     case_dir = PROJECT_ROOT / "cases" / case_id
     for name in CASE_FILES:

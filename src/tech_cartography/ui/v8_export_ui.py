@@ -1,4 +1,4 @@
-"""v8 Export tab skeleton (Phase 27B)."""
+"""v8 Export tab (Phase 27C)."""
 
 from __future__ import annotations
 
@@ -6,14 +6,15 @@ from pathlib import Path
 
 import streamlit as st
 
-from tech_cartography.runtime.live_artifact_paths import describe_live_artifact_storage
+from tech_cartography.runtime.v8_sources_schema import FIXED_POINT_OBSERVATION_NOTE, SAFETY_EXPORT_NOTICES
 from tech_cartography.services.live_evidence_gap_builder import find_latest_evidence_gap_path
 from tech_cartography.services.live_strategic_watch_brief import find_latest_strategic_watch_brief_path
 from tech_cartography.services.live_weekly_decision_cockpit import find_latest_weekly_decision_cockpit_path
-from tech_cartography.services.v8_sources_table import filter_patent_sources, load_source_candidates, sources_to_csv_text
-from tech_cartography.ui.easy_japanese_ui import render_info_box
+from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
+from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
+from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
-from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE
+from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES
 
 
 def _artifact_link(path: Path | None) -> None:
@@ -26,80 +27,97 @@ def _artifact_link(path: Path | None) -> None:
 def render_v8_export_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
   state = get_v8_input_state()
-  case_id = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
+  default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
 
   st.markdown("### Export")
-  st.caption("Phase27C 以降で本格 Export package を実装します。既存 artifact があればパスを表示します。")
+  st.markdown(
+    render_caution_box(
+      "candidate information only / human review required。"
+      " FTO、侵害、有効性判断、法的結論は行いません。"
+      " secret 値は表示しません。"
+    ),
+    unsafe_allow_html=True,
+  )
 
-  rows = load_source_candidates(case_id or None, project_root=root)
-  if rows:
+  case_options = [("all", "All cases")] + [(s["case_id"], s["label"]) for s in V8_CASE_SAMPLES]
+  case_ids = [c for c, _ in case_options]
+  labels = {c: label for c, label in case_options}
+  default_idx = case_ids.index(default_case) if default_case in case_ids else 0
+  export_case = st.selectbox(
+    "Export対象案件",
+    options=case_ids,
+    index=default_idx,
+    format_func=lambda cid: labels[cid],
+    key="v8_export_case_select",
+  )
+
+  base_table = load_sources_table(case_id=None if export_case == "all" else export_case, project_root=root)
+  filtered = filter_sources_table(base_table, case_id=export_case)
+  case_name = resolve_case_name(export_case, root)
+
+  st.markdown("#### Sources Export")
+  if filtered.records:
     st.download_button(
-      "Sources一覧 CSV",
-      data=sources_to_csv_text(rows).encode("utf-8"),
-      file_name="sources_index.csv",
+      "Sources CSV",
+      data=records_to_csv_text(filtered.records).encode("utf-8"),
+      file_name=f"sources_{export_case}.csv",
       mime="text/csv",
-      key="v8_export_sources_csv",
+      key="v8_export_dl_csv",
+    )
+    st.download_button(
+      "Sources Markdown",
+      data=records_to_markdown(filtered.records, case_name=case_name, table=filtered).encode("utf-8"),
+      file_name=f"sources_{export_case}.md",
+      mime="text/markdown",
+      key="v8_export_dl_md",
     )
   else:
-    st.caption("Sources一覧 CSV — データなし")
+    st.caption("Sources データなし")
 
-  patent_rows = filter_patent_sources(rows)
-  if patent_rows:
-    import csv
-    import io
+  if st.button("Export Package を生成", key="v8_export_build_package", type="primary"):
+    package = build_export_package(filtered, case_id=export_case, project_root=root)
+    st.session_state["v8_last_export_package"] = package.to_dict()
+    st.success("Export Package を生成しました。")
 
-    buffer = io.StringIO()
-    writer = csv.DictWriter(
-      buffer,
-      fieldnames=["publication_number", "title", "organization", "year", "url", "display_status"],
-    )
-    writer.writeheader()
-    for row in patent_rows[:5]:
-      writer.writerow(
-        {
-          "publication_number": row.get("publication_number", ""),
-          "title": row.get("title", ""),
-          "organization": row.get("organization", ""),
-          "year": row.get("year", ""),
-          "url": row.get("url", ""),
-          "display_status": "draft",
-        },
-      )
-    st.download_button(
-      "読むべき特許 CSV（draft）",
-      data=buffer.getvalue().encode("utf-8"),
-      file_name="top_patents_draft.csv",
-      mime="text/csv",
-      key="v8_export_patents_csv",
-    )
+  pkg = st.session_state.get("v8_last_export_package")
+  if isinstance(pkg, dict):
+    st.markdown("#### 直近 Export Package")
+    st.caption(f"output_dir: {pkg.get('output_dir')}")
+    st.caption(f"manifest: {pkg.get('manifest_path')}")
+    st.caption(f"export_summary: {pkg.get('export_summary_path')}")
+    for label, key in (
+      ("sources.csv", "sources_csv_path"),
+      ("sources.md", "sources_md_path"),
+      ("sources.xlsx", "sources_xlsx_path"),
+    ):
+      path = Path(str(pkg.get(key) or ""))
+      if path.exists():
+        mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if path.suffix == ".xlsx" else "text/plain"
+        st.download_button(f"Download {label}", data=path.read_bytes(), file_name=path.name, mime=mime, key=f"v8_export_pkg_{key}")
+    if pkg.get("excel_warning"):
+      st.caption(str(pkg.get("excel_warning")))
 
-  st.markdown("#### プレースホルダ / 既存 artifact")
-  st.markdown("- Claim Map CSV — Phase27E")
-  st.markdown("- Evidence Map CSV — Phase27F")
+  st.markdown(render_info_box(FIXED_POINT_OBSERVATION_NOTE), unsafe_allow_html=True)
 
-  st.markdown("**Evidence Gap**")
+  st.markdown("#### 既存 artifact 参照")
   _artifact_link(find_latest_evidence_gap_path(root))
-
-  st.markdown("**Strategic Watch Brief**")
   brief_path = find_latest_strategic_watch_brief_path(root)
   _artifact_link(brief_path)
   if brief_path and brief_path.exists():
     md_path = brief_path.with_suffix(".md")
     if md_path.exists():
-      st.download_button(
-        "Strategic Watch Brief Markdown",
-        data=md_path.read_bytes(),
-        file_name=md_path.name,
-        mime="text/markdown",
-        key="v8_export_brief_md",
-      )
+      st.download_button("Strategic Watch Brief Markdown", data=md_path.read_bytes(), file_name=md_path.name, mime="text/markdown", key="v8_export_brief_md")
+  _artifact_link(find_latest_weekly_decision_cockpit_path(root))
 
-  st.markdown("**Weekly Decision Cockpit**")
-  cockpit_path = find_latest_weekly_decision_cockpit_path(root)
-  _artifact_link(cockpit_path)
+  st.markdown("#### 今後追加予定")
+  for item in (
+    "Patent Shortlist — Phase27D",
+    "Claim Map — Phase27E",
+    "Evidence Map — Phase27F",
+    "Gap / Next Actions",
+    "Watch Profile update proposal",
+  ):
+    st.markdown(f"- {item}")
 
-  st.markdown("#### Export package（予定）")
-  st.markdown(render_info_box("Phase27C で case 単位 ZIP bundle を実装予定です。"), unsafe_allow_html=True)
-
-  storage = describe_live_artifact_storage(root)
-  st.caption(f"artifact root: {storage.get('outputs_root', '')}")
+  st.caption(f"export packages root: {get_v8_export_packages_dir(root)}")
+  st.markdown(render_info_box(SAFETY_EXPORT_NOTICES[2]), unsafe_allow_html=True)

@@ -2,5 +2,10 @@ type,title,organization,year,url,publication_number,source_status,evidence_role,
 patent,Sizing composition for carbon fibers,Amoco Corporation,1999,https://patents.google.com/patent/US5916936,US5916936,verified_primary,claim_support,case_02_sizing_interface,サイジング組成の代表特許
 patent,Carbon fiber with improved interfacial adhesion,Toray Industries,2001,https://patents.google.com/patent/US6287695,US6287695,candidate,interface_claim,case_02_sizing_interface,界面接着の請求項確認
 patent,Carbon fibers with epoxy-compatible sizing,Hexcel,2000,https://patents.google.com/patent/EP1022334,EP1022334,candidate,process_property,case_02_sizing_interface,エポキシ相容性サイジング
+patent,Aqueous sizing composition for carbon fibers,Amoco Corporation,1989,https://patents.google.com/patent/US4828969,US4828969,candidate,claim_support,case_02_sizing_interface,水性サイジング組成
+patent,Carbon fiber sizing composition,Zoltek Corporation,1997,https://patents.google.com/patent/US5593736,US5593736,candidate,claim_support,case_02_sizing_interface,サイジング・湿潤性
+patent,Surface treatment of carbon fibers for improved adhesion,Toho Tenax,1997,https://patents.google.com/patent/US5962187,US5962187,candidate,interface_claim,case_02_sizing_interface,表面処理・界面
 paper,Interfacial properties of sized carbon fibers in epoxy composites,Composites Science and Technology,1998,https://doi.org/10.1016/S0266-3538(97)00112-3,,candidate,interface_evidence,case_02_sizing_interface,ILSS・界面の論文Evidence
-web_signal,Composite materials interface research summary,Composites UK,,https://compositesuk.co.uk/, ,candidate_information_only,background_context,case_02_sizing_interface,候補情報のみ
+paper,Effect of fiber surface treatment on composite interfacial properties,Composites Part A,2001,https://doi.org/10.1016/S1359-835X(00)00072-8,,candidate,interface_evidence,case_02_sizing_interface,表面処理と界面せん断
+web_signal,Composite materials interface research summary,Composites UK,,https://compositesuk.co.uk/, ,weak_signal,background_context,case_02_sizing_interface,候補情報のみ
+company,Hexcel carbon fiber and composites portfolio,Hexcel,,https://www.hexcel.com/markets/aerospace/carbon-fibers,,weak_signal,company_signal,case_02_sizing_interface,候補情報のみ

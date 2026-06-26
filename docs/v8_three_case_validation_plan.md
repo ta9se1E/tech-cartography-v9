@@ -13,6 +13,14 @@ v8 の Claim / Evidence / Gap / 定点観測ループを、**3つの実案件**�
 - 各出力に **source url** と **artifact path** を残す
 - メール送信・Scheduler は **必須機能として残す**（デフォルト OFF、ループ説明は必須）
 
+## Phase27C: source_candidates.csv
+
+- 各 case の `cases/<case_id>/source_candidates.csv` を Unified Sources の入力とする
+- 各 case **patent 5件以上**、paper 2件以上、web/company 候補 1件以上
+- `v8_sources_loader` が CSV → `V8SourceRecord` に正規化
+- Export Package は `outputs/local_v8_export_packages/` に保存
+- Cloud Build はこの Phase では不要
+
 ## Case 1: PAN 系炭素繊維の前駆体・炭化・黒鉛化
 
 | 項目 | 内容 |

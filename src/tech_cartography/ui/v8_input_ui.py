@@ -115,6 +115,9 @@ def render_v8_input_tab(*, project_root: Path | str) -> None:
     st.markdown(f"- **{label}**: {value}")
 
   st.markdown(
-    render_next_action_box(f"次は「{V8_TAB_LABELS['sources']}」で出典一覧を確認してください。"),
+    render_next_action_box(
+      f"案件を選んだら「{V8_TAB_LABELS['sources']}」で Sources 一覧を確認してください。"
+      " 入力内容は session に保存され、Sources タブの初期フィルタに反映されます。"
+    ),
     unsafe_allow_html=True,
   )
