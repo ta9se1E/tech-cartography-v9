@@ -170,6 +170,26 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Scheduler", "follow"),
   ),
   (
+    "phase27h fixed point observation loop",
+    ("定点観測", "Observation Loop"),
+  ),
+  (
+    "phase27h scheduler follow-up plan",
+    ("Scheduler Follow-up", "dry_run"),
+  ),
+  (
+    "phase27h email digest plan",
+    ("Email Digest Plan", "preview"),
+  ),
+  (
+    "phase27h no email send this phase",
+    ("送信しない", "no_email_send"),
+  ),
+  (
+    "phase27h no scheduler start this phase",
+    ("起動しない", "no_scheduler_start"),
+  ),
+  (
     "cloud build only at milestones",
     ("Cloud Build", "節目"),
   ),
@@ -550,6 +570,103 @@ def main(argv: list[str] | None = None) -> int:
     failures.append(f"gap next actions build failed: {exc}")
 
   for rel in phase27g_files + ("src/tech_cartography/ui/v8_gap_next_actions_ui.py",):
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
+
+  phase27h_files = (
+    "src/tech_cartography/runtime/v8_fixed_point_observation_schema.py",
+    "src/tech_cartography/services/v8_fixed_point_observation.py",
+    "src/tech_cartography/services/v8_fixed_point_observation_export.py",
+  )
+  for rel in phase27h_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  fp_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_fixed_point_observation_ui.py")
+  admin_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_admin_settings_ui.py")
+  if "Generate / Refresh Fixed Point Observation" in fp_ui:
+    print("PASS: v8_fixed_point_observation_ui has generate control")
+  else:
+    failures.append("v8_fixed_point_observation_ui missing Generate / Refresh Fixed Point Observation")
+
+  fp_blob = _read(PROJECT_ROOT / "src/tech_cartography/services/v8_fixed_point_observation.py")
+  if "watch_profile_update_proposals" in fp_blob or "Watch Profile" in fp_ui:
+    print("PASS: fixed point observation references Watch Profile update proposal")
+  else:
+    failures.append("missing Watch Profile update proposal in fixed point observation")
+
+  if "scheduler_followup_plan" in fp_blob or "Scheduler Follow-up" in fp_ui:
+    print("PASS: fixed point observation references Scheduler Follow-up Plan")
+  else:
+    failures.append("missing Scheduler Follow-up Plan")
+
+  if "email_digest_plan" in fp_blob or "Email Digest Plan" in fp_ui:
+    print("PASS: fixed point observation references Email Digest Plan")
+  else:
+    failures.append("missing Email Digest Plan")
+
+  if "no_email_send" in fp_blob or "送信しない" in fp_ui:
+    print("PASS: fixed point observation mentions no email send")
+  else:
+    failures.append("missing no email send notice")
+
+  if "no_scheduler_start" in fp_blob or "起動しない" in fp_ui:
+    print("PASS: fixed point observation mentions no scheduler start")
+  else:
+    failures.append("missing no scheduler start notice")
+
+  if "メール送信" in fp_ui and "Scheduler" in fp_ui:
+    print("PASS: fixed point UI keeps email and scheduler as required functions")
+  else:
+    failures.append("fixed point UI missing email/scheduler required function notice")
+
+  if "SMTP_PASSWORD" not in admin_ui and "TAVILY_API_KEY" not in admin_ui:
+    print("PASS: admin settings UI does not expose secret env var names in literals")
+  else:
+    failures.append("admin settings UI may expose secret names")
+  if "DISABLE_EMAIL_SEND" in admin_ui and "DISABLE_SCHEDULER" in admin_ui:
+    print("PASS: admin settings UI references email/scheduler env flags")
+  else:
+    failures.append("admin settings UI missing DISABLE_EMAIL_SEND / DISABLE_SCHEDULER")
+
+  if "fixed_point_observation" in export_ui:
+    print("PASS: v8_export_ui references fixed_point_observation artifacts")
+  else:
+    failures.append("v8_export_ui missing fixed_point_observation references")
+
+  try:
+    from tech_cartography.services.v8_fixed_point_observation import build_observation_loop_report
+
+    for case_id in CASE_IDS:
+      report = build_observation_loop_report(case_id=case_id, project_root=PROJECT_ROOT)
+      if report.watch_profile_update_proposals:
+        print(f"PASS: {case_id} has watch_profile_update_proposals")
+      else:
+        failures.append(f"{case_id} empty watch_profile_update_proposals")
+      if report.scheduler_followup_plan:
+        sched = report.scheduler_followup_plan
+        if sched.schedule_mode == "dry_run_only" and sched.no_scheduler_start:
+          print(f"PASS: {case_id} scheduler plan dry_run_only / no_scheduler_start")
+        else:
+          failures.append(f"{case_id} scheduler plan missing dry_run safeguards")
+      else:
+        failures.append(f"{case_id} missing scheduler_followup_plan")
+      if report.email_digest_plan:
+        email = report.email_digest_plan
+        if email.digest_mode == "preview_only" and email.no_email_send:
+          print(f"PASS: {case_id} email digest preview_only / no_email_send")
+        else:
+          failures.append(f"{case_id} email digest missing preview safeguards")
+      else:
+        failures.append(f"{case_id} missing email_digest_plan")
+      if len(report.top_3_next_cycle_tasks) >= 1:
+        print(f"PASS: {case_id} has top_3_next_cycle_tasks")
+      else:
+        failures.append(f"{case_id} missing top_3_next_cycle_tasks")
+  except Exception as exc:
+    failures.append(f"fixed point observation build failed: {exc}")
+
+  for rel in phase27h_files + ("src/tech_cartography/ui/v8_fixed_point_observation_ui.py",):
     text = _read(PROJECT_ROOT / rel)
     if legal_forbidden.search(text) and "no_legal" not in text.lower():
       failures.append(f"{rel} may claim legal judgement without disclaimer")

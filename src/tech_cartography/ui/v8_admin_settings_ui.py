@@ -58,9 +58,27 @@ def render_v8_admin_settings_tab(
     render_caution_box(
       "secret 値（SMTP パスワード、API キー、OAuth/JWT 全文）は表示しません。"
       " 運用コンソール系 UI はこのタブに集約しています。"
+      " v8「定点観測」タブではメール/Scheduler の計画と説明のみ — "
+      "本番 ON/OFF や secret はここで扱います。"
     ),
     unsafe_allow_html=True,
   )
+
+  import os
+  disable_email = os.environ.get("DISABLE_EMAIL_SEND", "(unset)")
+  disable_scheduler = os.environ.get("DISABLE_SCHEDULER", "(unset)")
+  st.markdown("#### 定点観測ループと管理者設定の役割分担")
+  st.markdown(
+    render_info_box(
+      "メール送信設定と Scheduler 設定は管理者向けです。"
+      " 定点観測タブでは Email Digest Plan / Scheduler Follow-up Plan のプレビューのみ。"
+      " SMTP パスワード / API キー / OAuth secret / JWT 全文は表示しません。"
+    ),
+    unsafe_allow_html=True,
+  )
+  st.caption(f"DISABLE_EMAIL_SEND={disable_email}")
+  st.caption(f"DISABLE_SCHEDULER={disable_scheduler}")
+  st.caption("メール送信と Scheduler は必須機能として保持（デフォルト OFF）。")
 
   render_auth_status_expander(project_root=root, key="v8_admin_auth")
   render_iap_cutover_status_expander(project_root=root, key="v8_admin_iap")

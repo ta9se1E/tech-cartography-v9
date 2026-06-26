@@ -54,6 +54,25 @@ v8 の Claim / Evidence / Gap / 定点観測ループを、**3つの実案件**�
 - メール送信と Scheduler は必須機能として残す（本 Phase では送信・起動しない）
 - 3案件で Top 3 Next Actions を出力
 
+## Phase27H: Fixed Point Observation Loop
+
+**目的:** Gap / Next Actions から Watch Profile / Scheduler / Email Digest 計画へ接続し、定点観測ループ artifact を生成する。
+
+**追加/修正ファイル候補:**
+- `src/tech_cartography/runtime/v8_fixed_point_observation_schema.py`
+- `src/tech_cartography/services/v8_fixed_point_observation.py`
+- `src/tech_cartography/services/v8_fixed_point_observation_export.py`
+- `src/tech_cartography/ui/v8_fixed_point_observation_ui.py`
+
+**完了条件:**
+- 3案件で Observation Loop report を生成
+- Watch Profile update proposal / Scheduler plan / Email digest plan を含む
+- no_email_send / no_scheduler_start を明示
+- メール送信・Scheduler は必須機能として残す
+- Watch Profile 自動更新しない
+
+**Cloud Build:** 不要
+
 ## Case 1: PAN 系炭素繊維の前駆体・炭化・黒鉛化
 
 | 項目 | 内容 |

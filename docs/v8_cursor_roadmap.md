@@ -214,7 +214,30 @@
 
 ---
 
-## Phase27H: 3案件検証
+## Phase27H: Fixed Point Observation Loop
+
+**目的:** Gap / Next Actions 結果を Watch Profile / Scheduler / Email Digest 計画へ接続し、定点観測ループ artifact を生成する。
+
+**追加/修正ファイル候補:**
+- `src/tech_cartography/runtime/v8_fixed_point_observation_schema.py`
+- `src/tech_cartography/services/v8_fixed_point_observation.py`
+- `src/tech_cartography/services/v8_fixed_point_observation_export.py`
+- `src/tech_cartography/ui/v8_fixed_point_observation_ui.py`
+- Gap / Next Actions / Export / 管理者設定 UI 連携
+
+**完了条件:**
+- 3案件で Fixed Point Observation Loop を生成
+- Scheduler plan = dry_run_only、Email digest = preview_only
+- メール送信・Scheduler は必須機能として UI に説明（送信・起動はしない）
+- Watch Profile 自動更新しない — 人手承認待ち
+
+**テスト観点:** schema JSON serializable、3案件生成、export、UI import
+
+**Cloud Build:** 不要
+
+---
+
+## Phase27I: 3案件検証
 
 **目的:** 3案件をローカルで end-to-end 検証し checklist を Pass。
 

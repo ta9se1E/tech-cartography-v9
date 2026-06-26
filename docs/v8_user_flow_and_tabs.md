@@ -11,7 +11,7 @@
 | Claim Map | `v8_claim_map_ui.py` + `v8_claim_map.py` | ✅ Claim Map v1 |
 | Evidence Map | `v8_evidence_map_ui.py` + `v8_evidence_map.py` | ✅ Evidence Map v2 |
 | Gap / Next Actions | `v8_gap_next_actions_ui.py` + `v8_gap_next_actions.py` | ✅ Gap / Next Actions v2 |
-| 定点観測 | `v8_fixed_point_observation_ui.py` | ✅ ループ説明 + 導線 |
+| 定点観測 | `v8_fixed_point_observation_ui.py` + `v8_fixed_point_observation.py` | ✅ Observation Loop v1 |
 | Export | `v8_export_ui.py` | ✅ CSV/MD/Excel/Package |
 | 管理者設定 | `v8_admin_settings_ui.py` | ✅ 運用 UI 隔離 |
 
@@ -66,6 +66,17 @@
 - Export: `outputs/local_v8_gap_next_actions/` に csv / md / xlsx / manifest / watch_profile_update_proposal.md / digest_summary.md
 - メール送信と Scheduler は定点観測ループの必須機能として残す（本 Phase では送信・起動しない）
 - 次 Phase: 定点観測ループへ反映 → 次回 Scheduler 再確認 → 次回メール Digest で差分確認
+
+## Phase27H（Fixed Point Observation Loop）
+
+- schema: `V8ObservationLoopReport` / `V8WatchProfileUpdateProposal` / `V8SchedulerFollowupPlan` / `V8EmailDigestPlan`
+- Gap / Next Actions から Watch Profile update proposal / Scheduler plan / Email digest plan へ接続
+- **Watch Profile 更新は人手承認後** — 自動反映しない
+- **Scheduler Follow-up Plan** — `schedule_mode=dry_run_only`、本 Phase では起動しない
+- **Email Digest Plan** — `digest_mode=preview_only`、本 Phase では送信しない
+- メール送信と Scheduler は定点観測の必須機能として残す（デフォルト OFF）
+- Export: `outputs/local_v8_fixed_point_observation/` に json / md / xlsx / manifest
+- 次 Phase: **3案件検証** — ローカル end-to-end checklist（Cloud Build は不要）
 
 - エントリポイント: `app.py` → `render_v8_user_flow_app`（`APP_UI_VERSION` 未設定時 v8）
 - v7 UI は削除せず `APP_UI_VERSION=v7` で切替

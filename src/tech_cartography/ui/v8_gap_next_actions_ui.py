@@ -325,12 +325,18 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
   st.markdown("#### 次 Phase への接続")
   for phase in GAP_NEXT_PHASES:
     st.markdown(f"- {phase}")
-
   st.markdown(
     render_info_box(
-      f"「{V8_TAB_LABELS['evidence_map']}」に戻るか、"
-      f"「{V8_TAB_LABELS['fixed_point_observation']}」で定点観測ループへ進んでください。"
-      " メール送信と Scheduler は定点観測の必須機能として保持（本タブでは起動しません）。"
+      "Watch Profile update proposal / Digest summary は定点観測ループ（"
+      f"「{V8_TAB_LABELS['fixed_point_observation']}」）へ引き継がれます。"
+      " 人手承認後に Watch Profile 反映・次回 Scheduler・メール Digest へ接続します。"
+    ),
+    unsafe_allow_html=True,
+  )
+
+  st.markdown(
+    render_next_action_box(
+      f"「{V8_TAB_LABELS['fixed_point_observation']}」で定点観測ループ（Phase27H）へ進んでください。"
     ),
     unsafe_allow_html=True,
   )

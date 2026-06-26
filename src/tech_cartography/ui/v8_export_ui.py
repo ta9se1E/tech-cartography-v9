@@ -13,6 +13,7 @@ from tech_cartography.services.live_weekly_decision_cockpit import find_latest_w
 from tech_cartography.services.v8_claim_map_export import find_latest_claim_map_dir
 from tech_cartography.services.v8_evidence_map_export import find_latest_evidence_map_dir
 from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
+from tech_cartography.services.v8_fixed_point_observation_export import find_latest_fixed_point_observation_dir
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
@@ -217,9 +218,45 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
 
   st.markdown(render_info_box(FIXED_POINT_OBSERVATION_NOTE), unsafe_allow_html=True)
 
+  st.markdown("#### Fixed Point Observation Export (Phase27H)")
+  st.caption(
+    "Export Package には今後 fixed_point_observation.json / md / xlsx / manifest / "
+    "watch_profile_update_proposal.md / scheduler_followup_plan.md / email_digest_plan.md "
+    "を同梱する予定です。"
+    " メール送信と Scheduler は必須機能として残します（本 Phase では送信・起動しません）。"
+    " Watch Profile 更新は人手承認後に行います。"
+  )
+  fp_dir = find_latest_fixed_point_observation_dir(
+    None if export_case == "all" else export_case,
+    root,
+  )
+  if fp_dir and fp_dir.exists():
+    st.caption(f"latest fixed point observation: {fp_dir}")
+    for fname, mime in (
+      ("fixed_point_observation.json", "application/json"),
+      ("fixed_point_observation.md", "text/markdown"),
+      ("fixed_point_observation.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+      ("fixed_point_observation_manifest.json", "application/json"),
+      ("watch_profile_update_proposal.md", "text/markdown"),
+      ("scheduler_followup_plan.md", "text/markdown"),
+      ("email_digest_plan.md", "text/markdown"),
+    ):
+      path = fp_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_fp_{fname}",
+        )
+  else:
+    st.caption("Fixed Point Observation は未生成 — 「定点観測」タブで Generate してください。")
+
   st.markdown("#### 既存 artifact 参照")
   _artifact_link(find_latest_evidence_gap_path(root))
   _artifact_link(find_latest_gap_next_actions_dir(None if export_case == "all" else export_case, root))
+  _artifact_link(find_latest_fixed_point_observation_dir(None if export_case == "all" else export_case, root))
   brief_path = find_latest_strategic_watch_brief_path(root)
   _artifact_link(brief_path)
   if brief_path and brief_path.exists():
@@ -230,7 +267,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
 
   st.markdown("#### 今後追加予定")
   for item in (
-    "Export Package への Gap / Next Actions 同梱",
+    "Export Package への Gap / Next Actions / Fixed Point Observation 同梱",
     "Watch Profile 自動反映（人手承認後）",
   ):
     st.markdown(f"- {item}")
