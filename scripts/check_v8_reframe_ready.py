@@ -150,6 +150,26 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("claim_text_required", "claim text required"),
   ),
   (
+    "phase27g gap not invalidity",
+    ("Gap", "未確認", "弱点", "無効性"),
+  ),
+  (
+    "phase27g next actions human verification",
+    ("Next Action", "人間", "確認"),
+  ),
+  (
+    "phase27g watch profile update proposal",
+    ("Watch Profile", "update proposal"),
+  ),
+  (
+    "phase27g email digest summary",
+    ("digest summary", "Digest"),
+  ),
+  (
+    "phase27g scheduler follow-up",
+    ("Scheduler", "follow"),
+  ),
+  (
     "cloud build only at milestones",
     ("Cloud Build", "節目"),
   ),
@@ -449,6 +469,87 @@ def main(argv: list[str] | None = None) -> int:
     failures.append(f"evidence map build failed: {exc}")
 
   for rel in phase27f_files + ("src/tech_cartography/ui/v8_evidence_map_ui.py",):
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
+
+  phase27g_files = (
+    "src/tech_cartography/runtime/v8_gap_next_actions_schema.py",
+    "src/tech_cartography/services/v8_gap_next_actions.py",
+    "src/tech_cartography/services/v8_gap_next_actions_export.py",
+  )
+  for rel in phase27g_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  gap_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_gap_next_actions_ui.py")
+  if "Generate / Refresh Gap" in gap_ui:
+    print("PASS: v8_gap_next_actions_ui has generate control")
+  else:
+    failures.append("v8_gap_next_actions_ui missing Generate / Refresh Gap")
+
+  gap_blob = _read(PROJECT_ROOT / "src/tech_cartography/services/v8_gap_next_actions.py")
+  gap_schema = _read(PROJECT_ROOT / "src/tech_cartography/runtime/v8_gap_next_actions_schema.py")
+  if "invalidity" in (gap_blob + gap_schema + gap_ui).lower() or "弱点" in gap_schema:
+    print("PASS: gap next actions mentions gap is not invalidity / weakness")
+  else:
+    failures.append("gap next actions missing invalidity / weakness disclaimer")
+
+  if "人間" in gap_schema or "human verification" in gap_ui.lower():
+    print("PASS: next actions described as human verification tasks")
+  else:
+    failures.append("docs/UI missing next actions human verification notice")
+
+  if "watch_profile_update_proposal" in gap_blob or "Watch Profile" in gap_ui:
+    print("PASS: watch profile update proposal referenced")
+  else:
+    failures.append("missing watch profile update proposal")
+
+  if "digest_summary" in gap_blob:
+    print("PASS: digest summary referenced")
+  else:
+    failures.append("missing digest summary")
+
+  if "scheduler" in gap_ui.lower() and "digest" in gap_ui.lower():
+    print("PASS: gap UI mentions scheduler / digest follow-up")
+  else:
+    failures.append("gap UI missing scheduler / digest follow-up")
+
+  fixed_point_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_fixed_point_observation_ui.py")
+  if "gap_next_actions" in fixed_point_ui or "Gap / Next Actions" in fixed_point_ui:
+    print("PASS: fixed point observation UI references Gap / Next Actions")
+  else:
+    failures.append("fixed point UI missing Gap / Next Actions references")
+
+  if "gap_next_actions" in export_ui:
+    print("PASS: v8_export_ui references gap_next_actions artifacts")
+  else:
+    failures.append("v8_export_ui missing gap_next_actions references")
+
+  try:
+    from tech_cartography.services.v8_gap_next_actions import build_gap_next_actions_report
+
+    for case_id in CASE_IDS:
+      report = build_gap_next_actions_report(case_id=case_id, project_root=PROJECT_ROOT)
+      if report.gap_count >= 1:
+        print(f"PASS: {case_id} produces {report.gap_count} gaps")
+      else:
+        failures.append(f"{case_id} produces no gaps")
+      if len(report.top_3_actions) >= 1:
+        print(f"PASS: {case_id} produces top_3_actions={len(report.top_3_actions)}")
+      else:
+        failures.append(f"{case_id} missing top_3_actions")
+      if report.watch_profile_update_proposal.strip():
+        print(f"PASS: {case_id} has watch_profile_update_proposal")
+      else:
+        failures.append(f"{case_id} empty watch_profile_update_proposal")
+      if report.digest_summary.strip():
+        print(f"PASS: {case_id} has digest_summary")
+      else:
+        failures.append(f"{case_id} empty digest_summary")
+  except Exception as exc:
+    failures.append(f"gap next actions build failed: {exc}")
+
+  for rel in phase27g_files + ("src/tech_cartography/ui/v8_gap_next_actions_ui.py",):
     text = _read(PROJECT_ROOT / rel)
     if legal_forbidden.search(text) and "no_legal" not in text.lower():
       failures.append(f"{rel} may claim legal judgement without disclaimer")

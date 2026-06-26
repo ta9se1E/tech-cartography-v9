@@ -13,6 +13,7 @@ from tech_cartography.services.live_evidence_gap_builder import load_latest_evid
 from tech_cartography.services.live_run_history import list_run_history_entries
 from tech_cartography.services.live_watch_profile_manager import describe_watch_profile_status, get_active_watch_profile
 from tech_cartography.services.v8_evidence_map_export import find_latest_evidence_map_dir
+from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
 from tech_cartography.services.v8_sources_table import load_case_profile
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_warning_box
 from tech_cartography.ui.live_run_history_ui import render_run_history_section
@@ -67,6 +68,40 @@ def render_v8_fixed_point_observation_tab(*, project_root: Path | str) -> None:
     st.caption(f"latest Evidence Map: {ev_dir}")
   else:
     st.caption("Evidence Map 未生成 — 「Evidence Map」タブで Generate してください。")
+
+  gap_dir = find_latest_gap_next_actions_dir(case_id or None, root) if case_id else find_latest_gap_next_actions_dir(None, root)
+  if gap_dir and gap_dir.exists():
+    st.caption(f"latest Gap / Next Actions: {gap_dir}")
+    import json
+    manifest_path = gap_dir / "gap_next_actions_manifest.json"
+    if manifest_path.exists():
+      gap_meta = json.loads(manifest_path.read_text(encoding="utf-8"))
+      st.caption(f"gap_count={gap_meta.get('gap_count', 0)} / action_count={gap_meta.get('action_count', 0)}")
+    digest_path = gap_dir / "digest_summary.md"
+    watch_path = gap_dir / "watch_profile_update_proposal.md"
+    if watch_path.exists():
+      st.markdown("#### Watch Profile update proposal（Gap / Next Actions）")
+      st.markdown(watch_path.read_text(encoding="utf-8"))
+    if digest_path.exists():
+      st.markdown("#### Digest summary（Gap / Next Actions）")
+      st.markdown(digest_path.read_text(encoding="utf-8"))
+    st.markdown("#### Top 3 Next Actions（定点観測ループ）")
+    md_path = gap_dir / "gap_next_actions.md"
+    if md_path.exists():
+      text = md_path.read_text(encoding="utf-8")
+      in_top = False
+      for line in text.splitlines():
+        if line.startswith("## Top 3 Next Actions"):
+          in_top = True
+          continue
+        if in_top and line.startswith("## "):
+          break
+        if in_top and line.strip():
+          st.markdown(line)
+    st.caption("Scheduler follow-up: 次回 Scheduler 定点観測で Gap 再確認（本 Phase では起動しません）")
+    st.caption("Email digest hint: Digest summary を次回メール Digest に含める（本 Phase では送信しません）")
+  else:
+    st.caption("Gap / Next Actions 未生成 — 「Gap / Next Actions」タブで Generate してください。")
 
   st.markdown("#### 今回の Evidence Gap（要約）")
   gaps = (gap_artifact or {}).get("evidence_gaps") or []

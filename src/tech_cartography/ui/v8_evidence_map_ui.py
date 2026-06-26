@@ -253,6 +253,15 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
     st.markdown(
       render_warning_box(
         f"{evidence_map.claim_text_required_count} claim は claim text required — 裏取り候補は未確認です。"
+        " Gap / Next Actions タブでは claim_text_required を最優先 Gap として集約します。"
+      ),
+      unsafe_allow_html=True,
+    )
+  if evidence_map.missing_evidence_count > 0:
+    st.markdown(
+      render_info_box(
+        f"missing_evidence_count={evidence_map.missing_evidence_count} — "
+        "Gap / Next Actions で example/paper/property 不足を分類し Top 3 Actions を生成します。"
       ),
       unsafe_allow_html=True,
     )

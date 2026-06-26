@@ -12,6 +12,7 @@ from tech_cartography.services.live_strategic_watch_brief import find_latest_str
 from tech_cartography.services.live_weekly_decision_cockpit import find_latest_weekly_decision_cockpit_path
 from tech_cartography.services.v8_claim_map_export import find_latest_claim_map_dir
 from tech_cartography.services.v8_evidence_map_export import find_latest_evidence_map_dir
+from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
@@ -181,10 +182,44 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Evidence Map は未生成 — 「Evidence Map」タブで Generate してください。")
 
+  st.markdown("#### Gap / Next Actions Export (Phase27G)")
+  st.caption(
+    "Export Package には今後 gap_next_actions.csv / md / xlsx / manifest / "
+    "watch_profile_update_proposal.md / digest_summary.md を同梱する予定です。"
+    " Gap は未確認事項であり、特許の弱点・無効性・侵害可能性ではありません。"
+    " Next Action は人間の確認作業であり、法的判断ではありません。"
+  )
+  gap_dir = find_latest_gap_next_actions_dir(
+    None if export_case == "all" else export_case,
+    root,
+  )
+  if gap_dir and gap_dir.exists():
+    st.caption(f"latest gap / next actions: {gap_dir}")
+    for fname, mime in (
+      ("gap_next_actions.csv", "text/csv"),
+      ("gap_next_actions.md", "text/markdown"),
+      ("gap_next_actions.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+      ("gap_next_actions_manifest.json", "application/json"),
+      ("watch_profile_update_proposal.md", "text/markdown"),
+      ("digest_summary.md", "text/markdown"),
+    ):
+      path = gap_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_gap_{fname}",
+        )
+  else:
+    st.caption("Gap / Next Actions は未生成 — 「Gap / Next Actions」タブで Generate してください。")
+
   st.markdown(render_info_box(FIXED_POINT_OBSERVATION_NOTE), unsafe_allow_html=True)
 
   st.markdown("#### 既存 artifact 参照")
   _artifact_link(find_latest_evidence_gap_path(root))
+  _artifact_link(find_latest_gap_next_actions_dir(None if export_case == "all" else export_case, root))
   brief_path = find_latest_strategic_watch_brief_path(root)
   _artifact_link(brief_path)
   if brief_path and brief_path.exists():
@@ -195,8 +230,8 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
 
   st.markdown("#### 今後追加予定")
   for item in (
-    "Gap / Next Actions",
-    "Watch Profile update proposal",
+    "Export Package への Gap / Next Actions 同梱",
+    "Watch Profile 自動反映（人手承認後）",
   ):
     st.markdown(f"- {item}")
 

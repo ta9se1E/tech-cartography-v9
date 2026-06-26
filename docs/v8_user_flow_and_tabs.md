@@ -10,7 +10,7 @@
 | 読むべき特許 | `v8_patent_shortlist_ui.py` + `v8_patent_shortlist.py` | ✅ Top N heuristic |
 | Claim Map | `v8_claim_map_ui.py` + `v8_claim_map.py` | ✅ Claim Map v1 |
 | Evidence Map | `v8_evidence_map_ui.py` + `v8_evidence_map.py` | ✅ Evidence Map v2 |
-| Gap / Next Actions | `v8_gap_next_actions_ui.py` | ✅ 既存 artifact 閲覧 |
+| Gap / Next Actions | `v8_gap_next_actions_ui.py` + `v8_gap_next_actions.py` | ✅ Gap / Next Actions v2 |
 | 定点観測 | `v8_fixed_point_observation_ui.py` | ✅ ループ説明 + 導線 |
 | Export | `v8_export_ui.py` | ✅ CSV/MD/Excel/Package |
 | 管理者設定 | `v8_admin_settings_ui.py` | ✅ 運用 UI 隔離 |
@@ -55,6 +55,17 @@
 - paper → `paper_support_candidate`（medium_candidate）、web/company → weak_candidate + needs_human_review
 - Export: `outputs/local_v8_evidence_maps/` に csv / md / xlsx / manifest
 - 次 Phase: **Gap / Next Actions** — 定点観測 Digest で Evidence Gap 変化を追跡
+
+## Phase27G（Gap / Next Actions v2）
+
+- schema: `V8EvidenceGapRecord` / `V8NextVerificationAction` / `V8GapNextActionsReport` / `V8GapNextActionsExport`
+- Evidence Map の不足情報（support_type / evidence_gap / next_verification_action）を集約
+- **Gap は未確認事項** — 特許の弱点・無効性・侵害可能性ではない
+- **Next Action は人間の確認作業** — FTO/侵害/有効性/法的判断ではない
+- Top 3 Next Actions / Watch Profile update proposal / digest summary を生成
+- Export: `outputs/local_v8_gap_next_actions/` に csv / md / xlsx / manifest / watch_profile_update_proposal.md / digest_summary.md
+- メール送信と Scheduler は定点観測ループの必須機能として残す（本 Phase では送信・起動しない）
+- 次 Phase: 定点観測ループへ反映 → 次回 Scheduler 再確認 → 次回メール Digest で差分確認
 
 - エントリポイント: `app.py` → `render_v8_user_flow_app`（`APP_UI_VERSION` 未設定時 v8）
 - v7 UI は削除せず `APP_UI_VERSION=v7` で切替

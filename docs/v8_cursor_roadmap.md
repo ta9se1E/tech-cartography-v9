@@ -169,7 +169,34 @@
 
 ---
 
-## Phase27G: 定点観測ループ再配置
+## Phase27G: Gap / Next Actions v2
+
+**目的:** Evidence Map の不足情報を集約し、Top 3 Next Actions / Watch Profile update proposal / digest summary を生成する。
+
+**追加/修正ファイル候補:**
+- `src/tech_cartography/runtime/v8_gap_next_actions_schema.py`
+- `src/tech_cartography/services/v8_gap_next_actions.py`
+- `src/tech_cartography/services/v8_gap_next_actions_export.py`
+- `src/tech_cartography/ui/v8_gap_next_actions_ui.py`
+- Evidence Map / 定点観測 / Export UI 連携
+
+**完了条件:**
+- 3案件で Gap / Next Actions report を生成し Top 3 Actions を出力
+- Gap は未確認事項（invalidity / weakness / infringement ではない）を明示
+- Next Action は人間の確認作業（法的判断ではない）を明示
+- Watch Profile update proposal / digest summary / scheduler follow-up / email digest hint を含む
+- メール送信・Scheduler は必須機能として残す（本 Phase では送信・起動しない）
+- 外部 API / LLM / Web 検索を呼ばない
+
+**テスト観点:** schema JSON serializable、3案件生成、export csv/md/manifest、UI import
+
+**Cloud Build:** 不要
+
+---
+
+## Phase27G-old: 定点観測ループ再配置（Phase27B 骨格）
+
+**注:** Watch / Scheduler / Digest / Run History の UI 骨格は Phase27B で先行実装済み。Gap / Next Actions v2 は上記 Phase27G を参照。
 
 **目的:** 定点観測タブに Watch / Scheduler / Digest / Run History / Scope Feedback を集約。
 

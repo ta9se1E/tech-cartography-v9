@@ -45,6 +45,15 @@ v8 の Claim / Evidence / Gap / 定点観測ループを、**3つの実案件**�
 - 3案件で Evidence Map 生成 → Gap / Next Actions（Phase27G）へ接続
 - 定点観測: Evidence Gap 変化を次回 Digest で追跡
 
+## Phase27G: Gap / Next Actions v2
+
+- Evidence Map の不足を集約し Top 3 Next Actions を生成
+- Gap は未確認事項（弱点・無効性・侵害可能性ではない）
+- Next Action は人間の確認作業（法的判断ではない）
+- Watch Profile update proposal / digest summary へ接続
+- メール送信と Scheduler は必須機能として残す（本 Phase では送信・起動しない）
+- 3案件で Top 3 Next Actions を出力
+
 ## Case 1: PAN 系炭素繊維の前駆体・炭化・黒鉛化
 
 | 項目 | 内容 |
