@@ -31,8 +31,8 @@ _TAB_RENDERERS: dict[str, Callable[..., None]] = {
   "input": render_v8_input_tab,
   "sources": render_v8_sources_tab,
   "patent_shortlist": render_v8_patent_shortlist_tab,
-  "claim_map": lambda **kwargs: render_v8_claim_map_tab(),
-  "evidence_map": lambda **kwargs: render_v8_evidence_map_tab(),
+  "claim_map": render_v8_claim_map_tab,
+  "evidence_map": render_v8_evidence_map_tab,
   "gap_next_actions": render_v8_gap_next_actions_tab,
   "fixed_point_observation": render_v8_fixed_point_observation_tab,
   "export": render_v8_export_tab,
@@ -71,7 +71,7 @@ def render_v8_user_flow_app(
   for tab_id, tab in zip(V8_TAB_IDS, tabs, strict=True):
     with tab:
       renderer = _TAB_RENDERERS[tab_id]
-      if tab_id in {"intro", "claim_map", "evidence_map"}:
+      if tab_id in {"intro"}:
         renderer()
       elif tab_id == "admin_settings":
         renderer(project_root=PROJECT_ROOT)

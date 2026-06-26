@@ -128,15 +128,22 @@
 
 ## Phase27E: Claim Map v1
 
-**目的:** expected_claim_axes に沿った Claim Map。
+**目的:** Patent Shortlist 候補の請求項を技術軸へ整理する Claim Map v1。
 
-**追加/修正ファイル候補:**
-- `src/tech_cartography/services/claim_map_v1.py`
-- UI コンポーネント
+**追加/修正ファイル:**
+- `src/tech_cartography/runtime/v8_claim_map_schema.py`
+- `src/tech_cartography/services/v8_claim_input_loader.py`
+- `src/tech_cartography/services/v8_claim_map.py`
+- `src/tech_cartography/services/v8_claim_map_export.py`
+- `cases/*/claims_input.csv`
 
-**完了条件:** claim_map.json が patent/claim 単位で追跡可能
+**状態:** ✅ 完了
 
-**テスト観点:** publication_number 紐付け
+**完了条件:**
+- 3案件で Claim Map 生成（claims_input.csv 最低3件）
+- claim text not loaded 明示
+- evidence_needed / next_evidence_check
+- Export: csv / md / xlsx / manifest
 
 **Cloud Build:** 不要
 

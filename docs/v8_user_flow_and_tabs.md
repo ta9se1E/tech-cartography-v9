@@ -8,7 +8,7 @@
 | 入力 | `v8_input_ui.py` | ✅ session_state 保存 |
 | Sources一覧 | `v8_sources_ui.py` + `v8_sources_repository.py` | ✅ Unified Sources + Export |
 | 読むべき特許 | `v8_patent_shortlist_ui.py` + `v8_patent_shortlist.py` | ✅ Top N heuristic |
-| Claim Map | `v8_claim_map_ui.py` | 🔶 Phase27E 予定表示 |
+| Claim Map | `v8_claim_map_ui.py` + `v8_claim_map.py` | ✅ Claim Map v1 |
 | Evidence Map | `v8_evidence_map_ui.py` | 🔶 Phase27F 予定表示 |
 | Gap / Next Actions | `v8_gap_next_actions_ui.py` | ✅ 既存 artifact 閲覧 |
 | 定点観測 | `v8_fixed_point_observation_ui.py` | ✅ ループ説明 + 導線 |
@@ -34,6 +34,17 @@
 - Export: `outputs/local_v8_patent_shortlists/` に csv / md / xlsx / manifest
 - 次 Phase: **Claim Map**（請求項分解）→ Evidence Map → Gap / Next Actions
 - 定点観測ループ: Top 特許の変化を次回 Digest / Scheduler で追跡する方針
+
+## Phase27E（Claim Map v1）
+
+- schema: `V8ClaimRecord` / `V8ClaimMap` / `V8ClaimMapExport`
+- Patent Shortlist Top 候補 + `cases/<case_id>/claims_input.csv` / 手動 claim text から Claim Map を生成
+- **Claim Map は技術整理の暫定分類** — 権利範囲解釈・FTO/侵害/有効性判断ではない
+- claim text not loaded — 本文未取得時は `not_loaded` と明示し、内容を推測しない
+- ルールベースで technical_axis / material / process / property / evidence_needed を抽出
+- Export: `outputs/local_v8_claim_maps/` に csv / md / xlsx / manifest
+- 次 Phase: **Evidence Map**（実施例・論文対応）→ Gap / Next Actions
+- 定点観測: Claim Map 軸の変化を次回 Digest で追跡する方針
 
 - エントリポイント: `app.py` → `render_v8_user_flow_app`（`APP_UI_VERSION` 未設定時 v8）
 - v7 UI は削除せず `APP_UI_VERSION=v7` で切替

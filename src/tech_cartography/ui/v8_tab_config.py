@@ -88,6 +88,7 @@ EVIDENCE_SUPPORT_LEVELS: tuple[str, ...] = (
 
 STATE_V8_INPUT = "v8_input_state"
 STATE_V8_SELECTED_CASE = "v8_selected_case_id"
+STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 
 def v8_tab_labels() -> list[str]:

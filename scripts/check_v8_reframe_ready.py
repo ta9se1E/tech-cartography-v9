@@ -84,6 +84,18 @@ CSV_COLUMNS = (
   "notes",
 )
 
+CLAIMS_INPUT_COLUMNS = (
+  "case_id",
+  "publication_number",
+  "patent_title",
+  "claim_no",
+  "claim_text",
+  "claim_source_type",
+  "claim_source_url",
+  "claim_source_path",
+  "notes",
+)
+
 DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
   (
     "email send required for fixed point observation",
@@ -116,6 +128,14 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
   (
     "phase27d claim map connection",
     ("Claim Map", "Phase27"),
+  ),
+  (
+    "phase27e claim map not legal interpretation",
+    ("Claim Map", "技術整理", "法的"),
+  ),
+  (
+    "phase27e claim text not loaded",
+    ("claim text not loaded", "not_loaded"),
   ),
   (
     "cloud build only at milestones",
@@ -305,9 +325,72 @@ def main(argv: list[str] | None = None) -> int:
     if legal_forbidden.search(text) and "no_legal" not in text.lower():
       failures.append(f"{rel} may claim legal judgement without disclaimer")
 
-  import csv as csv_mod
+  phase27e_files = (
+    "src/tech_cartography/runtime/v8_claim_map_schema.py",
+    "src/tech_cartography/services/v8_claim_input_loader.py",
+    "src/tech_cartography/services/v8_claim_map.py",
+    "src/tech_cartography/services/v8_claim_map_export.py",
+  )
+  for rel in phase27e_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  claim_map_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_claim_map_ui.py")
+  if "Generate / Refresh Claim Map" in claim_map_ui:
+    print("PASS: v8_claim_map_ui has generate control")
+  else:
+    failures.append("v8_claim_map_ui missing Generate / Refresh Claim Map")
+
+  claim_blob = _read(PROJECT_ROOT / "src/tech_cartography/services/v8_claim_map.py")
+  claim_schema = _read(PROJECT_ROOT / "src/tech_cartography/runtime/v8_claim_map_schema.py")
+  if "claim text not loaded" in (claim_blob + claim_schema + claim_map_ui).lower():
+    print("PASS: claim map mentions claim text not loaded")
+  else:
+    failures.append("claim map missing claim text not loaded notice")
+
+  if "claim_map" in export_ui:
+    print("PASS: v8_export_ui references claim_map artifacts")
+  else:
+    failures.append("v8_export_ui missing claim_map references")
+
+  try:
+    from tech_cartography.services.v8_claim_map import build_claim_map
+
+    import csv as csv_mod
+
+    for case_id in CASE_IDS:
+      claims_csv = PROJECT_ROOT / "cases" / case_id / "claims_input.csv"
+      _check_file_exists(claims_csv, failures)
+      if claims_csv.exists():
+        with claims_csv.open(encoding="utf-8", newline="") as handle:
+          reader = csv_mod.DictReader(handle)
+          fieldnames = reader.fieldnames or []
+          missing_claim_cols = [c for c in CLAIMS_INPUT_COLUMNS if c not in fieldnames]
+          if missing_claim_cols:
+            failures.append(f"{case_id}/claims_input.csv missing columns: {', '.join(missing_claim_cols)}")
+          else:
+            print(f"PASS: {case_id}/claims_input.csv has required columns")
+          claim_rows = list(reader)
+        if len(claim_rows) >= 3:
+          print(f"PASS: {case_id}/claims_input.csv has {len(claim_rows)} rows")
+        else:
+          failures.append(f"{case_id}/claims_input.csv has only {len(claim_rows)} rows (need >=3)")
+
+      claim_map = build_claim_map(case_id=case_id, project_root=PROJECT_ROOT)
+      if claim_map.claim_count >= 3:
+        print(f"PASS: {case_id} produces {claim_map.claim_count} claim map records")
+      else:
+        failures.append(f"{case_id} produces only {claim_map.claim_count} claim map records (need >=3)")
+  except Exception as exc:
+    failures.append(f"claim map build failed: {exc}")
+
+  for rel in phase27e_files + ("src/tech_cartography/ui/v8_claim_map_ui.py",):
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
 
   fake_doi_re = re.compile(r"10\.(0000|1234)/|example\.com|fake-doi|placeholder", re.IGNORECASE)
+  import csv as csv_mod
+
   for case_id in CASE_IDS:
     csv_path = PROJECT_ROOT / "cases" / case_id / "source_candidates.csv"
     if not csv_path.exists():

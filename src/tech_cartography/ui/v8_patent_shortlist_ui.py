@@ -16,7 +16,7 @@ from tech_cartography.services.v8_patent_shortlist_export import (
 )
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_next_action_box
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
-from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
+from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, STATE_V8_SELECTED_PUBLICATION, V8_CASE_SAMPLES, V8_TAB_LABELS
 
 STATE_V8_PATENT_SHORTLIST = "v8_patent_shortlist_cache"
 
@@ -60,11 +60,15 @@ def _render_shortlist_detail(shortlist: V8PatentShortlist, *, key_prefix: str) -
     key=f"{key_prefix}_detail_pick",
   )
   detail = shortlist.patent_candidates[pick_idx]
+  st.session_state[STATE_V8_SELECTED_PUBLICATION] = detail.publication_number
   st.json(detail.score_breakdown)
   st.markdown(f"**caution_flags:** {', '.join(detail.caution_flags)}")
   st.caption(f"url: {detail.url or '（なし）'}")
   st.caption(f"source_status: {detail.source_status} / evidence_role: {detail.evidence_role}")
   st.caption(f"next_phase: {detail.next_phase}")
+  st.caption(
+    f"claim text not loaded — 「{V8_TAB_LABELS['claim_map']}」で請求項本文を claims_input.csv または手動入力で投入してください。"
+  )
 
 
 def _render_downloads(
@@ -215,7 +219,8 @@ def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
   st.caption("Export Package への同梱は Phase27C 以降の拡張予定。現時点では patent_shortlist_* を個別ダウンロード。")
   st.markdown(
     render_next_action_box(
-      f"「{V8_TAB_LABELS['sources']}」に戻るか、「{V8_TAB_LABELS['claim_map']}」で請求項分解（Phase27E）へ進んでください。"
+      f"Top候補の publication_number は Claim Map タブに引き継がれます。"
+      f"「{V8_TAB_LABELS['claim_map']}」で請求項分解（Phase27E）へ進んでください。"
     ),
     unsafe_allow_html=True,
   )

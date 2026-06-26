@@ -10,6 +10,7 @@ from tech_cartography.runtime.v8_sources_schema import FIXED_POINT_OBSERVATION_N
 from tech_cartography.services.live_evidence_gap_builder import find_latest_evidence_gap_path
 from tech_cartography.services.live_strategic_watch_brief import find_latest_strategic_watch_brief_path
 from tech_cartography.services.live_weekly_decision_cockpit import find_latest_weekly_decision_cockpit_path
+from tech_cartography.services.v8_claim_map_export import find_latest_claim_map_dir
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
@@ -121,6 +122,35 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Patent Shortlist は未生成 — 「読むべき特許」タブで Generate してください。")
 
+  st.markdown("#### Claim Map Export (Phase27E)")
+  st.caption(
+    "Export Package には今後 claim_map.csv / md / xlsx / manifest を同梱する予定です。"
+    " Claim Map は技術整理であり、権利範囲解釈・法的判断ではありません。"
+  )
+  claim_map_dir = find_latest_claim_map_dir(
+    None if export_case == "all" else export_case,
+    root,
+  )
+  if claim_map_dir and claim_map_dir.exists():
+    st.caption(f"latest claim map: {claim_map_dir}")
+    for fname, mime in (
+      ("claim_map.csv", "text/csv"),
+      ("claim_map.md", "text/markdown"),
+      ("claim_map.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+      ("claim_map_manifest.json", "application/json"),
+    ):
+      path = claim_map_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_claim_map_{fname}",
+        )
+  else:
+    st.caption("Claim Map は未生成 — 「Claim Map」タブで Generate してください。")
+
   st.markdown(render_info_box(FIXED_POINT_OBSERVATION_NOTE), unsafe_allow_html=True)
 
   st.markdown("#### 既存 artifact 参照")
@@ -135,7 +165,6 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
 
   st.markdown("#### 今後追加予定")
   for item in (
-    "Claim Map — Phase27E",
     "Evidence Map — Phase27F",
     "Gap / Next Actions",
     "Watch Profile update proposal",

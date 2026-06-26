@@ -29,6 +29,14 @@ v8 の Claim / Evidence / Gap / 定点観測ループを、**3つの実案件**�
 - 次 Phase: Claim Map で請求項を分解
 - 定点観測: Top 特許リストの差分を次回 Digest に載せる
 
+## Phase27E: Claim Map v1
+
+- `cases/<case_id>/claims_input.csv` — Top 候補 publication_number（claim text は空欄可）
+- Claim Map は技術整理であり法的解釈ではない
+- claim text not loaded を UI / Export で明示
+- 3案件で Claim Map を生成し、Evidence Map（Phase27F）へ接続
+- 定点観測: Claim Map 軸の変化を次回 Digest で追跡
+
 ## Case 1: PAN 系炭素繊維の前駆体・炭化・黒鉛化
 
 | 項目 | 内容 |
