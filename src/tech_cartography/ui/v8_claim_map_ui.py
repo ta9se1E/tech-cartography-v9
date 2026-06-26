@@ -224,11 +224,21 @@ def _render_manual_claim_injection_section(
       f"{report.get('validation_readiness_after')}"
     )
 
+  next_actions: list[str] = [
+    "保存した claim 本文を使って「Claim Mapを再生成」を押してください。",
+    f"次に「{V8_TAB_LABELS['evidence_map']}」タブで Evidence Map を再生成してください。",
+    "Gap / Next Actions → 定点観測 → Export で Demo Polish / Demo Readiness Pack を再生成してください。",
+  ]
+  if isinstance(saved, dict) and saved.get("case_id") == active_case and saved.get("saved_to_claims_input_csv"):
+    pub_label = str(saved.get("publication_number") or inj_pub or publication_number or "").strip()
+    if pub_label:
+      next_actions.insert(
+        0,
+        f"{pub_label} — claim_text_status={saved.get('claim_text_status', 'manual_input')} で保存済み",
+      )
+
   st.markdown(
-    render_next_action_card(
-      f"保存後は「Claim Mapを再生成」を押し、"
-      f"「{V8_TAB_LABELS['evidence_map']}」で Evidence Map を確認してください。"
-    ),
+    render_next_action_card("次にやること", next_actions),
     unsafe_allow_html=True,
   )
 

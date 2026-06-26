@@ -28,3 +28,12 @@ def test_recommended_demo_flow_not_empty() -> None:
   report = build_demo_readiness_report(project_root=project_root_from_here())
   for case in report.cases:
     assert case.recommended_demo_flow
+
+
+def test_claim_map_ui_next_action_card_signature() -> None:
+  text = Path(__file__).resolve().parents[1].joinpath(
+    "src/tech_cartography/ui/v8_claim_map_ui.py"
+  ).read_text(encoding="utf-8")
+  assert 'render_next_action_card("次にやること"' in text.replace("\n", " ") or (
+    "render_next_action_card(" in text and "next_actions" in text
+  )

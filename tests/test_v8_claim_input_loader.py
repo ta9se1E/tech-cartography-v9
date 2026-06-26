@@ -23,9 +23,14 @@ def test_load_claims_input_csv_all_cases() -> None:
     assert len(rows) >= 3
     assert all(r.publication_number for r in rows)
     assert all(r.case_id == case_id for r in rows)
-    for row in rows:
-      assert not row.has_loaded_text()
-      assert "claim text not loaded" in row.warnings
+    loaded = [r for r in rows if r.has_loaded_text()]
+    if case_id == "case_01_pan_graphitization":
+      assert len(loaded) >= 1
+      assert all(r.claim_source_type == "manual" for r in loaded)
+    else:
+      assert not loaded
+      for row in rows:
+        assert "claim text not loaded" in row.warnings
 
 
 def test_claims_input_columns_present() -> None:

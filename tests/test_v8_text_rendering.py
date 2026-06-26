@@ -47,3 +47,11 @@ def test_render_next_action_card_list() -> None:
 def test_render_next_action_card_empty() -> None:
   html = render_next_action_card("次にやること", [])
   assert "次に行う操作はまだありません" in html
+
+
+def test_render_next_action_card_single_string_not_char_split() -> None:
+  text = "保存後は「Claim Mapを再生成」を押してください。"
+  html = render_next_action_card("次にやること", text)
+  assert html.count("<li>") == 1
+  assert "Claim Map" in html
+  assert "保" not in html or "保存後" in html

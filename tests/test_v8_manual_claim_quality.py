@@ -55,9 +55,18 @@ def test_cases_dir_has_no_fabricated_claim_text() -> None:
     with csv_path.open(encoding="utf-8", newline="") as handle:
       rows = list(csv.DictReader(handle))
     for row in rows:
-      assert not str(row.get("claim_text") or "").strip(), (
-        f"{case_id} should not have claim_text in cases/"
-      )
+      text = str(row.get("claim_text") or "").strip()
+      if not text:
+        continue
+      source_type = str(row.get("claim_source_type") or "").strip().lower()
+      notes = str(row.get("notes") or "").lower()
+      assert "test fixture only" not in text.lower()
+      assert "placeholder" not in text.lower()
+      if case_id == "case_01_pan_graphitization":
+        assert source_type == "manual", f"{case_id} claim_text must be user manual_input only"
+        assert "user provided" in notes
+      else:
+        assert False, f"{case_id} should not have claim_text in cases/"
 
 
 def test_evidence_map_keeps_candidate_treatment(injected_case_root: Path) -> None:
