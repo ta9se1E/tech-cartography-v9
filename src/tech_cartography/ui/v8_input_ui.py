@@ -116,8 +116,8 @@ def render_v8_input_tab(*, project_root: Path | str) -> None:
 
   st.markdown(
     render_next_action_box(
-      f"案件を選んだら「{V8_TAB_LABELS['sources']}」で Sources 一覧を確認してください。"
-      " 入力内容は session に保存され、Sources タブの初期フィルタに反映されます。"
+      f"流れ: 「{V8_TAB_LABELS['sources']}」→「{V8_TAB_LABELS['patent_shortlist']}」→「{V8_TAB_LABELS['claim_map']}」。"
+      f" 案件選択後、Sources で patent を確認し、読むべき特許 Top N（heuristic）を生成してください。"
     ),
     unsafe_allow_html=True,
   )

@@ -1,4 +1,4 @@
-"""v8 patent shortlist tab skeleton (Phase 27B)."""
+"""v8 patent shortlist tab (Phase 27D)."""
 
 from __future__ import annotations
 
@@ -7,61 +7,215 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from tech_cartography.services.v8_sources_table import filter_patent_sources, load_source_candidates
-from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box
+from tech_cartography.runtime.v8_patent_shortlist_schema import V8PatentCandidate, V8PatentShortlist
+from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
+from tech_cartography.services.v8_patent_shortlist_export import (
+  export_patent_shortlist,
+  shortlist_to_csv_text,
+  shortlist_to_markdown,
+)
+from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_next_action_box
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
-from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_TAB_LABELS
+from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
+
+STATE_V8_PATENT_SHORTLIST = "v8_patent_shortlist_cache"
 
 
-def _draft_patent_rows(patent_rows: list[dict[str, str]], *, limit: int = 5) -> list[dict[str, str]]:
-  draft: list[dict[str, str]] = []
-  for index, row in enumerate(patent_rows[:limit], start=1):
-    draft.append(
-      {
-        "rank": str(index),
-        "publication_number": row.get("publication_number", ""),
-        "title": row.get("title", ""),
-        "organization": row.get("organization", ""),
-        "year": row.get("year", ""),
-        "url": row.get("url", ""),
-        "why_read": "【draft placeholder】請求項・実施例の優先確認理由は Phase27D でスコアリング",
-        "technical_axis": "【draft placeholder】case_profile の expected_claim_axes を参照",
-        "evidence_needed": "【draft placeholder】一次公報・論文の確認要否",
-        "next_action": "【draft placeholder】原典 URL で請求項を人手確認",
-        "display_status": "draft",
-      },
+def _case_options() -> list[tuple[str, str]]:
+  return [("all", "All cases")] + [(s["case_id"], s["label"]) for s in V8_CASE_SAMPLES]
+
+
+def _render_shortlist_table(shortlist: V8PatentShortlist) -> None:
+  display_cols = [
+    "rank", "publication_number", "title", "assignee_or_organization", "year",
+    "total_score", "technical_axis_labels", "why_read",
+    "expected_evidence_to_check", "next_verification_action", "human_review_required",
+  ]
+  rows = []
+  for c in shortlist.patent_candidates:
+    rows.append({
+      "rank": c.rank,
+      "publication_number": c.publication_number,
+      "title": c.title,
+      "assignee_or_organization": c.assignee_or_organization,
+      "year": c.year,
+      "total_score": c.total_score,
+      "technical_axis_labels": ", ".join(c.technical_axis_labels),
+      "why_read": c.why_read,
+      "expected_evidence_to_check": c.expected_evidence_to_check,
+      "next_verification_action": c.next_verification_action,
+      "human_review_required": c.human_review_required,
+    })
+  st.dataframe(pd.DataFrame(rows, columns=display_cols), width="stretch", hide_index=True)
+
+
+def _render_shortlist_detail(shortlist: V8PatentShortlist, *, key_prefix: str) -> None:
+  if not shortlist.patent_candidates:
+    return
+  pick_labels = [f"#{c.rank} {c.publication_number}" for c in shortlist.patent_candidates]
+  pick_idx = st.selectbox(
+    "詳細",
+    range(len(shortlist.patent_candidates)),
+    format_func=lambda i: pick_labels[i],
+    key=f"{key_prefix}_detail_pick",
+  )
+  detail = shortlist.patent_candidates[pick_idx]
+  st.json(detail.score_breakdown)
+  st.markdown(f"**caution_flags:** {', '.join(detail.caution_flags)}")
+  st.caption(f"url: {detail.url or '（なし）'}")
+  st.caption(f"source_status: {detail.source_status} / evidence_role: {detail.evidence_role}")
+  st.caption(f"next_phase: {detail.next_phase}")
+
+
+def _render_downloads(
+  shortlist: V8PatentShortlist,
+  export_info: dict,
+  *,
+  key_prefix: str,
+) -> None:
+  case_id = shortlist.case_id
+  st.download_button(
+    "CSV",
+    shortlist_to_csv_text(shortlist.patent_candidates).encode("utf-8"),
+    f"patent_shortlist_{case_id}.csv",
+    "text/csv",
+    key=f"{key_prefix}_dl_csv",
+  )
+  st.download_button(
+    "Markdown",
+    shortlist_to_markdown(shortlist).encode("utf-8"),
+    f"patent_shortlist_{case_id}.md",
+    "text/markdown",
+    key=f"{key_prefix}_dl_md",
+  )
+  xlsx_path = Path(str(export_info.get("xlsx_path", "")))
+  if xlsx_path.exists():
+    st.download_button(
+      "Excel",
+      xlsx_path.read_bytes(),
+      xlsx_path.name,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      key=f"{key_prefix}_dl_xlsx",
     )
-  return draft
+  if export_info.get("excel_warning"):
+    st.caption(str(export_info.get("excel_warning")))
+  st.caption(f"export dir: {export_info.get('output_dir', '')}")
 
 
 def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
   state = get_v8_input_state()
-  case_id = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
+  default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
 
-  st.markdown("### 読むべき特許 Top 5（draft）")
+  st.markdown("### 読むべき特許 Top N")
   st.markdown(
     render_caution_box(
-      "このタブは <strong>Phase27B 骨格</strong> です。"
-      " 表示は source_candidates.csv からの仮候補であり、本格スコアリングは Phase27D で実装します。"
-      " 架空の根拠やスコアは表示しません。"
+      "<strong>読む優先度の暫定スコア（heuristic / draft selection）</strong> です。"
+      " 特許価値・権利価値・有効性・侵害リスクを意味しません。"
+      " FTO、侵害、有効性判断、法的結論は行いません。"
+      " claim text not loaded — 請求項・明細書は未読です。"
     ),
     unsafe_allow_html=True,
   )
 
-  all_rows = load_source_candidates(case_id or None, project_root=root)
-  patent_rows = filter_patent_sources(all_rows)
-  if not patent_rows:
-    st.info("特許 type の Sources がありません。入力タブで案件を選んでください。")
+  case_options = _case_options()
+  case_ids = [cid for cid, _ in case_options]
+  labels = {cid: label for cid, label in case_options}
+  default_idx = case_ids.index(default_case) if default_case in case_ids else 0
+
+  col1, col2, col3 = st.columns(3)
+  with col1:
+    selected_case = st.selectbox(
+      "案件",
+      options=case_ids,
+      index=default_idx,
+      format_func=lambda cid: labels[cid],
+      key="v8_patent_shortlist_case",
+    )
+  with col2:
+    top_n = st.selectbox("Top N", options=[3, 5, 10], index=1, key="v8_patent_shortlist_top_n")
+  with col3:
+    refresh = st.button("Generate / Refresh Patent Shortlist", key="v8_patent_shortlist_refresh", type="primary")
+
+  if selected_case != "all":
+    st.session_state[STATE_V8_SELECTED_CASE] = selected_case
+
+  cache_key = f"{selected_case}:{top_n}"
+  if refresh or st.session_state.get("v8_patent_shortlist_cache_key") != cache_key:
+    if selected_case == "all":
+      bundles: dict[str, dict] = {}
+      for sample in V8_CASE_SAMPLES:
+        cid = sample["case_id"]
+        shortlist = build_patent_shortlist(case_id=cid, top_n=top_n, project_root=root)
+        export_result = export_patent_shortlist(shortlist, project_root=root)
+        bundles[cid] = {"shortlist": shortlist.to_dict(), "export": export_result.to_dict()}
+      st.session_state[STATE_V8_PATENT_SHORTLIST] = {"mode": "all", "bundles": bundles, "top_n": top_n}
+    else:
+      shortlist = build_patent_shortlist(case_id=selected_case, top_n=top_n, project_root=root)
+      export_result = export_patent_shortlist(shortlist, project_root=root)
+      st.session_state[STATE_V8_PATENT_SHORTLIST] = {
+        "mode": "single",
+        "shortlist": shortlist.to_dict(),
+        "export": export_result.to_dict(),
+      }
+    st.session_state["v8_patent_shortlist_cache_key"] = cache_key
+
+  cached = st.session_state.get(STATE_V8_PATENT_SHORTLIST)
+  if not cached:
+    st.info("「Generate / Refresh Patent Shortlist」を押して Top N を生成してください。")
+    st.markdown(
+      render_next_action_box(f"先に「{V8_TAB_LABELS['sources']}」で patent source を確認してください。"),
+      unsafe_allow_html=True,
+    )
     return
 
-  draft_rows = _draft_patent_rows(patent_rows, limit=5)
-  df = pd.DataFrame(draft_rows)
-  st.dataframe(df, width="stretch", hide_index=True)
+  def _dict_to_shortlist(data: dict) -> V8PatentShortlist:
+    return V8PatentShortlist(
+      case_id=data["case_id"],
+      case_name=data["case_name"],
+      top_n=data["top_n"],
+      count=data["count"],
+      patent_candidates=[V8PatentCandidate.from_dict(c) for c in data["patent_candidates"]],
+      excluded_sources=data.get("excluded_sources", []),
+      warnings=data.get("warnings", []),
+      generated_at=data["generated_at"],
+    )
 
-  st.markdown(render_info_box("各行は draft / placeholder です。確定ランキングではありません。"), unsafe_allow_html=True)
+  if cached.get("mode") == "all":
+    bundles = cached.get("bundles") or {}
+    if not bundles:
+      st.warning("案件データがありません。")
+      return
+    for sample in V8_CASE_SAMPLES:
+      cid = sample["case_id"]
+      bundle = bundles.get(cid)
+      if not bundle:
+        continue
+      shortlist = _dict_to_shortlist(bundle["shortlist"])
+      with st.expander(f"{sample['label']} — {shortlist.count}件", expanded=cid == case_ids[1]):
+        if not shortlist.patent_candidates:
+          st.warning("patent source が不足しています。")
+          continue
+        _render_shortlist_table(shortlist)
+        _render_shortlist_detail(shortlist, key_prefix=f"v8_patent_{cid}")
+        st.markdown("##### ダウンロード")
+        _render_downloads(shortlist, bundle.get("export") or {}, key_prefix=f"v8_patent_{cid}")
+  else:
+    shortlist = _dict_to_shortlist(cached["shortlist"])
+    export_info = cached.get("export") or {}
+    if not shortlist.patent_candidates:
+      st.warning("patent source が不足しています。Sources一覧で patent を追加してください。")
+      return
+    _render_shortlist_table(shortlist)
+    st.markdown("#### 選択特許の詳細")
+    _render_shortlist_detail(shortlist, key_prefix="v8_patent_single")
+    st.markdown("#### ダウンロード")
+    _render_downloads(shortlist, export_info, key_prefix="v8_patent_single")
 
+  st.caption("Export Package への同梱は Phase27C 以降の拡張予定。現時点では patent_shortlist_* を個別ダウンロード。")
   st.markdown(
-    render_next_action_box(f"次は「{V8_TAB_LABELS['claim_map']}」で請求項の技術軸整理を確認してください。"),
+    render_next_action_box(
+      f"「{V8_TAB_LABELS['sources']}」に戻るか、「{V8_TAB_LABELS['claim_map']}」で請求項分解（Phase27E）へ進んでください。"
+    ),
     unsafe_allow_html=True,
   )

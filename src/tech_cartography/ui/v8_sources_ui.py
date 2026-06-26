@@ -82,6 +82,8 @@ def render_v8_sources_tab(*, project_root: Path | str) -> None:
       format_func=lambda cid: case_labels[cid],
       key="v8_sources_case_filter",
     )
+  if selected_case != "all":
+    st.session_state[STATE_V8_SELECTED_CASE] = selected_case
   with col2:
     type_filter = st.selectbox(
       "source_type",
@@ -141,6 +143,12 @@ def render_v8_sources_tab(*, project_root: Path | str) -> None:
   m4.metric("web/company", web_company)
   m5.metric("human review", needs_review)
   m6.metric("candidate only", candidate_only_count)
+
+  if patents == 0:
+    st.markdown(
+      render_warning_box("patent source が 0 件です。読むべき特許を作るには patent type の Sources が必要です。"),
+      unsafe_allow_html=True,
+    )
 
   if filtered.warnings:
     for warning in filtered.warnings:

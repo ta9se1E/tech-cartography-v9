@@ -7,7 +7,7 @@
 | はじめに | `v8_intro_ui.py` | ✅ 説明・フロー |
 | 入力 | `v8_input_ui.py` | ✅ session_state 保存 |
 | Sources一覧 | `v8_sources_ui.py` + `v8_sources_repository.py` | ✅ Unified Sources + Export |
-| 読むべき特許 | `v8_patent_shortlist_ui.py` | 🔶 draft Top5 |
+| 読むべき特許 | `v8_patent_shortlist_ui.py` + `v8_patent_shortlist.py` | ✅ Top N heuristic |
 | Claim Map | `v8_claim_map_ui.py` | 🔶 Phase27E 予定表示 |
 | Evidence Map | `v8_evidence_map_ui.py` | 🔶 Phase27F 予定表示 |
 | Gap / Next Actions | `v8_gap_next_actions_ui.py` | ✅ 既存 artifact 閲覧 |
@@ -24,6 +24,16 @@
 - Web/company = candidate information only
 - Sources は Patent Shortlist / Claim Map / Evidence Map の基礎データ
 - Export に定点観測・メール Digest 引き継ぎ note を含む
+
+## Phase27D（読むべき特許 Top N）
+
+- schema: `V8PatentCandidate` / `V8PatentShortlist` / `V8PatentShortlistExport`
+- Unified Sources の `source_type=patent` から案件ごとに Top N（3 / 5 / 10）を heuristic スコアリング
+- **total_score = 読む優先度の暫定スコア**（特許価値・権利価値・有効性・法的判断ではない）
+- claim text not loaded — 請求項・明細書は未読であることを常時明記
+- Export: `outputs/local_v8_patent_shortlists/` に csv / md / xlsx / manifest
+- 次 Phase: **Claim Map**（請求項分解）→ Evidence Map → Gap / Next Actions
+- 定点観測ループ: Top 特許の変化を次回 Digest / Scheduler で追跡する方針
 
 - エントリポイント: `app.py` → `render_v8_user_flow_app`（`APP_UI_VERSION` 未設定時 v8）
 - v7 UI は削除せず `APP_UI_VERSION=v7` で切替

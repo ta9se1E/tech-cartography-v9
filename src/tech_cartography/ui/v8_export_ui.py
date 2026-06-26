@@ -11,6 +11,7 @@ from tech_cartography.services.live_evidence_gap_builder import find_latest_evid
 from tech_cartography.services.live_strategic_watch_brief import find_latest_strategic_watch_brief_path
 from tech_cartography.services.live_weekly_decision_cockpit import find_latest_weekly_decision_cockpit_path
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
+from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
@@ -97,6 +98,29 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
     if pkg.get("excel_warning"):
       st.caption(str(pkg.get("excel_warning")))
 
+  st.markdown("#### Patent Shortlist Export (Phase27D)")
+  st.caption(
+    "Export Package には今後 patent_shortlist.csv / md / xlsx / manifest を同梱する予定です。"
+    " スコアは読む優先度の暫定値であり、特許価値・権利価値・法的判断ではありません。"
+  )
+  shortlist_dir = find_latest_patent_shortlist_dir(
+    None if export_case == "all" else export_case,
+    root,
+  )
+  if shortlist_dir and shortlist_dir.exists():
+    st.caption(f"latest patent shortlist: {shortlist_dir}")
+    for fname, mime in (
+      ("patent_shortlist.csv", "text/csv"),
+      ("patent_shortlist.md", "text/markdown"),
+      ("patent_shortlist.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+      ("patent_shortlist_manifest.json", "application/json"),
+    ):
+      path = shortlist_dir / fname
+      if path.exists():
+        st.download_button(f"Download {fname}", data=path.read_bytes(), file_name=path.name, mime=mime, key=f"v8_export_shortlist_{fname}")
+  else:
+    st.caption("Patent Shortlist は未生成 — 「読むべき特許」タブで Generate してください。")
+
   st.markdown(render_info_box(FIXED_POINT_OBSERVATION_NOTE), unsafe_allow_html=True)
 
   st.markdown("#### 既存 artifact 参照")
@@ -111,7 +135,6 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
 
   st.markdown("#### 今後追加予定")
   for item in (
-    "Patent Shortlist — Phase27D",
     "Claim Map — Phase27E",
     "Evidence Map — Phase27F",
     "Gap / Next Actions",

@@ -101,15 +101,26 @@
 
 ## Phase27D: 読むべき特許 Top N
 
-**目的:** 請求項読了優先順位 Top 5。
+**目的:** Unified Sources から案件ごとに「読むべき特許 Top N」を heuristic で選定。
 
-**追加/修正ファイル候補:**
-- `src/tech_cartography/services/top_patents_ranking.py`
-- `tests/test_top_patents_ranking.py`
+**追加/修正ファイル:**
+- `src/tech_cartography/runtime/v8_patent_shortlist_schema.py`
+- `src/tech_cartography/services/v8_patent_shortlist.py`
+- `src/tech_cartography/services/v8_patent_shortlist_export.py`
+- `src/tech_cartography/ui/v8_patent_shortlist_ui.py`
+- `tests/test_v8_patent_shortlist_*.py`
 
-**完了条件:** case ごとに top_patents.json（最大5件）
+**状態:** ✅ 完了
 
-**テスト観点:** 架空 patent なし、reason フィールドあり
+**完了条件:**
+- 3案件それぞれ Top5（最低 Top3）の patent candidates
+- why_read / next_verification_action / score_breakdown あり
+- スコアは読む優先度の暫定値（FTO/侵害/有効性/法的判断ではない）
+- claim text not loaded 明記
+- Export: csv / md / xlsx / manifest
+- Claim Map（Phase27E）へ接続
+
+**定点観測:** Top 特許の変化を次回 Digest で追跡する方針
 
 **Cloud Build:** 不要
 

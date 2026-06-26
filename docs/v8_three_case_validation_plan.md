@@ -21,6 +21,14 @@ v8 の Claim / Evidence / Gap / 定点観測ループを、**3つの実案件**�
 - Export Package は `outputs/local_v8_export_packages/` に保存
 - Cloud Build はこの Phase では不要
 
+## Phase27D: Patent Shortlist Top N
+
+- `v8_patent_shortlist` が各 case の patent source から Top5（テストは Top3 以上）を生成
+- スコアは **読む優先度の暫定値**（heuristic / draft）— 特許価値・権利価値・有効性判断ではない
+- 3案件検証では各 case Top5 を人手で why_read / next_verification_action と照合
+- 次 Phase: Claim Map で請求項を分解
+- 定点観測: Top 特許リストの差分を次回 Digest に載せる
+
 ## Case 1: PAN 系炭素繊維の前駆体・炭化・黒鉛化
 
 | 項目 | 内容 |

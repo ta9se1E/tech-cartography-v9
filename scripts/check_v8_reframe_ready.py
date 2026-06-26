@@ -110,6 +110,14 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("架空", "fake"),
   ),
   (
+    "phase27d patent shortlist reading priority not legal value",
+    ("読む優先度", "heuristic", "特許価値"),
+  ),
+  (
+    "phase27d claim map connection",
+    ("Claim Map", "Phase27"),
+  ),
+  (
     "cloud build only at milestones",
     ("Cloud Build", "節目"),
   ),
@@ -240,6 +248,62 @@ def main(argv: list[str] | None = None) -> int:
     failures.append(f"v8_export_package missing notice token: {token}")
   if not any("v8_export_package missing" in f for f in failures):
     print("PASS: export package docs mention safety notices")
+
+  phase27d_files = (
+    "src/tech_cartography/runtime/v8_patent_shortlist_schema.py",
+    "src/tech_cartography/services/v8_patent_shortlist.py",
+    "src/tech_cartography/services/v8_patent_shortlist_export.py",
+  )
+  for rel in phase27d_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  shortlist_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_patent_shortlist_ui.py")
+  if "Generate / Refresh Patent Shortlist" in shortlist_ui:
+    print("PASS: v8_patent_shortlist_ui has generate control")
+  else:
+    failures.append("v8_patent_shortlist_ui missing Generate / Refresh Patent Shortlist")
+
+  shortlist_blob = _read(PROJECT_ROOT / "src/tech_cartography/services/v8_patent_shortlist.py")
+  shortlist_schema = _read(PROJECT_ROOT / "src/tech_cartography/runtime/v8_patent_shortlist_schema.py")
+  score_tokens = ("heuristic", "draft", "reading priority", "読む優先度")
+  if any(tok.lower() in (shortlist_blob + shortlist_schema + shortlist_ui).lower() for tok in score_tokens):
+    print("PASS: patent shortlist score labels mention draft/heuristic/reading priority")
+  else:
+    failures.append("patent shortlist missing draft/heuristic/reading priority labels")
+
+  if "patent_shortlist" in export_ui:
+    print("PASS: v8_export_ui references patent_shortlist artifacts")
+  else:
+    failures.append("v8_export_ui missing patent_shortlist references")
+
+  if "読むべき特許" in sources_ui or "patent_shortlist" in sources_ui:
+    print("PASS: v8_sources_ui links to patent shortlist")
+  else:
+    failures.append("v8_sources_ui missing patent shortlist navigation")
+
+  try:
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
+    from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
+
+    for case_id in CASE_IDS:
+      shortlist = build_patent_shortlist(case_id=case_id, top_n=5, project_root=PROJECT_ROOT)
+      if len(shortlist.patent_candidates) >= 3:
+        print(f"PASS: {case_id} produces {len(shortlist.patent_candidates)} patent candidates")
+      else:
+        failures.append(
+          f"{case_id} produces only {len(shortlist.patent_candidates)} patent candidates (need >=3)",
+        )
+  except Exception as exc:
+    failures.append(f"patent shortlist build failed: {exc}")
+
+  legal_forbidden = re.compile(
+    r"(fto\s*clearance|infringement\s*analysis|validity\s*judgement|legal\s*conclusion)",
+    re.IGNORECASE,
+  )
+  for rel in phase27d_files + ("src/tech_cartography/ui/v8_patent_shortlist_ui.py",):
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
 
   import csv as csv_mod
 
