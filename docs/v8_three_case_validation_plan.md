@@ -37,6 +37,14 @@ v8 の Claim / Evidence / Gap / 定点観測ループを、**3つの実案件**�
 - 3案件で Claim Map を生成し、Evidence Map（Phase27F）へ接続
 - 定点観測: Claim Map 軸の変化を次回 Digest で追跡
 
+## Phase27F: Evidence Map v2
+
+- Claim Map + Unified Sources から Evidence Map を生成
+- supporting evidence candidate — 証明ではない
+- claim text required / missing evidence を明示
+- 3案件で Evidence Map 生成 → Gap / Next Actions（Phase27G）へ接続
+- 定点観測: Evidence Gap 変化を次回 Digest で追跡
+
 ## Case 1: PAN 系炭素繊維の前駆体・炭化・黒鉛化
 
 | 項目 | 内容 |

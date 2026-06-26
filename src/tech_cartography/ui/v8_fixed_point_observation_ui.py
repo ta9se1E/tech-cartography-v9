@@ -12,6 +12,7 @@ from tech_cartography.runtime.user_context import resolve_user_context
 from tech_cartography.services.live_evidence_gap_builder import load_latest_evidence_gap_artifact
 from tech_cartography.services.live_run_history import list_run_history_entries
 from tech_cartography.services.live_watch_profile_manager import describe_watch_profile_status, get_active_watch_profile
+from tech_cartography.services.v8_evidence_map_export import find_latest_evidence_map_dir
 from tech_cartography.services.v8_sources_table import load_case_profile
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_warning_box
 from tech_cartography.ui.live_run_history_ui import render_run_history_section
@@ -49,6 +50,24 @@ def render_v8_fixed_point_observation_tab(*, project_root: Path | str) -> None:
   st.caption(f"status: {watch_status.get('watch_profile_status')}")
 
   gap_artifact = load_latest_evidence_gap_artifact(root)
+
+  st.markdown("#### Evidence Map → Watch Profile / Digest 連携")
+  st.markdown(
+    render_info_box(
+      "Evidence Map の不足 Evidence は次回 Watch Profile 更新候補に使います。"
+      " 例: paper evidence 不足 → 論文検索範囲を広げる /"
+      " claim text required → 対象特許の claim 取得を次回タスクにする /"
+      " web/company candidate のみ → 一次情報確認を次回タスクにする。"
+      " メール Digest では Evidence Gap 変化を追跡します（送信はこの Phase では行いません）。"
+    ),
+    unsafe_allow_html=True,
+  )
+  ev_dir = find_latest_evidence_map_dir(case_id or None, root) if case_id else find_latest_evidence_map_dir(None, root)
+  if ev_dir and ev_dir.exists():
+    st.caption(f"latest Evidence Map: {ev_dir}")
+  else:
+    st.caption("Evidence Map 未生成 — 「Evidence Map」タブで Generate してください。")
+
   st.markdown("#### 今回の Evidence Gap（要約）")
   gaps = (gap_artifact or {}).get("evidence_gaps") or []
   if gaps:

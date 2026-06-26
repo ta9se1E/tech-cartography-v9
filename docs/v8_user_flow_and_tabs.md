@@ -9,7 +9,7 @@
 | Sources一覧 | `v8_sources_ui.py` + `v8_sources_repository.py` | ✅ Unified Sources + Export |
 | 読むべき特許 | `v8_patent_shortlist_ui.py` + `v8_patent_shortlist.py` | ✅ Top N heuristic |
 | Claim Map | `v8_claim_map_ui.py` + `v8_claim_map.py` | ✅ Claim Map v1 |
-| Evidence Map | `v8_evidence_map_ui.py` | 🔶 Phase27F 予定表示 |
+| Evidence Map | `v8_evidence_map_ui.py` + `v8_evidence_map.py` | ✅ Evidence Map v2 |
 | Gap / Next Actions | `v8_gap_next_actions_ui.py` | ✅ 既存 artifact 閲覧 |
 | 定点観測 | `v8_fixed_point_observation_ui.py` | ✅ ループ説明 + 導線 |
 | Export | `v8_export_ui.py` | ✅ CSV/MD/Excel/Package |
@@ -45,6 +45,16 @@
 - Export: `outputs/local_v8_claim_maps/` に csv / md / xlsx / manifest
 - 次 Phase: **Evidence Map**（実施例・論文対応）→ Gap / Next Actions
 - 定点観測: Claim Map 軸の変化を次回 Digest で追跡する方針
+
+## Phase27F（Evidence Map v2）
+
+- schema: `V8EvidenceLink` / `V8EvidenceMap` / `V8EvidenceMapExport`
+- Claim Map の technical_axis / evidence_needed と Unified Sources をルールベースで対応付け
+- **supporting evidence candidate** — 証明・確定 Evidence ではない（Evidence Map is not proof）
+- claim text not loaded → `claim_text_required` / missing
+- paper → `paper_support_candidate`（medium_candidate）、web/company → weak_candidate + needs_human_review
+- Export: `outputs/local_v8_evidence_maps/` に csv / md / xlsx / manifest
+- 次 Phase: **Gap / Next Actions** — 定点観測 Digest で Evidence Gap 変化を追跡
 
 - エントリポイント: `app.py` → `render_v8_user_flow_app`（`APP_UI_VERSION` 未設定時 v8）
 - v7 UI は削除せず `APP_UI_VERSION=v7` で切替

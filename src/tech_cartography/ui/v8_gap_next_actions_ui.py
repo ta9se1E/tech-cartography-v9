@@ -19,11 +19,13 @@ from tech_cartography.services.live_weekly_decision_cockpit import (
   build_weekly_decision_cockpit_payload,
   load_latest_weekly_decision_cockpit,
 )
+from tech_cartography.services.v8_evidence_map_export import find_latest_evidence_map_dir
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_warning_box
 from tech_cartography.ui.live_evidence_gap_ui import render_live_evidence_gap_section
 from tech_cartography.ui.live_strategic_watch_brief_ui import render_live_strategic_watch_brief_section
 from tech_cartography.ui.login_ui import can_use_admin_features
-from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
+from tech_cartography.ui.v8_input_ui import get_v8_input_state
+from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_TAB_LABELS
 
 
 def _top_items(items: list[dict[str, Any]], limit: int = 3) -> list[dict[str, Any]]:
@@ -32,6 +34,8 @@ def _top_items(items: list[dict[str, Any]], limit: int = 3) -> list[dict[str, An
 
 def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
+  state = get_v8_input_state()
+  case_id = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
   user_context = resolve_user_context()
   is_admin = can_use_admin_features()
 
@@ -68,6 +72,28 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
     or cockpit_live.get("what_not_to_conclude")
     or []
   )
+
+  st.markdown("#### Evidence Map artifact（Phase27F）")
+  evidence_map_dir = find_latest_evidence_map_dir(case_id or None, root)
+  if evidence_map_dir and evidence_map_dir.exists():
+    st.caption(f"latest evidence map: {evidence_map_dir}")
+    manifest = evidence_map_dir / "evidence_map_manifest.json"
+    if manifest.exists():
+      import json
+      meta = json.loads(manifest.read_text(encoding="utf-8"))
+      st.caption(
+        f"missing_evidence_count={meta.get('missing_evidence_count', 0)} / "
+        f"claim_text_required_count={meta.get('claim_text_required_count', 0)}"
+      )
+    st.markdown(
+      render_info_box(
+        "Evidence Map 由来の Gap は candidate として扱います（supporting evidence candidate / not proof）。"
+        " Phase27G で Gap / Next Actions へ本格連携予定。"
+      ),
+      unsafe_allow_html=True,
+    )
+  else:
+    st.caption("Evidence Map 未生成 — 「Evidence Map」タブで Generate してください。")
 
   st.markdown("#### Evidence Gap Top 3")
   if gaps:

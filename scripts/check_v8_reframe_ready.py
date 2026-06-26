@@ -138,6 +138,18 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("claim text not loaded", "not_loaded"),
   ),
   (
+    "phase27f supporting evidence candidate",
+    ("supporting evidence candidate", "候補"),
+  ),
+  (
+    "phase27f evidence map not proof",
+    ("not proof", "証明"),
+  ),
+  (
+    "phase27f claim text required",
+    ("claim_text_required", "claim text required"),
+  ),
+  (
     "cloud build only at milestones",
     ("Cloud Build", "節目"),
   ),
@@ -384,6 +396,59 @@ def main(argv: list[str] | None = None) -> int:
     failures.append(f"claim map build failed: {exc}")
 
   for rel in phase27e_files + ("src/tech_cartography/ui/v8_claim_map_ui.py",):
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
+
+  phase27f_files = (
+    "src/tech_cartography/runtime/v8_evidence_map_schema.py",
+    "src/tech_cartography/services/v8_evidence_map.py",
+    "src/tech_cartography/services/v8_evidence_map_export.py",
+  )
+  for rel in phase27f_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  evidence_map_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_evidence_map_ui.py")
+  fixed_point_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_fixed_point_observation_ui.py")
+  if "Generate / Refresh Evidence Map" in evidence_map_ui:
+    print("PASS: v8_evidence_map_ui has generate control")
+  else:
+    failures.append("v8_evidence_map_ui missing Generate / Refresh Evidence Map")
+
+  ev_blob = _read(PROJECT_ROOT / "src/tech_cartography/services/v8_evidence_map.py")
+  ev_schema = _read(PROJECT_ROOT / "src/tech_cartography/runtime/v8_evidence_map_schema.py")
+  if "supporting evidence candidate" in (ev_blob + ev_schema + evidence_map_ui).lower():
+    print("PASS: evidence map mentions supporting evidence candidate")
+  else:
+    failures.append("evidence map missing supporting evidence candidate notice")
+
+  if "evidence_map" in export_ui:
+    print("PASS: v8_export_ui references evidence_map artifacts")
+  else:
+    failures.append("v8_export_ui missing evidence_map references")
+
+  if "Evidence Map" in fixed_point_ui and ("Digest" in fixed_point_ui or "Watch Profile" in fixed_point_ui):
+    print("PASS: fixed point observation UI references Evidence Map gaps")
+  else:
+    failures.append("v8_fixed_point_observation_ui missing Evidence Map gap references")
+
+  try:
+    from tech_cartography.services.v8_evidence_map import build_evidence_map
+
+    for case_id in CASE_IDS:
+      emap = build_evidence_map(case_id=case_id, project_root=PROJECT_ROOT)
+      if emap.link_count >= 1:
+        print(f"PASS: {case_id} produces {emap.link_count} evidence map links")
+      else:
+        failures.append(f"{case_id} produces no evidence map links")
+      if emap.claim_text_required_count >= 1:
+        print(f"PASS: {case_id} has claim_text_required_count={emap.claim_text_required_count}")
+      else:
+        failures.append(f"{case_id} missing claim_text_required links")
+  except Exception as exc:
+    failures.append(f"evidence map build failed: {exc}")
+
+  for rel in phase27f_files + ("src/tech_cartography/ui/v8_evidence_map_ui.py",):
     text = _read(PROJECT_ROOT / rel)
     if legal_forbidden.search(text) and "no_legal" not in text.lower():
       failures.append(f"{rel} may claim legal judgement without disclaimer")

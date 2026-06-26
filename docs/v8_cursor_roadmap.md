@@ -151,15 +151,19 @@
 
 ## Phase27F: Evidence Map v2
 
-**目的:** Claim-Evidence 対応の統合。Web Signal は候補ラベル。
+**目的:** Claim Map と Unified Sources の裏付け候補対応表。
 
-**追加/修正ファイル候補:**
-- 既存 Evidence Map 拡張
-- `evidence_map.json` スキーマ
+**追加/修正ファイル:**
+- `src/tech_cartography/runtime/v8_evidence_map_schema.py`
+- `src/tech_cartography/services/v8_evidence_map.py`
+- `src/tech_cartography/services/v8_evidence_map_export.py`
 
-**完了条件:** Web Signal 行に candidate_information_only
+**状態:** ✅ 完了
 
-**テスト観点:** Gap 連携、fake evidence 禁止
+**完了条件:**
+- 3案件で Evidence Map 生成
+- supporting evidence candidate / not proof 明記
+- claim_text_required 対応
 
 **Cloud Build:** 不要
 

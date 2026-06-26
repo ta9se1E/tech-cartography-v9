@@ -272,6 +272,7 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
       render_warning_box(
         f"{claim_map.not_loaded_claim_count} 件は claim text not loaded。"
         " 原典公報から請求項を投入してください。"
+        f" 「{V8_TAB_LABELS['evidence_map']}」で claim_text_required として扱えます。"
       ),
       unsafe_allow_html=True,
     )

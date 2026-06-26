@@ -11,6 +11,7 @@ from tech_cartography.services.live_evidence_gap_builder import find_latest_evid
 from tech_cartography.services.live_strategic_watch_brief import find_latest_strategic_watch_brief_path
 from tech_cartography.services.live_weekly_decision_cockpit import find_latest_weekly_decision_cockpit_path
 from tech_cartography.services.v8_claim_map_export import find_latest_claim_map_dir
+from tech_cartography.services.v8_evidence_map_export import find_latest_evidence_map_dir
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
@@ -151,6 +152,35 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Claim Map は未生成 — 「Claim Map」タブで Generate してください。")
 
+  st.markdown("#### Evidence Map Export (Phase27F)")
+  st.caption(
+    "Export Package には今後 evidence_map.csv / md / xlsx / manifest を同梱する予定です。"
+    " Evidence Map は裏付け候補であり証明ではありません。"
+  )
+  evidence_map_dir = find_latest_evidence_map_dir(
+    None if export_case == "all" else export_case,
+    root,
+  )
+  if evidence_map_dir and evidence_map_dir.exists():
+    st.caption(f"latest evidence map: {evidence_map_dir}")
+    for fname, mime in (
+      ("evidence_map.csv", "text/csv"),
+      ("evidence_map.md", "text/markdown"),
+      ("evidence_map.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+      ("evidence_map_manifest.json", "application/json"),
+    ):
+      path = evidence_map_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_evidence_map_{fname}",
+        )
+  else:
+    st.caption("Evidence Map は未生成 — 「Evidence Map」タブで Generate してください。")
+
   st.markdown(render_info_box(FIXED_POINT_OBSERVATION_NOTE), unsafe_allow_html=True)
 
   st.markdown("#### 既存 artifact 参照")
@@ -165,7 +195,6 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
 
   st.markdown("#### 今後追加予定")
   for item in (
-    "Evidence Map — Phase27F",
     "Gap / Next Actions",
     "Watch Profile update proposal",
   ):
