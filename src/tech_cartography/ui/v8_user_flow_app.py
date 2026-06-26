@@ -20,7 +20,7 @@ from tech_cartography.ui.v8_input_ui import render_v8_input_tab
 from tech_cartography.ui.v8_intro_ui import render_v8_intro_tab
 from tech_cartography.ui.v8_patent_shortlist_ui import render_v8_patent_shortlist_tab
 from tech_cartography.ui.v8_sources_ui import render_v8_sources_tab
-from tech_cartography.ui.v8_tab_config import V8_TAB_IDS, v8_tab_labels
+from tech_cartography.ui.v8_tab_config import V8_STATUS_CAPTION, V8_TAB_IDS, v8_tab_labels
 from tech_cartography.users.watch_profile_store import get_active_watch_profile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -66,6 +66,7 @@ def render_v8_user_flow_app(
     theme_text = str(watch.get("theme", ""))
     watch_label = f"Watch: {theme_text[:40]}…" if len(theme_text) > 40 else f"Watch: {theme_text}"
     st.caption(watch_label)
+    st.caption(V8_STATUS_CAPTION)
 
   tabs = st.tabs(v8_tab_labels())
   for tab_id, tab in zip(V8_TAB_IDS, tabs, strict=True):

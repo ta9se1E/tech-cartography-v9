@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box
-from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
+from tech_cartography.ui.v8_tab_config import V8_STATUS_CAPTION, V8_TAB_LABELS
 
 
 def render_v8_intro_tab() -> None:
@@ -64,7 +64,7 @@ def render_v8_intro_tab() -> None:
     st.markdown(f"{index}. {step}")
 
   st.markdown("#### 現在の開発状態")
-  st.caption("v8 local-first — 3案件検証中（UI骨格 Phase27B、本格分析は Phase27C 以降）")
+  st.caption(V8_STATUS_CAPTION)
 
   st.markdown(
     render_next_action_box(f"次は「{V8_TAB_LABELS['input']}」タブでテーマと案件を選んでください。"),

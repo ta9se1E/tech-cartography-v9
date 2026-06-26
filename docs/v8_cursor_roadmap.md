@@ -237,6 +237,24 @@
 
 ---
 
+## Phase27H.1: 日本語表示・進捗ラベル修正
+
+**目的:** 「次にやること」の1文字分割表示バグを修正し、Phase27H 相当の進捗ラベル・サイドバーを整える。
+
+**追加/修正ファイル候補:**
+- `src/tech_cartography/ui/v8_text_rendering.py`
+- `src/tech_cartography/ui/easy_japanese_ui.py`（`render_next_action_box`）
+- `src/tech_cartography/ui/v8_tab_config.py` / `demo_safe_ui.py`（サイドバー）
+
+**完了条件:**
+- `str` を `render_next_action_box` に渡しても1文字ずつ分解されない
+- 古い「UI骨格 Phase27B」ラベルが消える
+- サイドバーが v8 10タブ構成の進捗を表示
+
+**Cloud Build:** 不要
+
+---
+
 ## Phase27I: 3案件検証
 
 **目的:** 3案件をローカルで end-to-end 検証し checklist を Pass。

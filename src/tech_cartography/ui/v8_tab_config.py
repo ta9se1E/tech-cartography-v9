@@ -90,6 +90,33 @@ STATE_V8_INPUT = "v8_input_state"
 STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
+V8_STATUS_CAPTION = (
+  "v8 local-first — Phase27H: 定点観測ループまで接続済み（次は3案件検証パック）"
+)
+
+V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
+  "1. 入力",
+  "2. Sources一覧",
+  "3. 読むべき特許",
+  "4. Claim Map",
+  "5. Evidence Map",
+  "6. Gap / Next Actions",
+  "7. 定点観測",
+  "8. Export",
+)
+
+V8_SIDEBAR_NEXT_STEP = (
+  "3案件検証パックを作成し、各Caseで一連の出力が揃うか確認する"
+)
+
+
+def v8_sidebar_progress_text() -> str:
+  return "\n".join(V8_SIDEBAR_PROGRESS_LINES)
+
+
+def v8_sidebar_next_steps_text() -> str:
+  return V8_SIDEBAR_NEXT_STEP
+
 
 def v8_tab_labels() -> list[str]:
   return [V8_TAB_LABELS[tab_id] for tab_id in V8_TAB_IDS]

@@ -183,7 +183,17 @@ def _load_final_validation_next_actions(project_root: Path) -> list[str]:
   return [str(a) for a in actions if str(a).strip()]
 
 
+def _is_v8_user_flow_ui() -> bool:
+  import os
+
+  return str(os.environ.get("APP_UI_VERSION", "v8")).strip().lower() != "v7"
+
+
 def sidebar_progress_text(ui_mode: str, *, project_root: Path | None = None) -> str:
+  if _is_v8_user_flow_ui():
+    from tech_cartography.ui.v8_tab_config import v8_sidebar_progress_text
+
+    return v8_sidebar_progress_text()
   if ui_mode == UI_MODE_DEMO:
     return "デモ表示中（US-12565719-B2 成果物）"
   if ui_mode == UI_MODE_ANALYST:
@@ -201,6 +211,10 @@ def sidebar_progress_text(ui_mode: str, *, project_root: Path | None = None) -> 
 
 
 def sidebar_next_steps_text(ui_mode: str, *, project_root: Path) -> str:
+  if _is_v8_user_flow_ui():
+    from tech_cartography.ui.v8_tab_config import v8_sidebar_next_steps_text
+
+    return v8_sidebar_next_steps_text()
   if ui_mode == UI_MODE_DEMO:
     return "はじめる → 技術の裏取り → 企業・市場シグナル → レポート"
   if ui_mode == UI_MODE_ANALYST:

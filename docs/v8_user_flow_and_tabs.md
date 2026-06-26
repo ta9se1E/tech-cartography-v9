@@ -78,6 +78,14 @@
 - Export: `outputs/local_v8_fixed_point_observation/` に json / md / xlsx / manifest
 - 次 Phase: **3案件検証** — ローカル end-to-end checklist（Cloud Build は不要）
 
+## Phase27H.1（日本語表示・進捗ラベル修正）
+
+- `render_next_action_box` に `str` を渡した際の1文字分割表示バグを修正
+- `v8_text_rendering.py` で `normalize_text_items` / `render_next_action_card` を共通化
+- 進捗ラベルを Phase27H 相当に更新（定点観測ループまで接続済み）
+- サイドバーの「現在の進捗」「次にやること」を v8 10タブ構成に整理
+- 次 Phase: **Phase27I** — 3案件ローカル検証パック
+
 - エントリポイント: `app.py` → `render_v8_user_flow_app`（`APP_UI_VERSION` 未設定時 v8）
 - v7 UI は削除せず `APP_UI_VERSION=v7` で切替
 - メール送信・Scheduler は削除せず、定点観測タブで必須機能として説明、詳細は管理者設定へ

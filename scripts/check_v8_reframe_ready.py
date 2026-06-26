@@ -190,6 +190,10 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("起動しない", "no_scheduler_start"),
   ),
   (
+    "phase27h.1 japanese text rendering fix",
+    ("Phase27H.1", "1文字"),
+  ),
+  (
     "cloud build only at milestones",
     ("Cloud Build", "節目"),
   ),
@@ -670,6 +674,51 @@ def main(argv: list[str] | None = None) -> int:
     text = _read(PROJECT_ROOT / rel)
     if legal_forbidden.search(text) and "no_legal" not in text.lower():
       failures.append(f"{rel} may claim legal judgement without disclaimer")
+
+  _check_file_exists(PROJECT_ROOT / "src/tech_cartography/ui/v8_text_rendering.py", failures)
+
+  text_rendering = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_text_rendering.py")
+  easy_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/easy_japanese_ui.py")
+  intro_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_intro_ui.py")
+  tab_config = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_tab_config.py")
+  demo_safe = _read(PROJECT_ROOT / "src/tech_cartography/ui/demo_safe_ui.py")
+
+  if "normalize_text_items" in text_rendering:
+    print("PASS: v8 text rendering guard exists")
+  else:
+    failures.append("v8_text_rendering missing normalize_text_items")
+
+  sample = "次は「入力」タブでテーマと案件を選んでください。"
+  if "normalize_text_items" in easy_ui:
+    print("PASS: easy_japanese_ui uses normalize_text_items for next action box")
+  else:
+    failures.append("easy_japanese_ui missing normalize_text_items in render_next_action_box")
+
+  try:
+    from tech_cartography.ui.v8_text_rendering import normalize_text_items
+
+    items = normalize_text_items(sample)
+    if len(items) == 1 and items[0] == sample:
+      print("PASS: Japanese next action text is not split character-by-character")
+    else:
+      failures.append("normalize_text_items splits string incorrectly")
+  except Exception as exc:
+    failures.append(f"v8_text_rendering import failed: {exc}")
+
+  if "UI骨格 Phase27B" not in intro_ui and "UI骨格 Phase27B" not in tab_config:
+    print("PASS: stale Phase27B label removed from v8 intro/config")
+  else:
+    failures.append("stale Phase27B label remains in v8 UI")
+
+  if "Phase27H" in tab_config and "定点観測" in tab_config:
+    print("PASS: current label mentions Phase27H / fixed point observation")
+  else:
+    failures.append("v8_tab_config missing Phase27H status caption")
+
+  if "v8_sidebar_progress_text" in demo_safe and "_is_v8_user_flow_ui" in demo_safe:
+    print("PASS: v8 sidebar mentions v8 flow")
+  else:
+    failures.append("demo_safe_ui missing v8 sidebar flow")
 
   fake_doi_re = re.compile(r"10\.(0000|1234)/|example\.com|fake-doi|placeholder", re.IGNORECASE)
   import csv as csv_mod

@@ -238,9 +238,12 @@ def render_ok_box(text: str) -> str:
   return f'<div class="tc-ok-box">{text}</div>'
 
 
-def render_next_action_box(actions: list[str]) -> str:
-  items = "".join(f"<li>{_safe(action)}</li>" for action in actions if action)
-  return f'<div class="tc-card-box"><b>次にやること</b><ul>{items or "<li>実行結果を読み込んでください。</li>"}</ul></div>'
+def render_next_action_box(actions: str | list[str] | tuple[str, ...] | None) -> str:
+  from tech_cartography.ui.v8_text_rendering import normalize_text_items
+
+  items = normalize_text_items(actions)
+  item_html = "".join(f"<li>{_safe(action)}</li>" for action in items)
+  return f'<div class="tc-card-box"><b>次にやること</b><ul>{item_html or "<li>実行結果を読み込んでください。</li>"}</ul></div>'
 
 
 def _coerce_mapping(value: Any) -> dict[str, Any]:
