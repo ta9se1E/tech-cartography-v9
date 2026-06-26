@@ -124,9 +124,12 @@ def _render_top_actions(actions: list[V8NextVerificationAction]) -> None:
       st.markdown(f"**email_digest_hint:** {action.email_digest_hint}")
 
 
-def _render_gap_table(gaps: list[V8EvidenceGapRecord]) -> None:
+def _render_gap_table(gaps: list[V8EvidenceGapRecord], *, artifact_generated: bool = True) -> None:
   if not gaps:
-    st.caption("Gap はありません。")
+    if artifact_generated:
+      st.caption("Gap は0件です（artifact 生成済み — true zero）。")
+    else:
+      st.caption("Gap artifact は未生成です — これは0件ではなく artifact missing です。")
     return
   rows = [
     {
@@ -153,6 +156,7 @@ def _render_single_report(
   _render_metrics(report)
 
   st.caption("artifact missing と true zero を区別 — Gap artifact 未生成時は gap_count=0 と表示しません")
+  refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
   if isinstance(refresh_cached, dict):
     rpt = refresh_cached.get("report") or {}
     if rpt.get("case_id") == report.case_id:
@@ -168,6 +172,8 @@ def _render_single_report(
           ),
           unsafe_allow_html=True,
         )
+  else:
+    st.caption("Manual Claim Refresh 結果はまだありません — Claim Map タブで保存後 refresh してください。")
 
   st.markdown("#### Top 3 Next Actions")
   _render_top_actions(report.top_3_actions)
