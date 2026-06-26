@@ -206,6 +206,18 @@ def render_v8_fixed_point_observation_tab(*, project_root: Path | str) -> None:
   st.markdown("### 定点観測ループ")
   st.markdown(
     render_info_box(
+      "<strong>定点観測で回る流れ (Phase27L)</strong><br>"
+      "1. 今回の Top5 深掘り結果<br>"
+      "2. 今回の Evidence Gap（未確認事項）<br>"
+      "3. 次回 Watch Profile 更新案（人手承認後）<br>"
+      "4. Scheduler Follow-up Plan（no_scheduler_start=true）<br>"
+      "5. Email Digest Plan（no_email_send=true）<br>"
+      "メール送信と Scheduler は必須機能として残しますが、本 Phase では実行しません。"
+    ),
+    unsafe_allow_html=True,
+  )
+  st.markdown(
+    render_info_box(
       "<strong>メール送信</strong>と<strong>Scheduler</strong>は定点観測の必須機能です（デフォルト OFF、機能は保持）。"
       " 本タブでは計画・提案・プレビューのみ — 送信・起動はしません。"
       f" SMTP / Scheduler 本番設定は「{V8_TAB_LABELS['admin_settings']}」へ。"

@@ -132,6 +132,19 @@
 - Export: **Manual Claim Refresh Pack** — `outputs/local_v8_manual_claim_refresh/`
 - CLI: `scripts/run_v8_manual_claim_refresh.py`
 
+## Phase27L（Evidence Map / Gap Demo Polish）
+
+- schema: `V8EvidenceDemoStatus` / `V8GapDemoStatus` / `V8DemoStoryCard` / `V8DemoPolishReport`
+- services: `v8_demo_polish.py` / `v8_demo_polish_export.py`
+- **Evidence Map is not proof** — paper / web / company は supporting evidence candidate
+- **Gap is not invalidity / weakness** — 未確認事項として Top 3 Next Actions を整理
+- claim 本文未投入 → `claim_text_required` / 手動投入済み → Evidence Map 具体化（candidate のみ）
+- 実施例本文・論文本文を読んだことにはしない
+- はじめにタブ: 推奨デモ操作手順（1000件 → Top5 → Claim → Evidence → Gap → 定点観測 → Export）
+- Export: **Demo Polish Pack** — `outputs/local_v8_demo_polish/`
+- CLI: `scripts/run_v8_demo_polish_pack.py`
+- 次 Phase: **Phase27M** UI最終調整 / **Phase27N** Cloud Run v8反映準備 / **Phase27O** Cloud Run v8反映
+
 ## Phase27J（Manual Claim Injection — 初期実装）
 
 - schema: `V8ManualClaimInjectionRequest` / `V8ManualClaimInjectionResult` / `V8ManualClaimRefreshReport`

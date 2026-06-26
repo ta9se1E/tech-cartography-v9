@@ -360,6 +360,23 @@
 
 ---
 
+## Phase27L: Evidence Map / Gap Demo Polish
+
+**目的:** Evidence Map / Gap / Next Actions をデモで見せやすい形に磨き込む。
+
+**状態:** ✅ 完了
+
+**完了条件:**
+- Demo Polish Pack（json/md/csv/manifest）出力
+- Evidence Map is not proof / supporting evidence candidate 表示
+- Gap is not invalidity / weakness 表示
+- Top 3 Next Actions カード表示
+- はじめにタブにデモ操作手順
+
+**Cloud Build:** 不要
+
+---
+
 ## Phase27J: Manual Claim Text Injection
 
 **目的:** ユーザーが一次情報から取得した実 claim 本文を手動投入し、Evidence Map の見え方を改善する。

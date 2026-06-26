@@ -19,6 +19,8 @@ from tech_cartography.services.v8_claim_map_export import find_latest_claim_map_
 from tech_cartography.services.v8_evidence_map_export import find_latest_evidence_map_dir
 from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
 from tech_cartography.services.v8_fixed_point_observation_export import find_latest_fixed_point_observation_dir
+from tech_cartography.services.v8_demo_polish import build_demo_polish_report
+from tech_cartography.services.v8_demo_polish_export import export_demo_polish, find_latest_demo_polish_dir
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
 from tech_cartography.services.v8_large_candidate_shortlist import find_latest_large_shortlist_dir
 from tech_cartography.services.v8_manual_claim_refresh_export import find_latest_manual_claim_refresh_dir
@@ -333,6 +335,69 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Large Candidate Pack 未生成 — 入力タブで取り込み後、読むべき特許で Top5 を生成してください。")
 
+  st.markdown("#### Demo Polish Pack (Phase27L)")
+  st.caption(
+    "Evidence Map / Gap / Next Actions をデモ向けに要約。"
+    " Evidence Map is not proof / Gap is not invalidity / weakness。"
+    " Cloud Build / メール送信 / Scheduler 起動は行いません。"
+  )
+  polish_case = export_case if export_case != "all" else V8_CASE_SAMPLES[0]["case_id"]
+  if st.button("Generate Demo Polish Pack", key="v8_export_demo_polish", type="primary"):
+    report = build_demo_polish_report(case_id=polish_case, project_root=root)
+    export_result = export_demo_polish(report, project_root=root)
+    st.session_state["v8_last_demo_polish"] = {
+      "report": report.to_dict(),
+      "export": export_result.to_dict(),
+    }
+    st.success("Demo Polish Pack を生成しました。")
+
+  cached_polish = st.session_state.get("v8_last_demo_polish")
+  polish_dir = find_latest_demo_polish_dir(
+    None if export_case == "all" else export_case,
+    root,
+  )
+  if isinstance(cached_polish, dict):
+    report = cached_polish.get("report") or {}
+    export_info = cached_polish.get("export") or {}
+    ev = report.get("evidence_demo_status") or {}
+    gap = report.get("gap_demo_status") or {}
+    st.markdown(f"- **case_id**: {report.get('case_id', '—')}")
+    st.markdown(f"- **publication_number**: {report.get('publication_number', '—')}")
+    st.markdown(f"- **claim_text_required_count**: {ev.get('claim_text_required_count', '—')}")
+    st.markdown(f"- **manual_claim_count**: {ev.get('manual_claim_count', '—')}")
+    st.markdown(f"- **evidence_link_count**: {ev.get('evidence_link_count', '—')}")
+    st.markdown(f"- **gap_count**: {gap.get('gap_count', '—')}")
+    for action in (gap.get("top_3_next_actions") or [])[:3]:
+      st.caption(f"next: {action}")
+    for lim in (report.get("remaining_limitations") or [])[:5]:
+      st.caption(f"limitation: {lim}")
+    dl_dir = Path(str(export_info.get("output_dir", "")))
+  elif polish_dir and polish_dir.exists():
+    st.caption(f"latest demo polish: {polish_dir}")
+    dl_dir = polish_dir
+  else:
+    st.caption("Demo Polish Pack 未生成 — Generate ボタンを押してください。")
+    dl_dir = None
+
+  if dl_dir and dl_dir.exists():
+    for fname, mime in (
+      ("demo_polish_report.md", "text/markdown"),
+      ("demo_polish_report.json", "application/json"),
+      ("demo_story_cards.csv", "text/csv"),
+      ("demo_narrative.md", "text/markdown"),
+      ("demo_caveats.md", "text/markdown"),
+      ("demo_polish_manifest.json", "application/json"),
+    ):
+      path = dl_dir / fname
+      if path.exists():
+        st.download_button(
+          f"Download {fname}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime=mime,
+          key=f"v8_export_dp_{fname}",
+        )
+
   st.markdown("#### Manual Claim Refresh Pack (Phase27K)")
   st.caption(
     "claim 本文はユーザー提供のみ。システムは生成しません。"
@@ -441,6 +506,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   _artifact_link(find_latest_fixed_point_observation_dir(None if export_case == "all" else export_case, root))
   _artifact_link(find_latest_validation_pack_dir(root))
   _artifact_link(find_latest_manual_claim_refresh_dir(root))
+  _artifact_link(find_latest_demo_polish_dir(None if export_case == "all" else export_case, root))
   _artifact_link(find_latest_large_shortlist_dir(None if export_case == "all" else export_case, root))
   brief_path = find_latest_strategic_watch_brief_path(root)
   _artifact_link(brief_path)

@@ -68,22 +68,38 @@ def _report_from_dict(data: dict[str, Any]) -> V8GapNextActionsReport:
 
 
 def _render_metrics(report: V8GapNextActionsReport) -> None:
-  c1, c2, c3, c4, c5 = st.columns(5)
+  review_count = sum(1 for g in report.gaps if g.human_review_required)
+  c1, c2, c3, c4 = st.columns(4)
   c1.metric("gap_count", report.gap_count)
-  c2.metric("action_count", report.action_count)
-  c3.metric("claim_text_required", report.count_by_gap_type.get("claim_text_required", 0))
-  c4.metric("example_support_missing", report.count_by_gap_type.get("example_support_missing", 0))
-  c5.metric("paper_support_missing", report.count_by_gap_type.get("paper_support_missing", 0))
-  c6, c7, c8 = st.columns(3)
-  c6.metric("web_or_company_only", report.count_by_gap_type.get("web_or_company_only", 0))
-  c7.metric("needs_human_review", sum(1 for g in report.gaps if g.human_review_required))
-  c8.metric("source_url_missing", report.count_by_gap_type.get("source_url_missing", 0))
+  c2.metric("claim_text_required", report.count_by_gap_type.get("claim_text_required", 0))
+  c3.metric("example_support_missing", report.count_by_gap_type.get("example_support_missing", 0))
+  c4.metric("paper_support_missing", report.count_by_gap_type.get("paper_support_missing", 0))
+  c5, c6 = st.columns(2)
+  c5.metric("web_or_company_only", report.count_by_gap_type.get("web_or_company_only", 0))
+  c6.metric("needs_human_review", review_count)
+
+
+def _render_top_action_cards(actions: list[V8NextVerificationAction]) -> None:
+  if not actions:
+    st.caption("Top 3 Next Actions は未生成です。")
+    return
+  for action in actions[:3]:
+    st.markdown(
+      render_info_box(
+        f"<strong>#{action.action_rank} {action.action_title}</strong><br>"
+        f"type: {action.action_type} / effort: {action.estimated_effort_label} / "
+        f"owner: {action.owner_suggestion}<br>"
+        f"expected_output: {action.expected_output}"
+      ),
+      unsafe_allow_html=True,
+    )
 
 
 def _render_top_actions(actions: list[V8NextVerificationAction]) -> None:
   if not actions:
     st.caption("Top 3 Next Actions は未生成です。")
     return
+  _render_top_action_cards(actions)
   rows = [
     {
       "rank": a.action_rank,
@@ -154,6 +170,20 @@ def _render_single_report(
 
   st.markdown("#### Top 3 Next Actions")
   _render_top_actions(report.top_3_actions)
+
+  st.markdown("#### Remaining Limitations")
+  limitations: list[str] = []
+  if report.count_by_gap_type.get("claim_text_required", 0) > 0:
+    limitations.append("claim 本文未取得 — claim_text_required")
+  if report.count_by_gap_type.get("example_support_missing", 0) > 0:
+    limitations.append("特許実施例の人手確認が必要（本文は未読）")
+  if report.count_by_gap_type.get("paper_support_missing", 0) > 0:
+    limitations.append("論文 Evidence の人手確認が必要（本文は未読）")
+  if not limitations:
+    limitations.append("大きな blocking gap なし — candidate は proof ではない")
+  for lim in limitations:
+    st.caption(f"- {lim}")
+
   st.markdown("#### Gap table")
   _render_gap_table(report.gaps)
 
@@ -224,8 +254,18 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
 
   st.markdown("### Gap / Next Actions")
   st.markdown(
+    render_info_box(
+      "<strong>Gapの見方 (Phase27L)</strong><br>"
+      "• Gap は<strong>未確認事項</strong> — Gap is not invalidity / weakness / infringement。<br>"
+      "• Next Action は人間の確認作業 — 法的判断ではありません。<br>"
+      "• claim 投入前: claim本文取得 → 投入後: 実施例確認 / paper確認 へ進む場合があります。<br>"
+      "• 実施例本文・論文本文を読んだことにはしません。"
+    ),
+    unsafe_allow_html=True,
+  )
+  st.markdown(
     render_caution_box(
-      "<strong>Gap は未確認事項であり、特許の弱点・無効性・侵害可能性ではありません。</strong> "
+      "<strong>Gap は特許の弱点ではなく、次に確認すべき未確認事項です。</strong> "
       "Next Action は人間が次に確認する技術調査タスクであり、法的判断ではありません。"
       " candidate information only / human review required。"
       " FTO、侵害、有効性判断ではありません。"
@@ -354,7 +394,8 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
 
   st.markdown(
     render_next_action_box(
-      f"「{V8_TAB_LABELS['fixed_point_observation']}」で定点観測ループ（Phase27H）へ進んでください。"
+      f"次: 「{V8_TAB_LABELS['fixed_point_observation']}」で定点観測ループを確認。"
+      " 次回タスク / Digest 計画 / Scheduler plan（no_email_send / no_scheduler_start）へ進んでください。"
     ),
     unsafe_allow_html=True,
   )

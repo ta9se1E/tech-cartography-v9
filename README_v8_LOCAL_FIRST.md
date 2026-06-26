@@ -84,6 +84,23 @@ conda run -n 2026hack python scripts/run_v8_manual_claim_refresh.py \
 
 **次 Phase:** Phase27L（Evidence polish）→ Phase27M（UI）→ Phase27N（Cloud Run）
 
+## Phase27L — Evidence Map / Gap Demo Polish
+
+Evidence Map / Gap / Next Actions をデモ向けに要約し、**Demo Polish Pack** を出力します。
+
+```bash
+conda run -n 2026hack python scripts/run_v8_demo_polish_pack.py \
+  --case-id case_01_pan_graphitization
+```
+
+- **Evidence Map is not proof** — paper / web / company は supporting evidence candidate
+- **Gap is not invalidity / weakness** — 未確認事項として Top 3 Next Actions を整理
+- claim 本文未投入 → `claim_text_required` / 手動投入済み → Evidence Map 具体化
+- 実施例本文・論文本文を読んだことにはしない
+- 出力: `outputs/local_v8_demo_polish/`
+
+**次 Phase:** Phase27M（UI最終調整）→ Phase27N（Cloud Run v8反映準備）→ Phase27O（Cloud Run v8反映）
+
 ## Phase27J — Manual Claim Injection
 
 claim 本文は **ユーザーが一次情報からコピーしたもののみ** を Claim Map タブで投入します。システムは生成しません。

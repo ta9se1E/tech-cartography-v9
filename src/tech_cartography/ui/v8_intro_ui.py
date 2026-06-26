@@ -64,7 +64,30 @@ def render_v8_intro_tab() -> None:
   for index, step in enumerate(flow, start=1):
     st.markdown(f"{index}. {step}")
 
-  st.markdown("#### Phase27J — Manual Claim Injection")
+  st.markdown("#### Phase27L — 推奨デモ操作手順")
+  demo_steps = [
+    "入力タブで 1000件候補 CSV を取り込む",
+    "Sources一覧で母集団を見る",
+    "読むべき特許で Top100 → Top20 → Top5 を見る",
+    "Claim Map で Top5 の claim 本文状態を見る",
+    "必要なら claim 本文を手動投入する",
+    "Evidence Map で supporting evidence candidate を見る",
+    "Gap / Next Actions で未確認事項と次アクションを見る",
+    "定点観測で次回タスクと Digest 計画を見る",
+    "Export で Demo Polish Pack を出す",
+  ]
+  for index, step in enumerate(demo_steps, start=1):
+    st.markdown(f"{index}. {step}")
+  st.markdown(
+    render_info_box(
+      "Evidence Map is not proof — paper / web / company は candidate です。"
+      " Gap is not invalidity / weakness — 未確認事項です。"
+      " claim 本文はユーザー提供のみ（自動生成しません）。"
+    ),
+    unsafe_allow_html=True,
+  )
+
+  st.markdown("#### Phase27K — Manual Claim Injection")
   st.markdown(
     render_info_box(
       "<strong>claim 本文はユーザーが一次情報からコピーしたもののみ</strong>を投入します。"
@@ -92,7 +115,8 @@ def render_v8_intro_tab() -> None:
   st.markdown(
     render_next_action_card(
       "次にやること",
-      f"「{V8_TAB_LABELS['claim_map']}」タブで実 claim 本文を手動投入してください。",
+      f"「{V8_TAB_LABELS['evidence_map']}」→「{V8_TAB_LABELS['gap_next_actions']}」→"
+      f"「{V8_TAB_LABELS['export']}」の順でデモ操作を確認してください。",
     ),
     unsafe_allow_html=True,
   )

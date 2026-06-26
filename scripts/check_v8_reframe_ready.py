@@ -281,6 +281,22 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
     "phase27k no legal judgement",
     ("FTO", "侵害"),
   ),
+  (
+    "phase27l evidence map is not proof",
+    ("Evidence Map is not proof", "supporting evidence candidate"),
+  ),
+  (
+    "phase27l gap is not invalidity",
+    ("Gap is not invalidity", "weakness"),
+  ),
+  (
+    "phase27l demo operation flow",
+    ("Phase27L", "デモ操作"),
+  ),
+  (
+    "phase27l demo polish pack",
+    ("Demo Polish Pack", "Phase27L"),
+  ),
 )
 
 
@@ -868,6 +884,70 @@ def main(argv: list[str] | None = None) -> int:
     if legal_forbidden.search(text) and "no_legal" not in text.lower():
       failures.append(f"{rel} may claim legal judgement without disclaimer")
 
+  phase27l_files = (
+    "src/tech_cartography/runtime/v8_demo_polish_schema.py",
+    "src/tech_cartography/services/v8_demo_polish.py",
+    "src/tech_cartography/services/v8_demo_polish_export.py",
+    "scripts/run_v8_demo_polish_pack.py",
+  )
+  for rel in phase27l_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  evidence_map_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_evidence_map_ui.py")
+  gap_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_gap_next_actions_ui.py")
+  fp_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_fixed_point_observation_ui.py")
+
+  if "Evidence Map is not proof" in evidence_map_ui:
+    print("PASS: v8_evidence_map_ui references Evidence Map is not proof")
+  else:
+    failures.append("v8_evidence_map_ui missing Evidence Map is not proof")
+
+  if "supporting evidence candidate" in evidence_map_ui.lower():
+    print("PASS: v8_evidence_map_ui references supporting evidence candidate")
+  else:
+    failures.append("v8_evidence_map_ui missing supporting evidence candidate")
+
+  if "Gap is not invalidity" in gap_ui or "弱点ではなく" in gap_ui:
+    print("PASS: v8_gap_next_actions_ui references Gap is not invalidity / weakness")
+  else:
+    failures.append("v8_gap_next_actions_ui missing Gap is not invalidity / weakness")
+
+  if "no_email_send" in fp_ui and "no_scheduler_start" in fp_ui:
+    print("PASS: v8_fixed_point_observation_ui references no_email_send / no_scheduler_start")
+  else:
+    failures.append("v8_fixed_point_observation_ui missing no_email_send / no_scheduler_start")
+
+  if "Demo Polish Pack" in export_ui:
+    print("PASS: v8_export_ui references Demo Polish Pack")
+  else:
+    failures.append("v8_export_ui missing Demo Polish Pack section")
+
+  intro_ui_early = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_intro_ui.py")
+  if "Phase27L" in intro_ui_early and "デモ操作" in intro_ui_early:
+    print("PASS: v8_intro_ui references demo operation flow")
+  else:
+    failures.append("v8_intro_ui missing demo operation flow")
+
+  try:
+    from tech_cartography.services.v8_demo_polish import build_demo_polish_report
+
+    report = build_demo_polish_report(case_id=CASE_IDS[0], project_root=PROJECT_ROOT)
+    if report.demo_narrative.strip():
+      print("PASS: demo polish report has non-empty narrative")
+    else:
+      failures.append("demo polish narrative is empty")
+    if report.evidence_demo_status and report.evidence_demo_status.claim_text_required_count >= 0:
+      print("PASS: demo polish claim_text_required_count available")
+    else:
+      failures.append("demo polish missing claim_text_required_count")
+  except Exception as exc:
+    failures.append(f"demo polish service failed: {exc}")
+
+  for rel in phase27l_files:
+    text = _read(PROJECT_ROOT / rel)
+    if legal_forbidden.search(text) and "no_legal" not in text.lower():
+      failures.append(f"{rel} may claim legal judgement without disclaimer")
+
   phase27j0_files = (
     "src/tech_cartography/runtime/v8_large_candidate_schema.py",
     "src/tech_cartography/services/v8_large_candidate_import.py",
@@ -985,8 +1065,8 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("stale Phase27B label remains in v8 UI")
 
-  if "Phase27I" in tab_config and ("3案件" in tab_config or "検証パック" in tab_config):
-    print("PASS: current label mentions Phase27I / three case validation pack")
+  if "Phase27L" in tab_config and ("Demo Polish" in tab_config or "demo polish" in tab_config.lower()):
+    print("PASS: current label mentions Phase27L / demo polish")
   elif "Phase27K" in tab_config and "Manual Claim" in tab_config:
     print("PASS: current label mentions Phase27K / manual claim injection")
   elif "Phase27J.1" in tab_config and ("Ranking" in tab_config or "ranking" in tab_config.lower()):
@@ -995,10 +1075,12 @@ def main(argv: list[str] | None = None) -> int:
     print("PASS: current label mentions Phase27J.0 / large candidate")
   elif "Phase27J" in tab_config and "Manual Claim" in tab_config:
     print("PASS: current label mentions Phase27J / manual claim injection")
+  elif "Phase27I" in tab_config and ("3案件" in tab_config or "検証パック" in tab_config):
+    print("PASS: current label mentions Phase27I / three case validation pack")
   elif "Phase27H" in tab_config and "定点観測" in tab_config:
     print("PASS: current label mentions Phase27H / fixed point observation")
   else:
-    failures.append("v8_tab_config missing Phase27I or Phase27H status caption")
+    failures.append("v8_tab_config missing Phase27L or Phase27H status caption")
 
   if "v8_sidebar_progress_text" in demo_safe and "_is_v8_user_flow_ui" in demo_safe:
     print("PASS: v8 sidebar mentions v8 flow")

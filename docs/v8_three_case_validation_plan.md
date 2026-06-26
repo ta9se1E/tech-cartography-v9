@@ -160,7 +160,15 @@ conda run -n 2026hack python scripts/run_v8_large_candidate_shortlist.py \
 - score は読む優先度であり、技術的正しさ・特許価値・法的価値ではない
 - 1000件全件 Deep Dive しない
 
-**次 Phase:** Phase27L（Evidence polish）→ Phase27M（UI）→ Phase27N（Cloud Run）
+**次 Phase:** Phase27M（UI）→ Phase27N（Cloud Run）
+
+## Phase27L: Evidence Map / Gap Demo Polish
+
+- Evidence Map is not proof — supporting evidence candidate のみ
+- Gap is not invalidity / weakness — 未確認事項
+- claim 投入済み → Evidence Map 具体化（candidate 扱いは維持）
+- Demo Polish Pack: `scripts/run_v8_demo_polish_pack.py`
+- はじめにタブ: 推奨デモ操作手順
 
 ## Phase27K: Manual Claim Injection and Refresh
 

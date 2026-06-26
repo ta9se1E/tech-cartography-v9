@@ -77,20 +77,85 @@ def _apply_filters(links: list[V8EvidenceLink], *, filters: dict[str, str]) -> l
   return result
 
 
+def _count_manual_claims(links: list[V8EvidenceLink]) -> int:
+  return sum(
+    1 for l in links
+    if l.claim_text_status in {"manual_input", "loaded", "csv_imported", "artifact_imported"}
+  )
+
+
+def _claim_status_summary(links: list[V8EvidenceLink]) -> dict[str, int]:
+  counts: dict[str, int] = {"not_loaded": 0, "manual_input": 0, "loaded": 0, "other": 0}
+  for link in links:
+    status = link.claim_text_status
+    if status == "not_loaded":
+      counts["not_loaded"] += 1
+    elif status == "manual_input":
+      counts["manual_input"] += 1
+    elif status in {"loaded", "csv_imported", "artifact_imported"}:
+      counts["loaded"] += 1
+    else:
+      counts["other"] += 1
+  return counts
+
+
+def _render_how_to_read_card() -> None:
+  st.markdown(
+    render_info_box(
+      "<strong>Evidence Mapの見方 (Phase27L)</strong><br>"
+      "• 1000件母集団から Top5 のみ Deep Dive しています。<br>"
+      "• claim 本文未投入 → <strong>claim_text_required</strong>（深掘り不足）。<br>"
+      "• claim 手動投入済み → Claim Map / Evidence Map が具体化します。<br>"
+      "• paper / web / company は <strong>supporting evidence candidate</strong> — "
+      "<strong>Evidence Map is not proof</strong>。<br>"
+      "• 実施例本文・論文本文を読んだことにはしません。"
+    ),
+    unsafe_allow_html=True,
+  )
+
+
 def _render_metrics(evidence_map: V8EvidenceMap) -> None:
-  paper_count = sum(1 for l in evidence_map.links if l.support_type == "paper_support_candidate")
-  web_company = sum(
+  paper_count = sum(
     1 for l in evidence_map.links
-    if l.support_type in {"web_signal_candidate", "company_signal_candidate"}
+    if l.support_type == "paper_support_candidate" or l.source_type == "paper"
+  )
+  web_count = sum(
+    1 for l in evidence_map.links
+    if l.support_type == "web_signal_candidate" or l.source_type == "web"
+  )
+  company_count = sum(
+    1 for l in evidence_map.links
+    if l.support_type == "company_signal_candidate" or l.source_type == "company"
   )
   review_count = sum(1 for l in evidence_map.links if l.human_review_required)
-  c1, c2, c3, c4, c5, c6 = st.columns(6)
-  c1.metric("links", evidence_map.link_count)
-  c2.metric("missing", evidence_map.missing_evidence_count)
-  c3.metric("claim_text_req", evidence_map.claim_text_required_count)
-  c4.metric("paper_candidate", paper_count)
-  c5.metric("web/company", web_company)
-  c6.metric("needs_review", review_count)
+  manual_count = _count_manual_claims(evidence_map.links)
+  c1, c2, c3, c4 = st.columns(4)
+  c1.metric("claim_text_required", evidence_map.claim_text_required_count)
+  c2.metric("manual_claim_count", manual_count)
+  c3.metric("evidence_link_count", evidence_map.link_count)
+  c4.metric("missing_evidence", evidence_map.missing_evidence_count)
+  c5, c6, c7, c8 = st.columns(4)
+  c5.metric("paper_candidate", paper_count)
+  c6.metric("web_candidate", web_count)
+  c7.metric("company_candidate", company_count)
+  c8.metric("needs_human_review", review_count)
+
+
+def _render_aggregation_chips(evidence_map: V8EvidenceMap) -> None:
+  status = _claim_status_summary(evidence_map.links)
+  st.markdown("**claim status summary:**")
+  st.caption(
+    f"not_loaded={status['not_loaded']} / manual_input={status['manual_input']} / "
+    f"loaded={status['loaded']}"
+  )
+  if evidence_map.count_by_source_type:
+    st.markdown("**source_type 別 candidate 集計:**")
+    for key, val in sorted(evidence_map.count_by_source_type.items(), key=lambda x: -x[1]):
+      st.caption(f"- {key}: {val}")
+  if evidence_map.count_by_support_level:
+    st.markdown("**support_level 別 candidate 集計:**")
+    for key, val in sorted(evidence_map.count_by_support_level.items(), key=lambda x: -x[1]):
+      st.caption(f"- {key}: {val}")
 
 
 def _render_link_detail(links: list[V8EvidenceLink], *, key_prefix: str) -> None:
@@ -113,10 +178,12 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
   st.markdown("### Evidence Map v2")
+  _render_how_to_read_card()
   st.markdown(
     render_caution_box(
-      "<strong>裏付け候補（supporting evidence candidate）のみ</strong> — Evidence Map is not proof。"
-      " paper / web / company は証明ではありません。"
+      "<strong>supporting evidence candidate のみ — Evidence Map is not proof。</strong> "
+      "paper / web / company は確定 Evidence ではありません。"
+      " claim 本文未投入の場合は深掘り不足として claim_text_required 扱いです。"
       " FTO・侵害・有効性判断ではありません。"
     ),
     unsafe_allow_html=True,
@@ -253,17 +320,27 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
   evidence_map = _to_map(cached["evidence_map"])
   export_info = cached.get("export") or {}
   _render_metrics(evidence_map)
+  _render_aggregation_chips(evidence_map)
 
   loaded_links = [
     l for l in evidence_map.links
     if l.claim_text_status in {"manual_input", "loaded", "csv_imported", "artifact_imported"}
   ]
   if loaded_links:
+    st.markdown("🏷️ **claim本文投入済み** — manual_input / loaded claim あり")
     st.markdown(
       render_info_box(
         f"<strong>manual claim 投入後の Evidence Map</strong> — "
         f"loaded/manual_input claims: {len(loaded_links)}。"
-        " paper / web / company は引き続き <strong>candidate</strong> 扱い（not proof）。"
+        " paper / web / company は引き続き <strong>supporting evidence candidate</strong>（not proof）。"
+      ),
+      unsafe_allow_html=True,
+    )
+  elif evidence_map.claim_text_required_count > 0:
+    st.markdown(
+      render_warning_box(
+        "<strong>claim 本文を投入すると Evidence Map が具体化します。</strong> "
+        "Claim Map タブで一次情報から claim 本文を手動投入してください。"
       ),
       unsafe_allow_html=True,
     )
@@ -321,7 +398,10 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
       "human_review": fl_review,
     },
   )
-  _render_link_table(filtered)
+  display_links = filtered[:50]
+  if len(filtered) > 50:
+    st.caption(f"表示: 先頭 50 / 全 {len(filtered)} links — 全件は CSV ダウンロードを利用")
+  _render_link_table(display_links)
   st.markdown("#### 選択 link の詳細")
   _render_link_detail(filtered, key_prefix="v8_evidence_map")
 
@@ -344,8 +424,8 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
 
   st.markdown(
     render_next_action_box(
-      f"「{V8_TAB_LABELS['claim_map']}」に戻るか、"
-      f"「{V8_TAB_LABELS['gap_next_actions']}」で Gap / Next Actions（Phase27G）へ進んでください。"
+      f"次: 「{V8_TAB_LABELS['gap_next_actions']}」で Gap / Next Actions を確認。"
+      " Gap は未確認事項（not invalidity / weakness）。Top 3 Next Actions を確認してください。"
     ),
     unsafe_allow_html=True,
   )
