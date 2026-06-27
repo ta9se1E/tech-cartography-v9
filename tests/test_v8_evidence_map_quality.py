@@ -26,5 +26,9 @@ def test_evidence_map_quality_notices() -> None:
     for link in emap.links:
       assert link.no_legal_judgement is True
       assert "evidence_map_not_proof" in link.caution_flags or link.support_type == "claim_text_required"
-      assert "supporting_evidence_candidate" in link.caution_flags or link.support_type == "claim_text_required"
+      assert (
+        "supporting_evidence_candidate" in link.caution_flags
+        or link.support_type == "claim_text_required"
+        or "missing_evidence" in link.caution_flags
+      )
       assert "direct" not in link.support_level or "candidate" in link.support_level

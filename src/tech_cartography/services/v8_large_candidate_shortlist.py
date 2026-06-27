@@ -40,6 +40,23 @@ def _large_shortlist_base_dir(project_root: Path | str | None = None) -> Path:
   return root / "outputs" / LOCAL_LARGE_SHORTLIST_SUBDIR
 
 
+def _pack_population_count(pack_dir: Path) -> int:
+  manifest_path = pack_dir / "large_candidate_shortlist_manifest.json"
+  if not manifest_path.exists():
+    return 0
+  try:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return int((manifest.get("selection") or {}).get("population_count") or 0)
+  except (json.JSONDecodeError, TypeError, ValueError):
+    return 0
+
+
+def _preferred_pack_dir(pack_dirs: list[Path]) -> Path | None:
+  if not pack_dirs:
+    return None
+  return max(pack_dirs, key=lambda p: (_pack_population_count(p), p.stat().st_mtime))
+
+
 def find_latest_large_shortlist_dir(
   case_id: str | None,
   project_root: Path | str | None = None,
@@ -49,8 +66,8 @@ def find_latest_large_shortlist_dir(
   base = get_large_shortlist_dir(case_id, project_root)
   if not base.is_dir():
     return None
-  dirs = sorted((p for p in base.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True)
-  return dirs[0] if dirs else None
+  dirs = [p for p in base.iterdir() if p.is_dir()]
+  return _preferred_pack_dir(dirs)
 
 
 def find_latest_large_shortlist_dirs_for_all_cases(
@@ -73,7 +90,7 @@ def find_latest_large_shortlist_dir_for_any_case(
   all_packs = find_latest_large_shortlist_dirs_for_all_cases(project_root)
   if not all_packs:
     return None
-  return max(all_packs, key=lambda item: item[1].stat().st_mtime)[1]
+  return max(all_packs, key=lambda item: (_pack_population_count(item[1]), item[1].stat().st_mtime))[1]
 
 
 def safe_find_latest_large_shortlist_dir(

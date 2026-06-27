@@ -19,7 +19,8 @@ from tech_cartography.services.v8_large_candidate_shortlist import load_top5_pub
 from tech_cartography.services.v8_manual_claim_injection import inject_manual_claim, list_claims_needing_text
 from tech_cartography.services.v8_manual_claim_refresh import refresh_after_manual_claim
 from tech_cartography.services.v8_manual_claim_refresh_export import export_manual_claim_refresh
-from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
+from tech_cartography.services.v8_deep_dive_shortlist import resolve_deep_dive_shortlist
+from tech_cartography.services.v8_large_candidate_shortlist import load_top5_publications
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_text_rendering import render_next_action_card
 from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
@@ -107,12 +108,15 @@ def _render_manual_claim_injection_section(
 
   needing = list_claims_needing_text(active_case, project_root=project_root)
   if needing:
-    st.markdown("**claim本文投入が必要な特許:**")
+    st.markdown("**claim本文投入が必要な特許（Deep Dive Top5）:**")
     for row in needing[:8]:
+      legacy_tag = " [legacy]" if row.get("shortlist_source") == "legacy" else ""
       st.caption(
         f"- {row['publication_number']} claim {row['claim_no']}"
-        f" — {row.get('patent_title') or '（title 未設定）'}"
+        f" — {row.get('patent_title') or '（title 未設定）'}{legacy_tag}"
       )
+  elif top5_publications:
+    st.caption("Deep Dive Top5 の claim 本文はすべて投入済み、または Top5 未生成です。")
   st.caption(f"workbench: cases/{active_case}/manual_claim_workbench.md")
 
   inj_col1, inj_col2 = st.columns(2)
@@ -290,14 +294,19 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
     st.session_state[STATE_V8_SELECTED_CASE] = selected_case
 
   active_case = case_ids[1] if selected_case == "all" else selected_case
-  shortlist = build_patent_shortlist(case_id=active_case, top_n=5, project_root=root)
+  deep_dive_shortlist = resolve_deep_dive_shortlist(active_case, root)
   top5_large = load_top5_publications(active_case, root)
-  shortlist_pubs = [p.publication_number for p in shortlist.patent_candidates]
+  shortlist_pubs = [p.publication_number for p in deep_dive_shortlist.patent_candidates]
   deep_dive_pubs = top5_large if top5_large else shortlist_pubs
   if top5_large:
     st.caption(
       f"Large Candidate Top5 深掘り対象: {', '.join(top5_large)}"
       " — 1000件母集団から選抜。Top100/Top20 全件は Claim Map 対象にしません。"
+    )
+  elif "legacy_patent_shortlist_fallback" in " ".join(deep_dive_shortlist.warnings):
+    st.warning(
+      "Large Candidate Top5 未生成 — legacy patent shortlist を fallback 使用中。"
+      " 入力タブで 1000件 CSV 取り込み後 Top5 を生成してください。"
     )
   pub_options = ["（Deep Dive 全件 — Top5）"] + deep_dive_pubs
   default_pub_idx = pub_options.index(default_pub) if default_pub in pub_options else 0
@@ -317,7 +326,7 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
       active_case=active_case,
       publication_number=publication_number,
       patent_title=next(
-        (p.title for p in shortlist.patent_candidates if p.publication_number == publication_number),
+        (p.title for p in deep_dive_shortlist.patent_candidates if p.publication_number == publication_number),
         "",
       ) if publication_number else "",
       project_root=root,
@@ -359,6 +368,7 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
           case_id=cid,
           publication_number=None,
           project_root=root,
+          shortlist=resolve_deep_dive_shortlist(cid, root),
           manual_rows=manual_rows or None,
           use_shortlist_only=use_shortlist_only,
         )
@@ -370,6 +380,7 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
         case_id=selected_case,
         publication_number=publication_number,
         project_root=root,
+        shortlist=deep_dive_shortlist,
         manual_rows=manual_rows or None,
         use_shortlist_only=use_shortlist_only,
       )

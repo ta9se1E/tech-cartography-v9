@@ -21,7 +21,7 @@ from tech_cartography.services.v8_fixed_point_observation_export import export_o
 from tech_cartography.services.v8_gap_next_actions import build_gap_next_actions_report
 from tech_cartography.services.v8_gap_next_actions_export import export_gap_next_actions
 from tech_cartography.services.v8_manual_claim_injection import claim_text_loaded_in_csv
-from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
+from tech_cartography.services.v8_deep_dive_shortlist import resolve_deep_dive_shortlist
 from tech_cartography.services.v8_patent_shortlist_export import export_patent_shortlist
 from tech_cartography.services.v8_sources_table import project_root_from_here
 
@@ -73,7 +73,7 @@ def refresh_after_manual_claim(
 
   artifact_paths: list[str] = []
 
-  shortlist = build_patent_shortlist(case_id=case_id, top_n=top_n, project_root=root)
+  shortlist = resolve_deep_dive_shortlist(case_id=case_id, project_root=root)
   shortlist_exp = export_patent_shortlist(shortlist, project_root=root)
   artifact_paths.append(shortlist_exp.output_dir)
 

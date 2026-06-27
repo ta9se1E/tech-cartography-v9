@@ -14,7 +14,11 @@ from tech_cartography.runtime.v8_claim_map_schema import (
 from tech_cartography.runtime.v8_patent_shortlist_schema import V8PatentShortlist
 from tech_cartography.runtime.v8_sources_schema import utc_now_iso
 from tech_cartography.services.v8_claim_input_loader import V8ClaimInputRow, load_claim_inputs
-from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
+from tech_cartography.services.v8_deep_dive_shortlist import (
+  patent_candidate_for_publication,
+  resolve_deep_dive_shortlist,
+)
+from tech_cartography.services.v8_deep_dive_shortlist import resolve_deep_dive_shortlist
 from tech_cartography.services.v8_sources_table import load_case_profile, project_root_from_here
 
 TECHNICAL_AXES: tuple[str, ...] = (
@@ -323,7 +327,7 @@ def build_claim_map(
 ) -> V8ClaimMap:
   root = project_root or project_root_from_here()
   if shortlist is None:
-    shortlist = build_patent_shortlist(case_id=case_id, top_n=5, project_root=root)
+    shortlist = resolve_deep_dive_shortlist(case_id, root)
 
   profile = load_case_profile(case_id, root) or {}
   del profile  # reserved for future axis tuning
@@ -357,7 +361,26 @@ def build_claim_map(
   if pub_filter:
     target_patents = [p for p in target_patents if p.publication_number == pub_filter]
     if not target_patents:
-      warnings.append(f"publication_number {pub_filter} not in Patent Shortlist")
+      loaded_rows = [
+        r for r in (claim_inputs or [])
+        if r.publication_number == pub_filter and r.has_loaded_text()
+      ]
+      if loaded_rows:
+        row = loaded_rows[0]
+        target_patents = [
+          patent_candidate_for_publication(
+            case_id=case_id,
+            publication_number=pub_filter,
+            project_root=root,
+            patent_title=row.patent_title,
+            claim_source_url=row.claim_source_url,
+          ),
+        ]
+        warnings.append(
+          f"{pub_filter} — manual_input claim を Deep Dive 対象に含めました（Top5 pack 外の選択）。"
+        )
+      else:
+        warnings.append(f"publication_number {pub_filter} not in Deep Dive shortlist")
 
   inputs_by_pub: dict[str, list[V8ClaimInputRow]] = {}
   for row in claim_inputs:

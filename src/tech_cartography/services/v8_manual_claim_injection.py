@@ -109,19 +109,49 @@ def list_claims_needing_text(
   *,
   project_root: Path | str | None = None,
 ) -> list[dict[str, Any]]:
-  """Return publication numbers / claim rows that still need user-provided claim text."""
-  rows, _ = load_claims_input_csv(case_id, project_root=project_root)
+  """Return Deep Dive Top5 patents that still need user-provided claim text."""
+  from tech_cartography.services.v8_deep_dive_shortlist import (
+    list_deep_dive_publications,
+    load_top5_candidate_records,
+  )
+
+  root = Path(project_root or project_root_from_here())
+  deep_dive_pubs, source_label = list_deep_dive_publications(case_id, root)
+  rows, _ = load_claims_input_csv(case_id, project_root=root)
+  rows_by_key = {(r.publication_number, r.claim_no): r for r in rows}
+  meta_by_pub = load_top5_candidate_records(case_id, root)
+
   needing: list[dict[str, Any]] = []
-  for row in rows:
-    if not row.has_loaded_text():
-      needing.append({
-        "case_id": row.case_id,
-        "publication_number": row.publication_number,
-        "patent_title": row.patent_title,
-        "claim_no": row.claim_no,
-        "claim_source_url": row.claim_source_url,
-        "notes": row.notes,
-      })
+  for pub in deep_dive_pubs:
+    row = rows_by_key.get((pub, "1")) or next(
+      (r for r in rows if r.publication_number == pub),
+      None,
+    )
+    if row and row.has_loaded_text():
+      continue
+    meta = meta_by_pub.get(pub) or {}
+    needing.append({
+      "case_id": case_id,
+      "publication_number": pub,
+      "patent_title": (row.patent_title if row else "") or meta.get("title") or "",
+      "claim_no": row.claim_no if row else "1",
+      "claim_source_url": (row.claim_source_url if row else "") or meta.get("url") or "",
+      "notes": row.notes if row else "",
+      "shortlist_source": source_label,
+    })
+
+  if not deep_dive_pubs:
+    for row in rows:
+      if not row.has_loaded_text():
+        needing.append({
+          "case_id": row.case_id,
+          "publication_number": row.publication_number,
+          "patent_title": row.patent_title,
+          "claim_no": row.claim_no,
+          "claim_source_url": row.claim_source_url,
+          "notes": row.notes,
+          "shortlist_source": "legacy",
+        })
   return needing
 
 
