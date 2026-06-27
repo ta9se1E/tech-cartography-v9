@@ -91,7 +91,7 @@ STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 V8_STATUS_CAPTION = (
-  "v8 local-first — Phase27N.5: One Case Real Demo Data Run（Case 1 実データ E2E — deploy は Phase27O）"
+  "v8 local-first — Phase27Q.1: Structured Theme / Claim Batch Import / Admin BigQuery（提出時 BQ OFF）"
 )
 
 V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (

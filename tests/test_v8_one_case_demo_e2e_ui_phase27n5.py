@@ -30,7 +30,7 @@ def test_intro_case1_real_demo() -> None:
 
 def test_tab_config_phase27n5() -> None:
   text = _read("tech_cartography/ui/v8_tab_config.py")
-  assert "Phase27N.5" in text
+  assert "Phase27N.5" in text or "Phase27Q.1" in text
   assert "UI骨格 Phase27B" not in text
 
 

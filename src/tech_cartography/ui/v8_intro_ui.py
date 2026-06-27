@@ -27,6 +27,16 @@ def render_v8_intro_tab() -> None:
     unsafe_allow_html=True,
   )
 
+  st.markdown("#### Phase27Q.1 — 構造化テーマ / Claim一括投入")
+  st.markdown(
+    render_info_box(
+      "Top5 請求項は CSV/Excel 一括投入（manual_input）。"
+      " BigQuery は候補抽出のみ — JP/CN claim 本文は取得しません。"
+      " 公開デモでは BigQuery 実行 UI は通常 OFF。"
+    ),
+    unsafe_allow_html=True,
+  )
+
   st.markdown("#### Phase27N.5 — Case 1 実データ E2E（最優先）")
   st.markdown(
     render_info_box(

@@ -23,7 +23,7 @@ from tech_cartography.services.v8_deep_dive_shortlist import resolve_deep_dive_s
 from tech_cartography.services.v8_large_candidate_shortlist import load_top5_publications
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_text_rendering import render_next_action_card
-from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
+from tech_cartography.ui.v8_claim_batch_import_ui import render_claim_batch_import_section
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
@@ -332,6 +332,9 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
       project_root=root,
       top5_publications=deep_dive_pubs,
     )
+
+  if selected_case != "all":
+    render_claim_batch_import_section(case_id=active_case, project_root=root)
 
   input_mode = st.radio(
     "claim入力方法",

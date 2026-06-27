@@ -10,7 +10,8 @@ import streamlit as st
 from tech_cartography.services.v8_large_candidate_import import import_large_candidates
 from tech_cartography.services.v8_sources_table import load_case_profile
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box
-from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
+from tech_cartography.ui.v8_bigquery_admin_ui import render_bigquery_admin_section
+from tech_cartography.ui.v8_research_theme_ui import render_research_theme_section
 from tech_cartography.ui.v8_tab_config import STATE_V8_INPUT, STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
 
 
@@ -105,6 +106,10 @@ def render_v8_input_tab(*, project_root: Path | str) -> None:
     value=str(state.get("google_patents_urls") or ""),
     key="v8_input_gp_urls",
   )
+
+  theme_case = selected if selected != "（案件を選ばない）" else V8_CASE_SAMPLES[0]["case_id"]
+  render_research_theme_section(case_id=theme_case, project_root=root)
+  render_bigquery_admin_section(case_id=theme_case, project_root=root)
 
   st.markdown("#### 1000件候補CSV/Excelを取り込む (Phase27J.0)")
   st.markdown(

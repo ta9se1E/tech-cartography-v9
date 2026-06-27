@@ -16,6 +16,11 @@ REQUIRED_DOCS = (
   "docs/v8_user_flow_and_tabs.md",
   "docs/v8_cursor_roadmap.md",
   "README_v8_LOCAL_FIRST.md",
+  "docs/bigquery_admin_runner_phase27q1.md",
+  "docs/claim_batch_import_phase27q1.md",
+  "docs/research_theme_profile_phase27q1.md",
+  "docs/submission_demo_operation_guide.md",
+  "README_SUBMISSION.md",
 )
 
 V8_UI_FILES = (
@@ -352,6 +357,22 @@ DOC_KEYWORD_CHECKS: tuple[tuple[str, tuple[str, ...]], ...] = (
   (
     "phase27n5 no cloud run deploy",
     ("Phase27N.5", "Cloud Run deploy", "実行しません"),
+  ),
+  (
+    "phase27q1 bigquery admin off by default",
+    ("ENABLE_BIGQUERY_RUN", "管理者", "OFF"),
+  ),
+  (
+    "phase27q1 claim batch import manual only",
+    ("claim", "自動生成", "しません"),
+  ),
+  (
+    "phase27q1 jp cn claims not from bigquery",
+    ("JP/CN", "claim", "BigQuery"),
+  ),
+  (
+    "phase27q1 structured research theme",
+    ("ResearchThemeProfile", "seed"),
   ),
 )
 
@@ -1063,14 +1084,16 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("v8_intro_ui missing Phase27N.5 / Case 1 real demo")
 
-  if "Phase27N.5" in tab_config:
+  if "Phase27Q.1" in tab_config:
+    print("PASS: Sidebar/tab config references Phase27Q.1")
+  elif "Phase27N.5" in tab_config:
     print("PASS: Sidebar/tab config references Phase27N.5")
   elif "Phase27N" in tab_config:
     print("PASS: Sidebar/tab config references Phase27N")
   elif "Phase27M" in tab_config:
-    failures.append("v8_tab_config still Phase27M only — update to Phase27N.5")
+    failures.append("v8_tab_config still Phase27M only — update to Phase27Q.1")
   else:
-    failures.append("v8_tab_config missing Phase27N.5")
+    failures.append("v8_tab_config missing Phase27Q.1")
 
   phase27n5_files = (
     "docs/one_case_real_demo_runbook.md",
@@ -1114,10 +1137,10 @@ def main(argv: list[str] | None = None) -> int:
   except Exception as exc:
     failures.append(f"cloud run readiness service failed: {exc}")
 
-  if "Phase27N" in tab_config or "Phase27M" in tab_config:
-    print("PASS: Sidebar/tab config references Phase27M/Phase27N era")
+  if "Phase27Q.1" in tab_config or "Phase27N" in tab_config or "Phase27M" in tab_config:
+    print("PASS: Sidebar/tab config references Phase27M/Phase27N/Phase27Q.1 era")
   else:
-    failures.append("v8_tab_config missing Phase27N")
+    failures.append("v8_tab_config missing Phase27Q.1")
 
   try:
     from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
@@ -1275,7 +1298,11 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("stale Phase27B label remains in v8 UI")
 
-  if "Phase27N.5" in tab_config and ("One Case" in tab_config or "Case 1" in tab_config or "実データ" in tab_config):
+  if "Phase27Q.1" in tab_config and (
+    "Structured Theme" in tab_config or "Claim Batch" in tab_config or "BigQuery" in tab_config
+  ):
+    print("PASS: current label mentions Phase27Q.1 / structured theme / claim batch")
+  elif "Phase27N.5" in tab_config and ("One Case" in tab_config or "Case 1" in tab_config or "実データ" in tab_config):
     print("PASS: current label mentions Phase27N.5 / one case real demo")
   elif "Phase27N" in tab_config and ("Cloud Run" in tab_config or "Readiness" in tab_config):
     print("PASS: current label mentions Phase27N / Cloud Run readiness")
@@ -1302,6 +1329,55 @@ def main(argv: list[str] | None = None) -> int:
     print("PASS: v8 sidebar mentions v8 flow")
   else:
     failures.append("demo_safe_ui missing v8 sidebar flow")
+
+  phase27q1_files = (
+    "src/tech_cartography/runtime/v8_research_theme_schema.py",
+    "src/tech_cartography/runtime/v8_bigquery_schema.py",
+    "src/tech_cartography/runtime/v8_claim_batch_import_schema.py",
+    "src/tech_cartography/services/v8_research_theme_defaults.py",
+    "src/tech_cartography/services/v8_bigquery_query_builder.py",
+    "src/tech_cartography/services/v8_bigquery_safety.py",
+    "src/tech_cartography/services/v8_bigquery_runner.py",
+    "src/tech_cartography/services/v8_claim_batch_import.py",
+    "src/tech_cartography/ui/v8_research_theme_ui.py",
+    "src/tech_cartography/ui/v8_bigquery_admin_ui.py",
+    "src/tech_cartography/ui/v8_claim_batch_import_ui.py",
+    "scripts/run_v8_bigquery_candidate_search.py",
+    "scripts/run_v8_claim_batch_import.py",
+    "docs/bigquery_admin_runner_phase27q1.md",
+    "docs/claim_batch_import_phase27q1.md",
+    "docs/research_theme_profile_phase27q1.md",
+    "docs/submission_demo_operation_guide.md",
+    "README_SUBMISSION.md",
+  )
+  for rel in phase27q1_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  input_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_input_ui.py")
+  claim_map_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_claim_map_ui.py")
+  bq_admin_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_bigquery_admin_ui.py")
+
+  for token, label in (
+    ("render_research_theme_section", "research theme section"),
+    ("render_bigquery_admin_section", "bigquery admin section"),
+    ("render_claim_batch_import_section", "claim batch import section"),
+  ):
+    blob_ui = input_ui + claim_map_ui
+    if token in blob_ui:
+      print(f"PASS: Phase27Q.1 UI references {label}")
+    else:
+      failures.append(f"Phase27Q.1 UI missing {label}")
+
+  if "ENABLE_BIGQUERY_RUN" in bq_admin_ui and "公開デモ" in bq_admin_ui:
+    print("PASS: BigQuery admin UI has safety caption")
+  else:
+    failures.append("v8_bigquery_admin_ui missing safety caption")
+
+  case01_theme = PROJECT_ROOT / "cases/case_01_pan_graphitization/research_theme_profile.json"
+  if case01_theme.exists():
+    print("PASS: case_01 research_theme_profile.json exists")
+  else:
+    failures.append("missing case_01 research_theme_profile.json")
 
   fake_doi_re = re.compile(r"10\.(0000|1234)/|example\.com|fake-doi|placeholder", re.IGNORECASE)
   import csv as csv_mod

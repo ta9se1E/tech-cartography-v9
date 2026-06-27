@@ -1,0 +1,5 @@
+publication_number,claim_no,claim_text,claim_source_url,claim_source_type,user_note
+CN117987966A,1,"1. A method for preparing a polyacrylonitrile-based carbon fiber precursor comprising spinning and stabilizing a precursor fiber.","https://patents.google.com/patent/CN117987966A/en","manual","fixture test claim — user provided"
+CN105401262A,1,"","https://patents.google.com/patent/CN105401262A/en","manual","empty claim should reject"
+CN105506785B,1,TBD,,"manual","placeholder reject"
+CN109402791B,1,short,,"manual","too short reject"

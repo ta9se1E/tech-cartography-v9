@@ -30,6 +30,9 @@ from tech_cartography.services.v8_cloud_run_readiness_export import (
 )
 from tech_cartography.services.v8_demo_polish import build_demo_polish_report
 from tech_cartography.services.v8_demo_polish_export import export_demo_polish, find_latest_demo_polish_dir
+from tech_cartography.services.v8_bigquery_export import get_bigquery_runs_dir
+from tech_cartography.services.v8_claim_batch_import import claim_batch_template_csv_text
+from tech_cartography.services.v8_research_theme_defaults import load_research_theme_profile, research_theme_profile_path
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
 from tech_cartography.services.v8_large_candidate_shortlist import (
   find_latest_large_shortlist_dir,
@@ -696,6 +699,59 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
           mime=mime,
           key=f"v8_export_val_{fname}",
         )
+
+  st.markdown("#### Phase27Q.1 — Research Theme / BigQuery / Claim Batch")
+  st.caption("BigQuery 実行 artifact と claim batch import report — Secret 値は表示しません。")
+  q_case = export_case if export_case != "all" else V8_CASE_SAMPLES[0]["case_id"]
+  theme_path = research_theme_profile_path(q_case, root)
+  if theme_path.exists():
+    st.download_button(
+      "Research Theme Profile JSON",
+      data=theme_path.read_bytes(),
+      file_name=theme_path.name,
+      mime="application/json",
+      key="v8_export_theme_profile",
+    )
+  bq_base = get_bigquery_runs_dir(root) / q_case
+  if bq_base.is_dir():
+    packs = sorted((p for p in bq_base.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True)
+    if packs:
+      latest_bq = packs[0]
+      for fname, mime in (
+        ("generated_query.sql", "text/plain"),
+        ("dry_run_report.json", "application/json"),
+        ("dry_run_report.md", "text/markdown"),
+        ("bigquery_results_raw.csv", "text/csv"),
+        ("source_candidates_large.csv", "text/csv"),
+        ("query_manifest.json", "application/json"),
+      ):
+        path = latest_bq / fname
+        if path.exists():
+          st.download_button(f"Download {fname}", data=path.read_bytes(), file_name=path.name, mime=mime, key=f"v8_export_bq_{fname}")
+  else:
+    st.caption("BigQuery run artifact 未生成 — 入力タブで SQL 生成してください。")
+
+  batch_base = get_claim_batch_import_dir(root) / q_case
+  if batch_base.is_dir():
+    batch_dirs = sorted(batch_base.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+    if batch_dirs:
+      latest_batch = batch_dirs[0]
+      for fname, mime in (
+        ("claim_batch_import_report.json", "application/json"),
+        ("claim_batch_import_report.md", "text/markdown"),
+        ("claim_batch_import_preview.csv", "text/csv"),
+        ("rejected_rows.csv", "text/csv"),
+      ):
+        path = latest_batch / fname
+        if path.exists():
+          st.download_button(f"Download {fname}", data=path.read_bytes(), file_name=path.name, mime=mime, key=f"v8_export_batch_{fname}")
+  st.download_button(
+    "Top5 claim template CSV",
+    data=claim_batch_template_csv_text().encode("utf-8"),
+    file_name=f"top5_claims_template_{q_case}.csv",
+    mime="text/csv",
+    key="v8_export_claim_template",
+  )
 
   st.markdown("#### 既存 artifact 参照")
   _artifact_link(find_latest_evidence_gap_path(root), label="evidence_gap")
