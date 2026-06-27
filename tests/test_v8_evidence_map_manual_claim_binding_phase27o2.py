@@ -22,7 +22,7 @@ def test_evidence_map_manual_claim_count_for_cn108286090a() -> None:
     claim_map=claim_map,
   )
   assert evidence.claim_text_required_count == 0
-  assert evidence.claim_count == 1
+  assert evidence.claim_count == 8
   assert any(l.publication_number == PUB for l in evidence.links)
   assert not any(l.publication_number == "US5176959" for l in evidence.links)
 

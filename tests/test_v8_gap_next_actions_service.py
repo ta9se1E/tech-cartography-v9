@@ -26,12 +26,21 @@ def test_build_gap_report_all_cases() -> None:
 
 def test_claim_text_required_maps_to_load_claim_text() -> None:
   root = project_root_from_here()
-  report = build_gap_next_actions_report(case_id="case_01_pan_graphitization", project_root=root)
+  report = build_gap_next_actions_report(case_id="case_02_sizing_interface", project_root=root)
   claim_gaps = [g for g in report.gaps if g.gap_type == "claim_text_required"]
   assert claim_gaps
   top = report.top_3_actions[0]
   assert top.action_type == "load_claim_text"
   assert "claim" in top.action_title.lower()
+
+
+def test_case1_full_manual_skips_load_claim_text_top_action() -> None:
+  root = project_root_from_here()
+  report = build_gap_next_actions_report(case_id="case_01_pan_graphitization", project_root=root)
+  claim_gaps = [g for g in report.gaps if g.gap_type == "claim_text_required"]
+  assert not claim_gaps
+  assert report.top_3_actions
+  assert report.top_3_actions[0].action_type != "load_claim_text"
 
 
 def test_missing_evidence_action_types() -> None:

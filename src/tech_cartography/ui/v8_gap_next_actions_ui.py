@@ -124,13 +124,14 @@ def _render_top_actions(actions: list[V8NextVerificationAction]) -> None:
       st.markdown(f"**email_digest_hint:** {action.email_digest_hint}")
 
 
-def _render_gap_table(gaps: list[V8EvidenceGapRecord], *, artifact_generated: bool = True) -> None:
+def _render_gap_table(gaps: list[V8EvidenceGapRecord], *, artifact_generated: bool = True, preview_limit: int = 20) -> None:
   if not gaps:
     if artifact_generated:
       st.caption("Gap は0件です（artifact 生成済み — true zero）。")
     else:
       st.caption("Gap artifact は未生成です — これは0件ではなく artifact missing です。")
     return
+  st.caption(f"Gap total: {len(gaps)} — 先頭 {min(preview_limit, len(gaps))} 件を表示")
   rows = [
     {
       "gap_type": g.gap_type,
@@ -142,9 +143,11 @@ def _render_gap_table(gaps: list[V8EvidenceGapRecord], *, artifact_generated: bo
       "publication_number": g.publication_number,
       "human_review": g.human_review_required,
     }
-    for g in gaps
+    for g in gaps[:preview_limit]
   ]
   st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+  if len(gaps) > preview_limit:
+    st.caption(f"残り {len(gaps) - preview_limit} 件 — 全件は CSV ダウンロードを利用")
 
 
 def _render_single_report(
@@ -178,6 +181,11 @@ def _render_single_report(
   st.markdown("#### Top 3 Next Actions")
   _render_top_actions(report.top_3_actions)
 
+  if report.count_by_gap_type:
+    st.markdown("**gap_type 別 count:**")
+    for gap_type, count in sorted(report.count_by_gap_type.items(), key=lambda x: -x[1]):
+      st.caption(f"- {gap_type}: {count}")
+
   st.markdown("#### Remaining Limitations")
   limitations: list[str] = []
   if report.count_by_gap_type.get("claim_text_required", 0) > 0:
@@ -191,10 +199,10 @@ def _render_single_report(
   for lim in limitations:
     st.caption(f"- {lim}")
 
-  st.markdown("#### Gap table")
-  _render_gap_table(report.gaps)
+  st.markdown("#### Gap table（preview）")
+  _render_gap_table(report.gaps, preview_limit=20)
 
-  gap_options = [f"{g.gap_type} — {g.gap_title} ({g.claim_no})" for g in report.gaps]
+  gap_options = [f"{g.gap_type} — {g.gap_title} ({g.claim_no})" for g in report.gaps[:20]]
   if gap_options:
     selected_gap_label = st.selectbox("Gap 詳細", gap_options, key=f"v8_gap_detail_{key_suffix}")
     idx = gap_options.index(selected_gap_label)

@@ -1,6 +1,6 @@
 # Large Candidate Quality Report — case_01_pan_graphitization
 
-- imported_at: 2026-06-27T04:32:03+00:00
+- imported_at: 2026-06-27T06:03:28+00:00
 - input_path: /Users/esakitakusei/Documents/python/practice/portfolio/2026_Hackathon/PatentScout_AI_v8/tests/fixtures/v8_large_candidate_fixture.csv
 - accepted: 8
 - rejected: 0

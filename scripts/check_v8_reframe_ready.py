@@ -662,10 +662,29 @@ def main(argv: list[str] | None = None) -> int:
         print(f"PASS: {case_id} produces {emap.link_count} evidence map links")
       else:
         failures.append(f"{case_id} produces no evidence map links")
-      if emap.claim_text_required_count >= 1:
-        print(f"PASS: {case_id} has claim_text_required_count={emap.claim_text_required_count}")
-      else:
-        failures.append(f"{case_id} missing claim_text_required links")
+      from tech_cartography.services.v8_case_claim_mode import (
+        is_full_manual_claims_mode,
+        expects_claim_text_required_links,
+      )
+
+      if is_full_manual_claims_mode(case_id):
+        if emap.claim_text_required_count == 0 and emap.claim_count >= 1:
+          print(
+            f"PASS: {case_id} full manual claims mode — "
+            f"claim_text_required_count=0, loaded claims={emap.claim_count}"
+          )
+        else:
+          failures.append(
+            f"{case_id} full manual mode expected claim_text_required_count=0 "
+            f"and loaded claims, got required={emap.claim_text_required_count} claims={emap.claim_count}"
+          )
+      elif expects_claim_text_required_links(case_id):
+        if emap.claim_text_required_count >= 1:
+          print(f"PASS: {case_id} incomplete mode — claim_text_required_count={emap.claim_text_required_count}")
+        else:
+          failures.append(f"{case_id} incomplete mode missing claim_text_required links")
+      elif emap.claim_text_required_count >= 0:
+        print(f"PASS: {case_id} evidence map claim_text_required_count={emap.claim_text_required_count}")
   except Exception as exc:
     failures.append(f"evidence map build failed: {exc}")
 

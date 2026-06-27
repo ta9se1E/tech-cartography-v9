@@ -30,20 +30,18 @@ def test_manual_source_type_maps_to_manual_input_status() -> None:
   assert "claim_text_loading_required" not in record.evidence_needed
 
 
-def test_selected_cn108286090a_produces_one_loaded_claim() -> None:
+def test_selected_cn108286090a_produces_all_loaded_claims() -> None:
   root = project_root_from_here()
   claim_map = build_claim_map(
     case_id=CASE_ID,
     publication_number=PUB,
     project_root=root,
   )
-  assert claim_map.claim_count == 1
-  assert claim_map.loaded_claim_count == 1
+  assert claim_map.claim_count == 8
+  assert claim_map.loaded_claim_count == 8
   assert claim_map.not_loaded_claim_count == 0
-  rec = claim_map.records[0]
-  assert rec.publication_number == PUB
-  assert rec.claim_no == "1"
-  assert rec.claim_text_status == "manual_input"
+  assert all(r.publication_number == PUB for r in claim_map.records)
+  assert all(r.claim_text_status == "manual_input" for r in claim_map.records)
 
 
 def test_claim_map_not_zero_when_manual_input_exists() -> None:

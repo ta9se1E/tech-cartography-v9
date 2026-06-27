@@ -44,13 +44,22 @@ def test_email_digest_preview_only() -> None:
   assert email.email_send_enabled is False
 
 
-def test_claim_text_required_planned_step() -> None:
+def test_claim_text_required_planned_step_incomplete_case() -> None:
   root = project_root_from_here()
-  report = build_observation_loop_report(case_id="case_01_pan_graphitization", project_root=root)
+  report = build_observation_loop_report(case_id="case_02_sizing_interface", project_root=root)
   sched = report.scheduler_followup_plan
   assert sched is not None
   assert sched.planned_steps[0] == "load_claim_text"
   assert report.loop_status == "blocked_by_claim_text_required"
+
+
+def test_case1_full_manual_not_blocked_by_claim_text() -> None:
+  root = project_root_from_here()
+  report = build_observation_loop_report(case_id="case_01_pan_graphitization", project_root=root)
+  assert report.loop_status != "blocked_by_claim_text_required"
+  sched = report.scheduler_followup_plan
+  assert sched is not None
+  assert sched.planned_steps[0] != "load_claim_text"
 
 
 def test_top_actions_in_cycle_tasks() -> None:

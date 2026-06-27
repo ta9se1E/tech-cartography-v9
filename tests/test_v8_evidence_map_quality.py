@@ -22,7 +22,11 @@ def test_evidence_map_quality_notices() -> None:
 
   for case_id in CASE_IDS:
     emap = build_evidence_map(case_id=case_id, project_root=root)
-    assert emap.claim_text_required_count >= 1
+    if case_id == "case_01_pan_graphitization":
+      assert emap.claim_text_required_count == 0
+      assert emap.link_count >= 35
+    else:
+      assert emap.claim_text_required_count >= 1
     for link in emap.links:
       assert link.no_legal_judgement is True
       assert "evidence_map_not_proof" in link.caution_flags or link.support_type == "claim_text_required"

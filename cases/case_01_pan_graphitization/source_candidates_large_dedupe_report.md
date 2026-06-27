@@ -1,6 +1,6 @@
 # Large Candidate Dedupe Report — case_01_pan_graphitization
 
-- generated_at: 2026-06-27T04:32:03+00:00
+- generated_at: 2026-06-27T06:03:28+00:00
 - population: 8
 - deduped: 7
 - duplicates: 1

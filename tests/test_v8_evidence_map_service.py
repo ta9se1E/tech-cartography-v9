@@ -33,7 +33,7 @@ def test_build_evidence_map_all_cases() -> None:
 
 def test_claim_text_required_links() -> None:
   root = project_root_from_here()
-  emap = build_evidence_map(case_id="case_01_pan_graphitization", project_root=root)
+  emap = build_evidence_map(case_id="case_02_sizing_interface", project_root=root)
   required = [l for l in emap.links if l.support_type == "claim_text_required"]
   assert required
   assert required[0].support_level in {"missing", "needs_human_review"}

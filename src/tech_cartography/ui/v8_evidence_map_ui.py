@@ -149,14 +149,43 @@ def _render_aggregation_chips(evidence_map: V8EvidenceMap) -> None:
     f"not_loaded={status['not_loaded']} / manual_input={status['manual_input']} / "
     f"loaded={status['loaded']}"
   )
-  if evidence_map.count_by_source_type:
-    st.markdown("**source_type 別 candidate 集計:**")
-    for key, val in sorted(evidence_map.count_by_source_type.items(), key=lambda x: -x[1]):
+  pub_counts: dict[str, int] = {}
+  for link in evidence_map.links:
+    pub_counts[link.publication_number] = pub_counts.get(link.publication_number, 0) + 1
+  if pub_counts:
+    st.markdown("**patent 別 claim link count:**")
+    for pub, count in sorted(pub_counts.items(), key=lambda x: (-x[1], x[0])):
+      st.caption(f"- {pub}: {count}")
+  if evidence_map.count_by_support_type:
+    st.markdown("**support_type 別 candidate 集計:**")
+    for key, val in sorted(evidence_map.count_by_support_type.items(), key=lambda x: -x[1]):
       st.caption(f"- {key}: {val}")
   if evidence_map.count_by_support_level:
     st.markdown("**support_level 別 candidate 集計:**")
     for key, val in sorted(evidence_map.count_by_support_level.items(), key=lambda x: -x[1]):
       st.caption(f"- {key}: {val}")
+
+
+def _render_top_links_preview(links: list[V8EvidenceLink], *, limit: int = 15) -> None:
+  if not links:
+    return
+  st.markdown(f"**Top evidence links preview（先頭 {min(limit, len(links))} / 全 {len(links)}）**")
+  preview_cols = [
+    "publication_number", "claim_no", "support_type", "support_level",
+    "source_type", "source_title", "evidence_gap",
+  ]
+  rows = []
+  for link in links[:limit]:
+    rows.append({
+      "publication_number": link.publication_number,
+      "claim_no": link.claim_no,
+      "support_type": link.support_type,
+      "support_level": link.support_level,
+      "source_type": link.source_type or "—",
+      "source_title": (link.source_title or "—")[:60],
+      "evidence_gap": (link.evidence_gap or "—")[:80],
+    })
+  st.dataframe(pd.DataFrame(rows, columns=preview_cols), width="stretch", hide_index=True)
 
 
 def _render_link_detail(links: list[V8EvidenceLink], *, key_prefix: str) -> None:
@@ -317,7 +346,8 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
       emap = _to_map(bundle["evidence_map"])
       with st.expander(f"{sample['label']} — {emap.link_count} links", expanded=cid == active_case):
         _render_metrics(emap)
-        _render_link_table(emap.links)
+        _render_aggregation_chips(emap)
+        _render_top_links_preview(emap.links, limit=10)
     st.markdown(
       render_next_action_box(f"「{V8_TAB_LABELS['gap_next_actions']}」で Gap / Next Actions（Phase27G）へ進んでください。"),
       unsafe_allow_html=True,
@@ -406,10 +436,17 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
       "human_review": fl_review,
     },
   )
-  display_links = filtered[:50]
-  if len(filtered) > 50:
-    st.caption(f"表示: 先頭 50 / 全 {len(filtered)} links — 全件は CSV ダウンロードを利用")
-  _render_link_table(display_links)
+  preview_limit = 20
+  _render_top_links_preview(filtered, limit=preview_limit)
+  if len(filtered) > preview_limit:
+    st.caption(
+      f"全 {len(filtered)} links — 先頭 {preview_limit} 件のみ表示。"
+      " 全件は CSV ダウンロードを利用してください。"
+    )
+    with st.expander(f"フィルタ結果テーブル（先頭 {preview_limit} 件）", expanded=False):
+      _render_link_table(filtered[:preview_limit])
+  else:
+    _render_link_table(filtered)
   st.markdown("#### 選択 link の詳細")
   _render_link_detail(filtered, key_prefix="v8_evidence_map")
 

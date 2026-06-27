@@ -57,7 +57,7 @@ def test_claims_needing_text_cn_top5_only() -> None:
   needing = list_claims_needing_text(CASE_ID, project_root=root)
   needing_pubs = {n["publication_number"] for n in needing}
   assert needing_pubs.issubset(set(CN_TOP5))
-  assert "CN108286090A" not in needing_pubs
+  assert not needing_pubs
 
 
 def test_full_top5_claim_map_includes_manual_input_cn() -> None:
@@ -65,6 +65,8 @@ def test_full_top5_claim_map_includes_manual_input_cn() -> None:
   if not load_top5_publications(CASE_ID, root):
     return
   claim_map = build_claim_map(case_id=CASE_ID, publication_number=None, project_root=root)
-  assert claim_map.claim_count == 5
+  assert claim_map.claim_count == 35
+  assert claim_map.loaded_claim_count == 35
+  assert claim_map.not_loaded_claim_count == 0
   loaded_pubs = {r.publication_number for r in claim_map.records if r.claim_text_status != "not_loaded"}
-  assert "CN108286090A" in loaded_pubs
+  assert loaded_pubs == set(CN_TOP5)

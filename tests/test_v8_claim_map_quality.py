@@ -22,7 +22,11 @@ def test_claim_map_quality_notices_and_labels() -> None:
 
   for case_id in CASE_IDS:
     claim_map = build_claim_map(case_id=case_id, project_root=root)
-    assert claim_map.not_loaded_claim_count >= 1
+    if case_id == "case_01_pan_graphitization":
+      assert claim_map.not_loaded_claim_count == 0
+      assert claim_map.loaded_claim_count >= 35
+    else:
+      assert claim_map.not_loaded_claim_count >= 1
     for rec in claim_map.records:
       assert rec.no_legal_judgement is True
       assert "no_legal_judgement" in rec.caution_flags
