@@ -16,6 +16,7 @@ from tech_cartography.services.v8_large_candidate_import import (
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
+from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
 
@@ -106,26 +107,34 @@ def _render_large_candidate_sources(*, root: Path, default_case: str) -> None:
     "publication_number", "title", "organization", "year", "source_type",
     "heuristic_score", "stage_label", "keyword_match_count", "human_review_required",
   ]
-  preview = filtered[:100]
+  preview = filtered[:20]
   rows = [{c: getattr(r, c, "") for c in display_cols} for r in preview]
   st.dataframe(pd.DataFrame(rows, columns=display_cols), width="stretch", hide_index=True)
-  if len(filtered) > 100:
-    st.caption(f"先頭100件のみ表示（全 {len(filtered)} 件）")
+  if len(filtered) > 20:
+    st.caption(f"先頭20件のみ表示（全 {len(filtered)} 件）")
 
-  for label, path in (
-    ("source_candidates_large.csv", paths["population"]),
-    ("source_candidates_large_deduped.csv", paths["deduped"]),
-    ("quality report", paths["quality_report"]),
-    ("dedupe report", paths["dedupe_report"]),
-  ):
-    if path.exists():
-      st.download_button(
-        f"Download {label}",
-        data=path.read_bytes(),
-        file_name=path.name,
-        mime="text/csv" if path.suffix == ".csv" else "text/markdown",
-        key=f"v8_large_dl_{path.name}",
-      )
+  with st.expander("全候補テーブル（最大100件）", expanded=False):
+    preview_all = filtered[:100]
+    rows_all = [{c: getattr(r, c, "") for c in display_cols} for r in preview_all]
+    st.dataframe(pd.DataFrame(rows_all, columns=display_cols), width="stretch", hide_index=True)
+    if len(filtered) > 100:
+      st.caption(f"先頭100件のみ表示（全 {len(filtered)} 件）")
+
+  with st.expander("ダウンロード・レポート（詳細）", expanded=False):
+    for label, path in (
+      ("source_candidates_large.csv", paths["population"]),
+      ("source_candidates_large_deduped.csv", paths["deduped"]),
+      ("quality report", paths["quality_report"]),
+      ("dedupe report", paths["dedupe_report"]),
+    ):
+      if path.exists():
+        st.download_button(
+          f"Download {label}",
+          data=path.read_bytes(),
+          file_name=path.name,
+          mime="text/csv" if path.suffix == ".csv" else "text/markdown",
+          key=f"v8_large_dl_{path.name}",
+        )
 
   st.markdown(
     render_next_action_box(
@@ -141,24 +150,28 @@ def _search_blob_lc(rec) -> str:
 
 def render_v8_sources_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
+  render_judge_conclusion_card("sources")
+  render_judge_next_tab_hint("sources")
+
   state = get_v8_input_state()
   default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
 
-  st.markdown("### Sources一覧")
-  render_demo_flow_banner(
-    project_root=root,
-    current_tab="sources",
-    tab_purpose="ここでは母集団を見る — 1000件は Deep Dive 対象ではない",
-    next_tab_key="patent_shortlist",
-  )
-  st.markdown(
-    render_caution_box(
-      "FTO、侵害、有効性判断、法的結論は行いません。"
-      " Web / company source は <strong>candidate information only</strong> です。"
-      " 1000件母集団は全件深掘りしたわけではありません。"
-    ),
-    unsafe_allow_html=True,
-  )
+  st.markdown("### Sources｜データ出自")
+  with st.expander("詳細ガイド・注意事項", expanded=False):
+    render_demo_flow_banner(
+      project_root=root,
+      current_tab="sources",
+      tab_purpose="ここでは母集団を見る — 1000件は Deep Dive 対象ではない",
+      next_tab_key="patent_shortlist",
+    )
+    st.markdown(
+      render_caution_box(
+        "FTO、侵害、有効性判断、法的結論は行いません。"
+        " Web / company source は <strong>candidate information only</strong> です。"
+        " 1000件母集団は全件深掘りしたわけではありません。"
+      ),
+      unsafe_allow_html=True,
+    )
 
   source_mode = st.radio(
     "Sources 表示モード",

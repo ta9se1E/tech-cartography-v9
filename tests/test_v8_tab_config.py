@@ -29,18 +29,18 @@ def test_v8_tab_order() -> None:
 def test_v8_tab_labels_japanese() -> None:
   labels = v8_tab_labels()
   assert labels == [
-    "はじめに",
-    "入力",
-    "Sources一覧",
-    "読むべき特許",
-    "Claim Map",
-    "Evidence Map",
-    "Gap / Next Actions",
-    "定点観測",
-    "Export",
-    "管理者設定",
+    "はじめに｜Judge Overview",
+    "入力・テーマ設定",
+    "Sources｜データ出自",
+    "読むべき特許｜Top5",
+    "Claim Map｜請求項の技術整理",
+    "Evidence Map｜裏取り候補",
+    "Gap / Next Actions｜未確認事項",
+    "定点観測｜Weekly Watch",
+    "Export｜共有レポート",
+    "管理者設定｜Demo Safety",
   ]
-  assert V8_TAB_LABELS["fixed_point_observation"] == "定点観測"
+  assert V8_TAB_LABELS["fixed_point_observation"] == "定点観測｜Weekly Watch"
 
 
 def test_v8_claim_and_evidence_axes_defined() -> None:

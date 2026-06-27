@@ -21,6 +21,7 @@ from tech_cartography.services.v8_patent_shortlist_export import (
 )
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box
 from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
+from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, STATE_V8_SELECTED_PUBLICATION, V8_CASE_SAMPLES, V8_TAB_LABELS
 
@@ -147,19 +148,20 @@ def _render_large_candidate_table(records: list, *, title: str) -> None:
 
 
 def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
-  st.markdown("#### Large Candidate mode (Phase27J.0 / 27J.1)")
-  st.caption(
-    "1000件母集団 → Top100 → Top20 → Top5。"
-    " score は読む優先度の暫定値であり、技術的正しさ・特許価値・法的価値ではありません。"
-    " Claim Map / Evidence Map は Top5 のみ深掘り。"
-  )
-  b1, b2, b3 = st.columns(3)
-  with b1:
-    gen100 = st.button("Generate Top100", key="v8_lc_top100")
-  with b2:
-    gen20 = st.button("Generate Top20", key="v8_lc_top20")
-  with b3:
-    gen5 = st.button("Generate Top5", key="v8_lc_top5", type="primary")
+  with st.expander("Large Candidate mode 詳細（スコア方針・Top100/Top20）", expanded=False):
+    st.caption(
+      "1000件母集団 → Top100 → Top20 → Top5。"
+      " score は読む優先度の暫定値であり、技術的正しさ・特許価値・法的価値ではありません。"
+      " Claim Map / Evidence Map は Top5 のみ深掘り。"
+    )
+  gen100 = gen20 = False
+  gen5 = st.button("Generate Top5", key="v8_lc_top5", type="primary")
+  with st.expander("Top100 / Top20 生成（詳細）", expanded=False):
+    b1, b2 = st.columns(2)
+    with b1:
+      gen100 = st.button("Generate Top100", key="v8_lc_top100")
+    with b2:
+      gen20 = st.button("Generate Top20", key="v8_lc_top20")
   if gen100 or gen20 or gen5 or st.session_state.get("v8_large_shortlist_force"):
     st.session_state.pop("v8_large_shortlist_force", None)
     pack = build_staged_shortlist(selected_case, project_root=root)
@@ -174,8 +176,9 @@ def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
 
   triage_engine = manifest.get("triage_engine") or (cached or {}).get("selection", {}).get("triage_engine", "—")
   ranking_policy = manifest.get("ranking_policy") or (cached or {}).get("selection", {}).get("ranking_policy", "—")
-  st.markdown(f"**Ranking Policy:** `{ranking_policy}`")
-  st.markdown(f"**Triage engine:** `{triage_engine}`")
+  with st.expander("Ranking Policy / Triage engine（詳細）", expanded=False):
+    st.markdown(f"**Ranking Policy:** `{ranking_policy}`")
+    st.markdown(f"**Triage engine:** `{triage_engine}`")
 
   if isinstance(cached, dict) and cached.get("case_id") == selected_case:
     sel = cached.get("selection") or {}
@@ -237,38 +240,38 @@ def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
       if dropped_md.exists():
         st.caption("詳細: dropped_candidate_summary.md を Export タブからダウンロード")
 
-      st.markdown("#### Top100 / Top20 テーブル")
-      score_min, score_max = st.slider(
-        "score range",
-        0.0,
-        20.0,
-        (0.0, 20.0),
-        key="v8_lc_score_range",
-      )
-      kw_filter = st.text_input("matched keyword", key="v8_lc_kw_filter")
-      org_filter = st.text_input("organization / assignee", key="v8_lc_org_filter")
-      year_filter = st.text_input("year", key="v8_lc_year_filter")
-      country_filter = st.text_input("country", key="v8_lc_country_filter")
+      with st.expander("Top100 / Top20 テーブル（全件）", expanded=False):
+        score_min, score_max = st.slider(
+          "score range",
+          0.0,
+          20.0,
+          (0.0, 20.0),
+          key="v8_lc_score_range",
+        )
+        kw_filter = st.text_input("matched keyword", key="v8_lc_kw_filter")
+        org_filter = st.text_input("organization / assignee", key="v8_lc_org_filter")
+        year_filter = st.text_input("year", key="v8_lc_year_filter")
+        country_filter = st.text_input("country", key="v8_lc_country_filter")
 
-      def _filter_records(records: list) -> list:
-        out = []
-        for r in records:
-          if r.heuristic_score < score_min or r.heuristic_score > score_max:
-            continue
-          if kw_filter and kw_filter.lower() not in " ".join(r.matched_keywords).lower():
-            continue
-          org = f"{r.organization} {r.assignee}".lower()
-          if org_filter and org_filter.lower() not in org:
-            continue
-          if year_filter and year_filter not in str(r.year):
-            continue
-          if country_filter and country_filter.upper() not in str(r.country_code).upper():
-            continue
-          out.append(r)
-        return out
+        def _filter_records(records: list) -> list:
+          out = []
+          for r in records:
+            if r.heuristic_score < score_min or r.heuristic_score > score_max:
+              continue
+            if kw_filter and kw_filter.lower() not in " ".join(r.matched_keywords).lower():
+              continue
+            org = f"{r.organization} {r.assignee}".lower()
+            if org_filter and org_filter.lower() not in org:
+              continue
+            if year_filter and year_filter not in str(r.year):
+              continue
+            if country_filter and country_filter.upper() not in str(r.country_code).upper():
+              continue
+            out.append(r)
+          return out
 
-      _render_large_candidate_table(_filter_records(top100), title="Top100")
-      _render_large_candidate_table(_filter_records(top20), title="Top20")
+        _render_large_candidate_table(_filter_records(top100), title="Top100")
+        _render_large_candidate_table(_filter_records(top20), title="Top20")
 
       if top5:
         pick = st.selectbox(
@@ -286,25 +289,29 @@ def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
 
 def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
+  render_judge_conclusion_card("patent_shortlist")
+  render_judge_next_tab_hint("patent_shortlist")
+
   state = get_v8_input_state()
   default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
 
-  st.markdown("### 読むべき特許 Top N")
-  render_demo_flow_banner(
-    project_root=root,
-    current_tab="patent_shortlist",
-    tab_purpose="1000件から Top100 → Top20 → Top5 を絞る — Top5 のみ Deep Dive",
-    next_tab_key="claim_map",
-  )
-  st.markdown(
-    render_caution_box(
-      "<strong>読む優先度の暫定スコア（heuristic / draft selection）</strong> です。"
-      " 特許価値・権利価値・有効性・侵害リスクを意味しません。"
-      " FTO、侵害、有効性判断、法的結論は行いません。"
-      " claim text not loaded — 請求項・明細書は未読です。"
-    ),
-    unsafe_allow_html=True,
-  )
+  st.markdown("### 読むべき特許｜Top5")
+  with st.expander("詳細ガイド・注意事項", expanded=False):
+    render_demo_flow_banner(
+      project_root=root,
+      current_tab="patent_shortlist",
+      tab_purpose="1000件から Top100 → Top20 → Top5 を絞る — Top5 のみ Deep Dive",
+      next_tab_key="claim_map",
+    )
+    st.markdown(
+      render_caution_box(
+        "<strong>読む優先度の暫定スコア（heuristic / draft selection）</strong> です。"
+        " 特許価値・権利価値・有効性・侵害リスクを意味しません。"
+        " FTO、侵害、有効性判断、法的結論は行いません。"
+        " claim text not loaded — 請求項・明細書は未読です。"
+      ),
+      unsafe_allow_html=True,
+    )
 
   case_options = _case_options()
   case_ids = [cid for cid, _ in case_options]

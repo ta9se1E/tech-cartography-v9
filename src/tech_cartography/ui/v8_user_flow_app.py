@@ -54,8 +54,8 @@ def render_v8_user_flow_app(
 
   st.markdown(
     render_main_title(
-      "Tech Cartography v8",
-      "Claim / Evidence / Gap / 定点観測 — 読むべき特許と次の一次確認を整理します",
+      "Tech Cartography",
+      "R&D Intelligence Agent — Claim / Evidence / Gap / 定点観測",
     ),
     unsafe_allow_html=True,
   )

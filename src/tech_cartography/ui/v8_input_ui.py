@@ -14,6 +14,7 @@ from tech_cartography.ui.v8_bigquery_admin_ui import render_bigquery_admin_secti
 from tech_cartography.ui.v8_research_theme_ui import render_research_theme_section
 from tech_cartography.ui.v8_tab_config import STATE_V8_INPUT, STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
 from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
+from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 
 
 def default_v8_input_state() -> dict[str, Any]:
@@ -41,21 +42,25 @@ def render_v8_input_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
   state = get_v8_input_state()
 
-  st.markdown("### 研究テーマと入力")
-  st.markdown(
-    render_info_box(
-      "<strong>まずここから (Phase27M)</strong> — Case を選び、1000件候補 CSV/Excel を取り込みます。"
-      " この UI から BigQuery は実行しません。SQL テンプレート: docs/bigquery_templates/"
-    ),
-    unsafe_allow_html=True,
-  )
-  render_demo_flow_banner(
-    project_root=root,
-    current_tab="input",
-    tab_purpose="入力 — Large Candidate CSV 取込の起点",
-    next_tab_key="sources",
-  )
-  st.caption("このタブでは外部API・BigQuery・メール送信・Scheduler は実行しません。")
+  render_judge_conclusion_card("input")
+  render_judge_next_tab_hint("input")
+
+  st.markdown("### 入力・テーマ設定")
+  with st.expander("詳細ガイド・CSV/Excel取込", expanded=False):
+    st.markdown(
+      render_info_box(
+        "<strong>まずここから</strong> — Case を選び、1000件候補 CSV/Excel を取り込みます。"
+        " この UI から BigQuery は実行しません。SQL テンプレート: docs/bigquery_templates/"
+      ),
+      unsafe_allow_html=True,
+    )
+    render_demo_flow_banner(
+      project_root=root,
+      current_tab="input",
+      tab_purpose="入力 — Large Candidate CSV 取込の起点",
+      next_tab_key="sources",
+    )
+    st.caption("このタブでは外部API・BigQuery・メール送信・Scheduler は実行しません。")
 
   case_options = ["（案件を選ばない）"] + [sample["case_id"] for sample in V8_CASE_SAMPLES]
   case_labels = {sample["case_id"]: sample["label"] for sample in V8_CASE_SAMPLES}
@@ -109,71 +114,72 @@ def render_v8_input_tab(*, project_root: Path | str) -> None:
   )
 
   theme_case = selected if selected != "（案件を選ばない）" else V8_CASE_SAMPLES[0]["case_id"]
-  render_research_theme_section(case_id=theme_case, project_root=root)
-  render_bigquery_admin_section(case_id=theme_case, project_root=root)
+  with st.expander("Research Theme / BigQuery 設定（管理者向け）", expanded=False):
+    render_research_theme_section(case_id=theme_case, project_root=root)
+    render_bigquery_admin_section(case_id=theme_case, project_root=root)
 
-  st.markdown("#### 1000件候補CSV/Excelを取り込む (Phase27J.0)")
-  st.markdown(
-    render_caution_box(
-      "この Phase では外部 API / BigQuery 実行 / Web 検索を行いません。"
-      " CSV/Excel の実データのみ使用します。fake URL / fake DOI は作りません。"
-      " <strong>1000件は母集団</strong>であり、全件を Claim Map / Evidence Map で深掘りしません。"
-    ),
-    unsafe_allow_html=True,
-  )
-  lc_case = st.selectbox(
-    "Large Candidate 案件",
-    options=[s["case_id"] for s in V8_CASE_SAMPLES],
-    key="v8_large_import_case",
-  )
-  lc_max_rows = st.number_input("max_rows", min_value=1, max_value=1000, value=1000, key="v8_large_max_rows")
-  lc_source_type = st.selectbox(
-    "source_type default",
-    options=["patent", "paper", "web", "company"],
-    key="v8_large_source_type",
-  )
-  lc_file = st.file_uploader(
-    "CSV / Excel (csv, xlsx)",
-    type=["csv", "xlsx"],
-    key="v8_large_candidate_upload",
-  )
-  if st.button("Import Large Candidate File", key="v8_large_import_btn", type="primary"):
-    if lc_file is None:
-      st.warning("ファイルを選択してください。")
-    elif not lc_case:
-      st.warning("案件を選択してください。")
-    else:
-      tmp_dir = root / "outputs" / "tmp_large_import"
-      tmp_dir.mkdir(parents=True, exist_ok=True)
-      suffix = Path(lc_file.name).suffix or ".csv"
-      tmp_path = tmp_dir / f"{lc_case}_upload{suffix}"
-      tmp_path.write_bytes(lc_file.getvalue())
-      result = import_large_candidates(
-        case_id=lc_case,
-        input_path=tmp_path,
-        max_rows=int(lc_max_rows),
-        default_source_type=lc_source_type,
-        project_root=root,
-      )
-      st.session_state["v8_last_large_import"] = result.to_dict()
-      st.success(
-        f"import完了 — accepted={result.accepted_row_count} / rejected={result.rejected_row_count}"
-      )
-  last_import = st.session_state.get("v8_last_large_import")
-  if isinstance(last_import, dict):
-    st.caption(f"input_row_count: {last_import.get('input_row_count')}")
-    st.caption(f"accepted_row_count: {last_import.get('accepted_row_count')}")
-    st.caption(f"output: {last_import.get('output_candidates_path')}")
+  with st.expander("1000件候補CSV/Excelを取り込む", expanded=False):
+    st.markdown(
+      render_caution_box(
+        "この Phase では外部 API / BigQuery 実行 / Web 検索を行いません。"
+        " CSV/Excel の実データのみ使用します。fake URL / fake DOI は作りません。"
+        " <strong>1000件は母集団</strong>であり、全件を Claim Map / Evidence Map で深掘りしません。"
+      ),
+      unsafe_allow_html=True,
+    )
+    lc_case = st.selectbox(
+      "Large Candidate 案件",
+      options=[s["case_id"] for s in V8_CASE_SAMPLES],
+      key="v8_large_import_case",
+    )
+    lc_max_rows = st.number_input("max_rows", min_value=1, max_value=1000, value=1000, key="v8_large_max_rows")
+    lc_source_type = st.selectbox(
+      "source_type default",
+      options=["patent", "paper", "web", "company"],
+      key="v8_large_source_type",
+    )
+    lc_file = st.file_uploader(
+      "CSV / Excel (csv, xlsx)",
+      type=["csv", "xlsx"],
+      key="v8_large_candidate_upload",
+    )
+    if st.button("Import Large Candidate File", key="v8_large_import_btn", type="primary"):
+      if lc_file is None:
+        st.warning("ファイルを選択してください。")
+      elif not lc_case:
+        st.warning("案件を選択してください。")
+      else:
+        tmp_dir = root / "outputs" / "tmp_large_import"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        suffix = Path(lc_file.name).suffix or ".csv"
+        tmp_path = tmp_dir / f"{lc_case}_upload{suffix}"
+        tmp_path.write_bytes(lc_file.getvalue())
+        result = import_large_candidates(
+          case_id=lc_case,
+          input_path=tmp_path,
+          max_rows=int(lc_max_rows),
+          default_source_type=lc_source_type,
+          project_root=root,
+        )
+        st.session_state["v8_last_large_import"] = result.to_dict()
+        st.success(
+          f"import完了 — accepted={result.accepted_row_count} / rejected={result.rejected_row_count}"
+        )
+    last_import = st.session_state.get("v8_last_large_import")
+    if isinstance(last_import, dict):
+      st.caption(f"input_row_count: {last_import.get('input_row_count')}")
+      st.caption(f"accepted_row_count: {last_import.get('accepted_row_count')}")
+      st.caption(f"output: {last_import.get('output_candidates_path')}")
 
-  st.markdown("#### ファイルアップロード（小規模 demo sources）")
-  csv_file = st.file_uploader("CSV / Excel 相当（CSV）", type=["csv"], key="v8_input_csv_upload")
-  if csv_file is not None:
-    state["csv_upload_note"] = f"uploaded: {csv_file.name} ({csv_file.size} bytes) — draft保存のみ"
-    st.caption(state["csv_upload_note"])
-  pdf_file = st.file_uploader("PDF（手動全文確認用）", type=["pdf"], key="v8_input_pdf_upload")
-  if pdf_file is not None:
-    state["pdf_upload_note"] = f"uploaded: {pdf_file.name} ({pdf_file.size} bytes) — draft保存のみ"
-    st.caption(state["pdf_upload_note"])
+  with st.expander("ファイルアップロード（小規模 demo sources）", expanded=False):
+    csv_file = st.file_uploader("CSV / Excel 相当（CSV）", type=["csv"], key="v8_input_csv_upload")
+    if csv_file is not None:
+      state["csv_upload_note"] = f"uploaded: {csv_file.name} ({csv_file.size} bytes) — draft保存のみ"
+      st.caption(state["csv_upload_note"])
+    pdf_file = st.file_uploader("PDF（手動全文確認用）", type=["pdf"], key="v8_input_pdf_upload")
+    if pdf_file is not None:
+      state["pdf_upload_note"] = f"uploaded: {pdf_file.name} ({pdf_file.size} bytes) — draft保存のみ"
+      st.caption(state["pdf_upload_note"])
 
   st.session_state[STATE_V8_INPUT] = state
 

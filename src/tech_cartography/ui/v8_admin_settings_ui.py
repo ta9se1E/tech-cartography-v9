@@ -24,6 +24,7 @@ from tech_cartography.ui.live_tavily_search_ui import render_live_tavily_smoke_t
 from tech_cartography.ui.live_watch_profile_ui import render_live_watch_profile_section
 from tech_cartography.ui.live_web_signal_collection_ui import render_live_web_signal_collection_section
 from tech_cartography.ui.login_ui import can_use_admin_features
+from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 
 
 def render_v8_admin_settings_tab(
@@ -33,7 +34,10 @@ def render_v8_admin_settings_tab(
   root = Path(project_root)
   is_admin = can_use_admin_features()
 
-  st.markdown("### 管理者設定")
+  render_judge_conclusion_card("admin_settings")
+  render_judge_next_tab_hint("admin_settings")
+
+  st.markdown("### 管理者設定｜Demo Safety")
   if not is_login_required():
     st.markdown(render_warning_box("ログイン設定がありません。"), unsafe_allow_html=True)
     return

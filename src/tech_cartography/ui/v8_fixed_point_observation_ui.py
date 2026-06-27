@@ -35,6 +35,7 @@ from tech_cartography.ui.live_run_history_ui import render_run_history_section
 from tech_cartography.ui.live_watch_expansion_ui import render_live_watch_expansion_section
 from tech_cartography.ui.login_ui import can_use_admin_features
 from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
+from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
@@ -161,10 +162,11 @@ def _render_single_report(
     st.caption("Email digest plan 未生成")
 
   st.markdown("#### Artifact Trace")
-  for trace in report.artifact_trace:
-    st.caption(trace)
-  for path in report.source_artifact_paths:
-    st.caption(f"source: {path}")
+  with st.expander("Artifact trace（開発者向け）", expanded=False):
+    for trace in report.artifact_trace:
+      st.caption(trace)
+    for path in report.source_artifact_paths:
+      st.caption(f"source: {path}")
 
   st.markdown("#### ダウンロード")
   st.download_button(
@@ -195,44 +197,48 @@ def _render_single_report(
       "manifest.json", manifest_path.read_bytes(), manifest_path.name,
       "application/json", key=f"v8_fp_dl_manifest_{key_suffix}",
     )
-  st.caption(f"export dir: {export_info.get('output_dir', '')}")
-
+  with st.expander("export dir（開発者向け）", expanded=False):
+    st.caption(f"export dir: {export_info.get('output_dir', '')}")
 
 def render_v8_fixed_point_observation_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
+  render_judge_conclusion_card("fixed_point_observation")
+  render_judge_next_tab_hint("fixed_point_observation")
+
   state = get_v8_input_state()
   default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
-  st.markdown("### 定点観測ループ")
-  render_demo_flow_banner(
-    project_root=root,
-    current_tab="fixed_point_observation",
-    tab_purpose="定点観測ループ — no_email_send / no_scheduler_start（機能は保持）",
-    next_tab_key="export",
-  )
-  st.markdown(
-    render_info_box(
-      "<strong>定点観測で回る流れ (Phase27L)</strong><br>"
-      "1. 今回の Top5 深掘り結果<br>"
-      "2. 今回の Evidence Gap（未確認事項）<br>"
-      "3. 次回 Watch Profile 更新案（人手承認後）<br>"
-      "4. Scheduler Follow-up Plan（no_scheduler_start=true）<br>"
-      "5. Email Digest Plan（no_email_send=true）<br>"
-      "メール送信と Scheduler は必須機能として残しますが、本 Phase では実行しません。"
-    ),
-    unsafe_allow_html=True,
-  )
-  st.markdown(
-    render_info_box(
-      "<strong>メール送信</strong>と<strong>Scheduler</strong>は定点観測の必須機能です（デフォルト OFF、機能は保持）。"
-      " 本タブでは計画・提案・プレビューのみ — 送信・起動はしません。"
-      f" SMTP / Scheduler 本番設定は「{V8_TAB_LABELS['admin_settings']}」へ。"
-    ),
-    unsafe_allow_html=True,
-  )
-  for notice in OBSERVATION_LOOP_SAFETY_NOTICES[:4]:
-    st.caption(notice)
+  st.markdown("### 定点観測｜Weekly Watch")
+  with st.expander("詳細ガイド・メール/Scheduler 注意", expanded=False):
+    render_demo_flow_banner(
+      project_root=root,
+      current_tab="fixed_point_observation",
+      tab_purpose="定点観測ループ — Digest preview（メール/Scheduler OFF）",
+      next_tab_key="export",
+    )
+    st.markdown(
+      render_info_box(
+        "<strong>定点観測で回る流れ</strong><br>"
+        "1. 今回の Top5 深掘り結果<br>"
+        "2. 今回の Evidence Gap（未確認事項）<br>"
+        "3. 次回 Watch Profile 更新案（人手承認後）<br>"
+        "4. Scheduler Follow-up Plan（起動OFF）<br>"
+        "5. Email Digest Plan（送信OFF）<br>"
+        "メール送信と Scheduler は必須機能として残しますが、本デモでは実行しません。"
+      ),
+      unsafe_allow_html=True,
+    )
+    st.markdown(
+      render_info_box(
+        "<strong>メール送信</strong>と<strong>Scheduler</strong>は定点観測の必須機能です（デフォルト OFF、機能は保持）。"
+        " 本タブでは計画・提案・プレビューのみ — 送信・起動はしません。"
+        f" SMTP / Scheduler 本番設定は「{V8_TAB_LABELS['admin_settings']}」へ。"
+      ),
+      unsafe_allow_html=True,
+    )
+    for notice in OBSERVATION_LOOP_SAFETY_NOTICES[:4]:
+      st.caption(notice)
 
   watch_status = describe_watch_profile_status(root)
   active, active_path = get_active_watch_profile(root)
@@ -278,18 +284,19 @@ def render_v8_fixed_point_observation_tab(*, project_root: Path | str) -> None:
     st.session_state[STATE_V8_SELECTED_PUBLICATION] = publication_number
 
   gap_dir = find_latest_gap_next_actions_dir(active_case, root)
-  if gap_dir:
-    st.caption(f"Gap / Next Actions artifact: {gap_dir}")
-  else:
+  if not gap_dir:
     st.caption("Gap / Next Actions 未生成 — 「Gap / Next Actions」タブで Generate してください。")
-  for finder, label in (
-    (find_latest_evidence_map_dir, "Evidence Map"),
-    (find_latest_claim_map_dir, "Claim Map"),
-    (find_latest_patent_shortlist_dir, "Patent Shortlist"),
-  ):
-    p = finder(active_case, root)
-    if p:
-      st.caption(f"{label}: {p}")
+  with st.expander("artifact参照（開発者向け）", expanded=False):
+    if gap_dir:
+      st.caption(f"Gap / Next Actions artifact: {gap_dir}")
+    for finder, label in (
+      (find_latest_evidence_map_dir, "Evidence Map"),
+      (find_latest_claim_map_dir, "Claim Map"),
+      (find_latest_patent_shortlist_dir, "Patent Shortlist"),
+    ):
+      p = finder(active_case, root)
+      if p:
+        st.caption(f"{label}: {p}")
 
   refresh = st.button(
     "Generate / Refresh Fixed Point Observation Loop",

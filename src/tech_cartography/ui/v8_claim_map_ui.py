@@ -25,6 +25,7 @@ from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_next
 from tech_cartography.ui.v8_text_rendering import render_next_action_card
 from tech_cartography.ui.v8_claim_batch_import_ui import render_claim_batch_import_section
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
+from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
   STATE_V8_SELECTED_PUBLICATION,
@@ -257,25 +258,28 @@ def claim_text_loaded_hint(case_id: str, pub: str, claim_no: str, root: Path) ->
 
 def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
+  render_judge_conclusion_card("claim_map")
+  render_judge_next_tab_hint("claim_map")
+
   state = get_v8_input_state()
   default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
-  st.markdown("### Claim Map v1")
-  render_demo_flow_banner(
-    project_root=root,
-    current_tab="claim_map",
-    tab_purpose="Claim Map は技術整理 — 権利範囲解釈ではない。Top5 claim 状態を確認",
-    next_tab_key="evidence_map",
-  )
-  st.markdown(
-    render_caution_box(
-      "<strong>Claim Map は技術整理の暫定分類（heuristic / draft）</strong> です。"
-      " 権利範囲の解釈・FTO・侵害・有効性判断ではありません。"
-      " claim text not loaded の請求項は分類しません。"
-    ),
-    unsafe_allow_html=True,
-  )
+  st.markdown("### Claim Map｜請求項の技術整理")
+  with st.expander("詳細ガイド・注意事項", expanded=False):
+    render_demo_flow_banner(
+      project_root=root,
+      current_tab="claim_map",
+      tab_purpose="Claim Map は技術整理 — 権利範囲解釈ではない。Top5 claim 状態を確認",
+      next_tab_key="evidence_map",
+    )
+    st.markdown(
+      render_caution_box(
+        "<strong>Claim Map は請求項の技術要素整理（heuristic / draft）</strong> です。"
+        " 権利範囲の解釈・FTO・侵害・有効性判断ではありません。"
+      ),
+      unsafe_allow_html=True,
+    )
 
   case_options = _case_options()
   case_ids = [c for c, _ in case_options]
@@ -323,26 +327,26 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
     st.session_state[STATE_V8_SELECTED_PUBLICATION] = publication_number
 
   if selected_case != "all":
-    _render_manual_claim_injection_section(
-      active_case=active_case,
-      publication_number=publication_number,
-      patent_title=next(
-        (p.title for p in deep_dive_shortlist.patent_candidates if p.publication_number == publication_number),
-        "",
-      ) if publication_number else "",
-      project_root=root,
-      top5_publications=deep_dive_pubs,
+    with st.expander("詳細操作（手動claim投入・CSV/Excel一括投入）", expanded=False):
+      _render_manual_claim_injection_section(
+        active_case=active_case,
+        publication_number=publication_number,
+        patent_title=next(
+          (p.title for p in deep_dive_shortlist.patent_candidates if p.publication_number == publication_number),
+          "",
+        ) if publication_number else "",
+        project_root=root,
+        top5_publications=deep_dive_pubs,
+      )
+      render_claim_batch_import_section(case_id=active_case, project_root=root)
+
+  with st.expander("claim入力方法・Generate", expanded=True):
+    input_mode = st.radio(
+      "claim入力方法",
+      options=["claims_input.csv", "手動claim text貼り付け", "claim text未取得でMap作成"],
+      horizontal=True,
+      key="v8_claim_map_input_mode",
     )
-
-  if selected_case != "all":
-    render_claim_batch_import_section(case_id=active_case, project_root=root)
-
-  input_mode = st.radio(
-    "claim入力方法",
-    options=["claims_input.csv", "手動claim text貼り付け", "claim text未取得でMap作成"],
-    horizontal=True,
-    key="v8_claim_map_input_mode",
-  )
 
   manual_rows: list[dict[str, str]] = []
   if input_mode == "手動claim text貼り付け":

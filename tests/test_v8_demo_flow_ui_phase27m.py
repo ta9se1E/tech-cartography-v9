@@ -22,15 +22,30 @@ def test_demo_flow_ui_phase27m() -> None:
 
 def test_intro_shortest_demo_flow() -> None:
   text = _read("tech_cartography/ui/v8_intro_ui.py")
-  assert "最短デモ操作" in text
-  assert "Phase27N" in text or "Phase27M" in text
-  assert "artifact missing" in text.lower() or "未生成" in text
-  assert "render_next_action_card" in text
+  assert "最短デモ操作" in text or "3分デモ" in text or "render_judge_three_minute_guide" in text
+  assert (
+    "Phase27N" in text
+    or "Phase27M" in text
+    or "render_judge_conclusion_card" in text
+  )
+  assert (
+    "artifact missing" in text.lower()
+    or "未生成" in text
+    or "351" in text
+    or "render_judge_three_minute_guide" in text
+  )
+  assert "render_next_action_card" in text or "render_judge_three_minute_guide" in text
 
 
 def test_tab_config_phase27m() -> None:
   text = _read("tech_cartography/ui/v8_tab_config.py")
-  assert "Phase27N" in text or "Phase27M" in text or "Phase27Q.1" in text or "Phase27Q.3" in text
+  assert (
+    "Phase27N" in text
+    or "Phase27M" in text
+    or "Phase27Q.1" in text
+    or "Phase27Q.3" in text
+    or "Judge Mode" in text
+  )
 
 
 def test_input_first_step() -> None:

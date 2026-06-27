@@ -190,75 +190,9 @@ def _is_v8_user_flow_ui() -> bool:
 
 
 def _render_v8_demo_readiness_sidebar(project_root: Path) -> None:
-  import streamlit as st
+  from tech_cartography.ui.v8_judge_mode_ui import render_judge_mode_sidebar
 
-  from tech_cartography.runtime.v8_one_case_demo_schema import DEFAULT_ONE_CASE_ID
-  from tech_cartography.services.v8_cloud_run_readiness import build_cloud_run_readiness_report
-  from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
-  from tech_cartography.ui.v8_input_ui import get_v8_input_state
-  from tech_cartography.ui.v8_tab_config import (
-    CASE_01_TOP5_PUBLICATIONS,
-    STATE_V8_SELECTED_CASE,
-    V8_SIDEBAR_SUBMISSION_SAFE_NOTICE,
-    V8_STATUS_CAPTION,
-  )
-
-  st.divider()
-  st.markdown("**v8 Submission Demo (Phase27Q.3)**")
-  st.caption(V8_STATUS_CAPTION)
-  st.caption(V8_SIDEBAR_SUBMISSION_SAFE_NOTICE)
-  case_id = str(
-    get_v8_input_state().get("selected_case_id")
-    or st.session_state.get(STATE_V8_SELECTED_CASE)
-    or DEFAULT_ONE_CASE_ID
-  )
-  st.caption(f"selected case: {case_id}")
-  try:
-    from tech_cartography.runtime.v8_one_case_demo_schema import DEFAULT_ONE_CASE_INPUT_CSV
-    from tech_cartography.services.v8_one_case_demo_e2e import assess_one_case_demo_status
-
-    oc = assess_one_case_demo_status(project_root=project_root)
-    st.caption(f"Case 1 E2E: {oc.overall_status}")
-    if not oc.input_csv_exists:
-      st.caption(f"CSV未配置: {DEFAULT_ONE_CASE_INPUT_CSV}")
-    st.caption(f"Top5: {CASE_01_TOP5_PUBLICATIONS}")
-
-    if case_id == DEFAULT_ONE_CASE_ID:
-      try:
-        from tech_cartography.services.v8_claim_map import build_claim_map
-        from tech_cartography.services.v8_evidence_map import build_evidence_map
-        from tech_cartography.services.v8_gap_next_actions import build_gap_next_actions_report
-
-        claim_map = build_claim_map(case_id=case_id, project_root=project_root)
-        evidence_map = build_evidence_map(case_id=case_id, project_root=project_root)
-        gap_report = build_gap_next_actions_report(case_id=case_id, project_root=project_root)
-        top_action = gap_report.top_3_actions[0].action_type if gap_report.top_3_actions else "—"
-        st.caption(
-          f"Claim Map: {claim_map.claim_count} claims / "
-          f"loaded={claim_map.loaded_claim_count} / not_loaded={claim_map.not_loaded_claim_count}"
-        )
-        st.caption(
-          f"Evidence Map: {evidence_map.link_count} candidate links / "
-          f"claim_text_required={evidence_map.claim_text_required_count}"
-        )
-        st.caption(f"Gap / Next Actions: {gap_report.gap_count} gaps / Top action={top_action}")
-      except Exception:
-        st.caption("Claim/Evidence/Gap 件数は各タブで Generate 後に表示されます")
-
-    st.caption("Fixed Point: digest preview only")
-    st.caption("BigQuery direct execution: OFF")
-    st.caption("次の提出操作: Export / Demo Readiness Pack / Cloud Run確認")
-
-    cr = build_cloud_run_readiness_report(project_root=project_root)
-    st.caption(f"cloud run prep: {cr.overall_status}")
-    report = build_demo_readiness_report(project_root=project_root)
-    st.caption(f"demo readiness: {report.overall_status}")
-    match = next((c for c in report.cases if c.case_id == case_id), None)
-    if match and match.next_3_user_actions:
-      st.caption(f"action: {match.next_3_user_actions[0][:60]}")
-    st.caption("no_email_send / no_scheduler_start")
-  except Exception:
-    st.caption("Readiness 未取得 — はじめにタブを確認")
+  render_judge_mode_sidebar(project_root=project_root)
 
 
 def sidebar_progress_text(ui_mode: str, *, project_root: Path | None = None) -> str:
@@ -485,9 +419,8 @@ def render_app_sidebar(
     if _is_v8_user_flow_ui():
       st.markdown(
         render_info_box(
-          "<strong>本番実行（v8提出デモ）</strong>: UI操作と artifact 生成のみ。"
+          "<strong>本番実行（Judge Mode 提出デモ）</strong>: UI操作と artifact 生成のみ。"
           " 外部API・BigQuery・メール・Scheduler は実行しません。"
-          " Manual Claims / Export / Demo Readiness Pack が利用できます。"
         ),
         unsafe_allow_html=True,
       )

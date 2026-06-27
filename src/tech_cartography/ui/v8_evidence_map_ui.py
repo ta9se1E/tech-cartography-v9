@@ -19,6 +19,7 @@ from tech_cartography.services.v8_large_candidate_shortlist import load_top5_pub
 from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_demo_flow_ui import render_artifact_count_metric, render_demo_flow_banner
+from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
@@ -203,27 +204,30 @@ def _render_link_detail(links: list[V8EvidenceLink], *, key_prefix: str) -> None
 
 def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
+  render_judge_conclusion_card("evidence_map")
+  render_judge_next_tab_hint("evidence_map")
+
   state = get_v8_input_state()
   default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
-  st.markdown("### Evidence Map v2")
-  render_demo_flow_banner(
-    project_root=root,
-    current_tab="evidence_map",
-    tab_purpose="supporting evidence candidate — Evidence Map is not proof",
-    next_tab_key="gap_next_actions",
-  )
-  _render_how_to_read_card()
-  st.markdown(
-    render_caution_box(
-      "<strong>supporting evidence candidate のみ — Evidence Map is not proof。</strong> "
-      "paper / web / company は確定 Evidence ではありません。"
-      " claim 本文未投入の場合は深掘り不足として claim_text_required 扱いです。"
-      " FTO・侵害・有効性判断ではありません。"
-    ),
-    unsafe_allow_html=True,
-  )
+  st.markdown("### Evidence Map｜裏取り候補")
+  with st.expander("詳細ガイド・注意事項", expanded=False):
+    render_demo_flow_banner(
+      project_root=root,
+      current_tab="evidence_map",
+      tab_purpose="supporting evidence candidate — 裏取り候補（証明ではない）",
+      next_tab_key="gap_next_actions",
+    )
+    _render_how_to_read_card()
+    st.markdown(
+      render_caution_box(
+        "<strong>裏取り候補（supporting evidence candidate）のみ — 証明ではありません。</strong> "
+        " paper / web / company は確定 Evidence ではありません。"
+        " 原典確認は人間が行います。FTO・侵害・有効性判断ではありません。"
+      ),
+      unsafe_allow_html=True,
+    )
 
   case_options = _case_options()
   case_ids = [c for c, _ in case_options]
@@ -263,7 +267,8 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
 
   claim_map_dir = find_latest_claim_map_dir(active_case, root)
   if claim_map_dir:
-    st.caption(f"Claim Map artifact: {claim_map_dir}")
+    with st.expander("artifact参照（開発者向け）", expanded=False):
+      st.caption(f"Claim Map artifact: {claim_map_dir}")
   else:
     st.caption("Claim Map 未生成 — Generate 時に自動構築されます")
 
@@ -359,96 +364,37 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
   st.caption("artifact missing と true zero を区別 — 未生成時は件数0として表示しません")
   _render_metrics(evidence_map)
   _render_aggregation_chips(evidence_map)
+  _render_top_links_preview(evidence_map.links, limit=15)
 
-  loaded_links = [
-    l for l in evidence_map.links
-    if l.claim_text_status in {"manual_input", "loaded", "csv_imported", "artifact_imported"}
-  ]
-  if loaded_links:
-    st.markdown("🏷️ **claim本文投入済み** — manual_input / loaded claim あり")
-    st.markdown(
-      render_info_box(
-        f"<strong>manual claim 投入後の Evidence Map</strong> — "
-        f"loaded/manual_input claims: {len(loaded_links)}。"
-        " paper / web / company は引き続き <strong>supporting evidence candidate</strong>（not proof）。"
-      ),
-      unsafe_allow_html=True,
-    )
-  elif evidence_map.claim_text_required_count > 0:
-    st.markdown(
-      render_warning_box(
-        "<strong>claim 本文を投入すると Evidence Map が具体化します。</strong> "
-        "Claim Map タブで一次情報から claim 本文を手動投入してください。"
-      ),
-      unsafe_allow_html=True,
-    )
-    for link in loaded_links[:5]:
-      st.caption(
-        f"- {link.publication_number} claim {link.claim_no}: "
-        f"status={link.claim_text_status}, axis={link.primary_axis}, "
-        f"evidence_needed={', '.join(link.evidence_needed[:3])}"
-      )
+  with st.expander("詳細（フィルタ・link一覧・claim投入メモ）", expanded=False):
+    loaded_links = [
+      l for l in evidence_map.links
+      if l.claim_text_status in {"manual_input", "loaded", "csv_imported", "artifact_imported"}
+    ]
+    if loaded_links:
+      st.caption(f"claim本文投入済み: {len(loaded_links)} links")
+    elif evidence_map.claim_text_required_count > 0:
+      st.caption("claim 本文未投入 — Claim Map タブで投入してください")
 
-  refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
-  if isinstance(refresh_cached, dict):
-    report = refresh_cached.get("report") or {}
-    before = report.get("claim_text_required_count_before")
-    after = report.get("claim_text_required_count_after")
-    if before is not None and after is not None and before != after:
-      st.success(f"claim_text_required_count 改善: {before} → {after}")
-
-  if evidence_map.claim_text_required_count > 0:
-    st.markdown(
-      render_warning_box(
-        f"{evidence_map.claim_text_required_count} claim は claim text required — 裏取り候補は未確認です。"
-        " Gap / Next Actions タブでは claim_text_required を最優先 Gap として集約します。"
-      ),
-      unsafe_allow_html=True,
-    )
-  if evidence_map.missing_evidence_count > 0:
-    st.markdown(
-      render_info_box(
-        f"missing_evidence_count={evidence_map.missing_evidence_count} — "
-        "Gap / Next Actions で example/paper/property 不足を分類し Top 3 Actions を生成します。"
-      ),
-      unsafe_allow_html=True,
-    )
-
-  fcol1, fcol2, fcol3, fcol4 = st.columns(4)
-  levels = ["（すべて）"] + sorted(evidence_map.count_by_support_level.keys())
-  types = ["（すべて）"] + sorted(evidence_map.count_by_support_type.keys())
-  stypes = ["（すべて）"] + sorted(evidence_map.count_by_source_type.keys())
-  with fcol1:
+    levels = ["（すべて）"] + sorted(evidence_map.count_by_support_level.keys())
+    types = ["（すべて）"] + sorted(evidence_map.count_by_support_type.keys())
+    stypes = ["（すべて）"] + sorted(evidence_map.count_by_source_type.keys())
     fl_level = st.selectbox("support_level", levels, key="v8_ev_filter_level")
-  with fcol2:
     fl_type = st.selectbox("support_type", types, key="v8_ev_filter_type")
-  with fcol3:
     fl_stype = st.selectbox("source_type", stypes, key="v8_ev_filter_stype")
-  with fcol4:
     fl_review = st.selectbox("human_review_required", ["すべて", "はい"], key="v8_ev_filter_review")
 
-  filtered = _apply_filters(
-    evidence_map.links,
-    filters={
-      "support_level": fl_level,
-      "support_type": fl_type,
-      "source_type": fl_stype,
-      "human_review": fl_review,
-    },
-  )
-  preview_limit = 20
-  _render_top_links_preview(filtered, limit=preview_limit)
-  if len(filtered) > preview_limit:
-    st.caption(
-      f"全 {len(filtered)} links — 先頭 {preview_limit} 件のみ表示。"
-      " 全件は CSV ダウンロードを利用してください。"
+    filtered = _apply_filters(
+      evidence_map.links,
+      filters={
+        "support_level": fl_level,
+        "support_type": fl_type,
+        "source_type": fl_stype,
+        "human_review": fl_review,
+      },
     )
-    with st.expander(f"フィルタ結果テーブル（先頭 {preview_limit} 件）", expanded=False):
-      _render_link_table(filtered[:preview_limit])
-  else:
-    _render_link_table(filtered)
-  st.markdown("#### 選択 link の詳細")
-  _render_link_detail(filtered, key_prefix="v8_evidence_map")
+    _render_link_table(filtered[:20])
+    _render_link_detail(filtered, key_prefix="v8_evidence_map")
 
   st.markdown("#### ダウンロード")
   st.download_button(

@@ -29,19 +29,30 @@ def test_admin_ui_cloud_run_readiness() -> None:
 
 def test_intro_ui_phase27n() -> None:
   text = _read("tech_cartography/ui/v8_intro_ui.py")
-  assert "Phase27N" in text
-  assert "deploy" in text.lower()
-  assert "render_next_action_card" in text
+  assert "Phase27N" in text or "Cloud Run Readiness" in text or "render_judge_conclusion_card" in text
+  assert "deploy" in text.lower() or "Cloud Run" in text
+  assert "render_next_action_card" in text or "render_judge_three_minute_guide" in text
   assert "use_container_width" not in text
 
 
 def test_tab_config_phase27n() -> None:
   text = _read("tech_cartography/ui/v8_tab_config.py")
-  assert "Phase27N" in text or "Phase27Q.1" in text or "Phase27Q.3" in text
+  assert (
+    "Phase27N" in text
+    or "Phase27Q.1" in text
+    or "Phase27Q.3" in text
+    or "Judge Mode" in text
+  )
   assert "UI骨格 Phase27B" not in text
 
 
 def test_demo_safe_ui_phase27n_sidebar() -> None:
   text = _read("tech_cartography/ui/demo_safe_ui.py")
-  assert "Phase27N" in text or "Phase27Q.3" in text or "Submission Demo" in text
+  assert (
+    "Phase27N" in text
+    or "Phase27Q.3" in text
+    or "Submission Demo" in text
+    or "render_judge_mode_sidebar" in text
+    or "Judge Mode" in text
+  )
   assert "use_container_width" not in text

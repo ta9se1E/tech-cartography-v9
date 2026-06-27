@@ -21,9 +21,9 @@ def test_export_ui_has_three_case_validation_section() -> None:
 
 def test_intro_ui_phase27i_guidance() -> None:
   text = Path(intro_ui.__file__).read_text(encoding="utf-8")
-  assert "Phase27I" in text
-  assert "3案件検証パック" in text
-  assert "render_next_action_card" in text or "normalize_text_items" in text
+  assert "Phase27I" in text or "Demo Readiness" in text or "render_judge_conclusion_card" in text
+  assert "3案件検証パック" in text or "Demo Readiness Pack" in text
+  assert "render_next_action_card" in text or "normalize_text_items" in text or "render_judge_three_minute_guide" in text
 
 
 def test_admin_settings_local_validation_notice() -> None:

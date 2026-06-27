@@ -26,6 +26,8 @@ REQUIRED_DOCS = (
 V8_UI_FILES = (
   "src/tech_cartography/ui/v8_user_flow_app.py",
   "src/tech_cartography/ui/v8_tab_config.py",
+  "src/tech_cartography/ui/v8_judge_mode_copy.py",
+  "src/tech_cartography/ui/v8_judge_mode_ui.py",
   "src/tech_cartography/ui/v8_intro_ui.py",
   "src/tech_cartography/ui/v8_input_ui.py",
   "src/tech_cartography/ui/v8_sources_ui.py",
@@ -41,7 +43,7 @@ V8_UI_FILES = (
 V8_TAB_LABELS_REQUIRED = (
   "はじめに",
   "入力",
-  "Sources一覧",
+  "Sources",
   "読むべき特許",
   "Claim Map",
   "Evidence Map",
@@ -886,7 +888,9 @@ def main(argv: list[str] | None = None) -> int:
     failures.append("v8_export_ui missing Three Case Validation Pack section")
 
   intro_ui_phase27i = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_intro_ui.py")
-  if "Phase27I" in intro_ui_phase27i and "3案件検証パック" in intro_ui_phase27i:
+  if ("Phase27I" in intro_ui_phase27i or "render_judge_three_minute_guide" in intro_ui_phase27i) and (
+    "3案件検証パック" in intro_ui_phase27i or "Demo Readiness" in intro_ui_phase27i
+  ):
     print("PASS: v8_intro_ui mentions Phase27I validation pack")
   else:
     failures.append("v8_intro_ui missing Phase27I validation pack guidance")
@@ -1023,6 +1027,8 @@ def main(argv: list[str] | None = None) -> int:
     print("PASS: v8_intro_ui references shortest demo operation flow")
   elif "Phase27L" in intro_ui_early and "デモ操作" in intro_ui_early:
     print("PASS: v8_intro_ui references demo operation flow")
+  elif "render_judge_three_minute_guide" in intro_ui_early or "3分デモ" in intro_ui_early:
+    print("PASS: v8_intro_ui references Judge Mode 3-minute demo flow")
   else:
     failures.append("v8_intro_ui missing demo operation flow")
 
@@ -1103,7 +1109,9 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("v8_intro_ui missing Phase27N.5 / Case 1 real demo")
 
-  if "Phase27Q.3" in tab_config:
+  if "Judge Mode" in tab_config and "提出デモ" in tab_config:
+    print("PASS: Sidebar/tab config references Judge Mode submission demo")
+  elif "Phase27Q.3" in tab_config:
     print("PASS: Sidebar/tab config references Phase27Q.3")
   elif "Phase27Q.1" in tab_config:
     print("PASS: Sidebar/tab config references Phase27Q.1")
@@ -1112,9 +1120,9 @@ def main(argv: list[str] | None = None) -> int:
   elif "Phase27N" in tab_config:
     print("PASS: Sidebar/tab config references Phase27N")
   elif "Phase27M" in tab_config:
-    failures.append("v8_tab_config still Phase27M only — update to Phase27Q.3")
+    failures.append("v8_tab_config still Phase27M only — update to Judge Mode or Phase27Q.3")
   else:
-    failures.append("v8_tab_config missing Phase27Q.3")
+    failures.append("v8_tab_config missing Judge Mode / Phase27Q.3")
 
   phase27n5_files = (
     "docs/one_case_real_demo_runbook.md",
@@ -1158,10 +1166,10 @@ def main(argv: list[str] | None = None) -> int:
   except Exception as exc:
     failures.append(f"cloud run readiness service failed: {exc}")
 
-  if "Phase27Q.3" in tab_config or "Phase27Q.1" in tab_config or "Phase27N" in tab_config or "Phase27M" in tab_config:
-    print("PASS: Sidebar/tab config references Phase27M/Phase27N/Phase27Q era")
+  if "Judge Mode" in tab_config or "Phase27Q.3" in tab_config or "Phase27Q.1" in tab_config or "Phase27N" in tab_config or "Phase27M" in tab_config:
+    print("PASS: Sidebar/tab config references Judge Mode or Phase27M/Phase27N/Phase27Q era")
   else:
-    failures.append("v8_tab_config missing Phase27Q.3")
+    failures.append("v8_tab_config missing Judge Mode / Phase27Q.3")
 
   try:
     from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
@@ -1319,7 +1327,9 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("stale Phase27B label remains in v8 UI")
 
-  if "Phase27Q.3" in tab_config and ("full Top5" in tab_config or "submission demo" in tab_config.lower()):
+  if "Judge Mode" in tab_config and ("提出デモ" in tab_config or "Judge Overview" in tab_config):
+    print("PASS: current label mentions Judge Mode / submission demo")
+  elif "Phase27Q.3" in tab_config and ("full Top5" in tab_config or "submission demo" in tab_config.lower()):
     print("PASS: current label mentions Phase27Q.3 / submission demo polish")
   elif "Phase27Q.1" in tab_config and (
     "Structured Theme" in tab_config or "Claim Batch" in tab_config or "BigQuery" in tab_config
@@ -1348,7 +1358,9 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("v8_tab_config missing Phase27N.5 or Phase27H status caption")
 
-  if "v8_sidebar_progress_text" in demo_safe and "_is_v8_user_flow_ui" in demo_safe:
+  if "render_judge_mode_sidebar" in demo_safe and "_is_v8_user_flow_ui" in demo_safe:
+    print("PASS: v8 sidebar mentions v8 flow")
+  elif "v8_sidebar_progress_text" in demo_safe and "_is_v8_user_flow_ui" in demo_safe:
     print("PASS: v8 sidebar mentions v8 flow")
   else:
     failures.append("demo_safe_ui missing v8 sidebar flow")

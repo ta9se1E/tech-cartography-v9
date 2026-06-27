@@ -28,6 +28,7 @@ from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
+from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
@@ -181,54 +182,56 @@ def _render_single_report(
   st.markdown("#### Top 3 Next Actions")
   _render_top_actions(report.top_3_actions)
 
-  if report.count_by_gap_type:
-    st.markdown("**gap_type 別 count:**")
-    for gap_type, count in sorted(report.count_by_gap_type.items(), key=lambda x: -x[1]):
-      st.caption(f"- {gap_type}: {count}")
+  with st.expander("Gap 一覧・詳細（全件）", expanded=False):
+    if report.count_by_gap_type:
+      st.markdown("**gap_type 別 count:**")
+      for gap_type, count in sorted(report.count_by_gap_type.items(), key=lambda x: -x[1]):
+        st.caption(f"- {gap_type}: {count}")
 
-  st.markdown("#### Remaining Limitations")
-  limitations: list[str] = []
-  if report.count_by_gap_type.get("claim_text_required", 0) > 0:
-    limitations.append("claim 本文未取得 — claim_text_required")
-  if report.count_by_gap_type.get("example_support_missing", 0) > 0:
-    limitations.append("特許実施例の人手確認が必要（本文は未読）")
-  if report.count_by_gap_type.get("paper_support_missing", 0) > 0:
-    limitations.append("論文 Evidence の人手確認が必要（本文は未読）")
-  if not limitations:
-    limitations.append("大きな blocking gap なし — candidate は proof ではない")
-  for lim in limitations:
-    st.caption(f"- {lim}")
+    st.markdown("#### Remaining Limitations")
+    limitations: list[str] = []
+    if report.count_by_gap_type.get("claim_text_required", 0) > 0:
+      limitations.append("claim 本文未取得 — claim_text_required")
+    if report.count_by_gap_type.get("example_support_missing", 0) > 0:
+      limitations.append("特許実施例の人手確認が必要（本文は未読）")
+    if report.count_by_gap_type.get("paper_support_missing", 0) > 0:
+      limitations.append("論文 Evidence の人手確認が必要（本文は未読）")
+    if not limitations:
+      limitations.append("大きな blocking gap なし — candidate は proof ではない")
+    for lim in limitations:
+      st.caption(f"- {lim}")
 
-  st.markdown("#### Gap table（preview）")
-  _render_gap_table(report.gaps, preview_limit=20)
+    st.markdown("#### Gap table（preview）")
+    _render_gap_table(report.gaps, preview_limit=20)
 
-  gap_options = [f"{g.gap_type} — {g.gap_title} ({g.claim_no})" for g in report.gaps[:20]]
-  if gap_options:
-    selected_gap_label = st.selectbox("Gap 詳細", gap_options, key=f"v8_gap_detail_{key_suffix}")
-    idx = gap_options.index(selected_gap_label)
-    gap = report.gaps[idx]
-    st.markdown(f"**why_it_matters:** {gap.why_it_matters}")
-    st.markdown(f"**related_source_titles:** {', '.join(gap.related_source_titles) or '—'}")
-    st.caption(f"source_evidence_links: {', '.join(gap.source_evidence_links)}")
+    gap_options = [f"{g.gap_type} — {g.gap_title} ({g.claim_no})" for g in report.gaps[:20]]
+    if gap_options:
+      selected_gap_label = st.selectbox("Gap 詳細", gap_options, key=f"v8_gap_detail_{key_suffix}")
+      idx = gap_options.index(selected_gap_label)
+      gap = report.gaps[idx]
+      st.markdown(f"**why_it_matters:** {gap.why_it_matters}")
+      st.markdown(f"**related_source_titles:** {', '.join(gap.related_source_titles) or '—'}")
+      st.caption(f"source_evidence_links: {', '.join(gap.source_evidence_links)}")
 
-  action_options = [f"#{a.action_rank} {a.action_title}" for a in report.next_actions[:10]]
-  if action_options:
-    selected_action = st.selectbox("Action 詳細", action_options, key=f"v8_action_detail_{key_suffix}")
-    aidx = action_options.index(selected_action)
-    action = report.next_actions[aidx]
-    st.markdown(f"**expected_output:** {action.expected_output}")
-    st.markdown(f"**next_step_command_hint:** {action.next_step_command_hint}")
+    action_options = [f"#{a.action_rank} {a.action_title}" for a in report.next_actions[:10]]
+    if action_options:
+      selected_action = st.selectbox("Action 詳細", action_options, key=f"v8_action_detail_{key_suffix}")
+      aidx = action_options.index(selected_action)
+      action = report.next_actions[aidx]
+      st.markdown(f"**expected_output:** {action.expected_output}")
+      st.markdown(f"**next_step_command_hint:** {action.next_step_command_hint}")
 
-  st.markdown("#### Watch Profile update proposal")
-  st.markdown(report.watch_profile_update_proposal)
-  st.markdown("#### Digest summary")
-  st.markdown(report.digest_summary)
-
-  st.markdown("#### Artifact trace")
-  for path in report.source_artifact_paths:
-    st.caption(path)
-  for path in report.evidence_map_artifact_paths:
-    st.caption(f"evidence_map: {path}")
+  st.markdown("#### Watch Profile / Digest / Artifact trace")
+  with st.expander("定点観測の詳細（Watch Profile / Digest / Artifact trace）", expanded=False):
+    st.markdown("#### Watch Profile update proposal")
+    st.markdown(report.watch_profile_update_proposal)
+    st.markdown("#### Digest summary")
+    st.markdown(report.digest_summary)
+    st.markdown("#### Artifact trace")
+    for path in report.source_artifact_paths:
+      st.caption(path)
+    for path in report.evidence_map_artifact_paths:
+      st.caption(f"evidence_map: {path}")
 
   st.markdown("#### ダウンロード")
   st.download_button(
@@ -263,39 +266,39 @@ def _render_single_report(
 
 def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
   root = Path(project_root)
+  render_judge_conclusion_card("gap_next_actions")
+  render_judge_next_tab_hint("gap_next_actions")
+
   state = get_v8_input_state()
   default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
-  st.markdown("### Gap / Next Actions")
-  render_demo_flow_banner(
-    project_root=root,
-    current_tab="gap_next_actions",
-    tab_purpose="Gap is not invalidity / weakness — 未確認事項と Top 3 Actions",
-    next_tab_key="fixed_point_observation",
-  )
-  st.markdown(
-    render_info_box(
-      "<strong>Gapの見方 (Phase27L)</strong><br>"
-      "• Gap は<strong>未確認事項</strong> — Gap is not invalidity / weakness / infringement。<br>"
-      "• Next Action は人間の確認作業 — 法的判断ではありません。<br>"
-      "• claim 投入前: claim本文取得 → 投入後: 実施例確認 / paper確認 へ進む場合があります。<br>"
-      "• 実施例本文・論文本文を読んだことにはしません。"
-    ),
-    unsafe_allow_html=True,
-  )
-  st.markdown(
-    render_caution_box(
-      "<strong>Gap は特許の弱点ではなく、次に確認すべき未確認事項です。</strong> "
-      "Next Action は人間が次に確認する技術調査タスクであり、法的判断ではありません。"
-      " candidate information only / human review required。"
-      " FTO、侵害、有効性判断ではありません。"
-      " 外部API・メール送信・Scheduler 起動はこのタブでは行いません。"
-    ),
-    unsafe_allow_html=True,
-  )
-  for notice in GAP_NEXT_ACTIONS_SAFETY_NOTICES[:4]:
-    st.caption(notice)
+  st.markdown("### Gap / Next Actions｜未確認事項")
+  with st.expander("詳細ガイド・注意事項", expanded=False):
+    render_demo_flow_banner(
+      project_root=root,
+      current_tab="gap_next_actions",
+      tab_purpose="Gapは未確認事項 — 弱点・無効理由・侵害リスクではない",
+      next_tab_key="fixed_point_observation",
+    )
+    st.markdown(
+      render_info_box(
+        "<strong>Gapの見方</strong><br>"
+        "• Gap は<strong>未確認事項</strong> — 弱点・無効理由・侵害リスクではありません。<br>"
+        "• Next Action は人間が次に確認する技術調査タスクです。"
+      ),
+      unsafe_allow_html=True,
+    )
+    st.markdown(
+      render_caution_box(
+        "<strong>Gap は特許の弱点ではなく、次に確認すべき未確認事項です。</strong> "
+        " Next Action は人間が次に確認する技術調査タスクであり、法的判断ではありません。"
+        " FTO、侵害、有効性判断は行いません。"
+      ),
+      unsafe_allow_html=True,
+    )
+    for notice in GAP_NEXT_ACTIONS_SAFETY_NOTICES[:4]:
+      st.caption(notice)
 
   case_options = _case_options()
   case_ids = [c for c, _ in case_options]
@@ -330,24 +333,16 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
     st.session_state[STATE_V8_SELECTED_PUBLICATION] = publication_number
 
   ev_dir = find_latest_evidence_map_dir(active_case, root)
-  claim_dir = find_latest_claim_map_dir(active_case, root)
-  shortlist_dir = find_latest_patent_shortlist_dir(active_case, root)
   if ev_dir:
-    st.caption(f"Evidence Map artifact: {ev_dir}")
-    import json
-    manifest = ev_dir / "evidence_map_manifest.json"
-    if manifest.exists():
-      meta = json.loads(manifest.read_text(encoding="utf-8"))
-      st.caption(
-        f"missing_evidence_count={meta.get('missing_evidence_count', 0)} / "
-        f"claim_text_required_count={meta.get('claim_text_required_count', 0)}"
-      )
+    with st.expander("artifact参照（開発者向け）", expanded=False):
+      st.caption(f"Evidence Map artifact: {ev_dir}")
+      import json
+      manifest = ev_dir / "evidence_map_manifest.json"
+      if manifest.exists():
+        meta = json.loads(manifest.read_text(encoding="utf-8"))
+        st.caption(f"missing_evidence_count={meta.get('missing_evidence_count', 0)}")
   else:
     st.caption("Evidence Map 未生成 — 「Evidence Map」タブで Generate してください。")
-  if claim_dir:
-    st.caption(f"Claim Map artifact: {claim_dir}")
-  if shortlist_dir:
-    st.caption(f"Patent Shortlist artifact: {shortlist_dir}")
 
   refresh = st.button("Generate / Refresh Gap & Next Actions", key="v8_gap_refresh", type="primary")
 
@@ -401,17 +396,18 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
     report = _report_from_dict(cached["report"])
     _render_single_report(report, cached.get("export") or {}, key_suffix="single")
 
-  st.markdown("#### 次 Phase への接続")
-  for phase in GAP_NEXT_PHASES:
-    st.markdown(f"- {phase}")
-  st.markdown(
-    render_info_box(
-      "Watch Profile update proposal / Digest summary は定点観測ループ（"
-      f"「{V8_TAB_LABELS['fixed_point_observation']}」）へ引き継がれます。"
-      " 人手承認後に Watch Profile 反映・次回 Scheduler・メール Digest へ接続します。"
-    ),
-    unsafe_allow_html=True,
-  )
+  with st.expander("次 Phase への接続（詳細）", expanded=False):
+    st.markdown("#### 次 Phase への接続")
+    for phase in GAP_NEXT_PHASES:
+      st.markdown(f"- {phase}")
+    st.markdown(
+      render_info_box(
+        "Watch Profile update proposal / Digest summary は定点観測ループ（"
+        f"「{V8_TAB_LABELS['fixed_point_observation']}」）へ引き継がれます。"
+        " 人手承認後に Watch Profile 反映・次回 Scheduler・メール Digest へ接続します。"
+      ),
+      unsafe_allow_html=True,
+    )
 
   st.markdown(
     render_next_action_box(

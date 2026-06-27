@@ -16,16 +16,16 @@ V8_TAB_IDS: tuple[str, ...] = (
 )
 
 V8_TAB_LABELS: dict[str, str] = {
-  "intro": "はじめに",
-  "input": "入力",
-  "sources": "Sources一覧",
-  "patent_shortlist": "読むべき特許",
-  "claim_map": "Claim Map",
-  "evidence_map": "Evidence Map",
-  "gap_next_actions": "Gap / Next Actions",
-  "fixed_point_observation": "定点観測",
-  "export": "Export",
-  "admin_settings": "管理者設定",
+  "intro": "はじめに｜Judge Overview",
+  "input": "入力・テーマ設定",
+  "sources": "Sources｜データ出自",
+  "patent_shortlist": "読むべき特許｜Top5",
+  "claim_map": "Claim Map｜請求項の技術整理",
+  "evidence_map": "Evidence Map｜裏取り候補",
+  "gap_next_actions": "Gap / Next Actions｜未確認事項",
+  "fixed_point_observation": "定点観測｜Weekly Watch",
+  "export": "Export｜共有レポート",
+  "admin_settings": "管理者設定｜Demo Safety",
 }
 
 V8_CASE_SAMPLES: tuple[dict[str, str], ...] = (
@@ -91,18 +91,17 @@ STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 V8_STATUS_CAPTION = (
-  "v8 submission demo — Phase27Q.3: Case 1 full Top5 manual claims / Evidence Gap（提出時 BQ・メール・Scheduler OFF）"
+  "Judge Mode — 提出デモ（外部API / BigQuery / メール / Scheduler OFF）"
 )
 
 V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
-  "1. 入力",
-  "2. Sources一覧",
-  "3. 読むべき特許",
-  "4. Claim Map",
-  "5. Evidence Map",
-  "6. Gap / Next Actions",
-  "7. 定点観測",
-  "8. Export",
+  "1. はじめに｜Judge Overview",
+  "2. 読むべき特許｜Top5",
+  "3. Claim Map｜請求項の技術整理",
+  "4. Evidence Map｜裏取り候補",
+  "5. Gap / Next Actions｜未確認事項",
+  "6. 定点観測｜Weekly Watch",
+  "7. Export｜共有レポート",
 )
 
 V8_SIDEBAR_NEXT_STEP = (
