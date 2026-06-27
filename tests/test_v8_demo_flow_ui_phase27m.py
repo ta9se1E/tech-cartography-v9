@@ -30,7 +30,7 @@ def test_intro_shortest_demo_flow() -> None:
 
 def test_tab_config_phase27m() -> None:
   text = _read("tech_cartography/ui/v8_tab_config.py")
-  assert "Phase27N" in text or "Phase27M" in text or "Phase27Q.1" in text
+  assert "Phase27N" in text or "Phase27M" in text or "Phase27Q.1" in text or "Phase27Q.3" in text
 
 
 def test_input_first_step() -> None:

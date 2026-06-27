@@ -37,20 +37,20 @@ def render_v8_intro_tab() -> None:
     unsafe_allow_html=True,
   )
 
-  st.markdown("#### Phase27N.5 — Case 1 実データ E2E（最優先）")
+  st.markdown("#### Phase27N.5 — Case 1 実データ E2E（完了）")
   st.markdown(
     render_info_box(
-      "<strong>Cloud Run deploy 前に、Case 1 だけ実在特許 CSV で最後まで通す</strong>。"
+      "<strong>Case 1 は1000件候補→Top5選抜→Top5全件35請求項投入済み。</strong>"
       " 1000件は母集団 — Top5 のみ Deep Dive。"
       " claim 本文は自動生成しません。"
     ),
     unsafe_allow_html=True,
   )
   n5_steps = [
-    "実在 CSV を cases/case_01_pan_graphitization/large_candidates/case_01_bigquery_export_1000.csv に配置",
+    "実在 CSV を cases/case_01_pan_graphitization/large_candidates/case_01_bigquery_export_1000.csv に配置済み",
     "Import（入力タブまたは CLI）",
     "Top100 / Top20 / Top5 生成",
-    "Top5 から1件選び claim 本文を手動投入",
+    "Top5 全件35請求項を manual_input として投入済み",
     "refresh（Claim Map 投入後 または CLI）",
     "Demo Polish Pack / Demo Readiness Pack 生成",
   ]
@@ -60,9 +60,9 @@ def render_v8_intro_tab() -> None:
     render_next_action_card(
       "Case 1 次にやること",
       [
-        "実在特許 CSV を配置（fixture/架空CSV不可）",
-        "scripts/run_v8_one_case_demo_e2e_check.py を実行",
-        "claim 未投入なら Claim Map タブで1件手動投入",
+        "Case 1: Top5全件35請求項投入済み — Evidence Gap / 実施例確認へ",
+        "scripts/run_v8_one_case_demo_e2e_check.py で demo_ready を確認",
+        "Export タブで Demo Readiness Pack / Cloud Run 確認",
       ],
     ),
     unsafe_allow_html=True,
@@ -74,8 +74,7 @@ def render_v8_intro_tab() -> None:
     "入力タブで 1000件 CSV を取り込む",
     "Sources一覧で母集団を見る",
     "読むべき特許で Top100 → Top20 → Top5 を見る",
-    "Claim Map で claim 状態を見る",
-    "claim 本文があれば手動投入する（1件推奨）",
+    "Claim Map で claim 状態を見る（Case 1: 35 claims 投入済み）",
     "Evidence Map で supporting evidence candidate を見る",
     "Gap / Next Actions で未確認事項を見る",
     "定点観測で次回タスクを見る",

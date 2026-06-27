@@ -1103,16 +1103,18 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("v8_intro_ui missing Phase27N.5 / Case 1 real demo")
 
-  if "Phase27Q.1" in tab_config:
+  if "Phase27Q.3" in tab_config:
+    print("PASS: Sidebar/tab config references Phase27Q.3")
+  elif "Phase27Q.1" in tab_config:
     print("PASS: Sidebar/tab config references Phase27Q.1")
   elif "Phase27N.5" in tab_config:
     print("PASS: Sidebar/tab config references Phase27N.5")
   elif "Phase27N" in tab_config:
     print("PASS: Sidebar/tab config references Phase27N")
   elif "Phase27M" in tab_config:
-    failures.append("v8_tab_config still Phase27M only — update to Phase27Q.1")
+    failures.append("v8_tab_config still Phase27M only — update to Phase27Q.3")
   else:
-    failures.append("v8_tab_config missing Phase27Q.1")
+    failures.append("v8_tab_config missing Phase27Q.3")
 
   phase27n5_files = (
     "docs/one_case_real_demo_runbook.md",
@@ -1156,10 +1158,10 @@ def main(argv: list[str] | None = None) -> int:
   except Exception as exc:
     failures.append(f"cloud run readiness service failed: {exc}")
 
-  if "Phase27Q.1" in tab_config or "Phase27N" in tab_config or "Phase27M" in tab_config:
-    print("PASS: Sidebar/tab config references Phase27M/Phase27N/Phase27Q.1 era")
+  if "Phase27Q.3" in tab_config or "Phase27Q.1" in tab_config or "Phase27N" in tab_config or "Phase27M" in tab_config:
+    print("PASS: Sidebar/tab config references Phase27M/Phase27N/Phase27Q era")
   else:
-    failures.append("v8_tab_config missing Phase27Q.1")
+    failures.append("v8_tab_config missing Phase27Q.3")
 
   try:
     from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
@@ -1317,7 +1319,9 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("stale Phase27B label remains in v8 UI")
 
-  if "Phase27Q.1" in tab_config and (
+  if "Phase27Q.3" in tab_config and ("full Top5" in tab_config or "submission demo" in tab_config.lower()):
+    print("PASS: current label mentions Phase27Q.3 / submission demo polish")
+  elif "Phase27Q.1" in tab_config and (
     "Structured Theme" in tab_config or "Claim Batch" in tab_config or "BigQuery" in tab_config
   ):
     print("PASS: current label mentions Phase27Q.1 / structured theme / claim batch")

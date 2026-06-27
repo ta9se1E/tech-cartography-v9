@@ -10,7 +10,8 @@ from tech_cartography.ui.v8_tab_config import V8_STATUS_CAPTION, v8_sidebar_prog
 
 def test_v8_status_caption_mentions_current_phase() -> None:
   assert (
-    "Phase27Q.1" in V8_STATUS_CAPTION
+    "Phase27Q.3" in V8_STATUS_CAPTION
+    or "Phase27Q.1" in V8_STATUS_CAPTION
     or "Phase27N.5" in V8_STATUS_CAPTION
     or "Phase27N" in V8_STATUS_CAPTION
     or "Phase27M" in V8_STATUS_CAPTION
@@ -22,6 +23,8 @@ def test_v8_status_caption_mentions_current_phase() -> None:
   assert (
     "Structured Theme" in V8_STATUS_CAPTION
     or "Claim Batch" in V8_STATUS_CAPTION
+    or "submission demo" in V8_STATUS_CAPTION.lower()
+    or "full Top5" in V8_STATUS_CAPTION
     or "One Case" in V8_STATUS_CAPTION
     or "Cloud Run" in V8_STATUS_CAPTION
     or "Demo Readiness" in V8_STATUS_CAPTION
@@ -70,7 +73,16 @@ def test_v8_sidebar_helpers_via_demo_safe(monkeypatch) -> None:
   assert "Paper/Web" not in progress
 
 
+def test_v8_sidebar_next_step_no_stale_single_claim_text() -> None:
+  from tech_cartography.ui.v8_tab_config import v8_sidebar_next_steps_text
+
+  text = v8_sidebar_next_steps_text()
+  assert "1件手動投入" not in text
+  assert "35" in text or "Top5全件" in text
+
+
 def test_stale_phase27b_label_removed_from_intro() -> None:
   text = Path("src/tech_cartography/ui/v8_intro_ui.py").read_text(encoding="utf-8")
   assert "UI骨格 Phase27B" not in text
   assert "V8_STATUS_CAPTION" in text
+  assert "1件手動投入" not in text

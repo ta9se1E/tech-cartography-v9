@@ -91,7 +91,7 @@ STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
 
 V8_STATUS_CAPTION = (
-  "v8 local-first — Phase27Q.1: Structured Theme / Claim Batch Import / Admin BigQuery（提出時 BQ OFF）"
+  "v8 submission demo — Phase27Q.3: Case 1 full Top5 manual claims / Evidence Gap（提出時 BQ・メール・Scheduler OFF）"
 )
 
 V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
@@ -106,7 +106,15 @@ V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
 )
 
 V8_SIDEBAR_NEXT_STEP = (
-  "Case 1 に実在特許 CSV を投入し、Top5 生成まで通す — claim は1件手動投入"
+  "Case 1 は1000件候補→Top5選抜→Top5全件35請求項投入済み。次はEvidence Gapと実施例確認。"
+)
+
+V8_SIDEBAR_SUBMISSION_SAFE_NOTICE = (
+  "提出デモ: 外部API実行なし / BigQuery実行なし / メール送信なし / Scheduler起動なし / 管理者設定デフォルトOFF"
+)
+
+CASE_01_TOP5_PUBLICATIONS = (
+  "CN108286090A, CN117987966A, CN105401262A, CN105506785B, CN109402791B"
 )
 
 
