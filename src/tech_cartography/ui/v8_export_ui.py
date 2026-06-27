@@ -32,6 +32,7 @@ from tech_cartography.services.v8_demo_polish import build_demo_polish_report
 from tech_cartography.services.v8_demo_polish_export import export_demo_polish, find_latest_demo_polish_dir
 from tech_cartography.services.v8_bigquery_export import get_bigquery_runs_dir
 from tech_cartography.services.v8_claim_batch_import import claim_batch_template_csv_text
+from tech_cartography.services.v8_claim_batch_import_export import get_claim_batch_import_dir
 from tech_cartography.services.v8_research_theme_defaults import load_research_theme_profile, research_theme_profile_path
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
 from tech_cartography.services.v8_large_candidate_shortlist import (
@@ -733,7 +734,11 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
 
   batch_base = get_claim_batch_import_dir(root) / q_case
   if batch_base.is_dir():
-    batch_dirs = sorted(batch_base.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+    batch_dirs = sorted(
+      (p for p in batch_base.iterdir() if p.is_dir()),
+      key=lambda p: p.stat().st_mtime,
+      reverse=True,
+    )
     if batch_dirs:
       latest_batch = batch_dirs[0]
       for fname, mime in (
@@ -744,7 +749,17 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
       ):
         path = latest_batch / fname
         if path.exists():
-          st.download_button(f"Download {fname}", data=path.read_bytes(), file_name=path.name, mime=mime, key=f"v8_export_batch_{fname}")
+          st.download_button(
+            f"Download {fname}",
+            data=path.read_bytes(),
+            file_name=path.name,
+            mime=mime,
+            key=f"v8_export_batch_{fname}",
+          )
+    else:
+      st.caption("Claim batch import 履歴はまだ出力がありません。")
+  else:
+    st.caption("Claim batch import 履歴はまだ出力がありません。")
   st.download_button(
     "Top5 claim template CSV",
     data=claim_batch_template_csv_text().encode("utf-8"),

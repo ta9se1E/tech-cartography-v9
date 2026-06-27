@@ -13,6 +13,7 @@ from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info
 from tech_cartography.ui.v8_bigquery_admin_ui import render_bigquery_admin_section
 from tech_cartography.ui.v8_research_theme_ui import render_research_theme_section
 from tech_cartography.ui.v8_tab_config import STATE_V8_INPUT, STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
+from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
 
 
 def default_v8_input_state() -> dict[str, Any]:

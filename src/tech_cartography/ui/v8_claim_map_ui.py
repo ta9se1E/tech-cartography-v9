@@ -31,6 +31,7 @@ from tech_cartography.ui.v8_tab_config import (
   V8_CASE_SAMPLES,
   V8_TAB_LABELS,
 )
+from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
 
 STATE_V8_CLAIM_MAP = "v8_claim_map_cache"
 STATE_V8_MANUAL_CLAIM_RESULT = "v8_manual_claim_injection_result"
