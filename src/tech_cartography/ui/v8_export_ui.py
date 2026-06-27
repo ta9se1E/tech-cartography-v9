@@ -31,7 +31,11 @@ from tech_cartography.services.v8_cloud_run_readiness_export import (
 from tech_cartography.services.v8_demo_polish import build_demo_polish_report
 from tech_cartography.services.v8_demo_polish_export import export_demo_polish, find_latest_demo_polish_dir
 from tech_cartography.services.v8_export_package import build_export_package, get_v8_export_packages_dir, records_to_csv_text, records_to_markdown
-from tech_cartography.services.v8_large_candidate_shortlist import find_latest_large_shortlist_dir
+from tech_cartography.services.v8_large_candidate_shortlist import (
+  find_latest_large_shortlist_dir,
+  find_latest_large_shortlist_dirs_for_all_cases,
+  safe_find_latest_large_shortlist_dir,
+)
 from tech_cartography.services.v8_manual_claim_refresh_export import find_latest_manual_claim_refresh_dir
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
@@ -40,11 +44,88 @@ from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES
 
 
-def _artifact_link(path: Path | None) -> None:
+def _export_case_filter(export_case: str) -> str | None:
+  return None if export_case == "all" else export_case
+
+
+def _primary_case_id(export_case: str) -> str:
+  if export_case != "all":
+    return export_case
+  return V8_CASE_SAMPLES[0]["case_id"]
+
+
+def _artifact_link(path: Path | None, *, label: str = "") -> None:
+  prefix = f"{label}: " if label else ""
   if path and path.exists():
-    st.caption(str(path))
+    st.caption(f"{prefix}{path}")
   else:
-    st.caption("（未生成）")
+    st.caption(f"{prefix}（未生成）")
+
+
+def _render_large_candidate_pack_downloads(lc_case: str, lc_dir: Path, *, key_prefix: str) -> None:
+  import json as _json
+
+  manifest_path = lc_dir / "large_candidate_shortlist_manifest.json"
+  if manifest_path.exists():
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    sel = manifest.get("selection") or {}
+    st.markdown(f"- **case_id**: {lc_case}")
+    st.markdown(f"- **triage_engine**: {manifest.get('triage_engine', '—')}")
+    st.markdown(f"- **ranking_policy**: {manifest.get('ranking_policy', '—')}")
+    st.markdown(f"- imported: {sel.get('population_count', '—')}")
+    st.markdown(f"- deduped: {sel.get('deduped_count', '—')}")
+    st.markdown(f"- Top100: {sel.get('top100_count', '—')}")
+    st.markdown(f"- Top20: {sel.get('top20_count', '—')}")
+    st.markdown(f"- Top5: {sel.get('top5_count', '—')}")
+    re_info = manifest.get("ranking_explanation") or {}
+    if re_info.get("common_selection_reasons"):
+      st.markdown("**common_selection_reasons:**")
+      for r in re_info["common_selection_reasons"][:5]:
+        st.caption(f"- {r}")
+    if re_info.get("common_exclusion_reasons"):
+      st.markdown("**common_exclusion_reasons:**")
+      for r in re_info["common_exclusion_reasons"][:5]:
+        st.caption(f"- {r}")
+  else:
+    st.info(f"{lc_case}: manifest 未生成 — artifact missing（true zero ではありません）")
+
+  st.markdown("##### Ranking Explanation Pack")
+  for fname, mime in (
+    ("ranking_explanation.md", "text/markdown"),
+    ("ranking_explanation.json", "application/json"),
+    ("ranking_explanation.csv", "text/csv"),
+    ("top5_ranking_explanation.md", "text/markdown"),
+    ("dropped_candidate_summary.md", "text/markdown"),
+  ):
+    path = lc_dir / fname
+    if path.exists():
+      st.download_button(
+        f"Download {fname}",
+        data=path.read_bytes(),
+        file_name=path.name,
+        mime=mime,
+        key=f"v8_export_re_{key_prefix}_{fname}",
+      )
+
+  for fname, mime in (
+    ("large_candidate_population.csv", "text/csv"),
+    ("large_candidate_deduped.csv", "text/csv"),
+    ("large_candidate_scored.csv", "text/csv"),
+    ("large_candidate_top100.csv", "text/csv"),
+    ("large_candidate_top20.csv", "text/csv"),
+    ("large_candidate_top5.csv", "text/csv"),
+    ("large_candidate_shortlist_summary.md", "text/markdown"),
+    ("large_candidate_shortlist_manifest.json", "application/json"),
+  ):
+    path = lc_dir / fname
+    if path.exists():
+      st.download_button(
+        f"Download {fname}",
+        data=path.read_bytes(),
+        file_name=path.name,
+        mime=mime,
+        key=f"v8_export_lc_{key_prefix}_{fname}",
+      )
 
 
 def render_v8_export_tab(*, project_root: Path | str) -> None:
@@ -126,7 +207,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
     " スコアは読む優先度の暫定値であり、特許価値・権利価値・法的判断ではありません。"
   )
   shortlist_dir = find_latest_patent_shortlist_dir(
-    None if export_case == "all" else export_case,
+    _export_case_filter(export_case),
     root,
   )
   if shortlist_dir and shortlist_dir.exists():
@@ -149,7 +230,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
     " Claim Map は技術整理であり、権利範囲解釈・法的判断ではありません。"
   )
   claim_map_dir = find_latest_claim_map_dir(
-    None if export_case == "all" else export_case,
+    _export_case_filter(export_case),
     root,
   )
   if claim_map_dir and claim_map_dir.exists():
@@ -178,7 +259,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
     " Evidence Map は裏付け候補であり証明ではありません。"
   )
   evidence_map_dir = find_latest_evidence_map_dir(
-    None if export_case == "all" else export_case,
+    _export_case_filter(export_case),
     root,
   )
   if evidence_map_dir and evidence_map_dir.exists():
@@ -209,7 +290,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
     " Next Action は人間の確認作業であり、法的判断ではありません。"
   )
   gap_dir = find_latest_gap_next_actions_dir(
-    None if export_case == "all" else export_case,
+    _export_case_filter(export_case),
     root,
   )
   if gap_dir and gap_dir.exists():
@@ -245,7 +326,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
     " Watch Profile 更新は人手承認後に行います。"
   )
   fp_dir = find_latest_fixed_point_observation_dir(
-    None if export_case == "all" else export_case,
+    _export_case_filter(export_case),
     root,
   )
   if fp_dir and fp_dir.exists():
@@ -277,72 +358,27 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
     "技術的正しさ・特許価値・法的価値ではありません。"
     " Cloud Build / 外部 API / BigQuery 実行は行いません。"
   )
-  lc_case = export_case if export_case != "all" else V8_CASE_SAMPLES[0]["case_id"]
-  lc_dir = find_latest_large_shortlist_dir(lc_case, root)
-  if lc_dir and lc_dir.exists():
-    import json as _json
-
-    manifest_path = lc_dir / "large_candidate_shortlist_manifest.json"
-    if manifest_path.exists():
-      manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
-      sel = manifest.get("selection") or {}
-      st.markdown(f"- **case_id**: {lc_case}")
-      st.markdown(f"- **triage_engine**: {manifest.get('triage_engine', '—')}")
-      st.markdown(f"- **ranking_policy**: {manifest.get('ranking_policy', '—')}")
-      st.markdown(f"- imported: {sel.get('population_count', '—')}")
-      st.markdown(f"- deduped: {sel.get('deduped_count', '—')}")
-      st.markdown(f"- Top100: {sel.get('top100_count', '—')}")
-      st.markdown(f"- Top20: {sel.get('top20_count', '—')}")
-      st.markdown(f"- Top5: {sel.get('top5_count', '—')}")
-      re_info = manifest.get("ranking_explanation") or {}
-      if re_info.get("common_selection_reasons"):
-        st.markdown("**common_selection_reasons:**")
-        for r in re_info["common_selection_reasons"][:5]:
-          st.caption(f"- {r}")
-      if re_info.get("common_exclusion_reasons"):
-        st.markdown("**common_exclusion_reasons:**")
-        for r in re_info["common_exclusion_reasons"][:5]:
-          st.caption(f"- {r}")
-
-    st.markdown("##### Ranking Explanation Pack")
-    for fname, mime in (
-      ("ranking_explanation.md", "text/markdown"),
-      ("ranking_explanation.json", "application/json"),
-      ("ranking_explanation.csv", "text/csv"),
-      ("top5_ranking_explanation.md", "text/markdown"),
-      ("dropped_candidate_summary.md", "text/markdown"),
-    ):
-      path = lc_dir / fname
-      if path.exists():
-        st.download_button(
-          f"Download {fname}",
-          data=path.read_bytes(),
-          file_name=path.name,
-          mime=mime,
-          key=f"v8_export_re_{fname}",
-        )
-
-    for fname, mime in (
-      ("large_candidate_population.csv", "text/csv"),
-      ("large_candidate_deduped.csv", "text/csv"),
-      ("large_candidate_scored.csv", "text/csv"),
-      ("large_candidate_top100.csv", "text/csv"),
-      ("large_candidate_top20.csv", "text/csv"),
-      ("large_candidate_top5.csv", "text/csv"),
-      ("large_candidate_shortlist_summary.md", "text/markdown"),
-      ("large_candidate_shortlist_manifest.json", "application/json"),
-    ):
-      path = lc_dir / fname
-      if path.exists():
-        st.download_button(
-          f"Download {fname}",
-          data=path.read_bytes(),
-          file_name=path.name,
-          mime=mime,
-          key=f"v8_export_lc_{fname}",
-        )
+  if export_case == "all":
+    all_packs = find_latest_large_shortlist_dirs_for_all_cases(root)
+    if not all_packs:
+      st.info(
+        "Large Candidate Pack 未生成 — artifact missing（true zero ではありません）。"
+        " 入力タブで取り込み後、読むべき特許で Top5 を生成してください。"
+      )
+    else:
+      st.caption(f"全 {len(all_packs)} 案件に Large Candidate Pack あり（最新順）")
+      for lc_case, lc_dir in sorted(all_packs, key=lambda item: item[1].stat().st_mtime, reverse=True):
+        st.markdown(f"##### {lc_case}")
+        _render_large_candidate_pack_downloads(lc_case, lc_dir, key_prefix=lc_case)
   else:
-    st.caption("Large Candidate Pack 未生成 — 入力タブで取り込み後、読むべき特許で Top5 を生成してください。")
+    lc_dir = find_latest_large_shortlist_dir(export_case, root)
+    if lc_dir and lc_dir.exists():
+      _render_large_candidate_pack_downloads(export_case, lc_dir, key_prefix=export_case)
+    else:
+      st.info(
+        "Large Candidate Pack 未生成 — artifact missing（true zero ではありません）。"
+        " 入力タブで取り込み後、読むべき特許で Top5 を生成してください。"
+      )
 
   st.markdown("#### Demo Readiness Pack (Phase27M)")
   st.caption(
@@ -502,7 +538,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
     " Evidence Map is not proof / Gap is not invalidity / weakness。"
     " Cloud Build / メール送信 / Scheduler 起動は行いません。"
   )
-  polish_case = export_case if export_case != "all" else V8_CASE_SAMPLES[0]["case_id"]
+  polish_case = _primary_case_id(export_case)
   if st.button("Generate Demo Polish Pack", key="v8_export_demo_polish", type="primary"):
     report = build_demo_polish_report(case_id=polish_case, project_root=root)
     export_result = export_demo_polish(report, project_root=root)
@@ -514,7 +550,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
 
   cached_polish = st.session_state.get("v8_last_demo_polish")
   polish_dir = find_latest_demo_polish_dir(
-    None if export_case == "all" else export_case,
+    _export_case_filter(export_case),
     root,
   )
   if isinstance(cached_polish, dict):
@@ -662,14 +698,26 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
         )
 
   st.markdown("#### 既存 artifact 参照")
-  _artifact_link(find_latest_evidence_gap_path(root))
-  _artifact_link(find_latest_gap_next_actions_dir(None if export_case == "all" else export_case, root))
-  _artifact_link(find_latest_fixed_point_observation_dir(None if export_case == "all" else export_case, root))
-  _artifact_link(find_latest_validation_pack_dir(root))
-  _artifact_link(find_latest_manual_claim_refresh_dir(root))
-  _artifact_link(find_latest_demo_readiness_dir(root))
-  _artifact_link(find_latest_demo_polish_dir(None if export_case == "all" else export_case, root))
-  _artifact_link(find_latest_large_shortlist_dir(None if export_case == "all" else export_case, root))
+  _artifact_link(find_latest_evidence_gap_path(root), label="evidence_gap")
+  _artifact_link(
+    find_latest_gap_next_actions_dir(_export_case_filter(export_case), root),
+    label="gap_next_actions",
+  )
+  _artifact_link(
+    find_latest_fixed_point_observation_dir(_export_case_filter(export_case), root),
+    label="fixed_point_observation",
+  )
+  _artifact_link(find_latest_validation_pack_dir(root), label="validation_pack")
+  _artifact_link(find_latest_manual_claim_refresh_dir(root), label="manual_claim_refresh")
+  _artifact_link(find_latest_demo_readiness_dir(root), label="demo_readiness")
+  _artifact_link(
+    find_latest_demo_polish_dir(_export_case_filter(export_case), root),
+    label="demo_polish",
+  )
+  _artifact_link(
+    safe_find_latest_large_shortlist_dir(_export_case_filter(export_case), root),
+    label="large_shortlist",
+  )
   brief_path = find_latest_strategic_watch_brief_path(root)
   _artifact_link(brief_path)
   if brief_path and brief_path.exists():

@@ -29,16 +29,60 @@ LOCAL_LARGE_SHORTLIST_SUBDIR = "local_v8_large_shortlists"
 
 
 def get_large_shortlist_dir(case_id: str, project_root: Path | str | None = None) -> Path:
+  if not case_id or not str(case_id).strip():
+    raise ValueError("case_id must be a non-empty string")
   root = Path(project_root or project_root_from_here())
   return root / "outputs" / LOCAL_LARGE_SHORTLIST_SUBDIR / case_id
 
 
-def find_latest_large_shortlist_dir(case_id: str, project_root: Path | str | None = None) -> Path | None:
+def _large_shortlist_base_dir(project_root: Path | str | None = None) -> Path:
+  root = Path(project_root or project_root_from_here())
+  return root / "outputs" / LOCAL_LARGE_SHORTLIST_SUBDIR
+
+
+def find_latest_large_shortlist_dir(
+  case_id: str | None,
+  project_root: Path | str | None = None,
+) -> Path | None:
+  if not case_id:
+    return find_latest_large_shortlist_dir_for_any_case(project_root)
   base = get_large_shortlist_dir(case_id, project_root)
   if not base.is_dir():
     return None
   dirs = sorted((p for p in base.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True)
   return dirs[0] if dirs else None
+
+
+def find_latest_large_shortlist_dirs_for_all_cases(
+  project_root: Path | str | None = None,
+) -> list[tuple[str, Path]]:
+  base = _large_shortlist_base_dir(project_root)
+  if not base.is_dir():
+    return []
+  results: list[tuple[str, Path]] = []
+  for case_dir in sorted(p for p in base.iterdir() if p.is_dir()):
+    latest = find_latest_large_shortlist_dir(case_dir.name, project_root)
+    if latest and latest.exists():
+      results.append((case_dir.name, latest))
+  return results
+
+
+def find_latest_large_shortlist_dir_for_any_case(
+  project_root: Path | str | None = None,
+) -> Path | None:
+  all_packs = find_latest_large_shortlist_dirs_for_all_cases(project_root)
+  if not all_packs:
+    return None
+  return max(all_packs, key=lambda item: item[1].stat().st_mtime)[1]
+
+
+def safe_find_latest_large_shortlist_dir(
+  case_id: str | None,
+  project_root: Path | str | None = None,
+) -> Path | None:
+  if case_id:
+    return find_latest_large_shortlist_dir(case_id, project_root)
+  return find_latest_large_shortlist_dir_for_any_case(project_root)
 
 
 def find_latest_large_manifest(case_id: str, project_root: Path | str | None = None) -> Path | None:
