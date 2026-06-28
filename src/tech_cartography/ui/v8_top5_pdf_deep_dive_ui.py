@@ -79,6 +79,7 @@ def _status_summary_rows(statuses: list[Top5PdfPipelineStatus]) -> list[dict]:
   for s in statuses:
     rows.append({
       "publication_number": s.publication_number,
+      "status": s.pipeline_status_label or "—",
       "pdf_uploaded": s.pdf_uploaded,
       "pdf_text_extracted": s.pdf_text_extracted,
       "needs_ocr": s.needs_ocr,
@@ -90,6 +91,7 @@ def _status_summary_rows(statuses: list[Top5PdfPipelineStatus]) -> list[dict]:
       "examples_count": s.examples_count,
       "example_facts_extracted": s.example_facts_extracted,
       "claim_example_links": s.claim_example_links_generated,
+      "evidence_aware_gaps": s.evidence_aware_gaps_generated,
       "next_action": s.next_action,
     })
   return rows
@@ -341,10 +343,23 @@ def _render_next_action_for_patent(
       st.success("最新 example_facts から Claim-Example binding を再生成しました")
       st.rerun()
 
-  st.success(
-    f"対応候補あり — linked={status.linked_claim_count}, unlinked={status.unlinked_claim_count}。"
-    " 次: Gapロジック更新へ（次Phase）"
-  )
+  from tech_cartography.services.v8_evidence_gap_next_actions import evidence_aware_gap_primary_available
+
+  if status.evidence_ready_for_review:
+    st.success(
+      f"Review-ready candidate — linked={status.linked_claim_count}, unlinked={status.unlinked_claim_count}。"
+      " PDF原文でOCR由来の工程条件・物性値・表候補を確認してください（候補扱い）。"
+    )
+  elif evidence_aware_gap_primary_available(case_id, project_root):
+    st.success(
+      f"Claim-Example evidence-aware Gap generated — human review checklist available。"
+      f" linked={status.linked_claim_count}, unlinked={status.unlinked_claim_count}"
+    )
+  else:
+    st.success(
+      f"対応候補あり — linked={status.linked_claim_count}, unlinked={status.unlinked_claim_count}。"
+      " Gap / Next Actions タブで Evidence-aware Gap を生成してください。"
+    )
 
 
 def render_top5_pdf_deep_dive_section(
@@ -375,7 +390,7 @@ def render_top5_pdf_deep_dive_section(
 
   render_top5_pdf_upload_section(statuses, case_id, project_root, key_prefix=key_prefix)
 
-  pending = [s for s in statuses if s.next_action != "Gapロジック更新へ進めます"]
+  pending = [s for s in statuses if not s.evidence_ready_for_review]
   focus = pending[0] if pending else statuses[0]
   st.markdown(f"**次に進める特許: {focus.publication_number}**")
   if focus.title or focus.assignee:

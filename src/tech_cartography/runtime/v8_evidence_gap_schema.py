@@ -177,6 +177,25 @@ class EvidenceAwareGapSummary:
 
 
 @dataclass
+class EvidenceAwareTopAction:
+  action_rank: int
+  action_type: str
+  action_title: str
+  action_description: str = ""
+  target_publication_number: str = ""
+  target_claim_no: str = ""
+  expected_output: str = ""
+  priority_reason: str = ""
+  owner_suggestion: str = "researcher"
+  watch_profile_update_hint: str = ""
+  email_digest_hint: str = ""
+  scheduler_followup_hint: str = ""
+
+  def to_dict(self) -> dict[str, Any]:
+    return asdict(self)
+
+
+@dataclass
 class EvidenceAwareGapReport:
   case_id: str
   generated_at: str = field(default_factory=utc_now_iso)

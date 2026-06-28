@@ -125,7 +125,7 @@ def test_infer_next_action_needs_ocr_run_vision() -> None:
     vision_ocr_available=True,
     vision_ocr_text_extracted=False,
   )
-  assert infer_next_action(status) == "Run Google Vision OCR"
+  assert infer_next_action(status) == "Run Google Vision OCR or verify PDF text extraction"
 
 
 def test_infer_next_action_ocr_disabled() -> None:

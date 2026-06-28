@@ -11,6 +11,9 @@ from tech_cartography.services.v8_claim_example_binding import (
   find_latest_claim_example_links_dir,
   load_binding_summary_from_dir,
 )
+from tech_cartography.services.v8_evidence_gap_next_actions import (
+  load_evidence_gap_summary_by_pub,
+)
 from tech_cartography.services.v8_gemini_example_facts import (
   find_latest_example_facts_dir,
   load_example_facts_summary_from_dir,
@@ -106,6 +109,42 @@ def _target_section_info_for_pub(
   return len(targets), ",".join(types), fallback
 
 
+def infer_pipeline_status_label(status: Top5PdfPipelineStatus) -> tuple[str, str]:
+  details: list[str] = []
+  if status.vision_ocr_text_extracted:
+    details.append("OCR completed")
+  if status.sections_extracted:
+    details.append("sections extracted")
+  if status.example_facts_extracted:
+    details.append("example facts extracted")
+  if status.claim_example_links_generated:
+    details.append("claim-example binding generated")
+  if status.evidence_aware_gaps_generated:
+    details.append("evidence-aware gaps generated")
+
+  if status.evidence_ready_for_review:
+    return "Review-ready candidate", " / ".join(details) if details else "review-ready candidate"
+  if status.evidence_no_example_facts:
+    if status.pdf_uploaded and not status.vision_ocr_text_extracted and status.needs_ocr:
+      return "PDF uploaded / OCR or text extraction pending", " / ".join(details) if details else ""
+    if status.vision_ocr_text_extracted and not status.sections_extracted:
+      return "OCR text available / sections pending", " / ".join(details) if details else ""
+    if status.sections_extracted and not status.example_facts_extracted:
+      return "text or sections available / example facts pending", " / ".join(details) if details else ""
+    return "example facts pending", " / ".join(details) if details else ""
+  if status.claim_example_links_generated and status.evidence_aware_gaps_generated:
+    return "Evidence-aware gaps generated", " / ".join(details) if details else ""
+  if not status.pdf_uploaded:
+    return "PDF not uploaded", ""
+  if status.needs_ocr and not status.vision_ocr_text_extracted:
+    return "PDF uploaded / OCR or text extraction pending", ""
+  if status.vision_ocr_text_extracted and not status.sections_extracted:
+    return "OCR text available / sections pending", ""
+  if status.sections_extracted and not status.example_facts_extracted:
+    return "text or sections available / example facts pending", ""
+  return "pipeline in progress", " / ".join(details) if details else ""
+
+
 def infer_next_action(status: Top5PdfPipelineStatus) -> str:
   if not status.pdf_uploaded:
     return "PDFを取得してアップロード"
@@ -114,20 +153,24 @@ def infer_next_action(status: Top5PdfPipelineStatus) -> str:
   if status.needs_ocr and not status.vision_ocr_text_extracted:
     if not status.vision_ocr_available:
       return "OCR disabled: enable Google Vision OCR"
-    return "Run Google Vision OCR"
+    return "Run Google Vision OCR or verify PDF text extraction"
   if status.vision_ocr_text_extracted and (
     not status.sections_extracted or status.sections_stale_vs_ocr
   ):
     return "Extract sections from OCR text"
   if not status.sections_extracted:
     return "Extract sections"
-  if status.sections_extracted and not status.has_examples and (status.examples_count or 0) == 0:
-    return "examples未検出: セクション抽出結果を確認してください"
   if not status.example_facts_extracted:
-    return "Extract example facts"
+    if status.sections_extracted and not status.has_examples and (status.examples_count or 0) == 0:
+      return "examples未検出: セクション抽出結果を確認してください"
+    return "Extract example facts or review sections"
   if not status.claim_example_links_generated:
     return "Bind claim to example facts"
-  return "Gapロジック更新へ進めます"
+  if status.evidence_ready_for_review:
+    return "PDF原文でOCR由来の工程条件・物性値・表候補を確認"
+  if status.evidence_aware_gaps_generated:
+    return "Claim-Example evidence-aware Gap generated — human review checklist available"
+  return "Generate evidence-aware Gap / Next Actions from Claim-Example binding"
 
 
 def build_top5_pdf_pipeline_status(
@@ -157,6 +200,8 @@ def build_top5_pdf_pipeline_status(
 
   bind_dir = find_latest_claim_example_links_dir(case_id, root)
   bind_summary = load_binding_summary_from_dir(bind_dir) if bind_dir else {}
+
+  evidence_gap_summary = load_evidence_gap_summary_by_pub(case_id, root)
 
   sections_csv = (section_dir / "publication_fulltext_sections.csv") if section_dir else None
 
@@ -215,6 +260,11 @@ def build_top5_pdf_pipeline_status(
     facts_extracted = bool(fact_row) and fact_count and fact_count > 0
     links_generated = bool(bind_row) and _int_or_none(bind_row.get("link_count", 0)) not in {None, 0}
 
+    gap_row = evidence_gap_summary.get(norm, {})
+    evidence_gaps_generated = bool(gap_row)
+    evidence_ready = _int_or_none(gap_row.get("ready_for_human_review_count")) not in {None, 0}
+    evidence_no_facts = _int_or_none(gap_row.get("no_example_facts_gap_count")) not in {None, 0}
+
     needs_review = (
       _bool_from_row(sec_row.get("needs_human_review")) if sec_row else False
     ) or (
@@ -272,9 +322,13 @@ def build_top5_pdf_pipeline_status(
       claim_example_links_generated=bool(links_generated),
       linked_claim_count=_int_or_none(bind_row.get("linked_claim_count")) if bind_row else None,
       unlinked_claim_count=_int_or_none(bind_row.get("unlinked_claim_count")) if bind_row else None,
+      evidence_aware_gaps_generated=evidence_gaps_generated,
+      evidence_ready_for_review=bool(evidence_ready),
+      evidence_no_example_facts=bool(evidence_no_facts),
       needs_human_review=needs_review,
       warning=warning,
     )
+    status.pipeline_status_label, status.pipeline_status_details = infer_pipeline_status_label(status)
     status.next_action = infer_next_action(status)
     statuses.append(status)
   return statuses

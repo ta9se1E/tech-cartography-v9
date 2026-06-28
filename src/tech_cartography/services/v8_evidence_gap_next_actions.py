@@ -29,6 +29,7 @@ from tech_cartography.runtime.v8_evidence_gap_schema import (
   EvidenceAwareGapRecord,
   EvidenceAwareGapReport,
   EvidenceAwareGapSummary,
+  EvidenceAwareTopAction,
 )
 from tech_cartography.runtime.v8_research_theme_schema import normalize_publication_number
 from tech_cartography.runtime.v8_sources_schema import utc_now_iso
@@ -563,6 +564,211 @@ def summary_to_markdown(report: EvidenceAwareGapReport) -> str:
   return "\n".join(lines)
 
 
+def load_evidence_gap_summary_by_pub(
+  case_id: str,
+  project_root: Path | str | None = None,
+) -> dict[str, dict[str, str]]:
+  gap_dir = find_latest_evidence_aware_gap_dir(case_id, project_root)
+  if not gap_dir or not is_evidence_aware_gap_pack(gap_dir):
+    return {}
+  summary_csv = gap_dir / "gap_next_actions_summary.csv"
+  if not summary_csv.exists():
+    return {}
+  with summary_csv.open(encoding="utf-8", newline="") as handle:
+    rows = list(csv.DictReader(handle))
+  return {
+    normalize_publication_number(str(row.get("publication_number", ""))): row
+    for row in rows
+    if str(row.get("publication_number", "")).strip()
+  }
+
+
+def evidence_aware_gap_primary_available(
+  case_id: str,
+  project_root: Path | str | None = None,
+) -> bool:
+  gap_dir = find_latest_evidence_aware_gap_dir(case_id, project_root)
+  if gap_dir is None or not is_evidence_aware_gap_pack(gap_dir):
+    return False
+  csv_path = gap_dir / "gap_next_actions.csv"
+  return csv_path.exists() and csv_path.stat().st_size > 0
+
+
+def _dedupe_evidence_snippets(
+  gaps: list[EvidenceAwareGapRecord],
+) -> list[tuple[str, str, str]]:
+  seen: set[tuple[str, str, str]] = set()
+  items: list[tuple[str, str, str]] = []
+  for gap in gaps:
+    for snippet in _parse_pipe_list(gap.top_evidence_snippets):
+      key = (gap.publication_number, str(gap.claim_no), snippet.strip())
+      if key in seen or not snippet.strip():
+        continue
+      seen.add(key)
+      items.append(key)
+  return items
+
+
+def build_top3_next_actions_from_evidence_gaps(
+  report: EvidenceAwareGapReport,
+) -> list[EvidenceAwareTopAction]:
+  actions: list[EvidenceAwareTopAction] = []
+  summaries = sorted(
+    report.summaries,
+    key=lambda s: (-s.ready_for_human_review_count, s.publication_number),
+  )
+  review_ready = [s for s in summaries if s.ready_for_human_review_count > 0]
+
+  if review_ready:
+    pub = review_ready[0].publication_number
+    pub_gaps = [g for g in report.gaps if g.publication_number == pub]
+    prop_table = [
+      g for g in pub_gaps
+      if g.gap_type in {GAP_TYPE_PROPERTY_VALUE_REVIEW, GAP_TYPE_TABLE_REVIEW}
+    ]
+    if prop_table:
+      claims = sorted({g.claim_no for g in prop_table}, key=lambda x: (len(x), x))
+      claim_label = "/".join(claims[:8])
+      if len(claims) > 8:
+        claim_label += f" 他{len(claims) - 8}件"
+      actions.append(EvidenceAwareTopAction(
+        action_rank=len(actions) + 1,
+        action_type="review_property_table_candidates",
+        action_title=f"{pub} claim {claim_label} の物性値・表候補を原文PDFで確認",
+        action_description=(
+          "property_value / table_candidate の裏取り候補について、"
+          "拉伸强度・拉伸模量・表1・単位を原文PDFで確認してください（候補扱い）。"
+        ),
+        target_publication_number=pub,
+        target_claim_no=claims[0] if claims else "",
+        expected_output="拉伸强度・拉伸模量・表1・単位の確認結果（候補メモ）",
+        priority_reason="review-ready candidate with property/table evidence snippets",
+        watch_profile_update_hint=f"Watch: {pub} property/table review tasks for claims {claim_label}",
+        email_digest_hint=f"Digest: {pub} property/table candidates pending source PDF review",
+        scheduler_followup_hint="Scheduler: queue human review for property/table candidates",
+      ))
+
+    process_gaps = [g for g in pub_gaps if g.gap_type == GAP_TYPE_PROCESS_CONDITION_REVIEW]
+    if process_gaps and len(actions) < 3:
+      claims = sorted({g.claim_no for g in process_gaps}, key=lambda x: (len(x), x))
+      claim_label = "〜".join([claims[0], claims[-1]]) if len(claims) > 1 else claims[0]
+      actions.append(EvidenceAwareTopAction(
+        action_rank=len(actions) + 1,
+        action_type="review_process_conditions",
+        action_title=f"{pub} claim {claim_label} の工程条件候補を原文PDFで確認",
+        action_description=(
+          "预氧化 / 低温碳化 / 高温碳化 / 石墨化 の温度・時間・拉伸倍率を"
+          "原文PDFで確認してください（OCR由来の可能性あり）。"
+        ),
+        target_publication_number=pub,
+        target_claim_no=claims[0] if claims else "",
+        expected_output="工程条件候補の温度・時間・雰囲気・拉伸倍率の確認結果",
+        priority_reason="process_condition review gaps from claim-example binding",
+        watch_profile_update_hint=f"Watch: {pub} process condition review for claims {claim_label}",
+        email_digest_hint=f"Digest: {pub} process condition candidates pending review",
+        scheduler_followup_hint="Scheduler: queue process condition human review",
+      ))
+
+  no_fact_pubs = sorted(
+    s.publication_number for s in report.summaries if s.no_example_facts_gap_count > 0
+  )
+  if no_fact_pubs and len(actions) < 3:
+    pub_list = " / ".join(no_fact_pubs)
+    actions.append(EvidenceAwareTopAction(
+      action_rank=len(actions) + 1,
+      action_type="complete_example_fact_pipeline",
+      action_title="他Top5公報のOCR / section / example facts抽出を進める",
+      action_description=(
+        f"実施例ファクト未取得の公報（{pub_list}）について、"
+        "PDF/OCR/section/Gemini facts/claim-example binding を順に実行してください。"
+      ),
+      target_publication_number=no_fact_pubs[0],
+      target_claim_no="",
+      expected_output="実施例ファクト抽出とclaim-example対応候補（候補扱い）",
+      priority_reason="publications without example facts remain in pipeline",
+      watch_profile_update_hint=f"Watch: prioritize example fact pipeline for {pub_list}",
+      email_digest_hint=f"Digest: {len(no_fact_pubs)} publications still lack example facts",
+      scheduler_followup_hint="Scheduler: track incomplete Top5 PDF pipelines",
+    ))
+
+  while len(actions) < 3:
+    ocr_gaps = [g for g in report.gaps if g.gap_type == GAP_TYPE_OCR_HUMAN_REVIEW]
+    if ocr_gaps and not any(a.action_type == "review_ocr_evidence" for a in actions):
+      gap = ocr_gaps[0]
+      actions.append(EvidenceAwareTopAction(
+        action_rank=len(actions) + 1,
+        action_type="review_ocr_evidence",
+        action_title=f"{gap.publication_number} claim {gap.claim_no} のOCR由来根拠候補を原文確認",
+        action_description=gap.gap_description,
+        target_publication_number=gap.publication_number,
+        target_claim_no=gap.claim_no,
+        expected_output="OCR由来数値・単位・実施例番号の原文確認結果",
+        priority_reason="OCR-derived evidence requires source PDF review",
+        watch_profile_update_hint=f"Watch: OCR review for {gap.publication_number}",
+        email_digest_hint=f"Digest: OCR review pending for {gap.publication_number}",
+      ))
+      continue
+    break
+
+  for idx, action in enumerate(actions[:3], start=1):
+    action.action_rank = idx
+  text_blob = " ".join(
+    f"{a.action_title} {a.action_description}" for a in actions[:3]
+  )
+  _assert_safe_text(text_blob)
+  return actions[:3]
+
+
+def build_watch_profile_proposal_md(report: EvidenceAwareGapReport) -> str:
+  top3 = build_top3_next_actions_from_evidence_gaps(report)
+  lines = [
+    f"# Watch Profile Update Proposal — {report.case_id}",
+    "",
+    "Evidence-aware Gap（claim-example binding由来）に基づく定点観測候補です。",
+    "候補情報のみ — 人手承認後に Watch Profile へ反映してください。",
+    "",
+  ]
+  for action in top3:
+    lines.append(f"- {action.watch_profile_update_hint or action.action_title}")
+  ready_pubs = [s.publication_number for s in report.summaries if s.ready_for_human_review_count > 0]
+  if ready_pubs:
+    lines.append(f"- Review-ready publications: {', '.join(ready_pubs)}")
+  no_fact = [s.publication_number for s in report.summaries if s.no_example_facts_gap_count > 0]
+  if no_fact:
+    lines.append(f"- Publications needing example fact pipeline: {', '.join(no_fact)}")
+  return "\n".join(lines)
+
+
+def build_digest_summary_md(report: EvidenceAwareGapReport) -> str:
+  top3 = build_top3_next_actions_from_evidence_gaps(report)
+  lines = [
+    f"# Digest Summary — {report.case_id}",
+    "",
+    "Evidence-aware Gap digest preview（送信は行いません — preview only）。",
+    "",
+    "## Top 3 Next Actions",
+  ]
+  for action in top3:
+    lines.append(
+      f"{action.action_rank}. **{action.action_title}** ({action.action_type}) — "
+      f"{action.target_publication_number}"
+    )
+    lines.append(f"   - expected_output: {action.expected_output}")
+    if action.email_digest_hint:
+      lines.append(f"   - digest_hint: {action.email_digest_hint}")
+  lines.extend([
+    "",
+    "## Summary counts",
+  ])
+  for summary in report.summaries:
+    lines.append(
+      f"- {summary.publication_number}: gaps={summary.gap_count}, "
+      f"ready={summary.ready_for_human_review_count}, "
+      f"no_facts={summary.no_example_facts_gap_count}",
+    )
+  return "\n".join(lines)
+
+
 def human_review_checklist_markdown(report: EvidenceAwareGapReport) -> str:
   lines = [
     f"# Human Review Checklist — {report.case_id}",
@@ -570,73 +776,59 @@ def human_review_checklist_markdown(report: EvidenceAwareGapReport) -> str:
     "Gapは弱点ではなく未確認事項です。Evidenceは裏取り候補であり、証明ではありません。",
     "",
   ]
-  pubs = sorted({g.publication_number for g in report.gaps})
-  for pub in pubs:
+
+  ready_pubs = sorted(
+    s.publication_number for s in report.summaries if s.ready_for_human_review_count > 0
+  )
+  if ready_pubs:
+    lines.extend(["## Review-ready publication", "", *[f"- {pub}" for pub in ready_pubs], ""])
+
+  for pub in ready_pubs:
     pub_gaps = [g for g in report.gaps if g.publication_number == pub]
-    if not pub_gaps:
-      continue
-    lines.append(f"## {pub}")
-    lines.append("")
     claims = sorted({g.claim_no for g in pub_gaps}, key=lambda x: (len(x), x))
-    lines.append(f"### 確認対象 claim: {', '.join(claims)}")
-  lines.append("")
+    if claims:
+      lines.extend([f"## {pub}", "", "### Claims to review", "", f"- claim {', '.join(claims)}", ""])
 
-  example_ids: list[str] = []
-  for gap in report.gaps:
-    for snippet in _parse_pipe_list(gap.top_evidence_snippets):
-      for match in re.finditer(r"(?:实施例|実施例|Example)\s*(\d+)", snippet, re.IGNORECASE):
-        example_ids.append(f"Example {match.group(1)}")
-  if example_ids:
-    lines.append(f"### 確認対象 example_id（候補）: {', '.join(dict.fromkeys(example_ids))}")
-    lines.append("")
-
-  review_gaps = [
-    g for g in report.gaps
-    if g.gap_type in {
-      GAP_TYPE_READY_FOR_HUMAN_REVIEW,
-      GAP_TYPE_OCR_HUMAN_REVIEW,
-      GAP_TYPE_PROPERTY_VALUE_REVIEW,
-      GAP_TYPE_TABLE_REVIEW,
-      GAP_TYPE_PROCESS_CONDITION_REVIEW,
-      GAP_TYPE_STRUCTURE_PROPERTY_REVIEW,
-    }
-  ]
-  if review_gaps:
-    lines.append("### 見るべき根拠候補")
-    for gap in review_gaps[:20]:
-      snippets = _parse_pipe_list(gap.top_evidence_snippets)
-      if snippets:
-        lines.append(f"- claim {gap.claim_no}: {' / '.join(snippets[:3])}")
+  deduped = _dedupe_evidence_snippets(report.gaps)
+  if deduped:
+    lines.extend(["### 見るべき根拠候補（重複除去）", ""])
+    for pub, claim_no, snippet in deduped[:30]:
+      lines.append(f"- {pub} claim {claim_no}: {snippet[:200]}")
     lines.append("")
 
   prop_gaps = [g for g in report.gaps if g.gap_type == GAP_TYPE_PROPERTY_VALUE_REVIEW]
-  if prop_gaps:
-    lines.append("### 確認すべき数値・単位")
-    for gap in prop_gaps[:10]:
-      lines.append(f"- claim {gap.claim_no}: {gap.next_action}")
-    lines.append("")
-
   table_gaps = [g for g in report.gaps if g.gap_type == GAP_TYPE_TABLE_REVIEW]
-  if table_gaps:
-    lines.append("### 確認すべき表")
-    for gap in table_gaps[:10]:
+  if prop_gaps or table_gaps:
+    lines.extend(["### Property / table items to verify", ""])
+    for gap in prop_gaps + table_gaps:
       snippets = _parse_pipe_list(gap.top_evidence_snippets)
-      lines.append(f"- claim {gap.claim_no}: {' / '.join(snippets[:2]) or gap.gap_description}")
+      hint = " / ".join(snippets[:2]) if snippets else gap.gap_label
+      lines.append(f"- claim {gap.claim_no}: {hint}")
     lines.append("")
 
   proc_gaps = [g for g in report.gaps if g.gap_type == GAP_TYPE_PROCESS_CONDITION_REVIEW]
   if proc_gaps:
-    lines.append("### 確認すべき工程条件")
-    for gap in proc_gaps[:10]:
-      lines.append(f"- claim {gap.claim_no}: {gap.next_action}")
-    lines.append("")
+    claims = sorted({g.claim_no for g in proc_gaps}, key=lambda x: (len(x), x))
+    lines.extend([
+      "### Process condition items to verify",
+      "",
+      f"- claim {', '.join(claims)}: 预氧化 / 低温碳化 / 高温碳化 / 石墨化",
+      "",
+    ])
 
-  no_fact = [g for g in report.gaps if g.gap_type == GAP_TYPE_NO_EXAMPLE_FACTS]
-  if no_fact:
-    lines.append("### 追加で必要な資料")
-    pubs_nf = sorted({g.publication_number for g in no_fact})
-    for pub in pubs_nf:
-      lines.append(f"- {pub}: 公報PDF、OCR/本文、section、Gemini実施例ファクト抽出")
+  struct_gaps = [g for g in report.gaps if g.gap_type == GAP_TYPE_STRUCTURE_PROPERTY_REVIEW]
+  if struct_gaps:
+    lines.extend(["### Structure items to verify", "", "- orientation_angle / 取向角（候補）", ""])
+
+  no_fact_summaries = [s for s in report.summaries if s.no_example_facts_gap_count > 0]
+  if no_fact_summaries:
+    lines.extend(["### Publications requiring next extraction", ""])
+    for summary in no_fact_summaries:
+      pub = summary.publication_number
+      note = "example facts pending"
+      if summary.status == "no_example_facts":
+        note = "OCR or facts extraction pending"
+      lines.append(f"- {pub}: {note}")
     lines.append("")
 
   return "\n".join(lines)
@@ -718,6 +910,10 @@ def export_evidence_aware_gap_next_actions(
 
   summary_md_path.write_text(summary_to_markdown(report), encoding="utf-8")
   checklist_path.write_text(human_review_checklist_markdown(report), encoding="utf-8")
+  watch_path = out_dir / "watch_profile_update_proposal.md"
+  digest_path = out_dir / "digest_summary.md"
+  watch_path.write_text(build_watch_profile_proposal_md(report), encoding="utf-8")
+  digest_path.write_text(build_digest_summary_md(report), encoding="utf-8")
 
   manifest = {
     "case_id": report.case_id,
@@ -732,6 +928,8 @@ def export_evidence_aware_gap_next_actions(
       "gap_next_actions_summary_csv": str(summary_csv_path),
       "gap_next_actions_summary_md": str(summary_md_path),
       "human_review_checklist_md": str(checklist_path),
+      "watch_profile_update_proposal_md": str(watch_path),
+      "digest_summary_md": str(digest_path),
     },
     "safety_notices": list(EVIDENCE_GAP_SAFETY_NOTICES),
     "warnings": report.warnings,

@@ -53,6 +53,11 @@ class Top5PdfPipelineStatus:
   claim_example_links_generated: bool = False
   linked_claim_count: int | None = None
   unlinked_claim_count: int | None = None
+  evidence_aware_gaps_generated: bool = False
+  evidence_ready_for_review: bool = False
+  evidence_no_example_facts: bool = False
+  pipeline_status_label: str = ""
+  pipeline_status_details: str = ""
   next_action: str = ""
   warning: str | None = None
   needs_human_review: bool = True

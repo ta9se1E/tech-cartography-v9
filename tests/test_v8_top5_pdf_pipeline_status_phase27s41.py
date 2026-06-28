@@ -47,7 +47,7 @@ def test_infer_next_action_needs_ocr() -> None:
     needs_ocr=True,
     vision_ocr_available=True,
   )
-  assert infer_next_action(s) == "Run Google Vision OCR"
+  assert infer_next_action(s) == "Run Google Vision OCR or verify PDF text extraction"
 
 
 def test_infer_next_action_sections_not_extracted() -> None:
@@ -75,7 +75,7 @@ def test_infer_next_action_facts_not_extracted() -> None:
     examples_count=2,
     example_facts_extracted=False,
   )
-  assert infer_next_action(s) == "Extract example facts"
+  assert infer_next_action(s) == "Extract example facts or review sections"
 
 
 def test_infer_next_action_binding_not_generated() -> None:
@@ -99,7 +99,21 @@ def test_infer_next_action_complete() -> None:
     example_facts_extracted=True,
     claim_example_links_generated=True,
   )
-  assert infer_next_action(s) == "Gapロジック更新へ進めます"
+  assert infer_next_action(s) == "Generate evidence-aware Gap / Next Actions from Claim-Example binding"
+
+
+def test_infer_next_action_evidence_ready() -> None:
+  s = _status(
+    pdf_uploaded=True,
+    pdf_text_extracted=True,
+    sections_extracted=True,
+    has_examples=True,
+    example_facts_extracted=True,
+    claim_example_links_generated=True,
+    evidence_ready_for_review=True,
+  )
+  assert infer_next_action(s) == "PDF原文でOCR由来の工程条件・物性値・表候補を確認"
+  assert "Run Google Vision OCR" not in infer_next_action(s)
 
 
 def test_find_latest_summaries_missing_graceful(tmp_path: Path) -> None:
@@ -231,5 +245,5 @@ def test_build_top5_pdf_pipeline_status_with_summaries(tmp_path: Path) -> None:
   assert s.sections_extracted is True
   assert s.example_facts_extracted is True
   assert s.claim_example_links_generated is True
-  assert s.next_action == "Gapロジック更新へ進めます"
+  assert s.next_action == "Generate evidence-aware Gap / Next Actions from Claim-Example binding"
   assert s.linked_claim_count == 3

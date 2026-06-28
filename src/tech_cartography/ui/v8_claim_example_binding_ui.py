@@ -20,6 +20,7 @@ from tech_cartography.services.v8_claim_example_binding import (
 )
 from tech_cartography.services.v8_large_candidate_shortlist import load_top5_publications
 from tech_cartography.services.v8_top5_pdf_pipeline_status import build_top5_pdf_pipeline_status
+from tech_cartography.services.v8_evidence_gap_next_actions import evidence_aware_gap_primary_available
 from tech_cartography.ui.v8_judge_mode_copy import CLAIM_EXAMPLE_BINDING_HELP
 from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
 
@@ -166,15 +167,25 @@ def render_gap_document_pipeline_status(
   st.caption(
     f"操作本体は「{V8_TAB_LABELS['patent_shortlist']}」タブの Top5 Deep Dive｜公報PDF解析 で実行します。"
   )
+  evidence_primary = evidence_aware_gap_primary_available(case_id, project_root)
   for s in statuses:
-    st.caption(f"- **{s.publication_number}**: {s.next_action}")
-    if s.needs_ocr and not s.vision_ocr_text_extracted:
+    status_label = s.pipeline_status_label or "—"
+    st.caption(f"- **{s.publication_number}** [{status_label}]: {s.next_action}")
+    if s.pipeline_status_details:
+      st.caption(f"  details: {s.pipeline_status_details}")
+    if s.needs_ocr and not s.vision_ocr_text_extracted and not s.evidence_ready_for_review:
       st.caption(
         "  PDFはアップロード済みですが、通常のPDF本文抽出では文字量が不足しています。"
         " Top5 Deep DiveでGoogle Vision OCRを実行してください。"
       )
     elif s.vision_ocr_text_extracted and not s.sections_extracted:
       st.caption("  OCR本文が取得済みです。次にTop5 Deep Diveでセクション抽出を実行してください。")
-  if any(s.claim_example_links_generated for s in statuses):
-    st.caption("claim-example対応候補あり — 次はGapロジック更新（次Phase）")
-  st.caption("対応付けは候補です。Gapロジックへの反映は次Phaseで行います。")
+  if evidence_primary:
+    st.caption(
+      "Claim-Example evidence-aware Gap generated — human review checklist available"
+    )
+  elif any(s.claim_example_links_generated for s in statuses):
+    st.caption(
+      "claim-example対応候補あり — Gap / Next Actions タブで Evidence-aware Gap を生成してください"
+    )
+  st.caption("対応付けは候補です。Evidenceは裏取り候補であり、証明ではありません。")

@@ -32,6 +32,7 @@ from tech_cartography.ui.v8_executive_summary_ui import (
   render_gap_executive_summary,
   render_gap_how_to_read_section,
 )
+from tech_cartography.services.v8_evidence_gap_next_actions import evidence_aware_gap_primary_available
 from tech_cartography.ui.v8_claim_example_binding_ui import render_gap_document_pipeline_status
 from tech_cartography.ui.v8_evidence_gap_next_actions_ui import render_evidence_aware_gap_section
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
@@ -163,11 +164,18 @@ def _render_single_report(
   *,
   project_root: Path,
   key_suffix: str,
+  evidence_primary: bool = False,
 ) -> None:
-  render_gap_how_to_read_section(report=report)
+  if evidence_primary:
+    st.caption(
+      "Legacy rule-based gap artifact（Evidence Mapベース）。"
+      " デモの主表示は上の Evidence-aware Gap を参照してください。"
+    )
+  else:
+    render_gap_how_to_read_section(report=report)
 
   ex_missing = report.count_by_gap_type.get("example_support_missing", 0)
-  if ex_missing > 0:
+  if ex_missing > 0 and not evidence_primary:
     st.markdown(
       render_info_box(
         "<strong>実施例裏取り（example_support_missing）</strong><br>"
@@ -180,10 +188,16 @@ def _render_single_report(
       unsafe_allow_html=True,
     )
     render_gap_document_pipeline_status(report.case_id, project_root)
+  elif ex_missing > 0 and evidence_primary:
+    st.caption(
+      f"Legacy example_support_missing={ex_missing} — "
+      "Evidence-aware Gap の「Pubs w/o example facts」を参照してください。"
+    )
 
-  st.caption("artifact missing と true zero を区別 — Gap artifact 未生成時は gap_count=0 と表示しません")
+  if not evidence_primary:
+    st.caption("artifact missing と true zero を区別 — Gap artifact 未生成時は gap_count=0 と表示しません")
   refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
-  if isinstance(refresh_cached, dict):
+  if isinstance(refresh_cached, dict) and not evidence_primary:
     rpt = refresh_cached.get("report") or {}
     if rpt.get("case_id") == report.case_id:
       before = rpt.get("claim_text_required_count_before")
@@ -198,11 +212,17 @@ def _render_single_report(
           ),
           unsafe_allow_html=True,
         )
-  else:
+  elif not evidence_primary:
     st.caption("Manual Claim Refresh 結果はまだありません — Claim Map タブで保存後 refresh してください。")
 
-  st.markdown("#### Top 3 Next Actions（最優先）")
-  _render_top_actions(report.top_3_actions)
+  if not evidence_primary:
+    st.markdown("#### Top 3 Next Actions（最優先）")
+    _render_top_actions(report.top_3_actions)
+  else:
+    st.caption("Legacy Top 3 Actions — 主表示は Evidence-aware Top 3 を参照してください。")
+    if report.top_3_actions:
+      with st.expander("Legacy actions（参考）", expanded=False):
+        _render_top_actions(report.top_3_actions)
 
   with st.expander(f"Gap 一覧・詳細（全{report.gap_count}件）", expanded=False):
     with st.expander("gap_type 別詳細メトリクス", expanded=False):
@@ -326,18 +346,6 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
       st.caption(notice)
 
   st.divider()
-  pre_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
-  evidence_case = pre_case if pre_case and pre_case != "all" else (
-    V8_CASE_SAMPLES[0]["case_id"] if V8_CASE_SAMPLES else ""
-  )
-  if evidence_case:
-    render_evidence_aware_gap_section(
-      evidence_case,
-      root,
-      key_prefix="v8_gap_tab_ev",
-      show_title=True,
-    )
-
   case_options = _case_options()
   case_ids = [c for c, _ in case_options]
   labels = {c: label for c, label in case_options}
@@ -370,6 +378,21 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
   if publication_number:
     st.session_state[STATE_V8_SELECTED_PUBLICATION] = publication_number
 
+  evidence_primary = (
+    selected_case != "all"
+    and evidence_aware_gap_primary_available(active_case, root)
+  )
+  evidence_bundle = None
+  if selected_case != "all":
+    evidence_bundle = render_evidence_aware_gap_section(
+      active_case,
+      root,
+      key_prefix="v8_gap_tab_ev",
+      show_title=True,
+    )
+    if evidence_bundle and evidence_bundle.get("primary_available"):
+      evidence_primary = True
+
   ev_dir = find_latest_evidence_map_dir(active_case, root)
   if ev_dir:
     with st.expander("artifact参照（開発者向け）", expanded=False):
@@ -382,62 +405,75 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
   else:
     st.caption("Evidence Map 未生成 — 「Evidence Map」タブで Generate してください。")
 
-  refresh = st.button("Generate / Refresh Gap & Next Actions", key="v8_gap_refresh", type="primary")
+  legacy_expander_label = (
+    "Legacy Gap artifact / Prior rule-based gap details（開発者向け）"
+    if evidence_primary
+    else "Prior rule-based Gap / Next Actions（Evidence Mapベース）"
+  )
+  with st.expander(legacy_expander_label, expanded=not evidence_primary):
+    refresh = st.button("Generate / Refresh Gap & Next Actions (Legacy)", key="v8_gap_refresh")
 
-  cache_key = f"{selected_case}:{publication_number}"
-  if refresh or st.session_state.get("v8_gap_cache_key") != cache_key:
-    if selected_case == "all":
-      bundles: dict[str, dict] = {}
+    cache_key = f"{selected_case}:{publication_number}"
+    if refresh or st.session_state.get("v8_gap_cache_key") != cache_key:
+      if selected_case == "all":
+        bundles: dict[str, dict] = {}
+        for sample in V8_CASE_SAMPLES:
+          cid = sample["case_id"]
+          report = build_gap_next_actions_report(case_id=cid, project_root=root)
+          export_result = export_gap_next_actions(report, project_root=root)
+          bundles[cid] = {"report": report.to_dict(), "export": export_result.to_dict()}
+        st.session_state[STATE_V8_GAP_NEXT_ACTIONS] = {"mode": "all", "bundles": bundles}
+      else:
+        report = build_gap_next_actions_report(
+          case_id=selected_case,
+          publication_number=publication_number,
+          project_root=root,
+        )
+        export_result = export_gap_next_actions(report, project_root=root)
+        st.session_state[STATE_V8_GAP_NEXT_ACTIONS] = {
+          "mode": "single",
+          "report": report.to_dict(),
+          "export": export_result.to_dict(),
+        }
+      st.session_state["v8_gap_cache_key"] = cache_key
+
+    cached = st.session_state.get(STATE_V8_GAP_NEXT_ACTIONS)
+    if not cached:
+      if not evidence_primary:
+        render_gap_executive_summary(None)
+        render_gap_how_to_read_section()
+      st.info("「Generate / Refresh Legacy Gap & Next Actions」を押してください。")
+      if not evidence_primary:
+        st.markdown(
+          render_next_action_box(f"先に「{V8_TAB_LABELS['evidence_map']}」で Evidence Map を生成してください。"),
+          unsafe_allow_html=True,
+        )
+    elif cached.get("mode") == "all":
+      bundles = cached.get("bundles") or {}
       for sample in V8_CASE_SAMPLES:
         cid = sample["case_id"]
-        report = build_gap_next_actions_report(case_id=cid, project_root=root)
-        export_result = export_gap_next_actions(report, project_root=root)
-        bundles[cid] = {"report": report.to_dict(), "export": export_result.to_dict()}
-      st.session_state[STATE_V8_GAP_NEXT_ACTIONS] = {"mode": "all", "bundles": bundles}
+        bundle = bundles.get(cid)
+        if not bundle:
+          continue
+        report = _report_from_dict(bundle["report"])
+        with st.expander(
+          f"{sample['label']} — {report.gap_count} legacy gaps / {report.action_count} actions",
+          expanded=cid == active_case and not evidence_primary,
+        ):
+          if not evidence_primary:
+            render_gap_executive_summary(report)
+          _render_single_report(
+            report, bundle.get("export") or {}, project_root=root,
+            key_suffix=cid, evidence_primary=evidence_primary,
+          )
     else:
-      report = build_gap_next_actions_report(
-        case_id=selected_case,
-        publication_number=publication_number,
-        project_root=root,
-      )
-      export_result = export_gap_next_actions(report, project_root=root)
-      st.session_state[STATE_V8_GAP_NEXT_ACTIONS] = {
-        "mode": "single",
-        "report": report.to_dict(),
-        "export": export_result.to_dict(),
-      }
-    st.session_state["v8_gap_cache_key"] = cache_key
-
-  cached = st.session_state.get(STATE_V8_GAP_NEXT_ACTIONS)
-  if not cached:
-    render_gap_executive_summary(None)
-    render_gap_how_to_read_section()
-    with st.expander("latest export（開発者向け）", expanded=False):
-      latest_dir = find_latest_gap_next_actions_dir(active_case if selected_case != "all" else None, root)
-      if latest_dir:
-        st.caption(f"latest export: {latest_dir}")
-    st.info("「Generate / Refresh Gap & Next Actions」を押してください。")
-    st.markdown(
-      render_next_action_box(f"先に「{V8_TAB_LABELS['evidence_map']}」で Evidence Map を生成してください。"),
-      unsafe_allow_html=True,
-    )
-    return
-
-  if cached.get("mode") == "all":
-    bundles = cached.get("bundles") or {}
-    for sample in V8_CASE_SAMPLES:
-      cid = sample["case_id"]
-      bundle = bundles.get(cid)
-      if not bundle:
-        continue
-      report = _report_from_dict(bundle["report"])
-      with st.expander(f"{sample['label']} — {report.gap_count} gaps / {report.action_count} actions", expanded=cid == active_case):
+      report = _report_from_dict(cached["report"])
+      if not evidence_primary:
         render_gap_executive_summary(report)
-        _render_single_report(report, bundle.get("export") or {}, project_root=root, key_suffix=cid)
-  else:
-    report = _report_from_dict(cached["report"])
-    render_gap_executive_summary(report)
-    _render_single_report(report, cached.get("export") or {}, project_root=root, key_suffix="single")
+      _render_single_report(
+        report, cached.get("export") or {}, project_root=root,
+        key_suffix="single", evidence_primary=evidence_primary,
+      )
 
   with st.expander("次 Phase への接続（詳細）", expanded=False):
     st.markdown("#### 次 Phase への接続")

@@ -1029,7 +1029,22 @@ def get_full_patent_document_pipeline_status(
   elif merged.get("example_facts_extracted") and not merged.get("claim_example_links_generated"):
     next_action = "Claim-Example対応候補の生成"
   elif merged.get("claim_example_links_generated"):
-    next_action = "Gapロジック更新へ（次Phase）"
+    from tech_cartography.services.v8_evidence_gap_next_actions import load_evidence_gap_summary_by_pub
+
+    gap_row = load_evidence_gap_summary_by_pub(case_id, project_root).get(
+      normalize_publication_number(publication_number), {},
+    )
+    ready_count = gap_row.get("ready_for_human_review_count")
+    try:
+      ready = int(ready_count) if ready_count not in {None, ""} else 0
+    except (TypeError, ValueError):
+      ready = 0
+    if ready > 0:
+      next_action = "Review OCR-derived evidence candidates in source PDF"
+    elif gap_row:
+      next_action = "Claim-Example evidence-aware Gap generated — human review checklist available"
+    else:
+      next_action = "Generate evidence-aware Gap / Next Actions from Claim-Example binding"
   elif merged.get("facts_needs_human_review") or merged.get("section_needs_human_review"):
     next_action = "抽出結果の人手確認が必要"
   elif merged.get("has_examples"):
