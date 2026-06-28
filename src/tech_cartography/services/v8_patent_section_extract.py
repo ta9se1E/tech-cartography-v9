@@ -37,7 +37,9 @@ _HEADING_RULES: list[tuple[str, str, float, int | None]] = [
   ("comparative_examples", r"(?m)^\s*Comparative\s+Examples?\s*$", CONF_STRONG, None),
   ("comparative_examples", r"(?m)^\s*对比例\s*$", CONF_STRONG, None),
   ("comparative_examples", r"(?m)^\s*比較例\s*$", CONF_STRONG, None),
-  ("tables", r"(?m)^\s*(Table\s*(\d+)|表\s*(\d+))\s*$", CONF_STRONG, 1),
+  ("tables", r"(?m)^\s*(Table\s*(\d+)|表\s*(\d+)|表(\d+))\s*$", CONF_STRONG, 1),
+  ("table_candidate", r"(?m)^\s*(性能对比表|对比表|高强高模碳纤维性能对比表)\s*$", CONF_STRONG, None),
+  ("table_candidate", r"(?m)^\s*表\s*(\d+)\s*[\.．、:：]?\s*(.*(?:对比|性能|强度|模量).*)$", CONF_STRONG, 1),
   ("examples", r"(?m)^\s*(Example\s*(\d+)|实施例\s*(\d+)|実施例\s*(\d+))\s*$", CONF_STRONG, 1),
   ("examples", r"(?m)^\s*(Examples?|Working\s+Examples?|实施例|実施例)\s*$", CONF_STRONG, None),
   ("claims", r"(?m)^\s*(CLAIMS|Claims|What is claimed is[:：]?|权利要求书|权利要求|請求の範囲|特許請求の範囲)\s*$", CONF_STRONG, 1),
@@ -349,13 +351,74 @@ def _section_needs_review(
   confidence: float,
   text_length: int,
 ) -> bool:
-  if section_type == "unknown":
+  if section_type in {"unknown", "table_candidate"}:
     return True
   if confidence < 0.75:
     return True
   if text_length < MIN_SECTION_TEXT_LENGTH:
     return True
   return False
+
+
+_TABLE_TITLE_RE = re.compile(
+  r"表\s*\d+|性能对比表|对比表|高强高模碳纤维性能|与日本东丽|日本东丽|Toray",
+  re.IGNORECASE,
+)
+_TABLE_PROPERTY_RE = re.compile(
+  r"拉伸强度|拉伸模量|强度|模量|GPa|MPa|M55J|M60J|M40J|T300|东丽",
+  re.IGNORECASE,
+)
+_NUMERIC_TOKEN_RE = re.compile(r"\d+\.?\d*")
+
+
+def _looks_like_table_candidate(text: str) -> bool:
+  if not text.strip():
+    return False
+  if _TABLE_TITLE_RE.search(text):
+    return True
+  numeric_count = len(_NUMERIC_TOKEN_RE.findall(text))
+  return bool(_TABLE_PROPERTY_RE.search(text) and numeric_count >= 3)
+
+
+def _augment_table_candidate_sections(
+  sections: list[PatentFulltextSection],
+  *,
+  case_id: str,
+  publication_number: str,
+) -> list[PatentFulltextSection]:
+  """Add table_candidate sections for Chinese OCR table-like blocks without removing examples."""
+  augmented = list(sections)
+  existing_ids = {s.section_id for s in sections}
+  for section in sections:
+    if section.section_type in {"tables", "table_candidate"}:
+      continue
+    text = section.section_text
+    if not _looks_like_table_candidate(text):
+      continue
+    section_id = f"{publication_number}_table_candidate_{len(existing_ids) + 1}"
+    while section_id in existing_ids:
+      section_id = f"{section_id}_dup"
+    existing_ids.add(section_id)
+    title = None
+    title_match = _TABLE_TITLE_RE.search(text)
+    if title_match:
+      title = title_match.group(0).strip()
+    augmented.append(PatentFulltextSection(
+      case_id=case_id,
+      publication_number=publication_number,
+      section_id=section_id,
+      section_type="table_candidate",
+      section_title=title,
+      section_text=text,
+      page_start=section.page_start,
+      page_end=section.page_end,
+      text_length=len(text),
+      confidence=min(section.confidence, 0.75),
+      needs_human_review=True,
+      detection_method="table_keyword_heuristic",
+      warning="OCR table candidate — verify values in source PDF",
+    ))
+  return augmented
 
 
 def detect_patent_sections_for_publication(
@@ -449,9 +512,13 @@ def detect_patent_sections_for_publication(
       ))
     status = "ok"
 
+  sections = _augment_table_candidate_sections(
+    sections, case_id=case_id, publication_number=norm_pub,
+  )
+
   examples_count = sum(1 for s in sections if s.section_type == "examples")
   comparative_count = sum(1 for s in sections if s.section_type == "comparative_examples")
-  tables_count = sum(1 for s in sections if s.section_type == "tables")
+  tables_count = sum(1 for s in sections if s.section_type in {"tables", "table_candidate"})
   has_claims = any(s.section_type == "claims" for s in sections)
   has_description = any(s.section_type == "description" for s in sections)
   has_examples = examples_count > 0

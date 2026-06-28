@@ -260,7 +260,33 @@ def _render_next_action_for_patent(
         write_example_facts_outputs(case_id, results, output_root, vocab, prompts)
         st.success("実施例ファクト抽出を実行しました（Top5一括）")
         st.rerun()
+      st.caption(
+        "OCR由来の表・物性値抽出は候補です。数値・単位・実施例番号は必ず原文PDFで確認してください。"
+      )
     return
+
+  if status.example_facts_extracted:
+    st.markdown("**Example facts（候補）**")
+    st.caption(
+      f"fact_count={status.fact_count or 0} / "
+      f"process={status.process_condition_fact_count or 0} / "
+      f"property={status.property_fact_count or 0} / "
+      f"structure={status.structure_property_fact_count or 0} / "
+      f"table_candidate={status.table_candidate_count or 0} / "
+      f"unknown={status.unknown_fact_count or 0} / "
+      f"needs_human_review={status.needs_human_review}"
+    )
+    st.caption(
+      "OCR由来の表・物性値抽出は候補です。数値・単位・実施例番号は必ず原文PDFで確認してください。"
+    )
+    prop_or_table = (status.property_fact_count or 0) > 0 or (status.table_candidate_count or 0) > 0
+    structure_ok = (status.structure_property_fact_count or 0) > 0
+    if prop_or_table or structure_ok:
+      st.caption("次の操作: Bind claim to example facts")
+    elif (status.process_condition_fact_count or 0) > 0:
+      st.warning("Process conditions extracted, but property/table extraction needs review")
+    elif (status.fact_count or 0) == 0:
+      st.warning("Review Gemini prompt or section input")
 
   if not status.claim_example_links_generated:
     if st.button("Bind claim to example facts", key=f"{key_prefix}_bind_{pub}", type="primary"):

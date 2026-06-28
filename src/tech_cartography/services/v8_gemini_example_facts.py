@@ -35,11 +35,12 @@ from tech_cartography.services.v8_research_theme_defaults import load_research_t
 from tech_cartography.services.v8_sources_table import project_root_from_here
 
 OUTPUT_SUBDIR = "local_v8_example_facts"
-PRIMARY_SECTION_TYPES = frozenset({"examples", "comparative_examples", "tables"})
+PRIMARY_SECTION_TYPES = frozenset({"examples", "comparative_examples", "tables", "table_candidate"})
 FALLBACK_SECTION_TYPE = "embodiments"
 EXCLUDED_SECTION_TYPES = frozenset({"claims", "background", "summary", "unknown"})
 MAX_FACTS_PER_SECTION = 50
 MAX_CHARS_PER_SECTION_DEFAULT = 12000
+MAX_TABLE_CANDIDATE_CONFIDENCE = 0.75
 
 PROMPT_RULES = """
 You extract structured facts from patent examples.
@@ -55,7 +56,58 @@ You extract structured facts from patent examples.
 - Do not assess infringement, validity, FTO, or claim scope.
 - Label all outputs as candidates requiring human review.
 - Set needs_human_review to true for every fact.
+
+Chinese OCR patent text (Phase 27S.5.3):
+- Extract process conditions AND property values, comparison tables, and structure indicators.
+- OCR tables may be broken — treat table titles, nearby text, and numeric columns as candidates.
+- Never create values not present in the section text.
+- If a numeric value or unit is ambiguous, leave property_value empty, keep evidence_text verbatim,
+  set fact_type=property_candidate or table_candidate, needs_human_review=true.
+- If a table row cannot be split reliably, use fact_type=table_candidate with full row in evidence_text.
+
+Property naming (when explicitly written):
+- 拉伸强度 / 强度 / tensile strength -> property_name=tensile_strength, fact_type=property_value
+- 拉伸模量 / 模量 / tensile modulus -> property_name=tensile_modulus, fact_type=property_value
+- 取向角 / orientation angle -> property_name=orientation_angle, fact_type=structure_property
+- 微晶尺寸 / crystallite size -> property_name=crystallite_size, fact_type=structure_property
+
+Process conditions (when explicitly written):
+- 高温碳化 / 低温碳化 / 石墨化 / 预氧化 -> process_condition
+- 伸長倍率 / 拉伸倍率 / relative stretching ratio -> process_condition
+
+Allowed fact_type values:
+- process_condition, property_value, structure_property, table_candidate,
+  comparison_candidate, property_candidate, comparison_example, table_value, material, unknown
 """
+
+_PROPERTY_NAME_ALIASES: dict[str, tuple[str, ...]] = {
+  "tensile_strength": ("拉伸强度", "强度", "tensile strength", "tensile_strength"),
+  "tensile_modulus": ("拉伸模量", "模量", "tensile modulus", "tensile_modulus"),
+  "orientation_angle": ("取向角", "orientation angle", "orientation_angle", "取向"),
+  "crystallite_size": ("微晶尺寸", "crystallite size", "crystallite_size"),
+}
+
+_STRUCTURE_PROPERTY_NAMES = frozenset({"orientation_angle", "crystallite_size"})
+_TABLE_MARKERS_RE = re.compile(
+  r"表\s*\d+|性能对比表|对比表|M55J|M60J|M40J|T300|东丽|Toray|日本东丽",
+  re.IGNORECASE,
+)
+_PROPERTY_EVIDENCE_RE = re.compile(
+  r"拉伸强度|拉伸模量|强度|模量|GPa|MPa|取向角|微晶",
+  re.IGNORECASE,
+)
+_STRENGTH_VALUE_RE = re.compile(
+  r"(?:拉伸强度|强度|tensile\s+strength)\s*[:：]?\s*([\d.]+)\s*(GPa|MPa|gpa|mpa)?",
+  re.IGNORECASE,
+)
+_MODULUS_VALUE_RE = re.compile(
+  r"(?:拉伸模量|模量|tensile\s+modulus)\s*[:：]?\s*([\d.]+)\s*(GPa|MPa|gpa|mpa)?",
+  re.IGNORECASE,
+)
+_ORIENTATION_VALUE_RE = re.compile(
+  r"(?:取向角|orientation\s+angle)\s*(?:为|是|:|：)?\s*([\d.]+)\s*(°|度|deg)?",
+  re.IGNORECASE,
+)
 
 
 def find_latest_patent_sections_output(case_id: str, output_root: Path | str) -> Path | None:
@@ -235,9 +287,148 @@ def _normalize_fact_type(raw: str | None) -> str:
   if not raw:
     return "unknown"
   normalized = raw.strip().lower().replace(" ", "_").replace("-", "_")
+  alias_map = {
+    "structure_characterization": "structure_property",
+    "table_value": "table_candidate",
+  }
+  normalized = alias_map.get(normalized, normalized)
   if normalized in VALID_FACT_TYPES:
     return normalized
   return "unknown"
+
+
+def normalize_property_unit(value: str | None) -> str | None:
+  if value is None:
+    return None
+  raw = str(value).strip()
+  if not raw:
+    return None
+  lowered = raw.lower()
+  unit_map = {
+    "c": "℃",
+    "°c": "℃",
+    "℃": "℃",
+    "min": "min",
+    "分": "min",
+    "分钟": "min",
+    "ppm": "ppm",
+    "gpa": "GPa",
+    "mpa": "MPa",
+    "%": "%",
+    "％": "%",
+    "°": "°",
+    "度": "°",
+    "deg": "°",
+  }
+  return unit_map.get(lowered, raw)
+
+
+def normalize_property_name(value: str | None) -> str | None:
+  if value is None:
+    return None
+  raw = str(value).strip()
+  if not raw:
+    return None
+  lowered = raw.lower().replace(" ", "_")
+  for canonical, aliases in _PROPERTY_NAME_ALIASES.items():
+    if lowered == canonical or raw in aliases or lowered in {a.lower() for a in aliases}:
+      return canonical
+  for canonical, aliases in _PROPERTY_NAME_ALIASES.items():
+    for alias in aliases:
+      if alias.lower() in lowered or alias in raw:
+        return canonical
+  return raw
+
+
+def _has_condition_fields(fact: ExampleFact) -> bool:
+  return bool(fact.condition_name or fact.condition_value or fact.process_step)
+
+
+def classify_property_candidate(fact: ExampleFact) -> ExampleFact:
+  """Reclassify unknown / ambiguous facts using property_name, property_value, evidence_text."""
+  evidence = fact.evidence_text or ""
+  prop_name = normalize_property_name(fact.property_name)
+  if prop_name:
+    fact.property_name = prop_name
+
+  if fact.property_unit:
+    fact.property_unit = normalize_property_unit(fact.property_unit)
+  if fact.condition_unit:
+    fact.condition_unit = normalize_property_unit(fact.condition_unit)
+
+  if prop_name in _STRUCTURE_PROPERTY_NAMES:
+    fact.fact_type = "structure_property"
+  elif prop_name in {"tensile_strength", "tensile_modulus"}:
+    if fact.property_value:
+      fact.fact_type = "property_value"
+    else:
+      fact.fact_type = "property_candidate"
+
+  if _TABLE_MARKERS_RE.search(evidence) and (
+    len(re.findall(r"\d+\.?\d*", evidence)) >= 2 or "表" in evidence
+  ):
+    if fact.fact_type in {"unknown", "property_candidate"}:
+      fact.fact_type = "table_candidate"
+      fact.confidence = min(fact.confidence, MAX_TABLE_CANDIDATE_CONFIDENCE)
+
+  if fact.fact_type == "unknown" and not _has_condition_fields(fact):
+    if prop_name and fact.property_value:
+      fact.fact_type = "structure_property" if prop_name in _STRUCTURE_PROPERTY_NAMES else "property_value"
+    elif prop_name and not fact.property_value:
+      fact.fact_type = "property_candidate"
+    elif _PROPERTY_EVIDENCE_RE.search(evidence):
+      if not fact.property_value:
+        m = _STRENGTH_VALUE_RE.search(evidence)
+        if m:
+          fact.property_name = "tensile_strength"
+          fact.property_value = m.group(1)
+          fact.property_unit = normalize_property_unit(m.group(2))
+          fact.fact_type = "property_value"
+        else:
+          m = _MODULUS_VALUE_RE.search(evidence)
+          if m:
+            fact.property_name = "tensile_modulus"
+            fact.property_value = m.group(1)
+            fact.property_unit = normalize_property_unit(m.group(2))
+            fact.fact_type = "property_value"
+          else:
+            m = _ORIENTATION_VALUE_RE.search(evidence)
+            if m:
+              fact.property_name = "orientation_angle"
+              fact.property_value = m.group(1)
+              fact.property_unit = normalize_property_unit(m.group(2) or "°")
+              fact.fact_type = "structure_property"
+            else:
+              fact.fact_type = "property_candidate"
+
+  if re.search(r"M55J|M60J|M40J|T300|东丽|Toray", evidence, re.IGNORECASE):
+    if fact.fact_type in {"unknown", "table_candidate", "property_candidate"}:
+      if "对比" in evidence or "comparison" in evidence.lower() or _TABLE_MARKERS_RE.search(evidence):
+        fact.fact_type = "comparison_candidate"
+
+  return fact
+
+
+def normalize_example_fact_type(fact: ExampleFact) -> ExampleFact:
+  """Apply post-parse fact_type normalization and property/table reclassification."""
+  fact = classify_property_candidate(fact)
+
+  if fact.fact_type in {"table_candidate", "comparison_candidate", "property_candidate"}:
+    fact.needs_human_review = True
+    fact.confidence = min(fact.confidence, MAX_TABLE_CANDIDATE_CONFIDENCE)
+
+  if fact.fact_type == "structure_property":
+    fact.needs_human_review = True
+
+  if fact.fact_type == "property_value" and not fact.property_value:
+    fact.fact_type = "property_candidate"
+    fact.needs_human_review = True
+
+  if not fact.evidence_text.strip():
+    fact.warning = (fact.warning or "") + " empty evidence_text"
+    fact.confidence = min(fact.confidence, 0.3)
+
+  return fact
 
 
 def parse_example_facts_json(
@@ -300,7 +491,7 @@ def parse_example_facts_json(
       needs_human_review=True,
       extraction_method="gemini",
     )
-    facts.append(validate_example_fact(fact, source_text, vocabulary))
+    facts.append(normalize_example_fact_type(validate_example_fact(fact, source_text, vocabulary)))
   return facts
 
 
@@ -335,8 +526,17 @@ def _aggregate_result(
   pub = normalize_publication_number(publication_number)
   pub_facts = [f for f in facts if f.publication_number == pub]
   example_ids = {f.example_id or f.example_label for f in pub_facts if f.example_id or f.example_label}
-  comp_count = sum(1 for f in pub_facts if f.fact_type == "comparison_example" or f.section_type == "comparative_examples")
+  comp_count = sum(
+    1 for f in pub_facts
+    if f.fact_type in {"comparison_example", "comparison_candidate"}
+    or f.section_type == "comparative_examples"
+  )
   prop_count = sum(1 for f in pub_facts if f.fact_type == "property_value")
+  prop_candidate_count = sum(1 for f in pub_facts if f.fact_type == "property_candidate")
+  structure_count = sum(1 for f in pub_facts if f.fact_type == "structure_property")
+  table_count = sum(1 for f in pub_facts if f.fact_type == "table_candidate")
+  comparison_candidate_count = sum(1 for f in pub_facts if f.fact_type == "comparison_candidate")
+  unknown_count = sum(1 for f in pub_facts if f.fact_type == "unknown")
   proc_count = sum(1 for f in pub_facts if f.fact_type == "process_condition")
   keyword_set: set[str] = set()
   for fact in pub_facts:
@@ -352,6 +552,11 @@ def _aggregate_result(
     comparative_example_count=comp_count,
     property_fact_count=prop_count,
     process_condition_fact_count=proc_count,
+    structure_property_fact_count=structure_count,
+    table_candidate_count=table_count,
+    comparison_candidate_count=comparison_candidate_count,
+    property_candidate_count=prop_candidate_count,
+    unknown_fact_count=unknown_count,
     matched_user_keyword_count=len(keyword_set),
     needs_human_review=True,
     facts=pub_facts,
@@ -463,8 +668,9 @@ def write_example_facts_outputs(
   summary_fields = [
     "case_id", "publication_number", "source_sections_csv", "target_section_count", "fact_count",
     "example_count", "comparative_example_count", "property_fact_count",
-    "process_condition_fact_count", "matched_user_keyword_count", "needs_human_review",
-    "status", "warning",
+    "process_condition_fact_count", "structure_property_fact_count", "table_candidate_count",
+    "comparison_candidate_count", "property_candidate_count", "unknown_fact_count",
+    "matched_user_keyword_count", "needs_human_review", "status", "warning",
   ]
 
   all_facts = [fact for result in results for fact in result.facts]
@@ -530,6 +736,11 @@ def write_example_facts_outputs(
         "comparative_example_count": result.comparative_example_count,
         "property_fact_count": result.property_fact_count,
         "process_condition_fact_count": result.process_condition_fact_count,
+        "structure_property_fact_count": result.structure_property_fact_count,
+        "table_candidate_count": result.table_candidate_count,
+        "comparison_candidate_count": result.comparison_candidate_count,
+        "property_candidate_count": result.property_candidate_count,
+        "unknown_fact_count": result.unknown_fact_count,
         "matched_user_keyword_count": result.matched_user_keyword_count,
         "needs_human_review": result.needs_human_review,
         "status": result.status,
@@ -539,14 +750,15 @@ def write_example_facts_outputs(
   sum_md = [
     f"# Example facts summary — {case_id}",
     "",
-    "| publication_number | facts | examples | property | process | keywords | review |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
+    "| publication_number | facts | examples | property | structure | table | process | unknown | review |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
   ]
   for result in results:
     sum_md.append(
       f"| {result.publication_number} | {result.fact_count} | {result.example_count} | "
-      f"{result.property_fact_count} | {result.process_condition_fact_count} | "
-      f"{result.matched_user_keyword_count} | {result.needs_human_review} |"
+      f"{result.property_fact_count} | {result.structure_property_fact_count} | "
+      f"{result.table_candidate_count} | {result.process_condition_fact_count} | "
+      f"{result.unknown_fact_count} | {result.needs_human_review} |"
     )
   summary_md.write_text("\n".join(sum_md), encoding="utf-8")
 
@@ -604,6 +816,11 @@ def get_example_facts_pipeline_status(
     "fact_count": fact_count,
     "property_fact_count": int(row.get("property_fact_count") or 0) if row else 0,
     "process_condition_fact_count": int(row.get("process_condition_fact_count") or 0) if row else 0,
+    "structure_property_fact_count": int(row.get("structure_property_fact_count") or 0) if row else 0,
+    "table_candidate_count": int(row.get("table_candidate_count") or 0) if row else 0,
+    "comparison_candidate_count": int(row.get("comparison_candidate_count") or 0) if row else 0,
+    "property_candidate_count": int(row.get("property_candidate_count") or 0) if row else 0,
+    "unknown_fact_count": int(row.get("unknown_fact_count") or 0) if row else 0,
     "matched_user_keyword_count": keyword_count,
     "facts_needs_human_review": needs_review,
     "facts_status": str(row.get("status") or ""),

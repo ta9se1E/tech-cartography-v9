@@ -16,8 +16,12 @@ VALID_FACT_TYPES: tuple[str, ...] = (
   "material",
   "process_condition",
   "property_value",
+  "property_candidate",
+  "structure_property",
   "comparison_example",
+  "comparison_candidate",
   "table_value",
+  "table_candidate",
   "structure_characterization",
   "example_overview",
   "unknown",
@@ -78,6 +82,11 @@ class ExampleFactsExtractionResult:
   comparative_example_count: int = 0
   property_fact_count: int = 0
   process_condition_fact_count: int = 0
+  structure_property_fact_count: int = 0
+  table_candidate_count: int = 0
+  comparison_candidate_count: int = 0
+  property_candidate_count: int = 0
+  unknown_fact_count: int = 0
   matched_user_keyword_count: int = 0
   needs_human_review: bool = True
   facts: list[ExampleFact] = field(default_factory=list)
@@ -96,6 +105,11 @@ class ExampleFactsExtractionResult:
       "comparative_example_count": self.comparative_example_count,
       "property_fact_count": self.property_fact_count,
       "process_condition_fact_count": self.process_condition_fact_count,
+      "structure_property_fact_count": self.structure_property_fact_count,
+      "table_candidate_count": self.table_candidate_count,
+      "comparison_candidate_count": self.comparison_candidate_count,
+      "property_candidate_count": self.property_candidate_count,
+      "unknown_fact_count": self.unknown_fact_count,
       "matched_user_keyword_count": self.matched_user_keyword_count,
       "needs_human_review": self.needs_human_review,
       "facts": [f.to_dict() for f in self.facts],

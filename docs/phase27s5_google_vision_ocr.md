@@ -93,6 +93,11 @@ python scripts/run_v8_section_extract_from_latest_ocr.py \
 - `sections_stale_vs_ocr`: pypdf 由来セクションが残っていても OCR 再抽出を促す
 - `needs_ocr=True` が残っていても OCR 本文があれば次アクションは section 抽出
 
+## Phase 27S.5.3 — 物性・表ファクト抽出
+
+中国語 OCR 本文から物性値・比較表・構造指標を Gemini 候補ファクトとして抽出する強化。
+詳細: [phase27s53_property_table_fact_extraction.md](phase27s53_property_table_fact_extraction.md)
+
 ## 安全表現
 
 - OCR 結果は自動抽出テキスト — 誤読の可能性あり

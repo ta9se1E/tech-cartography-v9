@@ -1,4 +1,4 @@
-"""Example facts extraction UI (Phase 27S.3)."""
+"""Example facts extraction UI (Phase 27S.3 / 27S.5.3)."""
 
 from __future__ import annotations
 
@@ -27,6 +27,10 @@ from tech_cartography.services.v8_llm_provider_gemini import (
 )
 from tech_cartography.ui.v8_judge_mode_copy import EXAMPLE_FACTS_EXTRACT_HELP
 
+OCR_PROPERTY_TABLE_WARNING = (
+  "OCR由来の表・物性値抽出は候補です。数値・単位・実施例番号は必ず原文PDFで確認してください。"
+)
+
 
 def _session_key(case_id: str) -> str:
   return f"v8_example_facts_{case_id}"
@@ -35,6 +39,7 @@ def _session_key(case_id: str) -> str:
 def render_example_facts_caution() -> None:
   for notice in EXAMPLE_FACTS_NOTICES:
     st.caption(notice)
+  st.caption(OCR_PROPERTY_TABLE_WARNING)
 
 
 def render_gemini_example_facts_section(
@@ -78,7 +83,10 @@ def render_gemini_example_facts_section(
       "examples_detected": pipe.get("has_examples"),
       "fact_count": row.get("fact_count", pipe.get("fact_count", 0)),
       "property_facts": row.get("property_fact_count", 0),
+      "structure_property": row.get("structure_property_fact_count", 0),
+      "table_candidate": row.get("table_candidate_count", 0),
       "process_facts": row.get("process_condition_fact_count", 0),
+      "unknown_facts": row.get("unknown_fact_count", 0),
       "matched_keywords": row.get("matched_user_keyword_count", 0),
       "needs_human_review": row.get("needs_human_review", True),
     })
@@ -115,11 +123,14 @@ def render_gemini_example_facts_section(
       preview_df = pd.read_csv(preview_csv).head(10)
       if not preview_df.empty:
         st.markdown("**example_facts preview (top 10)**")
-        st.dataframe(
-          preview_df[["fact_type", "evidence_text", "matched_user_keywords", "needs_human_review"]],
-          width="stretch",
-          hide_index=True,
-        )
+        preview_cols = [
+          c for c in (
+            "fact_type", "property_name", "property_value", "property_unit",
+            "evidence_text", "matched_user_keywords", "needs_human_review",
+          )
+          if c in preview_df.columns
+        ]
+        st.dataframe(preview_df[preview_cols], width="stretch", hide_index=True)
     files = [
       "example_facts.csv", "example_facts.json", "example_facts.md",
       "example_facts_summary.csv", "example_facts_summary.md",
@@ -130,4 +141,3 @@ def render_gemini_example_facts_section(
       path = export_dir / name
       if path.exists():
         cols[idx % 2].download_button(name, path.read_bytes(), name, key=f"{key_prefix}_dl_{name}")
-

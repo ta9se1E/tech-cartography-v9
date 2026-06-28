@@ -46,6 +46,9 @@ class Top5PdfPipelineStatus:
   fact_count: int | None = None
   property_fact_count: int | None = None
   process_condition_fact_count: int | None = None
+  structure_property_fact_count: int | None = None
+  table_candidate_count: int | None = None
+  unknown_fact_count: int | None = None
   matched_user_keyword_count: int | None = None
   claim_example_links_generated: bool = False
   linked_claim_count: int | None = None
