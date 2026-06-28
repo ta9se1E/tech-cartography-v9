@@ -33,7 +33,7 @@ from tech_cartography.ui.v8_executive_summary_ui import (
   render_gap_how_to_read_section,
 )
 from tech_cartography.ui.v8_google_patents_links_ui import render_google_patents_caution
-from tech_cartography.ui.v8_patent_section_extract_ui import render_gap_section_extraction_status
+from tech_cartography.ui.v8_example_facts_ui import render_gap_document_pipeline_status
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
@@ -183,7 +183,7 @@ def _render_single_report(
       unsafe_allow_html=True,
     )
     render_google_patents_caution()
-    render_gap_section_extraction_status(report.case_id, project_root)
+    render_gap_document_pipeline_status(report.case_id, project_root)
 
   st.caption("artifact missing と true zero を区別 — Gap artifact 未生成時は gap_count=0 と表示しません")
   refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")

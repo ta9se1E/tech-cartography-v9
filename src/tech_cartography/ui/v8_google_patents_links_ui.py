@@ -16,7 +16,7 @@ from tech_cartography.services.v8_google_patents_links import (
   build_top5_google_patents_links,
   export_google_patents_links,
 )
-from tech_cartography.services.v8_patent_section_extract import get_combined_patent_pdf_pipeline_status
+from tech_cartography.services.v8_gemini_example_facts import get_full_patent_document_pipeline_status
 from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
 
 
@@ -64,13 +64,16 @@ def render_top5_pdf_links_table(
       "次の操作": link.next_action,
     }
     if case_id and project_root is not None:
-      pipe = get_combined_patent_pdf_pipeline_status(case_id, link.publication_number, project_root)
+      pipe = get_full_patent_document_pipeline_status(case_id, link.publication_number, project_root)
       row["pdf_uploaded"] = pipe["pdf_uploaded"]
       row["text_extracted"] = pipe["text_extracted"]
       row["sections_extracted"] = pipe.get("sections_extracted")
       row["has_examples"] = pipe.get("has_examples")
+      row["example_facts_extracted"] = pipe.get("example_facts_extracted")
+      row["fact_count"] = pipe.get("fact_count", 0)
+      row["matched_user_keyword_count"] = pipe.get("matched_user_keyword_count", 0)
       row["needs_ocr"] = pipe["needs_ocr"]
-      row["needs_human_review"] = pipe.get("section_needs_human_review")
+      row["needs_human_review"] = pipe.get("facts_needs_human_review") or pipe.get("section_needs_human_review")
       row["next_action"] = pipe["next_action"]
     rows.append(row)
   st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)

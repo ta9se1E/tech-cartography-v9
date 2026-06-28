@@ -533,7 +533,7 @@ def get_combined_patent_pdf_pipeline_status(
   elif section["section_needs_human_review"]:
     next_action = "セクション判定の人手確認が必要"
   elif section["has_examples"]:
-    next_action = "Example facts extractionへ（次Phase27S.3）"
+    next_action = "Extract example facts"
   else:
     next_action = "examples未検出 — セクション人手確認"
 

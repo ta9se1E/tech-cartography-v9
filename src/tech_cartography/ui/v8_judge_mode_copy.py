@@ -161,3 +161,13 @@ PDF_SECTION_EXTRACT_HELP = (
   " この段階ではGemini抽出は行わず、次に構造化すべき本文範囲を特定します。"
   " セクション判定は候補であり確定ではありません。"
 )
+
+EXTRACTION_VOCABULARY_HELP = (
+  "Geminiが実施例から条件・物性値・比較例を抽出するときに重視する語彙です。"
+  " 研究テーマに応じて編集できます。ここにない語でも、本文に明示されていれば抽出対象になります。"
+)
+
+EXAMPLE_FACTS_EXTRACT_HELP = (
+  "検出済みの examples / comparative examples / tables から、工程条件・物性値・比較例を構造化します。"
+  " 抽出語彙はユーザーが編集できます。抽出結果は候補であり、人手確認が必要です。"
+)

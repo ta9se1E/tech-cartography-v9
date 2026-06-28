@@ -10,11 +10,10 @@ import streamlit as st
 from tech_cartography.runtime.v8_patent_section_schema import SECTION_EXTRACTION_NOTICES
 from tech_cartography.services.v8_large_candidate_shortlist import load_top5_publications
 from tech_cartography.services.v8_patent_pdf_text_extract import find_latest_pdf_text_extract_dir
+from tech_cartography.services.v8_gemini_example_facts import get_full_patent_document_pipeline_status
 from tech_cartography.services.v8_patent_section_extract import (
   extract_sections_from_pdf_text_output,
-  find_latest_pdf_text_extract_output,
   find_latest_section_extract_dir,
-  get_combined_patent_pdf_pipeline_status,
   load_section_summary_from_dir,
   write_section_outputs,
 )
@@ -54,7 +53,7 @@ def render_top5_pdf_section_extract_section(
   top5 = load_top5_publications(case_id, project_root)
   rows = []
   for pub in top5:
-    pipe = get_combined_patent_pdf_pipeline_status(case_id, pub, project_root)
+    pipe = get_full_patent_document_pipeline_status(case_id, pub, project_root)
     sec = section_summary.get(pub, {})
     rows.append({
       "publication_number": pub,
@@ -126,7 +125,7 @@ def render_gap_section_extraction_status(
 
   st.markdown("**Top5公報PDF — 解析パイプライン状況**")
   for pub in pubs:
-    pipe = get_combined_patent_pdf_pipeline_status(case_id, pub, project_root)
+    pipe = get_full_patent_document_pipeline_status(case_id, pub, project_root)
     if not pipe["pdf_uploaded"]:
       line = f"- **{pub}**: PDF未アップロード — Google PatentsからPDF取得が必要"
     elif not pipe["text_extracted"]:
