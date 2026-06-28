@@ -6,7 +6,9 @@ from pathlib import Path
 
 
 def test_patent_shortlist_ui_ranking_fields() -> None:
-  text = Path("src/tech_cartography/ui/v8_patent_shortlist_ui.py").read_text(encoding="utf-8")
+  shortlist = Path("src/tech_cartography/ui/v8_patent_shortlist_ui.py").read_text(encoding="utf-8")
+  top5_ui = Path("src/tech_cartography/ui/v8_top5_reading_ui.py").read_text(encoding="utf-8")
+  combined = shortlist + top5_ui
   for token in (
     "Ranking Policy",
     "why_selected",
@@ -16,8 +18,9 @@ def test_patent_shortlist_ui_ranking_fields() -> None:
     "Top20から落ちた候補",
     "Top5のみ",
   ):
-    assert token in text
-  assert "use_container_width" not in text
+    assert token in combined
+  assert "Generate Reading Priority" in shortlist
+  assert "use_container_width" not in shortlist
 
 
 def test_export_ui_ranking_explanation_pack() -> None:

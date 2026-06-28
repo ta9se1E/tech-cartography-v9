@@ -1249,7 +1249,9 @@ def main(argv: list[str] | None = None) -> int:
     failures.append("v8_sources_ui missing source_candidates_large")
 
   shortlist_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_patent_shortlist_ui.py")
-  if "Top100" in shortlist_ui and "Top5" in shortlist_ui:
+  top5_reading_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_top5_reading_ui.py")
+  shortlist_ui_combined = shortlist_ui + top5_reading_ui
+  if "Top100" in shortlist_ui_combined and "Top5" in shortlist_ui_combined:
     print("PASS: v8_patent_shortlist_ui references Top100/Top20/Top5")
   else:
     failures.append("v8_patent_shortlist_ui missing staged Top100/Top20/Top5")
@@ -1274,7 +1276,7 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("v8_large_candidate_shortlist missing triage adapter / ranking_policy")
 
-  if "Ranking Policy" in shortlist_ui:
+  if "Ranking Policy" in shortlist_ui_combined:
     print("PASS: v8_patent_shortlist_ui references Ranking Policy")
   else:
     failures.append("v8_patent_shortlist_ui missing Ranking Policy")
@@ -1284,7 +1286,7 @@ def main(argv: list[str] | None = None) -> int:
     ("positive_reasons", "positive_reasons"),
     ("negative_reasons", "negative_reasons"),
   ):
-    if token in shortlist_ui:
+    if token in shortlist_ui_combined:
       print(f"PASS: v8_patent_shortlist_ui references {label}")
     else:
       failures.append(f"v8_patent_shortlist_ui missing {label}")

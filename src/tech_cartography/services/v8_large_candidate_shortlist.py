@@ -23,6 +23,13 @@ from tech_cartography.services.v8_large_candidate_ranking_explanation import (
   export_ranking_explanation,
 )
 from tech_cartography.services.v8_patent_triage_adapter import score_large_candidates_with_triage
+from tech_cartography.services.v8_theme_based_ranking_policy import (
+  build_dropped_from_top5_summary,
+  build_theme_based_ranking_policy,
+  enrich_top5_record_with_theme,
+  select_top5_preserving_existing,
+)
+from tech_cartography.services.v8_research_theme_defaults import load_research_theme_profile
 from tech_cartography.services.v8_sources_table import project_root_from_here
 
 LOCAL_LARGE_SHORTLIST_SUBDIR = "local_v8_large_shortlists"
@@ -181,6 +188,7 @@ def _enrich_stage_records(
   label: str,
   ranking_policy: str,
   start_rank: int = 1,
+  theme_profile=None,
 ) -> list[V8LargeCandidateRecord]:
   out: list[V8LargeCandidateRecord] = []
   for i, rec in enumerate(items):
@@ -194,7 +202,9 @@ def _enrich_stage_records(
       if label == "top5"
       else f"候補スクリーニング: {copy.publication_number or 'no pub'}"
     )
-    if label == "top5":
+    if label == "top5" and theme_profile is not None:
+      copy = enrich_top5_record_with_theme(copy, theme_profile)
+    elif label == "top5":
       terms = ", ".join(f'"{k}"' for k in copy.matched_keywords[:3])
       copy.why_selected = (
         f"include term {terms} 等により Top5 に選抜（読む優先度のみ）"
@@ -217,6 +227,9 @@ def build_staged_shortlist(
   project_root: Path | str | None = None,
 ) -> V8LargeCandidateShortlistPack:
   root = Path(project_root or project_root_from_here())
+  pinned_top5 = load_top5_publications(case_id, root)
+  theme_profile = load_research_theme_profile(case_id, root)
+  theme_policy = build_theme_based_ranking_policy(case_id, project_root=root)
   population_path = Path(input_path) if input_path else root / "cases" / case_id / "source_candidates_large.csv"
 
   population = load_large_candidates_csv(population_path)
@@ -245,9 +258,17 @@ def build_staged_shortlist(
   top20_n = min(top20, top100_n)
   top5_n = min(top5, top20_n)
 
-  top100_list = _enrich_stage_records(scored[:top100_n], label="top100", ranking_policy=adapter.ranking_policy)
-  top20_list = _enrich_stage_records(scored[:top20_n], label="top20", ranking_policy=adapter.ranking_policy)
-  top5_list = _enrich_stage_records(scored[:top5_n], label="top5", ranking_policy=adapter.ranking_policy)
+  top100_list = _enrich_stage_records(
+    scored[:top100_n], label="top100", ranking_policy=adapter.ranking_policy, theme_profile=theme_profile,
+  )
+  top20_list = _enrich_stage_records(
+    scored[:top20_n], label="top20", ranking_policy=adapter.ranking_policy, theme_profile=theme_profile,
+  )
+  top5_raw = select_top5_preserving_existing(scored, pinned_publications=pinned_top5, top5_n=top5_n)
+  top5_list = _enrich_stage_records(
+    top5_raw, label="top5", ranking_policy=adapter.ranking_policy, theme_profile=theme_profile,
+  )
+  dropped_summary = build_dropped_from_top5_summary(top20_list, top5_list, theme_profile)
 
   stamp = utc_now_iso().replace(":", "").replace("-", "").replace("+00:00", "Z")
   output_dir = get_large_shortlist_dir(case_id, root) / f"pack_{stamp}"
@@ -308,6 +329,8 @@ def build_staged_shortlist(
     "",
     f"- triage_engine: {adapter.triage_engine}",
     f"- ranking_policy: {adapter.ranking_policy}",
+    f"- theme_name: {theme_policy.theme_name}",
+    f"- top5_pinned: {len(pinned_top5)} publications preserved" if pinned_top5 else "- top5_pinned: (none — score order)",
     f"- top5 deep dive only — Claim Map / Evidence Map は Top5 またはユーザー選択に限定",
     "",
     "## Safety",
@@ -329,6 +352,14 @@ def build_staged_shortlist(
     warnings=adapter.warnings,
   )
   export_ranking_explanation(ranking_report, output_dir)
+  (output_dir / "dropped_from_top5_summary.json").write_text(
+    json.dumps(dropped_summary.to_dict(), ensure_ascii=False, indent=2),
+    encoding="utf-8",
+  )
+  paths["dropped_candidate_summary"].write_text(
+    dropped_summary.summary_text + "\n\n" + ranking_report.dropped_candidate_summary,
+    encoding="utf-8",
+  )
 
   manifest = {
     "pack_id": _pack_id(case_id),
@@ -336,6 +367,7 @@ def build_staged_shortlist(
     "generated_at": selection.generated_at,
     "triage_engine": adapter.triage_engine,
     "ranking_policy": adapter.ranking_policy,
+    "theme_ranking_policy": theme_policy.to_dict(),
     "selection": selection.to_dict(),
     "files": {k: str(v) for k, v in paths.items()},
     "safety_notices": list(LARGE_CANDIDATE_SAFETY_NOTICES),
@@ -344,6 +376,7 @@ def build_staged_shortlist(
       "common_selection_reasons": ranking_report.common_selection_reasons,
       "common_exclusion_reasons": ranking_report.common_exclusion_reasons,
     },
+    "dropped_from_top5": dropped_summary.to_dict(),
   }
   paths["manifest"].write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 

@@ -25,6 +25,21 @@ if TYPE_CHECKING:
   from tech_cartography.services.v8_patent_triage_adapter import V8PatentTriageAdapterResult
 
 
+def _try_theme_narrative(rec: V8LargeCandidateRecord, case_id: str) -> str:
+  try:
+    from tech_cartography.services.v8_research_theme_defaults import load_research_theme_profile
+    from tech_cartography.services.v8_theme_based_ranking_policy import (
+      analyze_candidate_theme_fit,
+      build_why_selected_narrative,
+    )
+
+    theme = load_research_theme_profile(case_id, None)
+    fit = analyze_candidate_theme_fit(rec, theme)
+    return build_why_selected_narrative(rec, theme, fit)
+  except Exception:
+    return ""
+
+
 def _report_id(case_id: str) -> str:
   digest = hashlib.sha256(f"{case_id}|ranking|{utc_now_iso()}".encode()).hexdigest()[:12]
   return f"{case_id}:ranking_explanation:{digest}"
@@ -84,6 +99,11 @@ def _build_contributions_from_record(rec: V8LargeCandidateRecord, adapter: Any |
 
 
 def _why_selected_text(rec: V8LargeCandidateRecord, case_id: str) -> str:
+  if rec.why_selected:
+    return rec.why_selected
+  themed = _try_theme_narrative(rec, case_id)
+  if themed:
+    return themed
   terms = ", ".join(f'"{k}"' for k in rec.matched_keywords[:4])
   parts = []
   if terms:
