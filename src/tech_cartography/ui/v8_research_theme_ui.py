@@ -41,14 +41,11 @@ def get_research_theme_state(case_id: str, *, project_root: Path) -> ResearchThe
   return profile
 
 
-def render_research_theme_section(*, case_id: str, project_root: Path) -> ResearchThemeProfile:
-  st.markdown("#### 研究テーマ設定 (Phase27Q.1)")
-  st.markdown(
-    render_info_box(
-      "テーマ名・説明・キーワード群・除外キーワード・seed publication numbers を構造化して保存します。"
-      " seed が空でも keyword_only で動作します。"
-    ),
-    unsafe_allow_html=True,
+def render_research_theme_section(*, case_id: str, project_root: Path, show_advanced: bool = False) -> ResearchThemeProfile:
+  st.markdown("#### Research Theme / Search Query")
+  st.caption(
+    "テーマとキーワードから検索クエリ / BigQuery SQL テンプレートを生成します。"
+    " この画面から BigQuery は直接実行しません。"
   )
 
   profile = get_research_theme_state(case_id, project_root=project_root)
@@ -74,34 +71,36 @@ def render_research_theme_section(*, case_id: str, project_root: Path) -> Resear
   )
   profile.seed_publication_numbers = _split_lines(
     st.text_area(
-      "seed publication numbers（1行1件）",
+      "類似特許（publication number、1行1件）",
       value=_join_lines(profile.seed_publication_numbers),
       key="v8_theme_seeds",
     ),
   )
 
-  col1, col2, col3 = st.columns(3)
-  with col1:
-    profile.search_mode = st.selectbox(
-      "search mode",
-      options=["seed_and_keywords", "keyword_only", "seed_only"],
-      index=["seed_and_keywords", "keyword_only", "seed_only"].index(profile.search_mode)
-      if profile.search_mode in {"seed_and_keywords", "keyword_only", "seed_only"} else 0,
-      key="v8_theme_search_mode",
-    )
-  with col2:
-    profile.max_results = int(st.number_input("max results", min_value=1, max_value=1000, value=profile.max_results, key="v8_theme_max"))
-  with col3:
-    countries_text = st.text_input("countries（カンマ区切り）", value=",".join(profile.countries), key="v8_theme_countries")
-  profile.countries = [c.strip().upper() for c in countries_text.split(",") if c.strip()]
+  if show_advanced:
+    with st.expander("検索条件の詳細", expanded=False):
+      col1, col2, col3 = st.columns(3)
+      with col1:
+        profile.search_mode = st.selectbox(
+          "search mode",
+          options=["seed_and_keywords", "keyword_only", "seed_only"],
+          index=["seed_and_keywords", "keyword_only", "seed_only"].index(profile.search_mode)
+          if profile.search_mode in {"seed_and_keywords", "keyword_only", "seed_only"} else 0,
+          key="v8_theme_search_mode",
+        )
+      with col2:
+        profile.max_results = int(st.number_input("max results", min_value=1, max_value=1000, value=profile.max_results, key="v8_theme_max"))
+      with col3:
+        countries_text = st.text_input("countries（カンマ区切り）", value=",".join(profile.countries), key="v8_theme_countries")
+      profile.countries = [c.strip().upper() for c in countries_text.split(",") if c.strip()]
 
-  yr_col1, yr_col2 = st.columns(2)
-  with yr_col1:
-    yfrom = st.number_input("publication_year_from", min_value=1900, max_value=2100, value=profile.publication_year_from or 2000, key="v8_theme_yfrom")
-    profile.publication_year_from = int(yfrom)
-  with yr_col2:
-    yto_raw = st.text_input("publication_year_to（空=上限なし）", value=str(profile.publication_year_to or ""), key="v8_theme_yto")
-    profile.publication_year_to = int(yto_raw) if yto_raw.strip().isdigit() else None
+      yr_col1, yr_col2 = st.columns(2)
+      with yr_col1:
+        yfrom = st.number_input("publication_year_from", min_value=1900, max_value=2100, value=profile.publication_year_from or 2000, key="v8_theme_yfrom")
+        profile.publication_year_from = int(yfrom)
+      with yr_col2:
+        yto_raw = st.text_input("publication_year_to（空=上限なし）", value=str(profile.publication_year_to or ""), key="v8_theme_yto")
+        profile.publication_year_to = int(yto_raw) if yto_raw.strip().isdigit() else None
 
   profile = ResearchThemeProfile.from_dict(profile.to_dict())
 

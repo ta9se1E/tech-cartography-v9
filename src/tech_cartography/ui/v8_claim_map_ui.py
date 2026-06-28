@@ -26,6 +26,11 @@ from tech_cartography.ui.v8_text_rendering import render_next_action_card
 from tech_cartography.ui.v8_claim_batch_import_ui import render_claim_batch_import_section
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
+from tech_cartography.ui.v8_judge_mode_copy import (
+  CLAIM_INPUT_GUIDE_COMMON,
+  CLAIM_INPUT_GUIDE_LOADED,
+  CLAIM_INPUT_GUIDE_NOT_LOADED,
+)
 from tech_cartography.ui.v8_tab_config import (
   STATE_V8_SELECTED_CASE,
   STATE_V8_SELECTED_PUBLICATION,
@@ -341,6 +346,30 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
       render_claim_batch_import_section(case_id=active_case, project_root=root)
 
   with st.expander("claim入力方法・Generate", expanded=True):
+    try:
+      preview_map = build_claim_map(
+        case_id=active_case,
+        publication_number=publication_number,
+        project_root=root,
+        shortlist=deep_dive_shortlist,
+      )
+      claims_loaded = preview_map.loaded_claim_count >= preview_map.claim_count and preview_map.claim_count > 0
+    except Exception:
+      claims_loaded = False
+
+    if claims_loaded:
+      st.info(CLAIM_INPUT_GUIDE_LOADED)
+    else:
+      st.info(CLAIM_INPUT_GUIDE_NOT_LOADED)
+    st.caption(CLAIM_INPUT_GUIDE_COMMON)
+
+    st.markdown("**claim入力方法の選び方**")
+    st.caption(
+      "• **claims_input.csv** — Case 1 のように CSV に投入済みの場合（推奨）\n"
+      "• **手動claim text貼り付け** — 未投入の請求項を1件ずつ登録する場合\n"
+      "• **claim text未取得でMap作成** — 請求項未投入の状態を確認する場合"
+    )
+
     input_mode = st.radio(
       "claim入力方法",
       options=["claims_input.csv", "手動claim text貼り付け", "claim text未取得でMap作成"],
@@ -348,23 +377,23 @@ def render_v8_claim_map_tab(*, project_root: Path | str) -> None:
       key="v8_claim_map_input_mode",
     )
 
-  manual_rows: list[dict[str, str]] = []
-  if input_mode == "手動claim text貼り付け":
-    manual_pub = st.text_input("publication_number", value=publication_number or "", key="v8_claim_manual_pub")
-    manual_claim_no = st.text_input("claim_no", value="1", key="v8_claim_manual_no")
-    manual_title = st.text_input("patent_title（任意）", key="v8_claim_manual_title")
-    manual_text = st.text_area("claim text", height=150, key="v8_claim_manual_text")
-    if manual_pub.strip() and manual_text.strip():
-      manual_rows.append({
-        "publication_number": manual_pub.strip(),
-        "claim_no": manual_claim_no.strip() or "1",
-        "patent_title": manual_title.strip(),
-        "claim_text": manual_text.strip(),
-      })
+    manual_rows: list[dict[str, str]] = []
+    if input_mode == "手動claim text貼り付け":
+      manual_pub = st.text_input("publication_number", value=publication_number or "", key="v8_claim_manual_pub")
+      manual_claim_no = st.text_input("claim_no", value="1", key="v8_claim_manual_no")
+      manual_title = st.text_input("patent_title（任意）", key="v8_claim_manual_title")
+      manual_text = st.text_area("claim text", height=150, key="v8_claim_manual_text")
+      if manual_pub.strip() and manual_text.strip():
+        manual_rows.append({
+          "publication_number": manual_pub.strip(),
+          "claim_no": manual_claim_no.strip() or "1",
+          "patent_title": manual_title.strip(),
+          "claim_text": manual_text.strip(),
+        })
 
-  use_shortlist_only = input_mode == "claim text未取得でMap作成"
-  force_refresh = st.session_state.pop("v8_claim_map_force_refresh", False)
-  refresh = st.button("Generate / Refresh Claim Map", key="v8_claim_map_refresh", type="primary") or force_refresh
+    use_shortlist_only = input_mode == "claim text未取得でMap作成"
+    force_refresh = st.session_state.pop("v8_claim_map_force_refresh", False)
+    refresh = st.button("Generate / Refresh Claim Map", key="v8_claim_map_refresh", type="primary") or force_refresh
 
   cache_key = f"{selected_case}:{publication_number}:{input_mode}:{bool(manual_rows)}"
   if refresh or st.session_state.get("v8_claim_map_cache_key") != cache_key:

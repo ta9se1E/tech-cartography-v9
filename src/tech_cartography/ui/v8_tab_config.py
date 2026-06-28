@@ -89,6 +89,7 @@ EVIDENCE_SUPPORT_LEVELS: tuple[str, ...] = (
 STATE_V8_INPUT = "v8_input_state"
 STATE_V8_SELECTED_CASE = "v8_selected_case_id"
 STATE_V8_SELECTED_PUBLICATION = "v8_selected_publication_number"
+STATE_V8_CURRENT_TAB = "v8_current_tab_id"
 
 V8_STATUS_CAPTION = (
   "Judge Mode — 提出デモ（外部API / BigQuery / メール / Scheduler OFF）"
@@ -106,10 +107,6 @@ V8_SIDEBAR_PROGRESS_LINES: tuple[str, ...] = (
 
 V8_SIDEBAR_NEXT_STEP = (
   "Case 1 は1000件候補→Top5選抜→Top5全件35請求項投入済み。次はEvidence Gapと実施例確認。"
-)
-
-V8_SIDEBAR_SUBMISSION_SAFE_NOTICE = (
-  "提出デモ: 外部API実行なし / BigQuery実行なし / メール送信なし / Scheduler起動なし / 管理者設定デフォルトOFF"
 )
 
 CASE_01_TOP5_PUBLICATIONS = (

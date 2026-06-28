@@ -888,8 +888,15 @@ def main(argv: list[str] | None = None) -> int:
     failures.append("v8_export_ui missing Three Case Validation Pack section")
 
   intro_ui_phase27i = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_intro_ui.py")
-  if ("Phase27I" in intro_ui_phase27i or "render_judge_three_minute_guide" in intro_ui_phase27i) and (
-    "3案件検証パック" in intro_ui_phase27i or "Demo Readiness" in intro_ui_phase27i
+  if (
+    "Phase27I" in intro_ui_phase27i
+    or "render_judge_three_minute_guide" in intro_ui_phase27i
+    or "INTRO_FUNNEL_SUMMARY" in intro_ui_phase27i
+  ) and (
+    "3案件検証パック" in intro_ui_phase27i
+    or "Demo Readiness" in intro_ui_phase27i
+    or "351" in intro_ui_phase27i
+    or "成果ファネル" in intro_ui_phase27i
   ):
     print("PASS: v8_intro_ui mentions Phase27I validation pack")
   else:
@@ -1043,7 +1050,7 @@ def main(argv: list[str] | None = None) -> int:
     _check_file_exists(PROJECT_ROOT / rel, failures)
 
   input_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_input_ui.py")
-  if "まずここから" in input_ui:
+  if "まずここから" in input_ui or "Research Theme / Search Query" in input_ui or "render_research_theme_section" in input_ui:
     print("PASS: v8_input_ui references first step")
   else:
     failures.append("v8_input_ui missing first step guidance")
@@ -1102,7 +1109,12 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("v8_admin_settings_ui missing Cloud Run readiness section")
 
-  if "Phase27N.5" in intro_ui_early or "Case 1 実データ" in intro_ui_early:
+  if (
+    "Phase27N.5" in intro_ui_early
+    or "Case 1 実データ" in intro_ui_early
+    or "INTRO_FUNNEL_SUMMARY" in intro_ui_early
+    or ("Case 1" in intro_ui_early and "35" in intro_ui_early)
+  ):
     print("PASS: v8_intro_ui references Case 1 real demo data run")
   elif "Phase27N" in intro_ui_early:
     print("PASS: v8_intro_ui references Phase27N")

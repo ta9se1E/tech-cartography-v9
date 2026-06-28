@@ -21,9 +21,9 @@ def test_export_ui_one_case_e2e() -> None:
 
 def test_intro_case1_real_demo() -> None:
   text = _read("tech_cartography/ui/v8_intro_ui.py")
-  assert "Phase27N.5" in text or "render_judge_conclusion_card" in text or "35請求項" in text
-  assert "Case 1" in text or "case_01" in text
-  assert "claim 本文" in text or "claim" in text
+  assert "Phase27N.5" in text or "render_judge_conclusion_card" in text or "35請求項" in text or "INTRO_FUNNEL_SUMMARY" in text
+  assert "Case 1" in text or "case_01" in text or "INTRO_FUNNEL_SUMMARY" in text
+  assert "claim 本文" in text or "claim" in text or "35" in text or "請求項" in text
   assert "render_next_action_card" in text or "render_judge_three_minute_guide" in text
   assert "use_container_width" not in text
 

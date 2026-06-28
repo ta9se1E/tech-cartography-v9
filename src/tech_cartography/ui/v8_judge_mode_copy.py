@@ -1,4 +1,4 @@
-"""Judge Mode UI copy — display strings only (Phase 27R.1)."""
+"""Judge Mode UI copy — display strings only (Phase 27R.1 / 27R.2)."""
 
 from __future__ import annotations
 
@@ -16,20 +16,8 @@ CASE_01_FUNNEL_DEFAULTS: dict[str, int | str] = {
   "next_action": "check_patent_examples",
 }
 
-JUDGE_DEMO_SAFETY_LINES: tuple[str, ...] = (
-  "BigQuery直接実行: OFF",
-  "メール送信: OFF",
-  "Scheduler起動: OFF",
-)
-
-DEEP_RESEARCH_DIFF = (
-  "Deep Researchは一回の深い調査に強い。一方でTech Cartographyは、"
-  "Claim / Evidence / Gap / Next Actionを構造化し、"
-  "Watch Profileとして週次で追跡することに特化しています。"
-)
-
 THREE_MINUTE_DEMO_STEPS: tuple[str, ...] = (
-  "1. はじめに — 3分で価値を把握",
+  "1. はじめに — 概要と成果ファネルを確認",
   "2. 読むべき特許 — Top5選抜",
   "3. Claim Map — 請求項の技術要素整理",
   "4. Evidence Map — 裏取り候補",
@@ -38,28 +26,80 @@ THREE_MINUTE_DEMO_STEPS: tuple[str, ...] = (
   "7. Export — 共有レポート",
 )
 
+V8_EXECUTION_FLOW_LINES: tuple[str, ...] = THREE_MINUTE_DEMO_STEPS
+
 JUDGE_NEXT_TAB: dict[str, str] = {
-  "intro": "patent_shortlist",
+  "intro": "input",
+  "input": "sources",
+  "sources": "patent_shortlist",
   "patent_shortlist": "claim_map",
   "claim_map": "evidence_map",
   "evidence_map": "gap_next_actions",
   "gap_next_actions": "fixed_point_observation",
   "fixed_point_observation": "export",
   "export": "intro",
-  "input": "sources",
-  "sources": "patent_shortlist",
   "admin_settings": "intro",
 }
 
+TAB_DO_THIS: dict[str, str] = {
+  "intro": "このページの概要を確認し、「入力・テーマ設定」に進んでください。",
+  "input": "研究テーマ、検索キーワード、CSV/Excel取込、PDF入力口を確認してください。",
+  "sources": "取り込まれた候補特許データの出自と件数を確認してください。",
+  "patent_shortlist": "1000件候補から選ばれたTop5と、なぜ読むべきかを確認してください。",
+  "claim_map": "Top5特許の請求項35件が投入済みであることと、技術要素整理を確認してください。",
+  "evidence_map": "請求項に紐づく裏取り候補リンクと、その見方を確認してください。",
+  "gap_next_actions": "未確認事項と、人間が次に確認すべき実施例確認タスクを確認してください。",
+  "fixed_point_observation": "今回のGapを次回以降のWatch ProfileやDigestにつなげる流れを確認してください。",
+  "export": "分析結果を共有用ファイルとして出力してください。",
+  "admin_settings": "管理者向け設定です。通常デモでは操作不要です。",
+}
+
+TAB_DO_NEXT: dict[str, str] = {
+  "intro": "入力・テーマ設定でテーマと候補データ取込を確認",
+  "input": "Sources｜データ出自で候補母集団の件数を確認",
+  "sources": "読むべき特許｜Top5で選抜結果を確認",
+  "patent_shortlist": "Claim Map｜請求項の技術整理で35請求項の整理を確認",
+  "claim_map": "Evidence Map｜裏取り候補で351 linksを確認",
+  "evidence_map": "Gap / Next Actions｜未確認事項で106件と次タスクを確認",
+  "gap_next_actions": "定点観測｜Weekly WatchでDigest previewを確認",
+  "fixed_point_observation": "Export｜共有レポートで出力物を確認",
+  "export": "はじめにに戻るか、必要なタブを再確認",
+  "admin_settings": "はじめに｜Judge Overviewに戻る",
+}
+
+INTRO_SERVICE_SUMMARY = (
+  "Tech Cartographyは、研究テーマから「読むべき特許」「請求項構造」「裏取り候補」"
+  "「未確認Gap」「次の確認タスク」を整理するR&D Intelligence Agentです。"
+)
+
+INTRO_FUNNEL_SUMMARY = (
+  "本デモ（Case 1）: 1,000件候補 → Top5選抜 → 35請求項投入済 → "
+  "351件の裏取り候補 → 106件の未確認事項。"
+  " 最優先の確認タスクは特許実施例の確認です。"
+)
+
+INTRO_SAFETY_NOTICES: tuple[str, ...] = (
+  "スコア・整理結果は読む優先度・技術整理の目安であり、FTO・侵害・有効性判断ではありません。",
+  "Evidence Mapは裏取り候補の整理であり、証明ではありません。",
+  "Gapは未確認事項であり、弱点・無効理由・侵害リスクではありません。",
+)
+
+CLAIM_INPUT_GUIDE_NOT_LOADED = (
+  "一次情報から請求項本文をコピーし、manual claimとして登録してください。"
+  " AIはclaim本文を生成しません。"
+)
+
+CLAIM_INPUT_GUIDE_LOADED = (
+  "Top5全件の請求項本文は投入済みです。"
+  " Claim Mapを再生成すると、技術要素整理とEvidence Mapへの接続に進めます。"
+)
+
+CLAIM_INPUT_GUIDE_COMMON = (
+  "Claim Mapは権利範囲解釈ではなく、請求項本文を技術要素として整理するものです。"
+)
+
 JUDGE_CONCLUSION_CARDS: dict[str, str] = {
-  "intro": (
-    "Tech Cartographyは、研究テーマから「読むべき特許」「請求項構造」「裏取り候補」"
-    "「未確認Gap」「次の確認タスク」を整理するR&D Intelligence Agentです。"
-    " 本デモでは、PAN系炭素繊維テーマに対して、1,000件候補からTop5を選抜し、"
-    "Top5全件の35請求項をユーザー提供claimとして投入しました。"
-    " さらに351件の裏取り候補と106件の未確認事項を整理し、"
-    "次に確認すべき最優先タスクとして「特許実施例の確認」を提示しています。"
-  ),
+  "intro": INTRO_SERVICE_SUMMARY + " " + INTRO_FUNNEL_SUMMARY,
   "patent_shortlist": (
     "1,000件の候補特許から、読む優先度が高いTop5を選抜しました。"
     " スコアは読む優先度の目安であり、法的価値や権利範囲の評価ではありません。"
@@ -92,15 +132,18 @@ JUDGE_CONCLUSION_CARDS: dict[str, str] = {
     "Digest previewの共有に使います。"
   ),
   "input": (
-    "研究テーマ・キーワード・seed publication numbers を設定します。"
-    " 提出デモでは BigQuery 直接実行・外部API・メール・Scheduler は行いません。"
+    "研究テーマと検索キーワードを設定し、候補特許のCSV/Excel取込やPDF入力口を確認します。"
   ),
   "sources": (
     "候補特許・論文・Web等のデータ出自を確認します。"
     " 1,000件は母集団であり、Top5のみが深掘り対象です。"
   ),
   "admin_settings": (
-    "提出デモの安全設定を確認します。"
-    " 管理者機能はデフォルトOFF — 外部API・BigQuery・メール・Scheduler は実行しません。"
+    "管理者向け設定です。通常の提出デモでは操作不要です。"
   ),
 }
+
+PDF_UPLOAD_HELP = (
+  "将来的に特許PDFから請求項・実施例を読み取るための入力口です。"
+  " 現時点では手動確認・将来のClaim抽出連携用として保持しています。"
+)

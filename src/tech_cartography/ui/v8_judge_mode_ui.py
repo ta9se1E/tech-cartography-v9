@@ -1,4 +1,4 @@
-"""Judge Mode UI helpers — conclusion cards, sidebar funnel (Phase 27R.1)."""
+"""Judge Mode UI helpers — conclusion cards, sidebar funnel (Phase 27R.1 / 27R.2)."""
 
 from __future__ import annotations
 
@@ -10,16 +10,15 @@ import streamlit as st
 from tech_cartography.runtime.v8_one_case_demo_schema import DEFAULT_ONE_CASE_ID
 from tech_cartography.ui.v8_judge_mode_copy import (
   CASE_01_FUNNEL_DEFAULTS,
-  DEEP_RESEARCH_DIFF,
-  JUDGE_APP_SUBTITLE,
-  JUDGE_APP_TITLE,
   JUDGE_CASE_01_LABEL,
   JUDGE_CONCLUSION_CARDS,
-  JUDGE_DEMO_SAFETY_LINES,
   JUDGE_NEXT_TAB,
+  TAB_DO_NEXT,
+  TAB_DO_THIS,
   THREE_MINUTE_DEMO_STEPS,
+  V8_EXECUTION_FLOW_LINES,
 )
-from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
+from tech_cartography.ui.v8_tab_config import STATE_V8_CURRENT_TAB, V8_TAB_LABELS
 
 
 def load_case1_funnel_metrics(project_root: Path | str) -> dict[str, Any]:
@@ -47,13 +46,19 @@ def load_case1_funnel_metrics(project_root: Path | str) -> dict[str, Any]:
   return metrics
 
 
+def get_v8_current_tab_id() -> str:
+  tab_id = str(st.session_state.get(STATE_V8_CURRENT_TAB) or "intro")
+  if tab_id not in V8_TAB_LABELS:
+    return "intro"
+  return tab_id
+
+
 def render_judge_conclusion_card(tab_id: str) -> None:
   text = JUDGE_CONCLUSION_CARDS.get(tab_id)
   if not text:
     return
   if tab_id == "intro":
     st.success(text)
-    st.info(DEEP_RESEARCH_DIFF)
   else:
     st.info(text)
 
@@ -67,7 +72,7 @@ def render_judge_next_tab_hint(tab_id: str) -> None:
 
 
 def render_judge_three_minute_guide(*, expanded: bool = False) -> None:
-  with st.expander("3分デモ導線", expanded=expanded):
+  with st.expander("3分デモの流れ", expanded=expanded):
     for step in THREE_MINUTE_DEMO_STEPS:
       st.markdown(f"- {step}")
 
@@ -76,9 +81,21 @@ def render_judge_mode_sidebar(*, project_root: Path) -> None:
   from tech_cartography.ui.v8_input_ui import get_v8_input_state
   from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE
 
-  st.divider()
-  st.markdown(f"**{JUDGE_APP_TITLE}**")
-  st.caption(JUDGE_APP_SUBTITLE)
+  current_tab = get_v8_current_tab_id()
+
+  st.markdown("**実行フロー**")
+  for line in V8_EXECUTION_FLOW_LINES:
+    st.caption(line)
+
+  st.markdown("**このタブでやること**")
+  st.caption(TAB_DO_THIS.get(current_tab, "現在のタブの内容を確認してください。"))
+
+  next_tab_id = JUDGE_NEXT_TAB.get(current_tab)
+  st.markdown("**次のタブでやること**")
+  if next_tab_id:
+    st.caption(f"{V8_TAB_LABELS.get(next_tab_id, next_tab_id)} — {TAB_DO_NEXT.get(current_tab, '')}")
+  else:
+    st.caption("—")
 
   case_id = str(
     get_v8_input_state().get("selected_case_id")
@@ -89,17 +106,10 @@ def render_judge_mode_sidebar(*, project_root: Path) -> None:
   st.caption(JUDGE_CASE_01_LABEL if case_id == DEFAULT_ONE_CASE_ID else case_id)
 
   metrics = load_case1_funnel_metrics(project_root)
-  st.markdown("**今回の成果ファネル**")
+  st.markdown("**成果ファネル**")
   st.caption(f"候補特許: {metrics.get('candidates', 1000):,}件")
   st.caption(f"選抜: Top {metrics.get('top5', 5)}")
   st.caption(f"請求項: {metrics.get('claims', 35)}件投入済")
   st.caption(f"裏取り候補: {metrics.get('evidence_links', 351)} links")
   st.caption(f"未確認Gap: {metrics.get('gaps', 106)}件")
   st.caption(f"次アクション: {metrics.get('next_action', 'check_patent_examples')}")
-
-  st.markdown("**デモモード**")
-  for line in JUDGE_DEMO_SAFETY_LINES:
-    st.caption(line)
-
-  st.markdown("**次に見るタブ**")
-  st.caption(V8_TAB_LABELS.get("patent_shortlist", "読むべき特許｜Top5"))

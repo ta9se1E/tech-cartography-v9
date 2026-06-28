@@ -24,7 +24,8 @@ def test_judge_conclusion_cards_cover_main_tabs() -> None:
 
 
 def test_judge_next_tab_map_has_demo_flow() -> None:
-  assert JUDGE_NEXT_TAB["intro"] == "patent_shortlist"
+  assert JUDGE_NEXT_TAB["intro"] == "input"
+  assert JUDGE_NEXT_TAB["patent_shortlist"] == "claim_map"
   assert JUDGE_NEXT_TAB["export"] == "intro"
 
 

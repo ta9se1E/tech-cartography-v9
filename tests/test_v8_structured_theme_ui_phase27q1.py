@@ -22,8 +22,10 @@ def test_theme_ui_importable() -> None:
 def test_bigquery_ui_safety_caption() -> None:
   text = Path(bq_ui.__file__).read_text(encoding="utf-8")
   input_text = Path(input_ui.__file__).read_text(encoding="utf-8")
+  theme_text = Path(theme_ui.__file__).read_text(encoding="utf-8")
   assert "ENABLE_BIGQUERY_RUN" in text
   assert "公開デモ" in text
   assert "claim 本文" in text
   assert "use_container_width" not in text
-  assert "no_email_send" in input_text or "Scheduler" in input_text or "メール" in input_text
+  assert "render_bigquery_admin_section" in input_text
+  assert "BigQuery" in theme_text and "直接実行しません" in theme_text

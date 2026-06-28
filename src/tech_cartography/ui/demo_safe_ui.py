@@ -75,6 +75,12 @@ def visible_ui_mode_options() -> tuple[str, ...]:
   return (UI_MODE_DEMO, UI_MODE_ANALYST)
 
 
+def ui_mode_label(mode: str) -> str:
+  if _is_v8_user_flow_ui() and mode == UI_MODE_ANALYST:
+    return "詳細操作"
+  return UI_MODE_LABELS.get(mode, mode)
+
+
 def normalize_ui_mode(mode: str | None) -> str:
   candidate = str(mode or UI_MODE_DEMO)
   visible = visible_ui_mode_options()
@@ -358,7 +364,7 @@ def render_app_sidebar(
     "モード選択",
     list(visible_options),
     index=mode_index,
-    format_func=lambda m: UI_MODE_LABELS.get(m, m),
+    format_func=ui_mode_label,
     key=WIDGET_UI_MODE,
   )
   ui_mode_input = normalize_ui_mode(ui_mode_input)
@@ -372,14 +378,14 @@ def render_app_sidebar(
     st.rerun()
   st.session_state[STATE_UI_MODE] = ui_mode_input
 
-  st.markdown("**現在の進捗**")
-  st.caption(sidebar_progress_text(ui_mode_input, project_root=project_root))
-
-  st.markdown("**次にやること**")
-  st.caption(sidebar_next_steps_text(ui_mode_input, project_root=project_root))
-
   if _is_v8_user_flow_ui():
     _render_v8_demo_readiness_sidebar(project_root)
+  else:
+    st.markdown("**現在の進捗**")
+    st.caption(sidebar_progress_text(ui_mode_input, project_root=project_root))
+
+    st.markdown("**次にやること**")
+    st.caption(sidebar_next_steps_text(ui_mode_input, project_root=project_root))
 
   if ui_mode_input == UI_MODE_DEVELOPER and is_show_developer_mode_enabled():
     pipeline_root = str(st.session_state.get(STATE_PIPELINE_ROOT, project_root / "outputs" / "pipeline_runs"))
@@ -415,20 +421,11 @@ def render_app_sidebar(
       if key not in {STATE_UI_MODE}:
         st.session_state[key] = value
 
-  if ui_mode_input == UI_MODE_ANALYST:
-    if _is_v8_user_flow_ui():
-      st.markdown(
-        render_info_box(
-          "<strong>本番実行（Judge Mode 提出デモ）</strong>: UI操作と artifact 生成のみ。"
-          " 外部API・BigQuery・メール・Scheduler は実行しません。"
-        ),
-        unsafe_allow_html=True,
-      )
-    else:
-      st.markdown(
-        render_info_box("本番実行モード: テーマ入力・Manual Claims・E2E Chain を利用できます。"),
-        unsafe_allow_html=True,
-      )
+  if ui_mode_input == UI_MODE_ANALYST and not _is_v8_user_flow_ui():
+    st.markdown(
+      render_info_box("本番実行モード: テーマ入力・Manual Claims・E2E Chain を利用できます。"),
+      unsafe_allow_html=True,
+    )
 
   from tech_cartography.auth.basic_auth import is_login_required
   from tech_cartography.ui.api_secret_status_ui import render_api_secret_status_expander

@@ -173,17 +173,21 @@ def render_v8_sources_tab(*, project_root: Path | str) -> None:
       unsafe_allow_html=True,
     )
 
-  source_mode = st.radio(
-    "Sources 表示モード",
-    options=["small demo sources", "large candidate population"],
-    horizontal=True,
-    key="v8_sources_mode",
-  )
+  source_mode = st.session_state.get("v8_sources_mode", "large candidate population")
+  if "v8_sources_mode" not in st.session_state:
+    st.session_state["v8_sources_mode"] = "large candidate population"
 
-  if source_mode == "large candidate population":
-    _render_large_candidate_sources(root=root, default_case=default_case)
-    return
+  _render_large_candidate_sources(root=root, default_case=default_case)
 
+  with st.expander("small demo sources（参考・小規模データ）", expanded=False):
+    if st.button("small demo sources を表示", key="v8_sources_show_small"):
+      st.session_state["v8_sources_mode"] = "small demo sources"
+      st.rerun()
+    if st.session_state.get("v8_sources_mode") == "small demo sources":
+      _render_small_demo_sources(root=root, default_case=default_case)
+
+
+def _render_small_demo_sources(*, root: Path, default_case: str) -> None:
   base_table = load_sources_table(project_root=root)
   if not base_table.records:
     st.markdown(

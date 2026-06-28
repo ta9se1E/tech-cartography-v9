@@ -50,7 +50,8 @@ def test_tab_config_phase27m() -> None:
 
 def test_input_first_step() -> None:
   text = _read("tech_cartography/ui/v8_input_ui.py")
-  assert "まずここから" in text
+  assert "Research Theme / Search Query" in text or "render_research_theme_section" in text
+  assert "CSV/Excelを取り込む" in text
 
 
 def test_export_demo_readiness_pack() -> None:
