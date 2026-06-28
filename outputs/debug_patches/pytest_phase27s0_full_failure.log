@@ -1,0 +1,437 @@
+........................................................................ [  3%]
+......EEEEEF.....................F.F.................................... [  7%]
+........................................................................ [ 11%]
+........................................................................ [ 15%]
+........................................................................ [ 19%]
+........................................................................ [ 23%]
+........................................................................ [ 27%]
+........................................................................ [ 31%]
+........................................................................ [ 34%]
+........................................................................ [ 38%]
+........................................................................ [ 42%]
+........................................................................ [ 46%]
+........................................................................ [ 50%]
+...........F............................................................ [ 54%]
+........................................................................ [ 58%]
+........................................................................ [ 62%]
+........................................................................ [ 65%]
+........................................................FF.............. [ 69%]
+..............................F......................................... [ 73%]
+....F................................................................... [ 77%]
+........................................................................ [ 81%]
+........F.......................................................F....... [ 85%]
+........................................................................ [ 89%]
+........................................................................ [ 93%]
+.........................F.........F.................................... [ 96%]
+..........................................................               [100%]
+==================================== ERRORS ====================================
+________ ERROR at setup of test_simple_login_takes_priority_over_bcrypt ________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x14d7f0eb0>
+
+    @pytest.fixture
+    def sample_users_json(monkeypatch: pytest.MonkeyPatch) -> str:
+>     password_hash = hash_password("correct-horse")
+
+tests/test_basic_auth.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+password = 'correct-horse'
+
+    def hash_password(password: str) -> str:
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+
+src/tech_cartography/auth/basic_auth.py:110: ModuleNotFoundError
+_____ ERROR at setup of test_bcrypt_fallback_when_simple_password_missing ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x14d858e80>
+
+    @pytest.fixture
+    def sample_users_json(monkeypatch: pytest.MonkeyPatch) -> str:
+>     password_hash = hash_password("correct-horse")
+
+tests/test_basic_auth.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+password = 'correct-horse'
+
+    def hash_password(password: str) -> str:
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+
+src/tech_cartography/auth/basic_auth.py:110: ModuleNotFoundError
+_________________ ERROR at setup of test_authenticate_success __________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x14d853e20>
+
+    @pytest.fixture
+    def sample_users_json(monkeypatch: pytest.MonkeyPatch) -> str:
+>     password_hash = hash_password("correct-horse")
+
+tests/test_basic_auth.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+password = 'correct-horse'
+
+    def hash_password(password: str) -> str:
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+
+src/tech_cartography/auth/basic_auth.py:110: ModuleNotFoundError
+______________ ERROR at setup of test_authenticate_wrong_password ______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x14d243670>
+
+    @pytest.fixture
+    def sample_users_json(monkeypatch: pytest.MonkeyPatch) -> str:
+>     password_hash = hash_password("correct-horse")
+
+tests/test_basic_auth.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+password = 'correct-horse'
+
+    def hash_password(password: str) -> str:
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+
+src/tech_cartography/auth/basic_auth.py:110: ModuleNotFoundError
+_______________ ERROR at setup of test_authenticate_unknown_user _______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x14d796070>
+
+    @pytest.fixture
+    def sample_users_json(monkeypatch: pytest.MonkeyPatch) -> str:
+>     password_hash = hash_password("correct-horse")
+
+tests/test_basic_auth.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+password = 'correct-horse'
+
+    def hash_password(password: str) -> str:
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+
+src/tech_cartography/auth/basic_auth.py:110: ModuleNotFoundError
+=================================== FAILURES ===================================
+__________________ test_password_hash_not_equal_to_plaintext ___________________
+
+    def test_password_hash_not_equal_to_plaintext() -> None:
+      plain = "secret-value"
+>     hashed = hash_password(plain)
+
+tests/test_basic_auth.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+password = 'secret-value'
+
+    def hash_password(password: str) -> str:
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+
+src/tech_cartography/auth/basic_auth.py:110: ModuleNotFoundError
+_______________ test_dry_run_query_mock_returns_estimated_bytes ________________
+
+    def test_dry_run_query_mock_returns_estimated_bytes() -> None:
+      config = RetrievalConfig(project_id="test-project", dry_run=True, execute=False)
+      fake_client = _FakeClient(total_bytes=gb_to_bytes(2))
+    
+      def factory(project_id: str) -> _FakeClient:
+        assert project_id == "test-project"
+        return fake_client
+    
+      with patch(
+        "tech_cartography.retrieval.bigquery_light_retriever.resolve_project_id",
+        return_value={"project_id": "test-project", "source": "explicit", "error": None},
+      ):
+        result = dry_run_query("SELECT 1", config, client_factory=factory)
+    
+>     assert result["dry_run_status"] == "ok"
+E     AssertionError: assert 'error' == 'ok'
+E       
+E       - ok
+E       + error
+
+tests/test_bigquery_light_retriever.py:71: AssertionError
+________________ test_execute_true_passes_maximum_bytes_billed _________________
+
+    def test_execute_true_passes_maximum_bytes_billed() -> None:
+      config = RetrievalConfig(
+        project_id="test-project",
+        dry_run=False,
+        execute=True,
+        maximum_bytes_billed_gb=10.0,
+      )
+      fake_client = _FakeClient(
+        rows=[
+          {
+            "publication_number": "US-2024-000001",
+            "title": "PAN carbon fiber carbonization",
+            "abstract": "modulus aerospace composite",
+            "assignee": "TORAY",
+            "country": "US",
+            "publication_date": "20240101",
+            "url": "https://example.com",
+            "cpc_codes": "D01F",
+            "ipc_codes": "D01F",
+          },
+        ],
+      )
+    
+      def factory(project_id: str) -> _FakeClient:
+        return fake_client
+    
+      with patch(
+        "tech_cartography.retrieval.bigquery_light_retriever.resolve_project_id",
+        return_value={"project_id": "test-project", "source": "explicit", "error": None},
+      ):
+>       rows = execute_query("SELECT 1", config, client_factory=factory)
+
+tests/test_bigquery_light_retriever.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sql = 'SELECT 1'
+config = RetrievalConfig(project_id='test-project', dry_run=False, execute=True, maximum_bytes_billed_gb=10.0, max_results_per_intent=500, max_results_total=2000, output_dir='outputs/bigquery_light_retrieval', use_cache=True)
+
+    def execute_query(
+      sql: str,
+      config: RetrievalConfig,
+      *,
+      client_factory: ClientFactory | None = None,
+    ) -> list[dict]:
+      if not config.execute:
+        return []
+    
+      resolved = resolve_project_id(config.project_id)
+      project_id = resolved.get("project_id", "")
+      if not project_id:
+        raise RuntimeError(resolved.get("error") or "project_id unresolved")
+    
+      factory = client_factory or _default_client_factory
+>     from google.cloud import bigquery
+E     ModuleNotFoundError: No module named 'google.cloud'
+
+src/tech_cartography/retrieval/bigquery_light_retriever.py:134: ModuleNotFoundError
+___________________ test_execute_passes_maximum_bytes_billed ___________________
+
+    def test_execute_passes_maximum_bytes_billed() -> None:
+      config = FullTextRetrievalConfig(execute=True, maximum_bytes_billed_gb=10.0, use_cache=False)
+      fake_client = _FakeClient(
+        rows=[
+          {
+            "publication_number": "US2024000001A1",
+            "title": "PAN carbon fiber",
+            "claims": "Claim 1. Method",
+            "description": "Description with examples",
+            "assignee": "Toray",
+            "country_code": "US",
+          },
+        ],
+      )
+    
+      def factory(project_id: str) -> _FakeClient:
+        return fake_client
+    
+      with patch(
+        "tech_cartography.retrieval.patent_fulltext_retriever.resolve_project_id",
+        return_value={"project_id": "test-project", "source": "explicit", "error": None},
+      ), patch(
+        "tech_cartography.retrieval.patent_fulltext_retriever.dry_run_fulltext_query",
+        return_value={
+          "dry_run_status": "ok",
+          "estimated_bytes": 1000,
+          "would_be_blocked_by_max_bytes": False,
+          "error": None,
+        },
+      ):
+        execution = execute_fulltext_query(
+          _us_candidate(),
+          config,
+          client_factory=factory,
+        )
+>     assert execution["execution_status"] == "executed"
+E     AssertionError: assert 'error' == 'executed'
+E       
+E       - executed
+E       + error
+
+tests/test_patent_fulltext_retriever.py:258: AssertionError
+________________________ test_dry_run_with_fake_client _________________________
+
+tmp_path = PosixPath('/private/var/folders/bf/_3j1y7v932l3f_p4tvxr2p4w0000gn/T/pytest-of-esakitakusei/pytest-159/test_dry_run_with_fake_client0')
+
+    def test_dry_run_with_fake_client(tmp_path) -> None:
+      profile = ResearchThemeProfile(case_id="case_01", core_keywords=["PAN"])
+      client = FakeBigQueryClient(total_bytes=2048)
+>     manifest = run_bigquery_candidate_search(
+        case_id="case_01",
+        theme_profile=profile,
+        mode="dry_run",
+        project_root=tmp_path,
+        client=client,
+        config=_enabled_cfg(),
+      )
+
+tests/test_v8_bigquery_runner_phase27q1.py:40: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/tech_cartography/services/v8_bigquery_runner.py:148: in run_bigquery_candidate_search
+    job_config = _job_config(cfg, dry_run=True)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cfg = BigQuerySafetyConfig(enable_bigquery_run=True, show_bigquery_admin=True, bigquery_project_id='test-project', bigquery_...uery_max_bytes_billed=5000000000, bigquery_default_limit=100, bigquery_dry_run_only=True, bigquery_allow_execute=False)
+
+    def _job_config(cfg: BigQuerySafetyConfig, *, dry_run: bool) -> Any:
+>     from google.cloud import bigquery
+E     ModuleNotFoundError: No module named 'google.cloud'
+
+src/tech_cartography/services/v8_bigquery_runner.py:197: ModuleNotFoundError
+________________________ test_execute_with_fake_client _________________________
+
+tmp_path = PosixPath('/private/var/folders/bf/_3j1y7v932l3f_p4tvxr2p4w0000gn/T/pytest-of-esakitakusei/pytest-159/test_execute_with_fake_client0')
+
+    def test_execute_with_fake_client(tmp_path) -> None:
+      profile = ResearchThemeProfile(case_id="case_01", core_keywords=["PAN"])
+      client = FakeBigQueryClient(
+        total_bytes=2048,
+        rows=[{"publication_number": "JP2022090764A", "title": "test", "publication_date": "20220101", "heuristic_score": 10}],
+      )
+>     manifest = run_bigquery_candidate_search(
+        case_id="case_01",
+        theme_profile=profile,
+        mode="execute",
+        project_root=tmp_path,
+        client=client,
+        config=_enabled_cfg(allow_execute=True),
+      )
+
+tests/test_v8_bigquery_runner_phase27q1.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/tech_cartography/services/v8_bigquery_runner.py:148: in run_bigquery_candidate_search
+    job_config = _job_config(cfg, dry_run=True)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cfg = BigQuerySafetyConfig(enable_bigquery_run=True, show_bigquery_admin=True, bigquery_project_id='test-project', bigquery_...uery_max_bytes_billed=5000000000, bigquery_default_limit=100, bigquery_dry_run_only=False, bigquery_allow_execute=True)
+
+    def _job_config(cfg: BigQuerySafetyConfig, *, dry_run: bool) -> Any:
+>     from google.cloud import bigquery
+E     ModuleNotFoundError: No module named 'google.cloud'
+
+src/tech_cartography/services/v8_bigquery_runner.py:197: ModuleNotFoundError
+_______________________ test_intro_ui_phase27i_guidance ________________________
+
+    def test_intro_ui_phase27i_guidance() -> None:
+      text = Path(intro_ui.__file__).read_text(encoding="utf-8")
+      assert "Phase27I" in text or "Demo Readiness" in text or "render_judge_conclusion_card" in text
+>     assert "3案件検証パック" in text or "Demo Readiness Pack" in text
+E     assert ('3案件検証パック' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' or 'Demo Readiness Pack' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n')
+
+tests/test_v8_case_validation_ui_phase27i.py:25: AssertionError
+____________________________ test_intro_ui_phase27n ____________________________
+
+    def test_intro_ui_phase27n() -> None:
+      text = _read("tech_cartography/ui/v8_intro_ui.py")
+      assert "Phase27N" in text or "Cloud Run Readiness" in text or "render_judge_conclusion_card" in text
+>     assert "deploy" in text.lower() or "Cloud Run" in text
+E     assert ('deploy' in '"""v8 intro tab (phase 27b / 27r.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in intro_safety_notices:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' or 'Cloud Run' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n')
+E      +  where '"""v8 intro tab (phase 27b / 27r.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in intro_safety_notices:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' = <built-in method lower of str object at 0x14828f800>()
+E      +    where <built-in method lower of str object at 0x14828f800> = '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n'.lower
+
+tests/test_v8_cloud_run_readiness_ui_phase27n.py:33: AssertionError
+_____________________ test_input_ui_large_candidate_import _____________________
+
+    def test_input_ui_large_candidate_import() -> None:
+      text = Path(input_ui.__file__).read_text(encoding="utf-8")
+      assert "Import Large Candidate File" in text
+>     assert "1000件候補" in text
+E     assert '1000件候補' in '"""v8 input tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nfrom pathlib import Path\nfrom typin...ion_box(\n      f"次: 「{V8_TAB_LABELS[\'sources\']}」で候補母集団の件数と出自を確認してください。"\n    ),\n    unsafe_allow_html=True,\n  )\n'
+
+tests/test_v8_large_candidate_ui_phase27j0.py:17: AssertionError
+__________________________ test_intro_case1_real_demo __________________________
+
+    def test_intro_case1_real_demo() -> None:
+      text = _read("tech_cartography/ui/v8_intro_ui.py")
+      assert "Phase27N.5" in text or "render_judge_conclusion_card" in text or "35請求項" in text or "INTRO_FUNNEL_SUMMARY" in text
+      assert "Case 1" in text or "case_01" in text or "INTRO_FUNNEL_SUMMARY" in text
+>     assert "claim 本文" in text or "claim" in text or "35" in text or "請求項" in text
+E     assert ('claim 本文' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' or 'claim' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' or '35' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' or '請求項' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n')
+
+tests/test_v8_one_case_demo_e2e_ui_phase27n5.py:26: AssertionError
+_______________________ test_map_web_signals_to_patents ________________________
+
+    def test_map_web_signals_to_patents() -> None:
+>     result = map_web_signals_to_patents([_signal()], [_patent()])
+
+tests/test_web_signal_mapper.py:88: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+signals = [{'business_signal': 'Expansion candidate', 'company': 'TORAY', 'display_url': 'https://www.toray.com/news/press-release', 'normalized_company': 'TORAY', ...}]
+patents = [{'abstract': 'PAN precursor carbonization and prepreg for aerospace applications', 'assignee': 'TORAY INDUSTRIES', 'matched_terms': ['prepreg', 'carbon fiber'], 'primary_cluster_id': 'bundle_prepreg', ...}]
+
+    def map_web_signals_to_patents(signals: list[dict[str, Any]], patents: list[dict[str, Any]]) -> dict[str, Any]:
+      quality_results = [evaluate_web_signal_quality(signal) for signal in signals]
+>     for signal, quality in zip(signals, quality_results, strict=True):
+E     TypeError: zip() takes no keyword arguments
+
+src/tech_cartography/evidence/web_signal_mapper.py:288: TypeError
+________________________ test_report_markdown_sections _________________________
+
+    def test_report_markdown_sections() -> None:
+>     result = map_web_signals_to_patents(
+        [
+          {
+            "signal_id": "ws1",
+            "company": "TORAY",
+            "normalized_company": "TORAY",
+            "source_title": "Prepreg expansion",
+            "source_url": "https://www.toray.com/news/press-release",
+            "source_name": "Press release",
+            "signal_type": "production_expansion",
+            "technology_terms": ["carbon fiber", "prepreg"],
+            "business_signal": "Expansion",
+            "display_url": "https://www.toray.com/news/press-release",
+          },
+        ],
+        [
+          {
+            "publication_number": "US1",
+            "title": "Carbon fiber prepreg",
+            "assignee": "TORAY",
+            "abstract": "prepreg aerospace carbon fiber",
+            "primary_cluster_id": "bundle_prepreg",
+          },
+        ],
+      )
+
+tests/test_web_signal_report.py:8: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+signals = [{'business_signal': 'Expansion', 'company': 'TORAY', 'display_url': 'https://www.toray.com/news/press-release', 'normalized_company': 'TORAY', ...}]
+patents = [{'abstract': 'prepreg aerospace carbon fiber', 'assignee': 'TORAY', 'primary_cluster_id': 'bundle_prepreg', 'publication_number': 'US1', ...}]
+
+    def map_web_signals_to_patents(signals: list[dict[str, Any]], patents: list[dict[str, Any]]) -> dict[str, Any]:
+      quality_results = [evaluate_web_signal_quality(signal) for signal in signals]
+>     for signal, quality in zip(signals, quality_results, strict=True):
+E     TypeError: zip() takes no keyword arguments
+
+src/tech_cartography/evidence/web_signal_mapper.py:288: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_basic_auth.py::test_password_hash_not_equal_to_plaintext - ...
+FAILED tests/test_bigquery_light_retriever.py::test_dry_run_query_mock_returns_estimated_bytes
+FAILED tests/test_bigquery_light_retriever.py::test_execute_true_passes_maximum_bytes_billed
+FAILED tests/test_patent_fulltext_retriever.py::test_execute_passes_maximum_bytes_billed
+FAILED tests/test_v8_bigquery_runner_phase27q1.py::test_dry_run_with_fake_client
+FAILED tests/test_v8_bigquery_runner_phase27q1.py::test_execute_with_fake_client
+FAILED tests/test_v8_case_validation_ui_phase27i.py::test_intro_ui_phase27i_guidance
+FAILED tests/test_v8_cloud_run_readiness_ui_phase27n.py::test_intro_ui_phase27n
+FAILED tests/test_v8_large_candidate_ui_phase27j0.py::test_input_ui_large_candidate_import
+FAILED tests/test_v8_one_case_demo_e2e_ui_phase27n5.py::test_intro_case1_real_demo
+FAILED tests/test_web_signal_mapper.py::test_map_web_signals_to_patents - Typ...
+FAILED tests/test_web_signal_report.py::test_report_markdown_sections - TypeE...
+ERROR tests/test_basic_auth.py::test_simple_login_takes_priority_over_bcrypt
+ERROR tests/test_basic_auth.py::test_bcrypt_fallback_when_simple_password_missing
+ERROR tests/test_basic_auth.py::test_authenticate_success - ModuleNotFoundErr...
+ERROR tests/test_basic_auth.py::test_authenticate_wrong_password - ModuleNotF...
+ERROR tests/test_basic_auth.py::test_authenticate_unknown_user - ModuleNotFou...
+12 failed, 1841 passed, 5 errors in 55.25s

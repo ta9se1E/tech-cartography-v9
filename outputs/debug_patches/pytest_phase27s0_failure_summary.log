@@ -1,0 +1,54 @@
+==================================== ERRORS ====================================
+________ ERROR at setup of test_simple_login_takes_priority_over_bcrypt ________
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+_____ ERROR at setup of test_bcrypt_fallback_when_simple_password_missing ______
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+_________________ ERROR at setup of test_authenticate_success __________________
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+______________ ERROR at setup of test_authenticate_wrong_password ______________
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+_______________ ERROR at setup of test_authenticate_unknown_user _______________
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+>     import bcrypt
+E     ModuleNotFoundError: No module named 'bcrypt'
+E     AssertionError: assert 'error' == 'ok'
+E       
+E       - ok
+E       + error
+E     ModuleNotFoundError: No module named 'google.cloud'
+E     AssertionError: assert 'error' == 'executed'
+E       
+E       - executed
+E       + error
+E     ModuleNotFoundError: No module named 'google.cloud'
+E     ModuleNotFoundError: No module named 'google.cloud'
+E     assert ('3案件検証パック' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' or 'Demo Readiness Pack' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n')
+E     assert ('deploy' in '"""v8 intro tab (phase 27b / 27r.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in intro_safety_notices:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' or 'Cloud Run' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n')
+E      +  where '"""v8 intro tab (phase 27b / 27r.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in intro_safety_notices:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' = <built-in method lower of str object at 0x14828f800>()
+E      +    where <built-in method lower of str object at 0x14828f800> = '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n'.lower
+E     assert '1000件候補' in '"""v8 input tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nfrom pathlib import Path\nfrom typin...ion_box(\n      f"次: 「{V8_TAB_LABELS[\'sources\']}」で候補母集団の件数と出自を確認してください。"\n    ),\n    unsafe_allow_html=True,\n  )\n'
+E     assert ('claim 本文' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' or 'claim' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' or '35' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n' or '請求項' in '"""v8 intro tab (Phase 27B / 27R.2)."""\n\nfrom __future__ import annotations\n\nimport streamlit as st\n\nfrom tech_...み方")\n  for notice in INTRO_SAFETY_NOTICES:\n    st.markdown(f"- {notice}")\n\n  render_judge_next_tab_hint("intro")\n')
+E     TypeError: zip() takes no keyword arguments
+E     TypeError: zip() takes no keyword arguments
+FAILED tests/test_basic_auth.py::test_password_hash_not_equal_to_plaintext - ...
+FAILED tests/test_bigquery_light_retriever.py::test_dry_run_query_mock_returns_estimated_bytes
+FAILED tests/test_bigquery_light_retriever.py::test_execute_true_passes_maximum_bytes_billed
+FAILED tests/test_patent_fulltext_retriever.py::test_execute_passes_maximum_bytes_billed
+FAILED tests/test_v8_bigquery_runner_phase27q1.py::test_dry_run_with_fake_client
+FAILED tests/test_v8_bigquery_runner_phase27q1.py::test_execute_with_fake_client
+FAILED tests/test_v8_case_validation_ui_phase27i.py::test_intro_ui_phase27i_guidance
+FAILED tests/test_v8_cloud_run_readiness_ui_phase27n.py::test_intro_ui_phase27n
+FAILED tests/test_v8_large_candidate_ui_phase27j0.py::test_input_ui_large_candidate_import
+FAILED tests/test_v8_one_case_demo_e2e_ui_phase27n5.py::test_intro_case1_real_demo
+FAILED tests/test_web_signal_mapper.py::test_map_web_signals_to_patents - Typ...
+FAILED tests/test_web_signal_report.py::test_report_markdown_sections - TypeE...
+ERROR tests/test_basic_auth.py::test_simple_login_takes_priority_over_bcrypt
+ERROR tests/test_basic_auth.py::test_bcrypt_fallback_when_simple_password_missing
+ERROR tests/test_basic_auth.py::test_authenticate_success - ModuleNotFoundErr...
+ERROR tests/test_basic_auth.py::test_authenticate_wrong_password - ModuleNotF...
+ERROR tests/test_basic_auth.py::test_authenticate_unknown_user - ModuleNotFou...
