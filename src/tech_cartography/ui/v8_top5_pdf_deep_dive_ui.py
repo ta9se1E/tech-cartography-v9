@@ -1,4 +1,4 @@
-"""Top5 Deep Dive PDF pipeline UI (Phase 27S.4.1)."""
+"""Top5 Deep Dive PDF pipeline UI (Phase 27S.4.1 / 27S.4.2)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,10 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from tech_cartography.runtime.v8_top5_pdf_pipeline_status_schema import TOP5_PDF_PIPELINE_NOTICES
+from tech_cartography.runtime.v8_top5_pdf_pipeline_status_schema import (
+  TOP5_PDF_PIPELINE_NOTICES,
+  Top5PdfPipelineStatus,
+)
 from tech_cartography.services.v8_claim_example_binding import (
   bind_claims_to_example_facts,
   find_latest_claim_example_links_dir,
@@ -19,11 +22,15 @@ from tech_cartography.services.v8_gemini_example_facts import (
   find_latest_patent_sections_output,
   write_example_facts_outputs,
 )
-from tech_cartography.services.v8_google_patents_links import save_patent_pdf_upload
+from tech_cartography.services.v8_google_patents_links import build_google_patents_url
 from tech_cartography.services.v8_llm_provider_gemini import (
   ENABLE_GEMINI_EXAMPLE_FACTS_ENV,
   gemini_availability_message,
   is_gemini_example_facts_enabled,
+)
+from tech_cartography.services.v8_patent_pdf_storage import (
+  get_patent_pdf_upload_info,
+  save_uploaded_patent_pdf,
 )
 from tech_cartography.services.v8_patent_pdf_text_extract import (
   extract_text_from_uploaded_top5_pdfs,
@@ -35,12 +42,16 @@ from tech_cartography.services.v8_patent_section_extract import (
   find_latest_section_extract_dir,
   write_section_outputs,
 )
-from tech_cartography.runtime.v8_top5_pdf_pipeline_status_schema import Top5PdfPipelineStatus
 from tech_cartography.services.v8_top5_pdf_pipeline_status import (
   build_top5_pdf_pipeline_status,
 )
 from tech_cartography.ui.v8_judge_mode_copy import TOP5_PDF_DEEP_DIVE_HELP
 from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
+
+
+def _session_pdf_uploads() -> dict[str, str]:
+  raw = st.session_state.get("v8_patent_pdf_uploads")
+  return dict(raw) if isinstance(raw, dict) else {}
 
 
 def _metadata_from_top5_records(records: list | None) -> dict[str, dict[str, str]]:
@@ -63,19 +74,87 @@ def _status_summary_rows(statuses: list[Top5PdfPipelineStatus]) -> list[dict]:
   for s in statuses:
     rows.append({
       "publication_number": s.publication_number,
-      "title": (s.title or "—")[:60],
-      "assignee": (s.assignee or "—")[:40],
       "pdf_uploaded": s.pdf_uploaded,
       "pdf_text_extracted": s.pdf_text_extracted,
+      "needs_ocr": s.needs_ocr,
       "sections_extracted": s.sections_extracted,
       "examples_count": s.examples_count,
       "example_facts_extracted": s.example_facts_extracted,
       "claim_example_links": s.claim_example_links_generated,
-      "needs_ocr": s.needs_ocr,
-      "needs_human_review": s.needs_human_review,
       "next_action": s.next_action,
     })
   return rows
+
+
+def _default_upload_publication(statuses: list[Top5PdfPipelineStatus]) -> str:
+  for s in statuses:
+    if s.next_action == "PDFを取得してアップロード":
+      return s.publication_number
+  return statuses[0].publication_number
+
+
+def render_top5_pdf_upload_section(
+  statuses: list[Top5PdfPipelineStatus],
+  case_id: str,
+  project_root: Path,
+  *,
+  key_prefix: str = "v8_top5_dd",
+) -> str:
+  """Top5 PDF upload panel — always visible in Deep Dive."""
+  st.markdown("**Top5公報PDFアップロード**")
+  pubs = [s.publication_number for s in statuses]
+  default_pub = _default_upload_publication(statuses)
+  default_idx = pubs.index(default_pub) if default_pub in pubs else 0
+
+  selected = st.selectbox(
+    "PDF対象特許（Top5）",
+    options=pubs,
+    index=default_idx,
+    key=f"{key_prefix}_pdf_pub_select",
+  )
+
+  gp_url = build_google_patents_url(selected)
+  if gp_url:
+    st.markdown(f"[Google Patentsで開く]({gp_url})")
+
+  info = get_patent_pdf_upload_info(
+    case_id, project_root, selected, session_uploads=_session_pdf_uploads(),
+  )
+  st.caption(
+    f"publication_number: {info['publication_number']} / "
+    f"status: {info['upload_status']} / "
+    f"path: {info['pdf_path']} / "
+    f"size: {info['file_size']:,} bytes"
+  )
+
+  pdf_file = st.file_uploader(
+    "特許PDF（公報PDF）",
+    type=["pdf"],
+    key=f"{key_prefix}_pdf_file_{selected}",
+  )
+  if pdf_file is not None and st.button(
+    "PDFを保存",
+    key=f"{key_prefix}_pdf_save_{selected}",
+    type="primary",
+  ):
+    try:
+      save_uploaded_patent_pdf(
+        case_id,
+        project_root,
+        selected,
+        pdf_file.getvalue(),
+        original_filename=pdf_file.name,
+        allowed_publications=pubs,
+      )
+      uploads = _session_pdf_uploads()
+      uploads[selected] = pdf_file.name
+      st.session_state["v8_patent_pdf_uploads"] = uploads
+      st.success("PDFを保存しました。次に Extract PDF text を実行してください。")
+      st.rerun()
+    except ValueError as exc:
+      st.warning(str(exc))
+
+  return selected
 
 
 def _render_next_action_for_patent(
@@ -85,6 +164,7 @@ def _render_next_action_for_patent(
   output_root: Path,
   *,
   key_prefix: str,
+  show_upload_panel: bool = False,
 ) -> None:
   pub = status.publication_number
   st.caption(f"次の操作: **{status.next_action}**")
@@ -92,28 +172,10 @@ def _render_next_action_for_patent(
     st.caption(status.warning)
 
   if not status.pdf_uploaded:
-    if status.google_patents_url:
-      st.markdown(f"[Google Patentsで開く]({status.google_patents_url})")
-    pdf_file = st.file_uploader(
-      f"特許PDF — {pub}",
-      type=["pdf"],
-      key=f"{key_prefix}_pdf_{pub}",
-    )
-    if pdf_file is not None and st.button(f"PDFを保存 — {pub}", key=f"{key_prefix}_save_{pub}", type="primary"):
-      save_patent_pdf_upload(
-        case_id=case_id,
-        publication_number=pub,
-        pdf_bytes=pdf_file.getvalue(),
-        original_filename=pdf_file.name,
-        project_root=project_root,
-      )
-      uploads = st.session_state.get("v8_patent_pdf_uploads")
-      if not isinstance(uploads, dict):
-        uploads = {}
-      uploads[pub] = pdf_file.name
-      st.session_state["v8_patent_pdf_uploads"] = uploads
-      st.success(f"保存しました: {pub}")
-      st.rerun()
+    if show_upload_panel:
+      st.info("上の「Top5公報PDFアップロード」で対象特許を選び、PDFを保存してください。")
+    else:
+      st.info("Top5 Deep Dive｜公報PDF解析 のアップロード欄でPDFを保存してください。")
     return
 
   if not status.pdf_text_extracted:
@@ -125,20 +187,35 @@ def _render_next_action_for_patent(
     return
 
   if status.needs_ocr:
-    st.warning("テキスト量が少ない、または抽出不能の可能性があります。OCRは将来対応です。")
-    if not status.sections_extracted and st.button("Extract sections（続行）", key=f"{key_prefix}_sec_ocr_{pub}"):
-      raw_dir = find_latest_pdf_text_extract_dir(case_id, project_root)
-      if raw_dir and (raw_dir / "publication_fulltext_raw.csv").exists():
-        results = extract_sections_from_pdf_text_output(case_id, raw_dir / "publication_fulltext_raw.csv", output_root)
-        write_section_outputs(case_id, results, output_root)
-        st.rerun()
+    st.warning(
+      "このPDFはテキスト抽出量が少ないため、画像PDFの可能性があります。"
+      " 別形式のPDFをアップロードするか、OCR対応が必要です。"
+    )
+    if status.google_patents_url:
+      st.markdown(f"[Google Patentsで別PDFを確認]({status.google_patents_url})")
+    st.caption("上の「Top5公報PDFアップロード」でPDFを差し替えてアップロードできます。")
+    if not status.sections_extracted:
+      with st.expander("開発者向け詳細操作", expanded=False):
+        if st.button(
+          "Extract sections anyway",
+          key=f"{key_prefix}_sec_ocr_{pub}",
+        ):
+          raw_dir = find_latest_pdf_text_extract_dir(case_id, project_root)
+          if raw_dir and (raw_dir / "publication_fulltext_raw.csv").exists():
+            results = extract_sections_from_pdf_text_output(
+              case_id, raw_dir / "publication_fulltext_raw.csv", output_root,
+            )
+            write_section_outputs(case_id, results, output_root)
+            st.rerun()
     return
 
   if not status.sections_extracted:
     if st.button("Extract sections", key=f"{key_prefix}_sec_{pub}", type="primary"):
       raw_dir = find_latest_pdf_text_extract_dir(case_id, project_root)
       if raw_dir and (raw_dir / "publication_fulltext_raw.csv").exists():
-        results = extract_sections_from_pdf_text_output(case_id, raw_dir / "publication_fulltext_raw.csv", output_root)
+        results = extract_sections_from_pdf_text_output(
+          case_id, raw_dir / "publication_fulltext_raw.csv", output_root,
+        )
         write_section_outputs(case_id, results, output_root)
         st.success("セクション抽出を実行しました（Top5一括）")
         st.rerun()
@@ -222,17 +299,30 @@ def render_top5_pdf_deep_dive_section(
   st.markdown("**Top5 PDF Pipeline Summary**")
   st.dataframe(pd.DataFrame(_status_summary_rows(statuses)), width="stretch", hide_index=True)
 
+  render_top5_pdf_upload_section(statuses, case_id, project_root, key_prefix=key_prefix)
+
   pending = [s for s in statuses if s.next_action != "Gapロジック更新へ進めます"]
   focus = pending[0] if pending else statuses[0]
   st.markdown(f"**次に進める特許: {focus.publication_number}**")
-  _render_next_action_for_patent(focus, case_id, project_root, output_root, key_prefix=key_prefix)
+  if focus.title or focus.assignee:
+    st.caption(f"{focus.title[:80] if focus.title else '—'} / {focus.assignee or '—'}")
+  _render_next_action_for_patent(
+    focus, case_id, project_root, output_root,
+    key_prefix=key_prefix, show_upload_panel=True,
+  )
 
   with st.expander("Top5 各特許の詳細・操作", expanded=False):
     for status in statuses:
       with st.expander(f"{status.publication_number} — {status.next_action}", expanded=False):
+        st.caption(f"title: {(status.title or '—')[:100]}")
+        st.caption(f"assignee: {status.assignee or '—'}")
         if status.google_patents_url:
           st.markdown(f"[Google Patentsで開く]({status.google_patents_url})")
-        _render_next_action_for_patent(status, case_id, project_root, output_root, key_prefix=f"{key_prefix}_{status.publication_number}")
+        _render_next_action_for_patent(
+          status, case_id, project_root, output_root,
+          key_prefix=f"{key_prefix}_{status.publication_number}",
+          show_upload_panel=True,
+        )
 
   with st.expander("出力ダウンロード・開発者向け詳細", expanded=False):
     text_dir = find_latest_pdf_text_extract_dir(case_id, project_root)

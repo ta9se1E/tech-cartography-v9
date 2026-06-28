@@ -17,7 +17,6 @@ from tech_cartography.services.v8_google_patents_links import (
   export_google_patents_links,
 )
 from tech_cartography.services.v8_claim_example_binding import get_full_patent_document_pipeline_status
-from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
 
 
 def _session_pdf_uploads() -> dict[str, str]:
@@ -28,7 +27,7 @@ def _session_pdf_uploads() -> dict[str, str]:
 def render_google_patents_caution() -> None:
   st.caption(GOOGLE_PATENTS_SAFETY_NOTICES[0])
   st.caption(
-    "セクション抽出は入力タブの「Top5公報PDF セクション抽出」で実行できます（Gemini/OCRは次Phase）。"
+    "PDF解析は「読むべき特許｜Top5」タブの Top5 Deep Dive｜公報PDF解析 で実行できます。"
   )
 
 
@@ -36,8 +35,8 @@ def render_google_patents_link_on_card(link: GooglePatentsLink) -> None:
   st.markdown(f"[Google Patentsで開く]({link.google_patents_url})")
   st.markdown("**PDF取得ガイド**")
   st.caption(PDF_DOWNLOAD_INSTRUCTION)
-  st.markdown(
-    f"**PDFアップロードへ:** 「{V8_TAB_LABELS['input']}」タブのPDFアップロード欄に投入してください。"
+  st.caption(
+    "PDF取得後、この画面内の Top5 Deep Dive｜公報PDF解析 で対象特許を選択し、PDFをアップロードしてください。"
   )
   st.caption(f"PDF取得状況: {link.pdf_upload_status}")
 

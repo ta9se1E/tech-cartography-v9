@@ -11,6 +11,7 @@ import pytest
 def test_deep_dive_ui_importable() -> None:
   mod = importlib.import_module("tech_cartography.ui.v8_top5_pdf_deep_dive_ui")
   assert hasattr(mod, "render_top5_pdf_deep_dive_section")
+  assert hasattr(mod, "render_top5_pdf_upload_section")
   assert callable(mod.render_top5_pdf_deep_dive_section)
 
 

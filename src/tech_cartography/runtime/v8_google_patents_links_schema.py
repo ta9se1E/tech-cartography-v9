@@ -15,8 +15,7 @@ GOOGLE_PATENTS_SAFETY_NOTICES: tuple[str, ...] = (
 
 PDF_DOWNLOAD_INSTRUCTION = (
   "Google Patentsで公報を開き、ページ内の Download PDF からPDFを取得してください。"
-  " 取得したPDFは「入力・テーマ設定」のPDFアップロード欄に投入すると、"
-  "description / examples の解析に進めます。"
+  " 取得したPDFは、このTop5 Deep Dive内のPDFアップロード欄に投入してください。"
 )
 
 PDF_UPLOAD_NEXT_ACTION = "PDFを取得してアップロード"
