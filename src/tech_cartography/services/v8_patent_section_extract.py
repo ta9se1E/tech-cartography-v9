@@ -22,6 +22,8 @@ from tech_cartography.services.v8_patent_pdf_text_extract import (
 from tech_cartography.services.v8_sources_table import project_root_from_here
 
 OUTPUT_SUBDIR = "local_v8_patent_sections"
+VISION_OCR_OUTPUT_SUBDIR = "local_v8_google_vision_ocr"
+EXTRACTION_METHOD_VISION = "google_vision_ocr"
 MIN_SECTION_TEXT_LENGTH = 40
 CONF_STRONG = 0.85
 CONF_WEAK = 0.60
@@ -61,6 +63,117 @@ class _HeadingMatch:
   detection_method: str
 
 
+@dataclass
+class PublicationFulltextRawPackInfo:
+  pack_dir: Path
+  raw_csv_path: Path
+  extraction_method: str
+  mtime: float
+  publication_numbers: list[str]
+  total_rows: int = 0
+  total_text_length: int = 0
+
+
+def _int_field(value: object) -> int:
+  if value is None or value == "":
+    return 0
+  try:
+    return int(value)
+  except (TypeError, ValueError):
+    return 0
+
+
+def _raw_csv_publication_stats(
+  raw_csv: Path,
+  publication_number: str | None = None,
+) -> tuple[list[str], int, int, bool]:
+  """Return pubs, row count, text length sum, and whether google_vision_ocr rows exist."""
+  pubs: set[str] = set()
+  row_count = 0
+  text_length = 0
+  has_vision = False
+  target = normalize_publication_number(publication_number) if publication_number else None
+  with raw_csv.open(encoding="utf-8", newline="") as handle:
+    for row in csv.DictReader(handle):
+      pub = normalize_publication_number(str(row.get("publication_number", "")))
+      if not pub:
+        continue
+      if target and pub != target:
+        continue
+      method = str(row.get("extraction_method") or "")
+      if method == EXTRACTION_METHOD_VISION:
+        has_vision = True
+      pubs.add(pub)
+      row_count += 1
+      length = _int_field(row.get("text_length"))
+      if length <= 0:
+        length = len(str(row.get("text") or ""))
+      text_length += length
+  return sorted(pubs), row_count, text_length, has_vision
+
+
+def _collect_publication_fulltext_raw_packs(
+  case_id: str,
+  project_root: Path | str,
+  *,
+  publication_number: str | None = None,
+) -> list[PublicationFulltextRawPackInfo]:
+  root = Path(project_root)
+  packs: list[PublicationFulltextRawPackInfo] = []
+  for subdir, method in (
+    (PDF_TEXT_OUTPUT_SUBDIR, "pypdf"),
+    (VISION_OCR_OUTPUT_SUBDIR, EXTRACTION_METHOD_VISION),
+  ):
+    base = root / "outputs" / subdir
+    if not base.is_dir():
+      continue
+    for pack in base.iterdir():
+      if not pack.is_dir() or not pack.name.startswith(f"{case_id}_"):
+        continue
+      raw = pack / "publication_fulltext_raw.csv"
+      if not raw.exists():
+        continue
+      pubs, rows, chars, has_vision = _raw_csv_publication_stats(raw, publication_number)
+      if publication_number and not pubs:
+        continue
+      extraction_method = method
+      if method == "pypdf" and has_vision:
+        extraction_method = EXTRACTION_METHOD_VISION
+      packs.append(PublicationFulltextRawPackInfo(
+        pack_dir=pack,
+        raw_csv_path=raw,
+        extraction_method=extraction_method,
+        mtime=pack.stat().st_mtime,
+        publication_numbers=pubs,
+        total_rows=rows,
+        total_text_length=chars,
+      ))
+  return packs
+
+
+def find_publication_fulltext_raw_pack(
+  case_id: str,
+  project_root: Path | str,
+  publication_number: str | None = None,
+  *,
+  prefer_ocr: bool = False,
+) -> PublicationFulltextRawPackInfo | None:
+  """Select publication_fulltext_raw.csv pack for section extraction."""
+  packs = _collect_publication_fulltext_raw_packs(
+    case_id, project_root, publication_number=publication_number,
+  )
+  if not packs:
+    return None
+  if prefer_ocr and publication_number:
+    ocr_packs = [
+      p for p in packs
+      if p.extraction_method == EXTRACTION_METHOD_VISION and p.total_text_length > 0
+    ]
+    if ocr_packs:
+      return max(ocr_packs, key=lambda item: item.mtime)
+  return max(packs, key=lambda item: item.mtime)
+
+
 def find_latest_pdf_text_extract_output(case_id: str, output_root: Path | str) -> Path | None:
   root = Path(output_root)
   base = root / PDF_TEXT_OUTPUT_SUBDIR
@@ -77,32 +190,38 @@ def find_latest_pdf_text_extract_output(case_id: str, output_root: Path | str) -
 def find_latest_publication_fulltext_raw_pack(
   case_id: str,
   project_root: Path | str,
+  publication_number: str | None = None,
+  *,
+  prefer_ocr: bool = False,
 ) -> tuple[Path | None, str]:
-  """Return newest pack dir with publication_fulltext_raw.csv and extraction method."""
-  root = Path(project_root)
-  candidates: list[tuple[Path, str, float]] = []
-
-  pypdf_base = root / "outputs" / PDF_TEXT_OUTPUT_SUBDIR
-  if pypdf_base.is_dir():
-    for pack in pypdf_base.iterdir():
-      if pack.is_dir() and pack.name.startswith(f"{case_id}_"):
-        raw = pack / "publication_fulltext_raw.csv"
-        if raw.exists():
-          candidates.append((pack, "pypdf", pack.stat().st_mtime))
-
-  ocr_subdir = "local_v8_google_vision_ocr"
-  ocr_base = root / "outputs" / ocr_subdir
-  if ocr_base.is_dir():
-    for pack in ocr_base.iterdir():
-      if pack.is_dir() and pack.name.startswith(f"{case_id}_"):
-        raw = pack / "publication_fulltext_raw.csv"
-        if raw.exists():
-          candidates.append((pack, "google_vision_ocr", pack.stat().st_mtime))
-
-  if not candidates:
+  """Return pack dir with publication_fulltext_raw.csv and extraction method."""
+  info = find_publication_fulltext_raw_pack(
+    case_id,
+    project_root,
+    publication_number=publication_number,
+    prefer_ocr=prefer_ocr,
+  )
+  if not info:
     return None, ""
-  pack, method, _mtime = max(candidates, key=lambda item: item[2])
-  return pack, method
+  return info.pack_dir, info.extraction_method
+
+
+def sections_stale_vs_ocr_output(
+  section_summary_row: dict | None,
+  section_pack_dir: Path | None,
+  ocr_pack_dir: Path | None,
+) -> bool:
+  """True when OCR fulltext exists but sections are missing, older, or not from OCR."""
+  if not ocr_pack_dir or not (ocr_pack_dir / "publication_fulltext_raw.csv").exists():
+    return False
+  if not section_summary_row:
+    return True
+  source_raw = str(section_summary_row.get("source_raw_csv") or "")
+  if VISION_OCR_OUTPUT_SUBDIR not in source_raw and EXTRACTION_METHOD_VISION not in source_raw:
+    return True
+  if section_pack_dir and ocr_pack_dir:
+    return ocr_pack_dir.stat().st_mtime > section_pack_dir.stat().st_mtime
+  return False
 
 
 def find_latest_section_extract_dir(

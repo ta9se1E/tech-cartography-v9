@@ -39,7 +39,7 @@ from tech_cartography.services.v8_patent_pdf_text_extract import (
 from tech_cartography.services.v8_patent_section_extract import (
   extract_sections_from_pdf_text_output,
   find_latest_pdf_text_extract_dir,
-  find_latest_publication_fulltext_raw_pack,
+  find_publication_fulltext_raw_pack,
   find_latest_section_extract_dir,
   write_section_outputs,
 )
@@ -82,6 +82,8 @@ def _status_summary_rows(statuses: list[Top5PdfPipelineStatus]) -> list[dict]:
       "vision_ocr_text_extracted": s.vision_ocr_text_extracted,
       "text_extraction_method": s.text_extraction_method or "—",
       "sections_extracted": s.sections_extracted,
+      "sections_from_ocr": s.sections_from_ocr,
+      "sections_stale_vs_ocr": s.sections_stale_vs_ocr,
       "examples_count": s.examples_count,
       "example_facts_extracted": s.example_facts_extracted,
       "claim_example_links": s.claim_example_links_generated,
@@ -196,17 +198,26 @@ def _render_next_action_for_patent(
     )
     if status.needs_ocr and not status.vision_ocr_text_extracted:
       return
-    if status.vision_ocr_text_extracted and not status.sections_extracted:
-      return
+
+  needs_sections_from_ocr = (
+    status.vision_ocr_text_extracted
+    and (not status.sections_extracted or status.sections_stale_vs_ocr)
+  )
+  if needs_sections_from_ocr:
+    return
 
   if not status.sections_extracted:
-    pack_dir, method = find_latest_publication_fulltext_raw_pack(case_id, project_root)
-    raw_csv = (pack_dir / "publication_fulltext_raw.csv") if pack_dir else None
-    label = "Extract sections" if not status.vision_ocr_text_extracted else "Extract sections"
-    if raw_csv and raw_csv.exists() and st.button(label, key=f"{key_prefix}_sec_{pub}", type="primary"):
+    pack = find_publication_fulltext_raw_pack(
+      case_id, project_root, publication_number=pub, prefer_ocr=False,
+    )
+    raw_csv = pack.raw_csv_path if pack else None
+    if raw_csv and raw_csv.exists() and st.button(
+      "Extract sections", key=f"{key_prefix}_sec_{pub}", type="primary",
+    ):
       results = extract_sections_from_pdf_text_output(case_id, raw_csv, output_root)
       write_section_outputs(case_id, results, output_root)
-      st.success(f"セクション抽出を実行しました（source: {method or 'unknown'}）")
+      method = pack.extraction_method if pack else "unknown"
+      st.success(f"セクション抽出を実行しました（source: {method}）")
       st.rerun()
     elif not raw_csv:
       st.caption("publication_fulltext_raw.csv が見つかりません — PDF本文抽出またはOCRを先に実行してください。")
@@ -320,11 +331,14 @@ def render_top5_pdf_deep_dive_section(
     text_dir = find_latest_pdf_text_extract_dir(case_id, project_root)
     sec_dir = find_latest_section_extract_dir(case_id, project_root)
     bind_dir = find_latest_claim_example_links_dir(case_id, project_root)
-    ocr_pack, text_method = find_latest_publication_fulltext_raw_pack(case_id, project_root)
-    if text_method:
-      st.caption(f"現在の本文抽出方法: {text_method}")
+    ocr_pack = find_publication_fulltext_raw_pack(
+      case_id, project_root, prefer_ocr=True,
+    )
+    text_method = ocr_pack.extraction_method if ocr_pack else ""
+    if ocr_pack:
+      st.caption(f"現在の本文抽出方法: {text_method} ({ocr_pack.pack_dir})")
     for label, path in (
-      ("OCR pack", ocr_pack),
+      ("OCR pack", ocr_pack.pack_dir if ocr_pack else None),
       ("PDF text", text_dir),
       ("Sections", sec_dir),
       ("Claim-example links", bind_dir),

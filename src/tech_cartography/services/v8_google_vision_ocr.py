@@ -537,6 +537,48 @@ def load_ocr_summary_from_dir(pack_dir: Path | str) -> dict[str, dict]:
   return by_pub
 
 
+def load_vision_ocr_raw_csv_stats(
+  raw_csv_path: Path | str,
+  publication_number: str,
+) -> dict[str, int | bool | str]:
+  """Read OCR stats from publication_fulltext_raw.csv without calling Vision API."""
+  path = Path(raw_csv_path)
+  norm = normalize_publication_number(publication_number)
+  rows = 0
+  text_length = 0
+  has_vision = False
+  if not path.exists():
+    return {
+      "extracted": False,
+      "rows": 0,
+      "total_text_length": 0,
+      "raw_csv_path": str(path),
+    }
+  with path.open(encoding="utf-8", newline="") as handle:
+    for row in csv.DictReader(handle):
+      pub = normalize_publication_number(str(row.get("publication_number", "")))
+      if pub != norm:
+        continue
+      method = str(row.get("extraction_method") or "")
+      if method != EXTRACTION_METHOD_VISION:
+        continue
+      has_vision = True
+      rows += 1
+      try:
+        length = int(row.get("text_length") or 0)
+      except (TypeError, ValueError):
+        length = 0
+      if length <= 0:
+        length = len(str(row.get("text") or ""))
+      text_length += length
+  return {
+    "extracted": has_vision and rows > 0 and text_length > 0,
+    "rows": rows,
+    "total_text_length": text_length,
+    "raw_csv_path": str(path),
+  }
+
+
 def resolve_pdf_path_for_ocr(
   case_id: str,
   publication_number: str,

@@ -153,6 +153,20 @@ def test_infer_next_action_extract_sections_from_ocr() -> None:
   assert infer_next_action(status) == "Extract sections from OCR text"
 
 
+def test_infer_next_action_extract_sections_from_ocr_when_stale() -> None:
+  status = Top5PdfPipelineStatus(
+    case_id=CASE_ID,
+    publication_number=PUB,
+    pdf_uploaded=True,
+    pdf_text_extracted=True,
+    needs_ocr=True,
+    vision_ocr_text_extracted=True,
+    sections_extracted=True,
+    sections_stale_vs_ocr=True,
+  )
+  assert infer_next_action(status) == "Extract sections from OCR text"
+
+
 def test_ocr_ui_importable() -> None:
   import tech_cartography.ui.v8_google_vision_ocr_ui as ocr_ui
   assert callable(ocr_ui.render_google_vision_ocr_section)

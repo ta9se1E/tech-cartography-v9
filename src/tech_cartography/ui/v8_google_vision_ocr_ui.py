@@ -1,4 +1,4 @@
-"""Google Vision OCR UI (Phase 27S.5 / 27S.5.1)."""
+"""Google Vision OCR UI (Phase 27S.5 / 27S.5.1 / 27S.5.2)."""
 
 from __future__ import annotations
 
@@ -21,8 +21,9 @@ from tech_cartography.services.v8_google_vision_ocr import (
   vision_ocr_availability_message,
 )
 from tech_cartography.services.v8_patent_section_extract import (
+  PublicationFulltextRawPackInfo,
   extract_sections_from_pdf_text_output,
-  find_latest_publication_fulltext_raw_pack,
+  find_publication_fulltext_raw_pack,
   write_section_outputs,
 )
 from tech_cartography.ui.v8_judge_mode_copy import GOOGLE_VISION_OCR_HELP
@@ -32,26 +33,87 @@ def _ocr_pack_dir(case_id: str, project_root: Path) -> Path | None:
   return find_latest_google_vision_ocr_dir(case_id, project_root)
 
 
+def _needs_sections_from_ocr(status: Top5PdfPipelineStatus) -> bool:
+  return bool(
+    status.vision_ocr_text_extracted
+    and (not status.sections_extracted or status.sections_stale_vs_ocr)
+  )
+
+
+def _resolve_ocr_raw_pack(
+  case_id: str,
+  project_root: Path,
+  publication_number: str,
+) -> PublicationFulltextRawPackInfo | None:
+  return find_publication_fulltext_raw_pack(
+    case_id,
+    project_root,
+    publication_number=publication_number,
+    prefer_ocr=True,
+  )
+
+
+def _render_section_extraction_review(status: Top5PdfPipelineStatus) -> None:
+  if not status.sections_extracted or not status.sections_from_ocr:
+    return
+  st.markdown("**OCR由来セクション抽出結果（候補）**")
+  st.caption(
+    f"section_count={status.section_count or 0} / "
+    f"examples_count={status.examples_count or 0} / "
+    f"comparative_examples_count={status.comparative_examples_count or 0} / "
+    f"tables_count={status.tables_count or 0}"
+  )
+  st.caption(
+    f"source_method=google_vision_ocr / needs_human_review={status.needs_human_review}"
+  )
+  if (status.examples_count or 0) > 0 or status.fallback_used:
+    st.caption("次の操作: Extract example facts with Gemini")
+  elif (status.section_count or 0) <= 1:
+    st.caption("Section extraction needs review")
+  else:
+    st.caption("OCR由来セクション判定は候補です。数値・単位・実施例は必ず原文確認してください。")
+
+
 def _render_extract_sections_from_ocr(
+  status: Top5PdfPipelineStatus,
   case_id: str,
   project_root: Path,
   output_root: Path,
-  pub: str,
   *,
   key_prefix: str,
 ) -> None:
+  pack = _resolve_ocr_raw_pack(case_id, project_root, status.publication_number)
+  if not pack:
+    st.caption("OCR publication_fulltext_raw.csv が見つかりません。")
+    return
+
+  st.markdown("**OCR本文からセクション抽出**")
+  st.caption(
+    "OCR本文が取得済みです。次に、OCR本文から description / examples / tables の候補を切り出します。"
+  )
+  st.caption(
+    "OCR由来のセクション判定は候補です。数値・単位・実施例は必ず原文確認してください。"
+  )
+  st.caption(f"selected_raw_csv_path: {pack.raw_csv_path}")
+  st.caption(
+    f"source_method={pack.extraction_method} / "
+    f"source_pages={pack.total_rows} / source_chars={pack.total_text_length}"
+  )
+  if status.sections_stale_vs_ocr and status.sections_extracted:
+    st.warning("既存セクションはOCR本文より古い、またはpypdf由来です。OCR本文から再抽出してください。")
+
   if st.button(
     "Extract sections from OCR text",
-    key=f"{key_prefix}_sec_from_ocr_{pub}",
+    key=f"{key_prefix}_sec_from_ocr_{status.publication_number}",
     type="primary",
   ):
-    pack_dir, method = find_latest_publication_fulltext_raw_pack(case_id, project_root)
-    raw_csv = (pack_dir / "publication_fulltext_raw.csv") if pack_dir else None
-    if raw_csv and raw_csv.exists():
-      results = extract_sections_from_pdf_text_output(case_id, raw_csv, output_root)
-      write_section_outputs(case_id, results, output_root)
-      st.success(f"セクション抽出を実行しました（source: {method}）")
-      st.rerun()
+    results = extract_sections_from_pdf_text_output(case_id, pack.raw_csv_path, output_root)
+    write_section_outputs(case_id, results, output_root)
+    st.success(
+      f"セクション抽出を実行しました — source={pack.extraction_method}, "
+      f"pages={pack.total_rows}, chars={pack.total_text_length}"
+    )
+    st.rerun()
 
 
 def render_google_vision_ocr_section(
@@ -61,7 +123,7 @@ def render_google_vision_ocr_section(
   output_root: Path,
   *,
   key_prefix: str,
-  show_section_extract: bool = True,
+  show_section_extract: bool | None = None,
 ) -> None:
   """OCR panel for needs_ocr patents in Top5 Deep Dive."""
   pub = status.publication_number
@@ -109,10 +171,17 @@ def render_google_vision_ocr_section(
       f"status={status.vision_ocr_status or 'ocr_completed'}"
     )
     st.caption("OCR結果は自動抽出テキストであり、誤読の可能性があります。実施例・数値・単位は必ず原文確認してください。")
-    if show_section_extract and not status.sections_extracted:
+    should_show_sections = (
+      _needs_sections_from_ocr(status)
+      if show_section_extract is None
+      else bool(show_section_extract)
+    )
+    if should_show_sections:
       _render_extract_sections_from_ocr(
-        case_id, project_root, output_root, pub, key_prefix=key_prefix,
+        status, case_id, project_root, output_root, key_prefix=key_prefix,
       )
+    elif status.sections_extracted and status.sections_from_ocr:
+      _render_section_extraction_review(status)
     return
 
   if not status.needs_ocr:
@@ -163,6 +232,6 @@ def render_google_vision_ocr_section(
     else:
       st.error(f"OCR失敗 — status={result.status}, warning={result.warning}")
 
-  pack_dir, method = find_latest_publication_fulltext_raw_pack(case_id, project_root)
-  if pack_dir:
-    st.caption(f"現在の本文抽出方法: {method} ({pack_dir})")
+  pack = _resolve_ocr_raw_pack(case_id, project_root, pub)
+  if pack:
+    st.caption(f"現在の本文抽出方法: {pack.extraction_method} ({pack.pack_dir})")

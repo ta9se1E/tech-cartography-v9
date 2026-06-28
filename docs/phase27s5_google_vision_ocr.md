@@ -74,9 +74,24 @@ Vision OCR は PDF 1ページごとに `output-N-to-N.json` を出力する場�
 
 ## S.2 セクション抽出との接続
 
-`find_latest_publication_fulltext_raw_pack()` が pypdf / OCR 出力のうち**新しい方**を選択します。
+`find_publication_fulltext_raw_pack()` が pypdf / OCR 出力を比較し、`prefer_ocr=True` の場合は OCR 本文を優先します。
 
-Top5 Deep Dive から「Extract sections from OCR text」で S.2 section extractor を実行できます。
+OCR 本文（`publication_fulltext_raw.csv`）が存在し、セクション未生成または pypdf 由来セクションより新しい場合、Top5 Deep Dive に **Extract sections from OCR text** が表示されます。
+
+CLI（UI 不使用時）:
+
+```bash
+python scripts/run_v8_section_extract_from_latest_ocr.py \
+  --case-id case_01_pan_graphitization \
+  --publication-number CN108286090A \
+  --dry-run
+```
+
+## Phase 27S.5.2 — OCR セクション抽出導線
+
+- pipeline status: `vision_ocr_text_extracted` を raw CSV からも判定
+- `sections_stale_vs_ocr`: pypdf 由来セクションが残っていても OCR 再抽出を促す
+- `needs_ocr=True` が残っていても OCR 本文があれば次アクションは section 抽出
 
 ## 安全表現
 

@@ -32,6 +32,8 @@ class Top5PdfPipelineStatus:
   vision_ocr_status: str | None = None
   text_extraction_method: str | None = None
   sections_extracted: bool = False
+  sections_from_ocr: bool = False
+  sections_stale_vs_ocr: bool = False
   section_count: int | None = None
   examples_count: int | None = None
   comparative_examples_count: int | None = None
