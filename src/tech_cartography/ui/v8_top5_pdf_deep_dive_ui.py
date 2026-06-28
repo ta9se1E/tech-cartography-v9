@@ -196,11 +196,13 @@ def _render_next_action_for_patent(
     )
     if status.needs_ocr and not status.vision_ocr_text_extracted:
       return
+    if status.vision_ocr_text_extracted and not status.sections_extracted:
+      return
 
   if not status.sections_extracted:
     pack_dir, method = find_latest_publication_fulltext_raw_pack(case_id, project_root)
     raw_csv = (pack_dir / "publication_fulltext_raw.csv") if pack_dir else None
-    label = "Extract sections from OCR text" if status.vision_ocr_text_extracted else "Extract sections"
+    label = "Extract sections" if not status.vision_ocr_text_extracted else "Extract sections"
     if raw_csv and raw_csv.exists() and st.button(label, key=f"{key_prefix}_sec_{pub}", type="primary"):
       results = extract_sections_from_pdf_text_output(case_id, raw_csv, output_root)
       write_section_outputs(case_id, results, output_root)

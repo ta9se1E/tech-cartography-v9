@@ -27,6 +27,7 @@ class Top5PdfPipelineStatus:
   needs_ocr: bool = False
   vision_ocr_available: bool = False
   vision_ocr_text_extracted: bool = False
+  vision_ocr_extracted_pages: int | None = None
   vision_ocr_total_text_length: int | None = None
   vision_ocr_status: str | None = None
   text_extraction_method: str | None = None

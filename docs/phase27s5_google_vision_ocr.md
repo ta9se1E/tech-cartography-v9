@@ -52,7 +52,12 @@ streamlit run app.py
 
 `gs://{bucket}/{prefix}/{case_id}/{publication_number}/output/`
 
-## ローカル出力
+## 複数JSONの集約（Phase 27S.5.1）
+
+Vision OCR は PDF 1ページごとに `output-N-to-N.json` を出力する場合があります。
+各 JSON の `responses[].fullTextAnnotation.text` を**1 response = 1 page** として自然順ソートで集約します。
+
+`Rebuild OCR CSV from existing raw JSON` ボタンで、API を再実行せず `raw_vision_json` から CSV を再生成できます。
 
 `outputs/local_v8_google_vision_ocr/{case_id}_{timestamp}_{hash}/`
 

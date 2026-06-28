@@ -90,7 +90,7 @@ def test_parse_vision_json_outputs_pages(tmp_path: Path) -> None:
   json_path.write_text(json.dumps(_sample_vision_json()), encoding="utf-8")
   pdf_path = tmp_path / f"{PUB}.pdf"
   result = parse_vision_ocr_json_outputs([json_path], CASE_ID, PUB, pdf_path)
-  assert result.status == "success"
+  assert result.status == "ocr_completed"
   assert result.extracted_pages >= 1
   assert result.total_text_length > 0
   assert result.pages[0].extraction_method == EXTRACTION_METHOD_VISION

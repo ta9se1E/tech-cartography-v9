@@ -173,6 +173,7 @@ def build_top5_pdf_pipeline_status(
     ocr_status = str(ocr_row.get("status") or "") if ocr_row else ""
     vision_ocr_extracted = bool(ocr_row) and ocr_status in {"success", "ocr_completed"} and _int_or_none(ocr_row.get("total_text_length", 0)) not in {None, 0}
     vision_ocr_len = _int_or_none(ocr_row.get("total_text_length")) if ocr_row else None
+    vision_ocr_pages = _int_or_none(ocr_row.get("extracted_pages")) if ocr_row else None
     text_method = None
     if vision_ocr_extracted:
       text_method = "google_vision_ocr"
@@ -216,6 +217,7 @@ def build_top5_pdf_pipeline_status(
       needs_ocr=needs_ocr,
       vision_ocr_available=ocr_available,
       vision_ocr_text_extracted=bool(vision_ocr_extracted),
+      vision_ocr_extracted_pages=vision_ocr_pages,
       vision_ocr_total_text_length=vision_ocr_len,
       vision_ocr_status=ocr_status or None,
       text_extraction_method=text_method,

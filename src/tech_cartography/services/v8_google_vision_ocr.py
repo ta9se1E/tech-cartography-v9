@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 from tech_cartography.runtime.v8_google_vision_ocr_schema import (
@@ -163,7 +164,47 @@ def download_vision_ocr_json_outputs(
     local_path = local_output_dir / Path(blob.name).name
     blob.download_to_filename(str(local_path))
     paths.append(local_path)
-  return sorted(paths)
+  return sorted(paths, key=_natural_sort_key)
+
+
+def _natural_sort_key(path: Path) -> tuple:
+  parts: list[object] = []
+  for chunk in re.split(r"(\d+)", path.name):
+    if chunk.isdigit():
+      parts.append(int(chunk))
+    else:
+      parts.append(chunk.lower())
+  return tuple(parts)
+
+
+def sort_vision_ocr_json_paths(json_paths: list[Path]) -> list[Path]:
+  return sorted(json_paths, key=_natural_sort_key)
+
+
+def _page_no_from_json_filename(json_path: Path, fallback: int) -> int:
+  match = re.search(r"output-(\d+)-to-\d+\.json", json_path.name, re.IGNORECASE)
+  if match:
+    return int(match.group(1))
+  match = re.search(r"(\d+)", json_path.stem)
+  if match:
+    return int(match.group(1))
+  return fallback
+
+
+def _text_from_full_text_annotation(annotation: dict) -> str:
+  full_text = str(annotation.get("text") or "").strip()
+  if full_text:
+    return full_text
+  pages = annotation.get("pages") or []
+  if pages:
+    parts: list[str] = []
+    for page in pages:
+      page_text = _text_from_page_dict(page)
+      if page_text:
+        parts.append(page_text)
+    if parts:
+      return "\n".join(parts).strip()
+  return ""
 
 
 def _text_from_page_dict(page: dict) -> str:
@@ -176,62 +217,57 @@ def _text_from_page_dict(page: dict) -> str:
   return "".join(parts).strip()
 
 
-def _page_texts_from_annotation(annotation: dict) -> list[tuple[int, str, float | None]]:
-  pages_out: list[tuple[int, str, float | None]] = []
-  pages = annotation.get("pages") or []
-  if pages:
-    for page in pages:
-      page_no = int(page.get("pageNumber") or len(pages_out) + 1)
-      text = _text_from_page_dict(page)
-      if not text:
-        text = str(annotation.get("text") or "").strip()
-      pages_out.append((page_no, text, None))
-  full_text = str(annotation.get("text") or "").strip()
-  if not pages_out and full_text:
-    pages_out.append((1, full_text, None))
-  return pages_out
-
-
 def parse_vision_ocr_json_outputs(
   json_paths: list[Path],
   case_id: str,
   publication_number: str,
   source_pdf_path: Path,
 ) -> GoogleVisionOcrResult:
+  """Aggregate all Vision OCR JSON files — one response per page."""
   norm = normalize_publication_number(publication_number)
   pages: list[GoogleVisionOcrPage] = []
-  seen_pages: set[int] = set()
+  response_count = 0
+  sequential_page = 0
 
-  for json_path in json_paths:
+  for json_path in sort_vision_ocr_json_paths(json_paths):
     try:
       payload = json.loads(json_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
       continue
+
     responses = payload.get("responses") or []
     if not responses and "fullTextAnnotation" in payload:
       responses = [{"fullTextAnnotation": payload["fullTextAnnotation"]}]
+
     for response in responses:
+      response_count += 1
+      sequential_page += 1
       annotation = response.get("fullTextAnnotation") or {}
-      for page_no, text, confidence in _page_texts_from_annotation(annotation):
-        if page_no in seen_pages:
-          continue
-        seen_pages.add(page_no)
-        pages.append(GoogleVisionOcrPage(
-          case_id=case_id,
-          publication_number=norm,
-          page_no=page_no,
-          text=text,
-          text_length=len(text),
-          confidence=confidence,
-        ))
+      text = _text_from_full_text_annotation(annotation)
+      page_no = _page_no_from_json_filename(json_path, sequential_page)
+      warning = None if text else "empty OCR text — skipped in section extraction"
+      pages.append(GoogleVisionOcrPage(
+        case_id=case_id,
+        publication_number=norm,
+        page_no=page_no,
+        text=text,
+        text_length=len(text),
+        confidence=None,
+        warning=warning,
+      ))
 
   pages.sort(key=lambda p: p.page_no)
+  extracted_pages = sum(1 for p in pages if p.text_length > 0)
   total_len = sum(p.text_length for p in pages)
-  if not pages or total_len == 0:
+
+  if not pages or extracted_pages == 0:
     return GoogleVisionOcrResult(
       case_id=case_id,
       publication_number=norm,
       source_pdf_path=str(source_pdf_path),
+      page_count=response_count or None,
+      extracted_pages=0,
+      total_text_length=0,
       status="parse_failed",
       warning="OCR JSON parsed but no text extracted",
       needs_human_review=True,
@@ -241,11 +277,11 @@ def parse_vision_ocr_json_outputs(
     case_id=case_id,
     publication_number=norm,
     source_pdf_path=str(source_pdf_path),
-    page_count=len(pages),
-    extracted_pages=len(pages),
+    page_count=response_count or len(pages),
+    extracted_pages=extracted_pages,
     total_text_length=total_len,
     needs_human_review=True,
-    status="success",
+    status="ocr_completed",
     warning=OCR_HUMAN_REVIEW_WARNING,
     pages=pages,
   )
@@ -338,8 +374,6 @@ def run_google_vision_ocr_for_pdf(
   result = parse_vision_ocr_json_outputs(json_paths, case_id, norm, pdf_path)
   result.gcs_input_uri = gcs_input_uri
   result.gcs_output_uri = gcs_output_uri
-  if result.status == "success":
-    result.status = "ocr_completed"
   write_vision_ocr_outputs(case_id, [result], output_root, pack_dir=out_dir)
   return result
 
@@ -509,3 +543,84 @@ def resolve_pdf_path_for_ocr(
   project_root: Path | str,
 ) -> Path:
   return get_patent_pdf_path(case_id, project_root, publication_number)
+
+
+def _read_summary_source_pdf_path(output_dir: Path, publication_number: str) -> Path | None:
+  summary_csv = output_dir / "google_vision_ocr_summary.csv"
+  if not summary_csv.exists():
+    return None
+  norm = normalize_publication_number(publication_number)
+  with summary_csv.open(encoding="utf-8", newline="") as handle:
+    for row in csv.DictReader(handle):
+      if normalize_publication_number(str(row.get("publication_number", ""))) == norm:
+        path = str(row.get("source_pdf_path") or "").strip()
+        return Path(path) if path else None
+  return None
+
+
+def find_vision_ocr_raw_json_dir(output_dir: Path) -> Path | None:
+  json_dir = output_dir / "raw_vision_json"
+  if json_dir.is_dir() and any(json_dir.glob("*.json")):
+    return json_dir
+  return None
+
+
+def find_latest_vision_ocr_raw_json_dir(
+  case_id: str,
+  publication_number: str,
+  output_root: Path | str,
+) -> Path | None:
+  root = Path(output_root)
+  base = root / OUTPUT_SUBDIR
+  if not base.is_dir():
+    return None
+  norm = normalize_publication_number(publication_number)
+  candidates: list[tuple[Path, float]] = []
+  for pack in base.iterdir():
+    if not pack.is_dir() or not pack.name.startswith(f"{case_id}_"):
+      continue
+    json_dir = find_vision_ocr_raw_json_dir(pack)
+    if not json_dir:
+      continue
+    summary = load_ocr_summary_from_dir(pack)
+    if norm in summary or not summary:
+      candidates.append((json_dir, pack.stat().st_mtime))
+  if not candidates:
+    return None
+  return max(candidates, key=lambda item: item[1])[0]
+
+
+def reparse_existing_vision_ocr_output(
+  output_dir: Path,
+  case_id: str,
+  publication_number: str,
+  *,
+  source_pdf_path: Path | None = None,
+  project_root: Path | str | None = None,
+) -> GoogleVisionOcrResult:
+  """Re-parse raw_vision_json without calling Vision API."""
+  json_dir = find_vision_ocr_raw_json_dir(output_dir)
+  norm = normalize_publication_number(publication_number)
+  if not json_dir:
+    return _empty_result(
+      case_id, norm, source_pdf_path or Path("missing.pdf"),
+      "parse_failed", "raw_vision_json not found",
+    )
+
+  root = Path(project_root or project_root_from_here())
+  pdf_path = source_pdf_path or _read_summary_source_pdf_path(output_dir, publication_number)
+  if pdf_path is None or not pdf_path.exists():
+    pdf_path = resolve_pdf_path_for_ocr(case_id, publication_number, root)
+
+  json_paths = list(json_dir.glob("*.json"))
+  result = parse_vision_ocr_json_outputs(json_paths, case_id, publication_number, pdf_path)
+
+  summary = load_ocr_summary_from_dir(output_dir).get(norm, {})
+  if summary.get("gcs_input_uri"):
+    result.gcs_input_uri = str(summary["gcs_input_uri"])
+  if summary.get("gcs_output_uri"):
+    result.gcs_output_uri = str(summary["gcs_output_uri"])
+
+  output_root = root / "outputs"
+  write_vision_ocr_outputs(case_id, [result], output_root, pack_dir=output_dir)
+  return result
