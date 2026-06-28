@@ -10,7 +10,12 @@ import streamlit as st
 
 from tech_cartography.runtime.v8_large_candidate_schema import V8LargeCandidateRecord
 from tech_cartography.services.v8_large_candidate_import import load_large_candidates_csv
+from tech_cartography.services.v8_google_patents_links import (
+  build_google_patents_url,
+  build_top5_google_patents_links,
+)
 from tech_cartography.services.v8_research_theme_defaults import load_research_theme_profile
+from tech_cartography.ui.v8_google_patents_links_ui import render_google_patents_link_on_card
 from tech_cartography.services.v8_theme_based_ranking_policy import (
   analyze_candidate_theme_fit,
   build_dropped_from_top5_summary,
@@ -95,6 +100,18 @@ def render_top5_deep_dive_cards(
       st.markdown(f"**Evidence Mapで確認:** {guide.evidence_map_focus}")
       st.markdown(f"**実施例で確認:** {guide.examples_focus}")
       st.caption(f"caution: {guide.caution}")
+      gp_links = build_top5_google_patents_links(case_id, project_root)
+      gp = next((g for g in gp_links if g.publication_number == rec.publication_number), None)
+      if gp is None and rec.publication_number:
+        from tech_cartography.runtime.v8_google_patents_links_schema import GooglePatentsLink
+        gp = GooglePatentsLink(
+          case_id=case_id,
+          publication_number=rec.publication_number,
+          google_patents_url=build_google_patents_url(rec.publication_number),
+        )
+      if gp:
+        st.markdown("---")
+        render_google_patents_link_on_card(gp)
 
 
 def render_why_top5_section(

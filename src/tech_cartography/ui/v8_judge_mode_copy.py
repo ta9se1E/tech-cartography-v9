@@ -144,6 +144,8 @@ JUDGE_CONCLUSION_CARDS: dict[str, str] = {
 }
 
 PDF_UPLOAD_HELP = (
-  "将来的に特許PDFから請求項・実施例を読み取るための入力口です。"
-  " 現時点では手動確認・将来のClaim抽出連携用として保持しています。"
+  "Top5公報PDFをアップロードしてください。"
+  " 次Phaseでは、PDFから description / examples / comparative examples を抽出し、"
+  " 実施例条件・物性値・比較例を構造化します。"
+  " 現時点では手動確認・将来のPDF解析連携用として保持しています。"
 )

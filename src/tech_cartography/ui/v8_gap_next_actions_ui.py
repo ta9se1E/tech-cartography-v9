@@ -32,6 +32,7 @@ from tech_cartography.ui.v8_executive_summary_ui import (
   render_gap_executive_summary,
   render_gap_how_to_read_section,
 )
+from tech_cartography.ui.v8_google_patents_links_ui import render_google_patents_caution
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
@@ -162,6 +163,22 @@ def _render_single_report(
   key_suffix: str,
 ) -> None:
   render_gap_how_to_read_section(report=report)
+
+  ex_missing = report.count_by_gap_type.get("example_support_missing", 0)
+  if ex_missing > 0:
+    st.markdown(
+      render_info_box(
+        "<strong>実施例裏取り（example_support_missing）</strong><br>"
+        f"{ex_missing} 件の未確認事項があります。"
+        " 実施例裏取りを進めるには、Top5公報PDFの description / examples 本文が必要です。"
+        f" 「{V8_TAB_LABELS['patent_shortlist']}」でGoogle Patentsリンクを開き、"
+        f" PDFを取得して「{V8_TAB_LABELS['input']}」にアップロードしてください。"
+        " Gapは弱点ではなく未確認事項、Evidence Mapは証明ではなく裏取り候補です。"
+        " このPhaseではPDF本文解析はまだ行いません。"
+      ),
+      unsafe_allow_html=True,
+    )
+    render_google_patents_caution()
 
   st.caption("artifact missing と true zero を区別 — Gap artifact 未生成時は gap_count=0 と表示しません")
   refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
