@@ -74,6 +74,37 @@ def find_latest_pdf_text_extract_output(case_id: str, output_root: Path | str) -
   return latest if raw_csv.exists() else None
 
 
+def find_latest_publication_fulltext_raw_pack(
+  case_id: str,
+  project_root: Path | str,
+) -> tuple[Path | None, str]:
+  """Return newest pack dir with publication_fulltext_raw.csv and extraction method."""
+  root = Path(project_root)
+  candidates: list[tuple[Path, str, float]] = []
+
+  pypdf_base = root / "outputs" / PDF_TEXT_OUTPUT_SUBDIR
+  if pypdf_base.is_dir():
+    for pack in pypdf_base.iterdir():
+      if pack.is_dir() and pack.name.startswith(f"{case_id}_"):
+        raw = pack / "publication_fulltext_raw.csv"
+        if raw.exists():
+          candidates.append((pack, "pypdf", pack.stat().st_mtime))
+
+  ocr_subdir = "local_v8_google_vision_ocr"
+  ocr_base = root / "outputs" / ocr_subdir
+  if ocr_base.is_dir():
+    for pack in ocr_base.iterdir():
+      if pack.is_dir() and pack.name.startswith(f"{case_id}_"):
+        raw = pack / "publication_fulltext_raw.csv"
+        if raw.exists():
+          candidates.append((pack, "google_vision_ocr", pack.stat().st_mtime))
+
+  if not candidates:
+    return None, ""
+  pack, method, _mtime = max(candidates, key=lambda item: item[2])
+  return pack, method
+
+
 def find_latest_section_extract_dir(
   case_id: str,
   project_root: Path | str | None = None,

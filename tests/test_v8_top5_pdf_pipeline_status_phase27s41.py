@@ -41,8 +41,13 @@ def test_infer_next_action_text_not_extracted() -> None:
 
 
 def test_infer_next_action_needs_ocr() -> None:
-  s = _status(pdf_uploaded=True, pdf_text_extracted=True, needs_ocr=True)
-  assert "OCR候補" in infer_next_action(s)
+  s = _status(
+    pdf_uploaded=True,
+    pdf_text_extracted=True,
+    needs_ocr=True,
+    vision_ocr_available=True,
+  )
+  assert infer_next_action(s) == "Run Google Vision OCR"
 
 
 def test_infer_next_action_sections_not_extracted() -> None:

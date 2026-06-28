@@ -9,6 +9,7 @@ TOP5_PDF_PIPELINE_NOTICES: tuple[str, ...] = (
   "PDF解析は候補データの確認用です — Evidenceは証明ではなく裏取り候補です。",
   "Gapは弱点ではなく未確認事項です。",
   "Geminiは明示ボタン操作時のみ実行します。",
+  "Google Vision OCRも明示ボタン操作時のみ実行します。",
 )
 
 
@@ -24,6 +25,11 @@ class Top5PdfPipelineStatus:
   pdf_text_extracted: bool = False
   text_length: int | None = None
   needs_ocr: bool = False
+  vision_ocr_available: bool = False
+  vision_ocr_text_extracted: bool = False
+  vision_ocr_total_text_length: int | None = None
+  vision_ocr_status: str | None = None
+  text_extraction_method: str | None = None
   sections_extracted: bool = False
   section_count: int | None = None
   examples_count: int | None = None

@@ -81,17 +81,13 @@ def test_infer_next_action_needs_ocr() -> None:
     pdf_uploaded=True,
     pdf_text_extracted=True,
     needs_ocr=True,
+    vision_ocr_available=True,
   )
   action = infer_next_action(status)
-  assert "OCR候補" in action
+  assert action == "Run Google Vision OCR"
 
 
 def test_needs_ocr_does_not_expose_primary_extract_sections_button() -> None:
   source = Path("src/tech_cartography/ui/v8_top5_pdf_deep_dive_ui.py").read_text(encoding="utf-8")
-  assert "Extract sections anyway" in source
-  assert 'type="primary"' in source
-  ocr_block_start = source.index("if status.needs_ocr:")
-  ocr_block_end = source.index("if not status.sections_extracted:", ocr_block_start)
-  ocr_block = source[ocr_block_start:ocr_block_end]
-  assert "Extract sections（続行）" not in ocr_block
-  assert 'type="primary"' not in ocr_block
+  assert "render_google_vision_ocr_section" in source
+  assert "Extract sections anyway" not in source

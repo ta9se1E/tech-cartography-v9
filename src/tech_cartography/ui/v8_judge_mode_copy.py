@@ -163,6 +163,11 @@ TOP5_LARGE_CANDIDATE_MODE_NOTICE = (
   "提出デモでは large candidate staged の候補母集団を使用します。"
 )
 
+GOOGLE_VISION_OCR_HELP = (
+  "pypdfでテキストが取れないPDFに対し、Google Cloud Vision OCRで本文候補を抽出します。"
+  " OCR結果は確定本文ではなく、人手確認が必要です。"
+)
+
 PDF_UPLOAD_HELP = (
   "Top5公報PDFをアップロードしてください。"
   " 操作は「読むべき特許｜Top5」タブの Top5 Deep Dive で行います。"

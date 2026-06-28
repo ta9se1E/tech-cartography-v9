@@ -39,9 +39,11 @@ from tech_cartography.services.v8_patent_pdf_text_extract import (
 from tech_cartography.services.v8_patent_section_extract import (
   extract_sections_from_pdf_text_output,
   find_latest_pdf_text_extract_dir,
+  find_latest_publication_fulltext_raw_pack,
   find_latest_section_extract_dir,
   write_section_outputs,
 )
+from tech_cartography.ui.v8_google_vision_ocr_ui import render_google_vision_ocr_section
 from tech_cartography.services.v8_top5_pdf_pipeline_status import (
   build_top5_pdf_pipeline_status,
 )
@@ -77,6 +79,8 @@ def _status_summary_rows(statuses: list[Top5PdfPipelineStatus]) -> list[dict]:
       "pdf_uploaded": s.pdf_uploaded,
       "pdf_text_extracted": s.pdf_text_extracted,
       "needs_ocr": s.needs_ocr,
+      "vision_ocr_text_extracted": s.vision_ocr_text_extracted,
+      "text_extraction_method": s.text_extraction_method or "—",
       "sections_extracted": s.sections_extracted,
       "examples_count": s.examples_count,
       "example_facts_extracted": s.example_facts_extracted,
@@ -186,39 +190,24 @@ def _render_next_action_for_patent(
       st.rerun()
     return
 
-  if status.needs_ocr:
-    st.warning(
-      "このPDFはテキスト抽出量が少ないため、画像PDFの可能性があります。"
-      " 別形式のPDFをアップロードするか、OCR対応が必要です。"
+  if status.needs_ocr or status.vision_ocr_text_extracted:
+    render_google_vision_ocr_section(
+      status, case_id, project_root, output_root, key_prefix=key_prefix,
     )
-    if status.google_patents_url:
-      st.markdown(f"[Google Patentsで別PDFを確認]({status.google_patents_url})")
-    st.caption("上の「Top5公報PDFアップロード」でPDFを差し替えてアップロードできます。")
-    if not status.sections_extracted:
-      with st.expander("開発者向け詳細操作", expanded=False):
-        if st.button(
-          "Extract sections anyway",
-          key=f"{key_prefix}_sec_ocr_{pub}",
-        ):
-          raw_dir = find_latest_pdf_text_extract_dir(case_id, project_root)
-          if raw_dir and (raw_dir / "publication_fulltext_raw.csv").exists():
-            results = extract_sections_from_pdf_text_output(
-              case_id, raw_dir / "publication_fulltext_raw.csv", output_root,
-            )
-            write_section_outputs(case_id, results, output_root)
-            st.rerun()
-    return
+    if status.needs_ocr and not status.vision_ocr_text_extracted:
+      return
 
   if not status.sections_extracted:
-    if st.button("Extract sections", key=f"{key_prefix}_sec_{pub}", type="primary"):
-      raw_dir = find_latest_pdf_text_extract_dir(case_id, project_root)
-      if raw_dir and (raw_dir / "publication_fulltext_raw.csv").exists():
-        results = extract_sections_from_pdf_text_output(
-          case_id, raw_dir / "publication_fulltext_raw.csv", output_root,
-        )
-        write_section_outputs(case_id, results, output_root)
-        st.success("セクション抽出を実行しました（Top5一括）")
-        st.rerun()
+    pack_dir, method = find_latest_publication_fulltext_raw_pack(case_id, project_root)
+    raw_csv = (pack_dir / "publication_fulltext_raw.csv") if pack_dir else None
+    label = "Extract sections from OCR text" if status.vision_ocr_text_extracted else "Extract sections"
+    if raw_csv and raw_csv.exists() and st.button(label, key=f"{key_prefix}_sec_{pub}", type="primary"):
+      results = extract_sections_from_pdf_text_output(case_id, raw_csv, output_root)
+      write_section_outputs(case_id, results, output_root)
+      st.success(f"セクション抽出を実行しました（source: {method or 'unknown'}）")
+      st.rerun()
+    elif not raw_csv:
+      st.caption("publication_fulltext_raw.csv が見つかりません — PDF本文抽出またはOCRを先に実行してください。")
     return
 
   if status.sections_extracted and not status.has_examples and (status.examples_count or 0) == 0:
@@ -329,7 +318,11 @@ def render_top5_pdf_deep_dive_section(
     text_dir = find_latest_pdf_text_extract_dir(case_id, project_root)
     sec_dir = find_latest_section_extract_dir(case_id, project_root)
     bind_dir = find_latest_claim_example_links_dir(case_id, project_root)
+    ocr_pack, text_method = find_latest_publication_fulltext_raw_pack(case_id, project_root)
+    if text_method:
+      st.caption(f"現在の本文抽出方法: {text_method}")
     for label, path in (
+      ("OCR pack", ocr_pack),
       ("PDF text", text_dir),
       ("Sections", sec_dir),
       ("Claim-example links", bind_dir),

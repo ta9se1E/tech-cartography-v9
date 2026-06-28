@@ -16,6 +16,12 @@ from tech_cartography.services.v8_gemini_example_facts import (
   load_example_facts_summary_from_dir,
   load_target_sections,
 )
+from tech_cartography.services.v8_google_vision_ocr import (
+  find_latest_google_vision_ocr_dir,
+  get_ocr_bucket_name,
+  is_google_vision_ocr_enabled,
+  load_ocr_summary_from_dir,
+)
 from tech_cartography.services.v8_google_patents_links import (
   build_google_patents_url,
   patent_pdfs_dir,
@@ -101,10 +107,14 @@ def _target_section_info_for_pub(
 def infer_next_action(status: Top5PdfPipelineStatus) -> str:
   if not status.pdf_uploaded:
     return "PDFを取得してアップロード"
-  if not status.pdf_text_extracted:
+  if not status.pdf_text_extracted and not status.vision_ocr_text_extracted:
     return "Extract PDF text"
-  if status.needs_ocr:
-    return "OCR候補: テキスト抽出できないPDFです"
+  if status.needs_ocr and not status.vision_ocr_text_extracted:
+    if not status.vision_ocr_available:
+      return "OCR disabled: enable Google Vision OCR"
+    return "Run Google Vision OCR"
+  if status.vision_ocr_text_extracted and not status.sections_extracted:
+    return "Extract sections from OCR text"
   if not status.sections_extracted:
     return "Extract sections"
   if status.sections_extracted and not status.has_examples and (status.examples_count or 0) == 0:
@@ -131,6 +141,10 @@ def build_top5_pdf_pipeline_status(
   pdf_dir = find_latest_pdf_text_extract_dir(case_id, root)
   pdf_summary = load_extraction_summary_from_dir(pdf_dir) if pdf_dir else {}
 
+  ocr_dir = find_latest_google_vision_ocr_dir(case_id, root)
+  ocr_summary = load_ocr_summary_from_dir(ocr_dir) if ocr_dir else {}
+  ocr_available = is_google_vision_ocr_enabled() and bool(get_ocr_bucket_name())
+
   section_dir = find_latest_section_extract_dir(case_id, root)
   section_summary = load_section_summary_from_dir(section_dir) if section_dir else {}
 
@@ -149,12 +163,23 @@ def build_top5_pdf_pipeline_status(
     uploaded = resolve_pdf_upload_status(norm, case_id=case_id, project_root=root) == "アップロード済み"
     pdf_path = patent_pdfs_dir(case_id, root) / f"{norm}.pdf"
     pdf_row = pdf_summary.get(norm, {})
+    ocr_row = ocr_summary.get(norm, {})
     sec_row = section_summary.get(norm, {})
     fact_row = facts_summary.get(norm, {})
     bind_row = bind_summary.get(norm, {})
 
     text_extracted = bool(pdf_row) and str(pdf_row.get("status", "")) not in {"", "file_missing"}
     needs_ocr = _bool_from_row(pdf_row.get("needs_ocr")) if pdf_row else False
+    ocr_status = str(ocr_row.get("status") or "") if ocr_row else ""
+    vision_ocr_extracted = bool(ocr_row) and ocr_status in {"success", "ocr_completed"} and _int_or_none(ocr_row.get("total_text_length", 0)) not in {None, 0}
+    vision_ocr_len = _int_or_none(ocr_row.get("total_text_length")) if ocr_row else None
+    text_method = None
+    if vision_ocr_extracted:
+      text_method = "google_vision_ocr"
+    elif text_extracted and not needs_ocr:
+      text_method = str(pdf_row.get("extraction_method") or "pypdf")
+    elif text_extracted:
+      text_method = "pypdf"
     sections_extracted = bool(sec_row) and str(sec_row.get("status", "")) not in {"", "empty_input"}
     examples_count = _int_or_none(sec_row.get("examples_count")) if sec_row else 0
     has_examples = _bool_from_row(sec_row.get("has_examples")) if sec_row else False
@@ -171,8 +196,8 @@ def build_top5_pdf_pipeline_status(
     )
 
     warning = None
-    if needs_ocr:
-      warning = "needs_ocr — 画像PDFの可能性"
+    if needs_ocr and not vision_ocr_extracted:
+      warning = "needs_ocr — 画像PDFの可能性（Google Vision OCR対象）"
     elif sections_extracted and not has_examples:
       warning = "examples未検出 — embodiments fallback候補を確認"
 
@@ -189,6 +214,11 @@ def build_top5_pdf_pipeline_status(
       pdf_text_extracted=text_extracted,
       text_length=_int_or_none(pdf_row.get("total_text_length")) if pdf_row else None,
       needs_ocr=needs_ocr,
+      vision_ocr_available=ocr_available,
+      vision_ocr_text_extracted=bool(vision_ocr_extracted),
+      vision_ocr_total_text_length=vision_ocr_len,
+      vision_ocr_status=ocr_status or None,
+      text_extraction_method=text_method,
       sections_extracted=sections_extracted,
       section_count=_int_or_none(sec_row.get("section_count")) if sec_row else None,
       examples_count=examples_count,

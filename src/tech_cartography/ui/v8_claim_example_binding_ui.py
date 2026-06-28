@@ -124,6 +124,13 @@ def render_gap_document_pipeline_status(
   )
   for s in statuses:
     st.caption(f"- **{s.publication_number}**: {s.next_action}")
+    if s.needs_ocr and not s.vision_ocr_text_extracted:
+      st.caption(
+        "  PDFはアップロード済みですが、通常のPDF本文抽出では文字量が不足しています。"
+        " Top5 Deep DiveでGoogle Vision OCRを実行してください。"
+      )
+    elif s.vision_ocr_text_extracted and not s.sections_extracted:
+      st.caption("  OCR本文が取得済みです。次にTop5 Deep Diveでセクション抽出を実行してください。")
   if any(s.claim_example_links_generated for s in statuses):
     st.caption("claim-example対応候補あり — 次はGapロジック更新（次Phase）")
   st.caption("対応付けは候補です。Gapロジックへの反映は次Phaseで行います。")
