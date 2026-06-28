@@ -16,6 +16,7 @@ from tech_cartography.services.v8_google_patents_links import (
   build_top5_google_patents_links,
   export_google_patents_links,
 )
+from tech_cartography.services.v8_patent_pdf_text_extract import get_pdf_pipeline_status
 from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
 
 
@@ -26,7 +27,7 @@ def _session_pdf_uploads() -> dict[str, str]:
 
 def render_google_patents_caution() -> None:
   st.caption(GOOGLE_PATENTS_SAFETY_NOTICES[0])
-  st.caption("このPhaseではPDF本文解析はまだ行いません — 次Phaseで実施します。")
+  st.caption("PDF本文抽出は入力タブの「Top5公報PDF テキスト抽出」で実行できます（OCR/Geminiは次Phase）。")
 
 
 def render_google_patents_link_on_card(link: GooglePatentsLink) -> None:
@@ -42,6 +43,8 @@ def render_google_patents_link_on_card(link: GooglePatentsLink) -> None:
 def render_top5_pdf_links_table(
   links: list[GooglePatentsLink],
   *,
+  case_id: str = "",
+  project_root: Path | None = None,
   key_prefix: str = "v8_gp",
 ) -> None:
   if not links:
@@ -51,13 +54,20 @@ def render_top5_pdf_links_table(
   render_google_patents_caution()
   rows = []
   for link in links:
-    rows.append({
+    row = {
       "publication_number": link.publication_number,
       "title": (link.title or "—")[:80],
       "Google Patents": link.google_patents_url,
       "PDF取得状況": link.pdf_upload_status,
       "次の操作": link.next_action,
-    })
+    }
+    if case_id and project_root is not None:
+      pipe = get_pdf_pipeline_status(case_id, link.publication_number, project_root)
+      row["pdf_uploaded"] = pipe["pdf_uploaded"]
+      row["text_extracted"] = pipe["text_extracted"]
+      row["needs_ocr"] = pipe["needs_ocr"]
+      row["next_action"] = pipe["next_action"]
+    rows.append(row)
   st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
   for link in links:
     st.markdown(f"- [{link.publication_number} — Google Patentsで開く]({link.google_patents_url})")
@@ -99,5 +109,7 @@ def load_and_render_top5_pdf_links(
   links = build_top5_google_patents_links(
     case_id, project_root, session_uploads=_session_pdf_uploads(),
   )
-  render_top5_pdf_links_table(links, key_prefix=key_prefix)
+  render_top5_pdf_links_table(
+    links, key_prefix=key_prefix, case_id=case_id, project_root=project_root,
+  )
   return links

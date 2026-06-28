@@ -33,6 +33,7 @@ from tech_cartography.ui.v8_executive_summary_ui import (
   render_gap_how_to_read_section,
 )
 from tech_cartography.ui.v8_google_patents_links_ui import render_google_patents_caution
+from tech_cartography.ui.v8_patent_pdf_text_extract_ui import render_gap_pdf_extraction_status
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
@@ -160,6 +161,7 @@ def _render_single_report(
   report: V8GapNextActionsReport,
   export_info: dict[str, Any],
   *,
+  project_root: Path,
   key_suffix: str,
 ) -> None:
   render_gap_how_to_read_section(report=report)
@@ -172,13 +174,15 @@ def _render_single_report(
         f"{ex_missing} 件の未確認事項があります。"
         " 実施例裏取りを進めるには、Top5公報PDFの description / examples 本文が必要です。"
         f" 「{V8_TAB_LABELS['patent_shortlist']}」でGoogle Patentsリンクを開き、"
-        f" PDFを取得して「{V8_TAB_LABELS['input']}」にアップロードしてください。"
+        f" PDFを取得して「{V8_TAB_LABELS['input']}」にアップロードし、"
+        f" 「Top5公報PDF テキスト抽出」で Extract PDF text を実行してください。"
         " Gapは弱点ではなく未確認事項、Evidence Mapは証明ではなく裏取り候補です。"
-        " このPhaseではPDF本文解析はまだ行いません。"
+        " 実施例抽出・物性値抽出は次Phaseです。"
       ),
       unsafe_allow_html=True,
     )
     render_google_patents_caution()
+    render_gap_pdf_extraction_status(report.case_id, project_root)
 
   st.caption("artifact missing と true zero を区別 — Gap artifact 未生成時は gap_count=0 と表示しません")
   refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
@@ -419,11 +423,11 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
       report = _report_from_dict(bundle["report"])
       with st.expander(f"{sample['label']} — {report.gap_count} gaps / {report.action_count} actions", expanded=cid == active_case):
         render_gap_executive_summary(report)
-        _render_single_report(report, bundle.get("export") or {}, key_suffix=cid)
+        _render_single_report(report, bundle.get("export") or {}, project_root=root, key_suffix=cid)
   else:
     report = _report_from_dict(cached["report"])
     render_gap_executive_summary(report)
-    _render_single_report(report, cached.get("export") or {}, key_suffix="single")
+    _render_single_report(report, cached.get("export") or {}, project_root=root, key_suffix="single")
 
   with st.expander("次 Phase への接続（詳細）", expanded=False):
     st.markdown("#### 次 Phase への接続")
