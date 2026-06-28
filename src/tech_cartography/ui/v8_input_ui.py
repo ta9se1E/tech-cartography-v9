@@ -17,6 +17,7 @@ from tech_cartography.ui.v8_google_patents_links_ui import load_and_render_top5_
 from tech_cartography.ui.v8_judge_mode_copy import PDF_UPLOAD_HELP
 from tech_cartography.ui.v8_patent_pdf_text_extract_ui import render_top5_pdf_text_extract_section
 from tech_cartography.ui.v8_extraction_vocabulary_ui import render_extraction_vocabulary_section
+from tech_cartography.ui.v8_claim_example_binding_ui import render_claim_example_binding_section
 from tech_cartography.ui.v8_example_facts_ui import render_gemini_example_facts_section
 from tech_cartography.ui.v8_patent_section_extract_ui import render_top5_pdf_section_extract_section
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
@@ -189,6 +190,7 @@ def render_v8_input_tab(*, project_root: Path | str) -> None:
   render_top5_pdf_text_extract_section(theme_case, root, key_prefix="v8_input_pdf_text")
   render_top5_pdf_section_extract_section(theme_case, root, key_prefix="v8_input_pdf_section")
   render_gemini_example_facts_section(theme_case, root, key_prefix="v8_input_efacts")
+  render_claim_example_binding_section(theme_case, root, key_prefix="v8_input_cebind")
 
   with st.expander("詳細設定（BigQuery SQL生成・管理者向け）", expanded=False):
     render_bigquery_admin_section(case_id=theme_case, project_root=root)

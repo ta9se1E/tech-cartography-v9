@@ -216,6 +216,10 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
   st.markdown("### Evidence Map｜裏取り候補")
+  st.caption(
+    "PDF実施例から抽出した claim-example 対応候補は、入力タブの「Claim-Example対応候補」で生成できます。"
+    " 次Phaseで Evidence Map / Gap ロジックに反映予定です。"
+  )
 
   case_options = _case_options()
   case_ids = [c for c, _ in case_options]

@@ -10,7 +10,7 @@ import streamlit as st
 from tech_cartography.runtime.v8_patent_section_schema import SECTION_EXTRACTION_NOTICES
 from tech_cartography.services.v8_large_candidate_shortlist import load_top5_publications
 from tech_cartography.services.v8_patent_pdf_text_extract import find_latest_pdf_text_extract_dir
-from tech_cartography.services.v8_gemini_example_facts import get_full_patent_document_pipeline_status
+from tech_cartography.services.v8_claim_example_binding import get_full_patent_document_pipeline_status
 from tech_cartography.services.v8_patent_section_extract import (
   extract_sections_from_pdf_text_output,
   find_latest_section_extract_dir,

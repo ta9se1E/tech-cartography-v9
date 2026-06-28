@@ -171,3 +171,8 @@ EXAMPLE_FACTS_EXTRACT_HELP = (
   "検出済みの examples / comparative examples / tables から、工程条件・物性値・比較例を構造化します。"
   " 抽出語彙はユーザーが編集できます。抽出結果は候補であり、人手確認が必要です。"
 )
+
+CLAIM_EXAMPLE_BINDING_HELP = (
+  "投入済みclaim本文と、PDF実施例から抽出したファクトを対応付けます。"
+  " 対応は候補であり、人手確認が必要です。support_levelは法的評価ではありません。"
+)

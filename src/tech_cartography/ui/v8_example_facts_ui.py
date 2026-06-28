@@ -15,11 +15,11 @@ from tech_cartography.services.v8_gemini_example_facts import (
   extract_example_facts_from_sections,
   find_latest_example_facts_dir,
   find_latest_patent_sections_output,
-  get_full_patent_document_pipeline_status,
   load_example_facts_summary_from_dir,
   load_target_sections,
   write_example_facts_outputs,
 )
+from tech_cartography.services.v8_claim_example_binding import get_full_patent_document_pipeline_status
 from tech_cartography.services.v8_large_candidate_shortlist import load_top5_publications
 from tech_cartography.services.v8_llm_provider_gemini import (
   gemini_availability_message,
@@ -131,33 +131,3 @@ def render_gemini_example_facts_section(
       if path.exists():
         cols[idx % 2].download_button(name, path.read_bytes(), name, key=f"{key_prefix}_dl_{name}")
 
-
-def render_gap_document_pipeline_status(
-  case_id: str,
-  project_root: Path,
-  publication_numbers: list[str] | None = None,
-) -> None:
-  pubs = publication_numbers or load_top5_publications(case_id, project_root)
-  if not pubs:
-    return
-
-  st.markdown("**Top5公報PDF — 解析パイプライン状況**")
-  for pub in pubs:
-    pipe = get_full_patent_document_pipeline_status(case_id, pub, project_root)
-    if not pipe["pdf_uploaded"]:
-      line = f"- **{pub}**: PDF未アップロード — PDF取得が必要"
-    elif not pipe["text_extracted"]:
-      line = f"- **{pub}**: PDF本文未抽出 — Extract PDF text が必要"
-    elif not pipe.get("sections_extracted"):
-      line = f"- **{pub}**: セクション未抽出 — Extract sections が必要"
-    elif pipe.get("has_examples") and not pipe.get("example_facts_extracted"):
-      line = f"- **{pub}**: examples検出済み・facts未抽出 — Gemini Example facts extraction が必要"
-    elif pipe.get("facts_needs_human_review") or pipe.get("section_needs_human_review"):
-      line = f"- **{pub}**: needs_human_review=True — 抽出結果の人手確認が必要"
-    elif pipe.get("example_facts_extracted"):
-      line = f"- **{pub}**: facts抽出済み — 次Phaseで claim-example対応候補へ"
-    else:
-      line = f"- **{pub}**: セクション抽出済み — examples未検出、人手確認を推奨"
-    st.markdown(line)
-
-  st.caption("抽出結果は候補です。claim-example対応は次Phaseで行います。")

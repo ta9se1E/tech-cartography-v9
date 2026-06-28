@@ -16,7 +16,7 @@ from tech_cartography.services.v8_google_patents_links import (
   build_top5_google_patents_links,
   export_google_patents_links,
 )
-from tech_cartography.services.v8_gemini_example_facts import get_full_patent_document_pipeline_status
+from tech_cartography.services.v8_claim_example_binding import get_full_patent_document_pipeline_status
 from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
 
 
@@ -70,7 +70,10 @@ def render_top5_pdf_links_table(
       row["sections_extracted"] = pipe.get("sections_extracted")
       row["has_examples"] = pipe.get("has_examples")
       row["example_facts_extracted"] = pipe.get("example_facts_extracted")
+      row["claim_example_links_generated"] = pipe.get("claim_example_links_generated")
       row["fact_count"] = pipe.get("fact_count", 0)
+      row["linked_claim_count"] = pipe.get("linked_claim_count", 0)
+      row["unlinked_claim_count"] = pipe.get("unlinked_claim_count", 0)
       row["matched_user_keyword_count"] = pipe.get("matched_user_keyword_count", 0)
       row["needs_ocr"] = pipe["needs_ocr"]
       row["needs_human_review"] = pipe.get("facts_needs_human_review") or pipe.get("section_needs_human_review")

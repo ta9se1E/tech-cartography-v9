@@ -33,7 +33,7 @@ from tech_cartography.ui.v8_executive_summary_ui import (
   render_gap_how_to_read_section,
 )
 from tech_cartography.ui.v8_google_patents_links_ui import render_google_patents_caution
-from tech_cartography.ui.v8_example_facts_ui import render_gap_document_pipeline_status
+from tech_cartography.ui.v8_claim_example_binding_ui import render_gap_document_pipeline_status
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
