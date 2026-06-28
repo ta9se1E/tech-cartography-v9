@@ -45,7 +45,7 @@ from tech_cartography.services.v8_patent_section_extract import (
 from tech_cartography.services.v8_top5_pdf_pipeline_status import (
   build_top5_pdf_pipeline_status,
 )
-from tech_cartography.ui.v8_judge_mode_copy import TOP5_PDF_DEEP_DIVE_HELP
+from tech_cartography.ui.v8_judge_mode_copy import TOP5_DEEP_DIVE_WORKFLOW, TOP5_PDF_DEEP_DIVE_HELP
 from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
 
 
@@ -282,6 +282,7 @@ def render_top5_pdf_deep_dive_section(
   key_prefix: str = "v8_top5_dd",
 ) -> None:
   st.markdown("#### Top5 Deep Dive｜公報PDF解析")
+  st.caption(TOP5_DEEP_DIVE_WORKFLOW)
   st.caption(TOP5_PDF_DEEP_DIVE_HELP)
   for notice in TOP5_PDF_PIPELINE_NOTICES:
     st.caption(notice)

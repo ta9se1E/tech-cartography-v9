@@ -45,7 +45,7 @@ TAB_DO_THIS: dict[str, str] = {
   "intro": "このページの概要を確認し、「入力・テーマ設定」に進んでください。",
   "input": "研究テーマ、検索キーワード、抽出フォーカス語彙、CSV/Excel取込を確認してください。",
   "sources": "取り込まれた候補特許データの出自と件数を確認してください。",
-  "patent_shortlist": "1000件候補から選ばれたTop5と、なぜ読むべきかを確認してください。",
+  "patent_shortlist": "1,000件候補（large candidate staged）から選ばれたTop5と、なぜ読むべきかを確認してください。",
   "claim_map": "Top5特許の請求項35件が投入済みであることと、技術要素整理を確認してください。",
   "evidence_map": "請求項に紐づく裏取り候補リンクと、その見方を確認してください。",
   "gap_next_actions": "未確認事項と、人間が次に確認すべき実施例確認タスクを確認してください。",
@@ -152,6 +152,15 @@ INPUT_PDF_DEEP_DIVE_GUIDE = (
 TOP5_PDF_DEEP_DIVE_HELP = (
   "Top5に選ばれた特許について、Google Patentsで公報PDFを取得し、"
   "PDF本文、実施例セクション、実施例ファクト、claimとの対応候補を順番に確認します。"
+)
+
+TOP5_DEEP_DIVE_WORKFLOW = (
+  "Top5特許を深掘りするには、公報PDFをアップロードし、"
+  "本文抽出→OCR判定→セクション抽出→Geminiファクト抽出へ進みます。"
+)
+
+TOP5_LARGE_CANDIDATE_MODE_NOTICE = (
+  "提出デモでは large candidate staged の候補母集団を使用します。"
 )
 
 PDF_UPLOAD_HELP = (

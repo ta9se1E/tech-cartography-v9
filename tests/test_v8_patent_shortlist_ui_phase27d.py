@@ -10,6 +10,10 @@ import tech_cartography.ui.v8_patent_shortlist_ui as shortlist_ui
 def test_v8_patent_shortlist_ui_phase27d_controls() -> None:
   text = Path(shortlist_ui.__file__).read_text(encoding="utf-8")
   assert "Generate / Refresh Patent Shortlist" in text
+  assert "Generate Reading Priority" in text
+  assert "large candidate staged" in text
+  assert "Shortlist モード" not in text
+  assert 'options=["small demo (Top N)", "large candidate staged"]' not in text
   assert "width=\"stretch\"" in text
   assert "use_container_width" not in text
   assert "読む優先度" in text

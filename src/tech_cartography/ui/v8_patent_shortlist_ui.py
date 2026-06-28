@@ -32,6 +32,7 @@ from tech_cartography.ui.v8_top5_reading_ui import (
   render_why_top5_section,
 )
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
+from tech_cartography.ui.v8_judge_mode_copy import TOP5_LARGE_CANDIDATE_MODE_NOTICE
 from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, STATE_V8_SELECTED_PUBLICATION, V8_CASE_SAMPLES, V8_TAB_LABELS
 
 STATE_V8_PATENT_SHORTLIST = "v8_patent_shortlist_cache"
@@ -270,69 +271,10 @@ def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
       )
 
 
-def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
-  root = Path(project_root)
-  render_judge_conclusion_card("patent_shortlist")
-  render_judge_next_tab_hint("patent_shortlist")
-
-  state = get_v8_input_state()
-  default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
-
-  st.markdown("### 読むべき特許｜Top5")
-  with st.expander("詳細ガイド・注意事項", expanded=False):
-    render_demo_flow_banner(
-      project_root=root,
-      current_tab="patent_shortlist",
-      tab_purpose="1000件から Top100 → Top20 → Top5 を絞る — Top5 のみ Deep Dive",
-      next_tab_key="claim_map",
-    )
-    st.markdown(
-      render_caution_box(
-        "<strong>読む優先度の暫定スコア（heuristic / draft selection）</strong> です。"
-        " 特許価値・権利価値・有効性・侵害リスクを意味しません。"
-        " FTO、侵害、有効性判断、法的結論は行いません。"
-        " claim text not loaded — 請求項・明細書は未読です。"
-      ),
-      unsafe_allow_html=True,
-    )
-
-  case_options = _case_options()
-  case_ids = [cid for cid, _ in case_options]
-  labels = {cid: label for cid, label in case_options}
-  default_idx = case_ids.index(default_case) if default_case in case_ids else 0
-
-  col1, col2, col3 = st.columns(3)
-  with col1:
-    selected_case = st.selectbox(
-      "案件",
-      options=case_ids,
-      index=default_idx,
-      format_func=lambda cid: labels[cid],
-      key="v8_patent_shortlist_case",
-    )
-  with col2:
-    top_n = st.selectbox("Top N", options=[3, 5, 10], index=1, key="v8_patent_shortlist_top_n")
-  with col3:
-    refresh = st.button("Generate / Refresh Patent Shortlist", key="v8_patent_shortlist_refresh", type="primary")
-
-  if selected_case != "all":
-    st.session_state[STATE_V8_SELECTED_CASE] = selected_case
-
-  shortlist_mode = st.radio(
-    "Shortlist モード",
-    options=["small demo (Top N)", "large candidate staged"],
-    horizontal=True,
-    key="v8_patent_shortlist_mode",
-  )
-  if shortlist_mode == "large candidate staged" and selected_case != "all":
-    _render_large_candidate_mode(root=root, selected_case=selected_case)
-    st.markdown(
-      render_next_action_box(
-        f"Top5 を選択後、「{V8_TAB_LABELS['claim_map']}」へ（Top5 のみ深掘り対象）。"
-      ),
-      unsafe_allow_html=True,
-    )
-    return
+def _render_small_demo_shortlist_section(*, root: Path, selected_case: str) -> None:
+  """Legacy small demo (Top N) — kept for developers, not shown in submission demo."""
+  top_n = st.selectbox("Top N", options=[3, 5, 10], index=1, key="v8_patent_shortlist_top_n")
+  refresh = st.button("Generate / Refresh Patent Shortlist", key="v8_patent_shortlist_refresh")
 
   cache_key = f"{selected_case}:{top_n}"
   if refresh or st.session_state.get("v8_patent_shortlist_cache_key") != cache_key:
@@ -357,10 +299,6 @@ def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
   cached = st.session_state.get(STATE_V8_PATENT_SHORTLIST)
   if not cached:
     st.info("「Generate / Refresh Patent Shortlist」を押して Top N を生成してください。")
-    st.markdown(
-      render_next_action_box(f"先に「{V8_TAB_LABELS['sources']}」で patent source を確認してください。"),
-      unsafe_allow_html=True,
-    )
     return
 
   def _dict_to_shortlist(data: dict) -> V8PatentShortlist:
@@ -386,7 +324,7 @@ def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
       if not bundle:
         continue
       shortlist = _dict_to_shortlist(bundle["shortlist"])
-      with st.expander(f"{sample['label']} — {shortlist.count}件", expanded=cid == case_ids[1]):
+      with st.expander(f"{sample['label']} — {shortlist.count}件", expanded=False):
         if not shortlist.patent_candidates:
           st.warning("patent source が不足しています。")
           continue
@@ -407,10 +345,66 @@ def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
     _render_downloads(shortlist, export_info, key_prefix="v8_patent_single")
 
   st.caption("Export Package への同梱は Phase27C 以降の拡張予定。現時点では patent_shortlist_* を個別ダウンロード。")
+
+
+def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:
+  root = Path(project_root)
+  render_judge_conclusion_card("patent_shortlist")
+  render_judge_next_tab_hint("patent_shortlist")
+
+  state = get_v8_input_state()
+  default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
+
+  st.markdown("### 読むべき特許｜Top5")
+  st.caption(TOP5_LARGE_CANDIDATE_MODE_NOTICE)
+  st.caption("候補母集団: large candidate staged（1,000件候補 CSV/Excel 由来）")
+  with st.expander("詳細ガイド・注意事項", expanded=False):
+    render_demo_flow_banner(
+      project_root=root,
+      current_tab="patent_shortlist",
+      tab_purpose="1000件から Top100 → Top20 → Top5 を絞る — Top5 のみ Deep Dive",
+      next_tab_key="claim_map",
+    )
+    st.markdown(
+      render_caution_box(
+        "<strong>読む優先度の暫定スコア（heuristic / draft selection）</strong> です。"
+        " 特許価値・権利価値・有効性・侵害リスクを意味しません。"
+        " FTO、侵害、有効性判断、法的結論は行いません。"
+        " claim text not loaded — 請求項・明細書は未読です。"
+      ),
+      unsafe_allow_html=True,
+    )
+
+  case_options = _case_options()
+  case_ids = [cid for cid, _ in case_options]
+  labels = {cid: label for cid, label in case_options}
+  default_idx = case_ids.index(default_case) if default_case in case_ids else 0
+
+  selected_case = st.selectbox(
+    "案件",
+    options=case_ids,
+    index=default_idx,
+    format_func=lambda cid: labels[cid],
+    key="v8_patent_shortlist_case",
+  )
+
+  if selected_case != "all":
+    st.session_state[STATE_V8_SELECTED_CASE] = selected_case
+    _render_large_candidate_mode(root=root, selected_case=selected_case)
+    with st.expander("開発者向け詳細（Patent Shortlist / Top N）", expanded=False):
+      _render_small_demo_shortlist_section(root=root, selected_case=selected_case)
+    st.markdown(
+      render_next_action_box(
+        f"Top5 を選択後、「{V8_TAB_LABELS['claim_map']}」へ（Top5 のみ深掘り対象）。"
+      ),
+      unsafe_allow_html=True,
+    )
+    return
+
+  st.info("提出デモでは案件を1つ選び、「Generate Reading Priority」で Top5 を生成してください。")
+  with st.expander("開発者向け詳細（Patent Shortlist / Top N）", expanded=False):
+    _render_small_demo_shortlist_section(root=root, selected_case=selected_case)
   st.markdown(
-    render_next_action_box(
-      f"Top候補の publication_number は Claim Map タブに引き継がれます。"
-      f"「{V8_TAB_LABELS['claim_map']}」で請求項分解（Phase27E）へ進んでください。"
-    ),
+    render_next_action_box(f"先に「{V8_TAB_LABELS['sources']}」で候補母集団を確認してください。"),
     unsafe_allow_html=True,
   )
