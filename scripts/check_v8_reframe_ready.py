@@ -1428,6 +1428,42 @@ def main(argv: list[str] | None = None) -> int:
   else:
     failures.append("missing case_01 research_theme_profile.json")
 
+  phase27s7_files = (
+    "src/tech_cartography/runtime/v8_demo_flow_export_schema.py",
+    "src/tech_cartography/services/v8_demo_flow_export_readiness.py",
+    "src/tech_cartography/ui/v8_submission_demo_readiness_ui.py",
+    "src/tech_cartography/ui/v8_evidence_aware_watch_ui.py",
+    "docs/phase27s7_demo_flow_export_readiness.md",
+    "tests/test_v8_demo_flow_export_readiness_phase27s7.py",
+  )
+  for rel in phase27s7_files:
+    _check_file_exists(PROJECT_ROOT / rel, failures)
+
+  fp_ui_s7 = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_fixed_point_observation_ui.py")
+  ev_watch_ui = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_evidence_aware_watch_ui.py")
+  intro_ui_s7 = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_intro_ui.py")
+  export_ui_s7 = _read(PROJECT_ROOT / "src/tech_cartography/ui/v8_export_ui.py")
+
+  if "render_evidence_aware_watch_section" in fp_ui_s7:
+    print("PASS: v8_fixed_point_observation_ui references evidence-aware watch section")
+  else:
+    failures.append("v8_fixed_point_observation_ui missing evidence-aware watch section")
+
+  if "watch_profile_update_proposal.md" in ev_watch_ui and "digest_summary.md" in ev_watch_ui:
+    print("PASS: v8_evidence_aware_watch_ui references watch proposal and digest preview")
+  else:
+    failures.append("v8_evidence_aware_watch_ui missing watch proposal / digest preview")
+
+  if "render_submission_demo_readiness_card" in intro_ui_s7:
+    print("PASS: v8_intro_ui references submission demo readiness card")
+  else:
+    failures.append("v8_intro_ui missing submission demo readiness card")
+
+  if "Demo Export Bundle" in export_ui_s7 and "export_demo_flow_bundle" in export_ui_s7:
+    print("PASS: v8_export_ui references Demo Export Bundle")
+  else:
+    failures.append("v8_export_ui missing Demo Export Bundle section")
+
   fake_doi_re = re.compile(r"10\.(0000|1234)/|example\.com|fake-doi|placeholder", re.IGNORECASE)
   import csv as csv_mod
 

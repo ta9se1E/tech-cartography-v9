@@ -61,9 +61,9 @@ TAB_DO_NEXT: dict[str, str] = {
   "patent_shortlist": "Claim Map｜請求項の技術整理で35請求項の整理を確認",
   "claim_map": "Evidence Map｜裏取り候補で351 linksを確認",
   "evidence_map": "Gap / Next Actions｜未確認事項で106件と次タスクを確認",
-  "gap_next_actions": "定点観測｜Weekly WatchでDigest previewを確認",
-  "fixed_point_observation": "Export｜共有レポートで出力物を確認",
-  "export": "はじめにに戻るか、必要なタブを再確認",
+  "gap_next_actions": "定点観測｜Weekly Watchで Digest preview / Watch proposal を確認",
+  "fixed_point_observation": "Export｜Demo Export Bundle で提出用成果物を確認",
+  "export": "提出デモ完了 — 共有資料を確認",
   "admin_settings": "はじめに｜Judge Overviewに戻る",
 }
 
@@ -116,20 +116,17 @@ JUDGE_CONCLUSION_CARDS: dict[str, str] = {
     " 論文・Web・企業情報がどの請求項要素と関連しうるかを整理し、原典確認は人間が行います。"
   ),
   "gap_next_actions": (
-    "106件の未確認事項を整理しました。"
+    "Evidence-aware Gap / Next Actions を整理しました。"
     " Gapは弱点・無効理由・侵害リスクではありません。"
-    " まだ人間が確認していない技術・実施例・エビデンスの一覧です。"
-    " 最優先の確認タスクは、特許 description / examples の実施例確認です。"
+    " CN108286090A は review-ready 候補、他Top5は pipeline 継続が次アクションです。"
   ),
   "fixed_point_observation": (
-    "このケースを週次で追跡できます。"
-    " 新しい特許・論文・Webシグナルが出たとき、差分をDigestとして確認できます。"
+    "Evidence-aware Gap から Watch Profile 更新案と Digest preview を確認できます。"
     " デモではDigest previewのみで、メール送信とScheduler起動はOFFです。"
   ),
   "export": (
-    "今回の分析結果をMarkdown / CSV / Excel等で出力できます。"
-    " 出力物は、Top5選抜結果、Claim Map、Evidence候補、Gap / Next Actions、"
-    "Digest previewの共有に使います。"
+    "Evidence-aware Gap / claim-example / checklist / digest を Demo Export Bundle にまとめて出力できます。"
+    " 出力物は共有用の候補資料であり、証明ではありません。"
   ),
   "input": (
     "研究テーマと検索キーワードを設定し、候補特許のCSV/Excel取込と抽出フォーカス語彙を確認します。"

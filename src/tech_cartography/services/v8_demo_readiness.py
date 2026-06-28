@@ -20,6 +20,12 @@ from tech_cartography.services.v8_demo_polish_export import find_latest_demo_pol
 from tech_cartography.services.v8_evidence_map_export import find_latest_evidence_map_dir
 from tech_cartography.services.v8_export_package import get_v8_export_packages_dir
 from tech_cartography.services.v8_fixed_point_observation_export import find_latest_fixed_point_observation_dir
+from tech_cartography.services.v8_demo_flow_export_readiness import find_latest_demo_export_bundle_dir
+from tech_cartography.services.v8_evidence_gap_next_actions import (
+  evidence_aware_gap_primary_available,
+  find_latest_evidence_aware_gap_dir,
+  is_evidence_aware_gap_pack,
+)
 from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
 from tech_cartography.services.v8_large_candidate_shortlist import find_latest_large_shortlist_dir
 from tech_cartography.services.v8_sources_table import load_case_profile, project_root_from_here
@@ -419,16 +425,33 @@ def assess_case_demo_readiness(
       blocking_issues=["Evidence Map artifact 未生成 — 0件表示はしない"],
     ))
 
-  gap_dir = find_latest_gap_next_actions_dir(case_id, root)
+  ev_gap_dir = find_latest_evidence_aware_gap_dir(case_id, root)
+  gap_dir = ev_gap_dir if (ev_gap_dir and is_evidence_aware_gap_pack(ev_gap_dir)) else find_latest_gap_next_actions_dir(case_id, root)
   gap_count: int | None = None
   if gap_dir:
     trace.append(str(gap_dir))
-    manifest = gap_dir / "gap_next_actions_manifest.json"
+    manifest = gap_dir / "evidence_gap_manifest.json"
+    if not manifest.exists():
+      manifest = gap_dir / "gap_next_actions_manifest.json"
     counts = _read_manifest_counts(manifest, "gap_count", "action_count")
     gap_count = counts.get("gap_count")
+    evidence_primary = evidence_aware_gap_primary_available(case_id, root)
+    if evidence_primary:
+      summary_csv = gap_dir / "gap_next_actions_summary.csv"
+      if summary_csv.exists():
+        try:
+          with summary_csv.open(encoding="utf-8", newline="") as handle:
+            import csv as _csv
+            rows = list(_csv.DictReader(handle))
+            gap_count = sum(int(r.get("gap_count") or 0) for r in rows)
+        except (OSError, ValueError, TypeError):
+          pass
     if gap_count is not None:
       gap_status = "ready" if gap_count >= 0 else "warning"
-      gap_summary = f"Gap artifact あり — gaps={gap_count}"
+      gap_summary = (
+        f"Evidence-aware Gap artifact あり — gaps={gap_count}"
+        if evidence_primary else f"Gap artifact あり — gaps={gap_count}"
+      )
       if gap_count == 0:
         gap_summary += " (true zero — artifact 生成済み)"
     else:
@@ -442,9 +465,9 @@ def assess_case_demo_readiness(
       summary=gap_summary,
       artifact_paths=[str(gap_dir)],
       primary_artifact_exists=True,
-      key_counts={"gap_count": gap_count if gap_count is not None else "—"},
-      next_user_action="定点観測タブへ",
-      next_button_hint="Generate / Refresh Gap & Next Actions",
+      key_counts={"gap_count": gap_count if gap_count is not None else "—", "evidence_aware": evidence_primary},
+      next_user_action="定点観測タブへ — Weekly Watch preview",
+      next_button_hint="Generate Gap / Next Actions from Claim-Example Evidence",
     ))
   else:
     steps.append(_make_step(
@@ -460,19 +483,28 @@ def assess_case_demo_readiness(
     ))
 
   fp_dir = find_latest_fixed_point_observation_dir(case_id, root)
-  if fp_dir:
-    trace.append(str(fp_dir))
+  ev_watch_ready = bool(
+    ev_gap_dir
+    and is_evidence_aware_gap_pack(ev_gap_dir)
+    and (ev_gap_dir / "digest_summary.md").exists()
+  )
+  if fp_dir or ev_watch_ready:
+    trace.append(str(fp_dir or ev_gap_dir))
     steps.append(_make_step(
       case_id=case_id,
       step_name="fixed_point_observation",
       status="ready",
       display_label="定点観測",
-      summary="Fixed Point Observation artifact あり — no_email_send / no_scheduler_start",
-      artifact_paths=[str(fp_dir)],
+      summary=(
+        "Evidence-aware Weekly Watch preview あり — no_email_send / no_scheduler_start"
+        if ev_watch_ready
+        else "Fixed Point Observation artifact あり — no_email_send / no_scheduler_start"
+      ),
+      artifact_paths=[str(ev_gap_dir if ev_watch_ready else fp_dir)],
       primary_artifact_exists=True,
-      key_counts={"no_email_send": True, "no_scheduler_start": True},
-      next_user_action="Export タブへ",
-      next_button_hint="Generate / Refresh Fixed Point Observation",
+      key_counts={"no_email_send": True, "no_scheduler_start": True, "email_sent": False},
+      next_user_action="Export タブへ — Demo Export Bundle",
+      next_button_hint="Weekly Watch preview を確認",
     ))
   else:
     steps.append(_make_step(
@@ -509,18 +541,25 @@ def assess_case_demo_readiness(
       next_button_hint="Generate Demo Polish Pack",
     ))
 
+  bundle_dir = find_latest_demo_export_bundle_dir(case_id, root)
   export_root = get_v8_export_packages_dir(root)
-  export_exists = export_root.is_dir() and any(export_root.iterdir()) if export_root.exists() else False
+  export_exists = bool(bundle_dir) or (
+    export_root.is_dir() and any(export_root.iterdir()) if export_root.exists() else False
+  )
   steps.append(_make_step(
     case_id=case_id,
     step_name="export",
-    status="ready" if export_exists else "warning",
+    status="ready" if bundle_dir else ("warning" if export_exists else "not_generated"),
     display_label="Export",
-    summary="Export Package あり" if export_exists else "Export Package 未生成 — warning",
-    artifact_paths=[str(export_root)] if export_exists else [],
-    primary_artifact_exists=export_exists,
-    next_user_action="Demo Readiness Pack を生成して提出準備",
-    next_button_hint="Generate Demo Readiness Pack",
+    summary=(
+      f"Demo Export Bundle あり — {bundle_dir.name}"
+      if bundle_dir
+      else ("Export Package あり" if export_exists else "Export Package 未生成 — warning")
+    ),
+    artifact_paths=[str(bundle_dir or export_root)] if (bundle_dir or export_exists) else [],
+    primary_artifact_exists=bool(bundle_dir or export_exists),
+    next_user_action="提出デモ完了 — 共有資料を確認",
+    next_button_hint="Generate Demo Export Bundle",
   ))
 
   ready_steps = sum(1 for s in steps if s.status == "ready")

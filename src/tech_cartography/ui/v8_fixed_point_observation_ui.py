@@ -27,6 +27,10 @@ from tech_cartography.services.v8_fixed_point_observation_export import (
   find_latest_fixed_point_observation_dir,
   observation_loop_to_markdown,
 )
+from tech_cartography.services.v8_evidence_gap_next_actions import (
+  evidence_aware_gap_primary_available,
+  find_latest_evidence_aware_gap_dir,
+)
 from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
 from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
@@ -36,6 +40,7 @@ from tech_cartography.ui.live_watch_expansion_ui import render_live_watch_expans
 from tech_cartography.ui.login_ui import can_use_admin_features
 from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
 from tech_cartography.ui.v8_executive_summary_ui import render_watch_executive_summary
+from tech_cartography.ui.v8_evidence_aware_watch_ui import render_evidence_aware_watch_section
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
@@ -284,12 +289,22 @@ def render_v8_fixed_point_observation_tab(*, project_root: Path | str) -> None:
   if publication_number:
     st.session_state[STATE_V8_SELECTED_PUBLICATION] = publication_number
 
-  gap_dir = find_latest_gap_next_actions_dir(active_case, root)
-  if not gap_dir:
-    st.caption("Gap / Next Actions 未生成 — 「Gap / Next Actions」タブで Generate してください。")
+  if selected_case != "all":
+    render_evidence_aware_watch_section(active_case, root, key_prefix="v8_fp_ev_watch")
+    st.divider()
+
+  gap_dir = find_latest_evidence_aware_gap_dir(active_case, root)
+  legacy_gap_dir = find_latest_gap_next_actions_dir(active_case, root)
+  if not gap_dir or not evidence_aware_gap_primary_available(active_case, root):
+    st.caption(
+      "Evidence-aware Gap 未生成 — "
+      f"「{V8_TAB_LABELS['gap_next_actions']}」タブで Generate Gap / Next Actions from Claim-Example Evidence を実行してください。"
+    )
   with st.expander("artifact参照（開発者向け）", expanded=False):
     if gap_dir:
-      st.caption(f"Gap / Next Actions artifact: {gap_dir}")
+      st.caption(f"Evidence-aware Gap artifact: {gap_dir}")
+    if legacy_gap_dir and legacy_gap_dir != gap_dir:
+      st.caption(f"Legacy Gap artifact: {legacy_gap_dir}")
     for finder, label in (
       (find_latest_evidence_map_dir, "Evidence Map"),
       (find_latest_claim_map_dir, "Claim Map"),
@@ -335,29 +350,29 @@ def render_v8_fixed_point_observation_tab(*, project_root: Path | str) -> None:
       latest = find_latest_fixed_point_observation_dir(active_case if selected_case != "all" else None, root)
       if latest:
         st.caption(f"latest export: {latest}")
-    st.info("「Generate / Refresh Fixed Point Observation Loop」を押してください。")
-    st.markdown(
-      render_next_action_box(f"先に「{V8_TAB_LABELS['gap_next_actions']}」で Gap / Next Actions を生成してください。"),
-      unsafe_allow_html=True,
-    )
-    return
 
-  if cached.get("mode") == "all":
-    bundles = cached.get("bundles") or {}
-    for sample in V8_CASE_SAMPLES:
-      cid = sample["case_id"]
-      bundle = bundles.get(cid)
-      if not bundle:
-        continue
-      report = _report_from_dict(bundle["report"])
-      with st.expander(
-        f"{sample['label']} — {report.loop_status}",
-        expanded=cid == active_case,
-      ):
-        _render_single_report(report, bundle.get("export") or {}, key_suffix=cid)
-  else:
-    report = _report_from_dict(cached["report"])
-    _render_single_report(report, cached.get("export") or {}, key_suffix="single")
+  with st.expander("Legacy Fixed Point Observation Loop（Evidence Mapベース）", expanded=False):
+    if not cached:
+      st.info("「Generate / Refresh Fixed Point Observation Loop」を押してください（Legacy observation loop）。")
+      st.caption("Evidence-aware Watch preview は上記セクションが主参照です。")
+    else:
+      st.caption("以下は Evidence Map ベースの従来ループです。")
+      if cached.get("mode") == "all":
+        bundles = cached.get("bundles") or {}
+        for sample in V8_CASE_SAMPLES:
+          cid = sample["case_id"]
+          bundle = bundles.get(cid)
+          if not bundle:
+            continue
+          report = _report_from_dict(bundle["report"])
+          with st.expander(
+            f"{sample['label']} — {report.loop_status}",
+            expanded=cid == active_case,
+          ):
+            _render_single_report(report, bundle.get("export") or {}, key_suffix=cid)
+      else:
+        report = _report_from_dict(cached["report"])
+        _render_single_report(report, cached.get("export") or {}, key_suffix="single")
 
   st.markdown("#### Scope Feedback / Run History")
   st.caption("検索範囲の拡張・縮小は Scope Expansion で人間承認。Watch Profile は自動更新しません。")

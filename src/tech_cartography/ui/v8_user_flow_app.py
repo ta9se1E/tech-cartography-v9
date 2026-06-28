@@ -27,7 +27,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_PIPELINE_ROOT = default_pipeline_root()
 
 _TAB_RENDERERS: dict[str, Callable[..., None]] = {
-  "intro": lambda **kwargs: render_v8_intro_tab(),
+  "intro": lambda **kwargs: render_v8_intro_tab(project_root=kwargs.get("project_root")),
   "input": render_v8_input_tab,
   "sources": render_v8_sources_tab,
   "patent_shortlist": render_v8_patent_shortlist_tab,
@@ -73,8 +73,8 @@ def render_v8_user_flow_app(
     with tab:
       st.session_state[STATE_V8_CURRENT_TAB] = tab_id
       renderer = _TAB_RENDERERS[tab_id]
-      if tab_id in {"intro"}:
-        renderer()
+      if tab_id == "intro":
+        renderer(project_root=PROJECT_ROOT)
       elif tab_id == "admin_settings":
         renderer(project_root=PROJECT_ROOT)
       else:

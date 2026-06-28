@@ -20,6 +20,14 @@ from tech_cartography.services.v8_evidence_map_export import find_latest_evidenc
 from tech_cartography.services.v8_gap_next_actions_export import find_latest_gap_next_actions_dir
 from tech_cartography.services.v8_fixed_point_observation_export import find_latest_fixed_point_observation_dir
 from tech_cartography.services.v8_demo_readiness import build_demo_readiness_report
+from tech_cartography.services.v8_demo_flow_export_readiness import (
+  export_demo_flow_bundle,
+  find_latest_demo_export_bundle_dir,
+)
+from tech_cartography.services.v8_evidence_gap_next_actions import (
+  find_latest_evidence_aware_gap_dir,
+  is_evidence_aware_gap_pack,
+)
 from tech_cartography.services.v8_demo_readiness_export import export_demo_readiness, find_latest_demo_readiness_dir
 from tech_cartography.runtime.v8_one_case_demo_schema import DEFAULT_ONE_CASE_INPUT_CSV, DEFAULT_ONE_CASE_ID
 from tech_cartography.services.v8_one_case_demo_e2e import assess_one_case_demo_status
@@ -361,6 +369,56 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
           "Large Candidate Pack 未生成 — artifact missing（true zero ではありません）。"
           " 入力タブで取り込み後、読むべき特許で Top5 を生成してください。"
         )
+
+    st.markdown("#### Demo Export Bundle (Phase27S.7)")
+    st.caption(
+      "Evidence-aware Gap / claim-example / checklist / digest / watch proposal を1つの提出用 bundle にまとめます。"
+      " メール送信・Scheduler 起動は行いません。"
+    )
+    bundle_case = _primary_case_id(export_case)
+    render_submission_demo_readiness_card(bundle_case, root, expanded=False)
+    if st.button("Generate Demo Export Bundle", key="v8_export_demo_bundle", type="primary"):
+      result = export_demo_flow_bundle(bundle_case, project_root=root)
+      st.session_state["v8_last_demo_export_bundle"] = result.to_dict()
+      st.success(f"Demo Export Bundle 生成: {result.output_dir}")
+
+    bundle_cached = st.session_state.get("v8_last_demo_export_bundle")
+    bundle_dir = find_latest_demo_export_bundle_dir(bundle_case, root)
+    if isinstance(bundle_cached, dict):
+      st.caption(f"latest bundle: {bundle_cached.get('output_dir', '—')}")
+      for warning in bundle_cached.get("warnings") or []:
+        st.caption(f"warning: {warning}")
+      dl_bundle = Path(str(bundle_cached.get("output_dir", "")))
+    elif bundle_dir:
+      dl_bundle = bundle_dir
+      st.caption(f"latest bundle: {bundle_dir}")
+    else:
+      dl_bundle = None
+      st.caption("Demo Export Bundle 未生成")
+
+    if dl_bundle and dl_bundle.exists():
+      for fname in (
+        "demo_summary.md",
+        "demo_artifact_trace.md",
+        "latest_gap_next_actions.csv",
+        "latest_claim_example_links.csv",
+        "human_review_checklist.md",
+        "watch_profile_update_proposal.md",
+        "digest_summary.md",
+        "demo_export_manifest.json",
+      ):
+        path = dl_bundle / fname
+        if path.exists():
+          mime = "application/json" if fname.endswith(".json") else (
+            "text/csv" if fname.endswith(".csv") else "text/markdown"
+          )
+          st.download_button(
+            f"Download {fname}",
+            data=path.read_bytes(),
+            file_name=path.name,
+            mime=mime,
+            key=f"v8_export_bundle_{fname}",
+          )
 
     st.markdown("#### Demo Readiness Pack (Phase27M)")
     st.caption(
@@ -747,7 +805,8 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
     )
 
     st.markdown("#### 既存 artifact 参照")
-    _artifact_link(find_latest_evidence_gap_path(root), label="evidence_gap")
+    _artifact_link(find_latest_evidence_aware_gap_dir(_export_case_filter(export_case), root), label="evidence_aware_gap")
+    _artifact_link(find_latest_demo_export_bundle_dir(_export_case_filter(export_case), root), label="demo_export_bundle")
     _artifact_link(
       find_latest_gap_next_actions_dir(_export_case_filter(export_case), root),
       label="gap_next_actions",
