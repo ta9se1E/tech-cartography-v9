@@ -84,6 +84,34 @@ def render_v8_admin_settings_tab(
   st.caption(f"DISABLE_SCHEDULER={disable_scheduler}")
   st.caption("メール送信と Scheduler は必須機能として保持（デフォルト OFF）。")
 
+  st.markdown("#### 外部AI連携（Phase27R.5 — 将来拡張 / デフォルト OFF）")
+  from tech_cartography.runtime.v8_external_ai_config import (
+    EXTERNAL_AI_SAFETY_NOTICES,
+    external_ai_status_lines,
+  )
+  from tech_cartography.services.v8_external_ai_summary import build_external_ai_summary_prompt
+
+  st.markdown(
+    render_info_box(
+      "外部AI連携は、Top5選抜理由や Evidence / GAP サマリーの高度化に利用予定です。"
+      " 提出デモでは実行せず、既存データに基づくローカル要約のみ表示します。"
+    ),
+    unsafe_allow_html=True,
+  )
+  with st.expander("External AI — feature flags / plan preview", expanded=False):
+    for line in external_ai_status_lines():
+      st.caption(line)
+    for notice in EXTERNAL_AI_SAFETY_NOTICES[:4]:
+      st.caption(notice)
+    plan = build_external_ai_summary_prompt(
+      target="evidence_map_executive_summary",
+      case_id="case_01_pan_graphitization",
+      source_artifacts=["evidence_map.md", "gap_next_actions.md"],
+    )
+    st.caption(f"plan.execution_status={plan.execution_status}")
+    st.caption("Weekly Digest / Watch Profile / Scope Expansion / Email / Scheduler への接続は設計のみ")
+    st.caption("docs/external_ai_integration_phase27r5.md を参照")
+
   st.markdown("#### Phase27N — Cloud Run 反映準備")
   try:
     from tech_cartography.services.v8_cloud_run_readiness import build_cloud_run_readiness_report
