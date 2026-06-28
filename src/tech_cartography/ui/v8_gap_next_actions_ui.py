@@ -33,6 +33,7 @@ from tech_cartography.ui.v8_executive_summary_ui import (
   render_gap_how_to_read_section,
 )
 from tech_cartography.ui.v8_claim_example_binding_ui import render_gap_document_pipeline_status
+from tech_cartography.ui.v8_evidence_gap_next_actions_ui import render_evidence_aware_gap_section
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
@@ -323,6 +324,19 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
     )
     for notice in GAP_NEXT_ACTIONS_SAFETY_NOTICES[:4]:
       st.caption(notice)
+
+  st.divider()
+  pre_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
+  evidence_case = pre_case if pre_case and pre_case != "all" else (
+    V8_CASE_SAMPLES[0]["case_id"] if V8_CASE_SAMPLES else ""
+  )
+  if evidence_case:
+    render_evidence_aware_gap_section(
+      evidence_case,
+      root,
+      key_prefix="v8_gap_tab_ev",
+      show_title=True,
+    )
 
   case_options = _case_options()
   case_ids = [c for c, _ in case_options]

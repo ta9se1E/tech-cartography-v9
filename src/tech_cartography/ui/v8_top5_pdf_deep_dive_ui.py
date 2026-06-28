@@ -50,6 +50,7 @@ from tech_cartography.services.v8_top5_pdf_pipeline_status import (
   build_top5_pdf_pipeline_status,
 )
 from tech_cartography.ui.v8_judge_mode_copy import TOP5_DEEP_DIVE_WORKFLOW, TOP5_PDF_DEEP_DIVE_HELP
+from tech_cartography.ui.v8_evidence_gap_next_actions_ui import render_evidence_aware_gap_section
 from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
 
 
@@ -396,6 +397,14 @@ def render_top5_pdf_deep_dive_section(
           key_prefix=f"{key_prefix}_{status.publication_number}",
           show_upload_panel=True,
         )
+
+  st.divider()
+  render_evidence_aware_gap_section(
+    case_id,
+    project_root,
+    key_prefix=f"{key_prefix}_ev_gap",
+    show_title=True,
+  )
 
   with st.expander("出力ダウンロード・開発者向け詳細", expanded=False):
     text_dir = find_latest_pdf_text_extract_dir(case_id, project_root)
