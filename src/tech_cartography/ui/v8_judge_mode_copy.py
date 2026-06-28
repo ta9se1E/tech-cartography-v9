@@ -155,3 +155,9 @@ PDF_TEXT_EXTRACT_HELP = (
   " この段階ではOCRやGemini抽出は行わず、読めるPDFかどうかを判定します。"
   " 実施例抽出・物性値抽出・claim-example対応は次Phaseです。"
 )
+
+PDF_SECTION_EXTRACT_HELP = (
+  "抽出済みPDF本文から、description / examples / comparative examples / tables の候補を切り出します。"
+  " この段階ではGemini抽出は行わず、次に構造化すべき本文範囲を特定します。"
+  " セクション判定は候補であり確定ではありません。"
+)

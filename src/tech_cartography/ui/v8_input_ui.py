@@ -16,6 +16,7 @@ from tech_cartography.services.v8_large_candidate_shortlist import load_top5_pub
 from tech_cartography.ui.v8_google_patents_links_ui import load_and_render_top5_pdf_links
 from tech_cartography.ui.v8_judge_mode_copy import PDF_UPLOAD_HELP
 from tech_cartography.ui.v8_patent_pdf_text_extract_ui import render_top5_pdf_text_extract_section
+from tech_cartography.ui.v8_patent_section_extract_ui import render_top5_pdf_section_extract_section
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_research_theme_ui import render_research_theme_section
 from tech_cartography.ui.v8_tab_config import STATE_V8_INPUT, STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
@@ -183,6 +184,7 @@ def render_v8_input_tab(*, project_root: Path | str) -> None:
     st.caption(state["pdf_upload_note"])
 
   render_top5_pdf_text_extract_section(theme_case, root, key_prefix="v8_input_pdf_text")
+  render_top5_pdf_section_extract_section(theme_case, root, key_prefix="v8_input_pdf_section")
 
   with st.expander("詳細設定（BigQuery SQL生成・管理者向け）", expanded=False):
     render_bigquery_admin_section(case_id=theme_case, project_root=root)

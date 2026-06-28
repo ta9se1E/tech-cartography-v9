@@ -149,5 +149,6 @@ def render_gap_pdf_extraction_status(
     st.markdown(line)
 
   st.caption(
-    "このPhaseではPDF本文の抽出のみ。実施例抽出・物性値抽出・claim-example対応は次Phase。"
+    "セクション抽出は入力タブの「Top5公報PDF セクション抽出」で実行できます。"
+    " 実施例条件・物性値の構造化は Phase27S.3 で行います。"
   )
