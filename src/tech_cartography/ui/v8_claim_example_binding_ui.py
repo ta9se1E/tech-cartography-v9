@@ -18,7 +18,9 @@ from tech_cartography.services.v8_claim_example_binding import (
   write_claim_example_binding_outputs,
 )
 from tech_cartography.services.v8_large_candidate_shortlist import load_top5_publications
+from tech_cartography.services.v8_top5_pdf_pipeline_status import build_top5_pdf_pipeline_status
 from tech_cartography.ui.v8_judge_mode_copy import CLAIM_EXAMPLE_BINDING_HELP
+from tech_cartography.ui.v8_tab_config import V8_TAB_LABELS
 
 
 def _session_key(case_id: str) -> str:
@@ -110,25 +112,18 @@ def render_gap_document_pipeline_status(
   if not pubs:
     return
 
-  st.markdown("**Top5公報PDF — 解析パイプライン状況**")
-  for pub in pubs:
-    pipe = get_full_patent_document_pipeline_status(case_id, pub, project_root)
-    if not pipe["pdf_uploaded"]:
-      line = f"- **{pub}**: PDF未アップロード — PDF取得が必要"
-    elif not pipe["text_extracted"]:
-      line = f"- **{pub}**: PDF本文未抽出 — Extract PDF text が必要"
-    elif not pipe.get("sections_extracted"):
-      line = f"- **{pub}**: セクション未抽出 — Extract sections が必要"
-    elif pipe.get("has_examples") and not pipe.get("example_facts_extracted"):
-      line = f"- **{pub}**: Example facts未抽出 — Extract example facts が必要"
-    elif pipe.get("example_facts_extracted") and not pipe.get("claim_example_links_generated"):
-      line = f"- **{pub}**: Claim-example未対応 — Claim-Example対応候補の生成が必要"
-    elif pipe.get("claim_example_links_generated"):
-      line = f"- **{pub}**: Claim-example対応候補あり — 次PhaseでGapロジック更新へ"
-    elif pipe.get("facts_needs_human_review") or pipe.get("section_needs_human_review"):
-      line = f"- **{pub}**: needs_human_review=True — 抽出結果の人手確認が必要"
-    else:
-      line = f"- **{pub}**: パイプライン途中 — 上記手順を確認してください"
-    st.markdown(line)
+  output_root = project_root / "outputs"
+  statuses = build_top5_pdf_pipeline_status(case_id, project_root, output_root)
+  if publication_numbers:
+    pub_set = set(publication_numbers)
+    statuses = [s for s in statuses if s.publication_number in pub_set]
 
+  st.markdown("**Top5公報PDF — 解析状況（次アクション）**")
+  st.caption(
+    f"操作本体は「{V8_TAB_LABELS['patent_shortlist']}」タブの Top5 Deep Dive｜公報PDF解析 で実行します。"
+  )
+  for s in statuses:
+    st.caption(f"- **{s.publication_number}**: {s.next_action}")
+  if any(s.claim_example_links_generated for s in statuses):
+    st.caption("claim-example対応候補あり — 次はGapロジック更新（次Phase）")
   st.caption("対応付けは候補です。Gapロジックへの反映は次Phaseで行います。")

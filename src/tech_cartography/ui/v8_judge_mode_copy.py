@@ -43,7 +43,7 @@ JUDGE_NEXT_TAB: dict[str, str] = {
 
 TAB_DO_THIS: dict[str, str] = {
   "intro": "このページの概要を確認し、「入力・テーマ設定」に進んでください。",
-  "input": "研究テーマ、検索キーワード、CSV/Excel取込、PDF入力口を確認してください。",
+  "input": "研究テーマ、検索キーワード、抽出フォーカス語彙、CSV/Excel取込を確認してください。",
   "sources": "取り込まれた候補特許データの出自と件数を確認してください。",
   "patent_shortlist": "1000件候補から選ばれたTop5と、なぜ読むべきかを確認してください。",
   "claim_map": "Top5特許の請求項35件が投入済みであることと、技術要素整理を確認してください。",
@@ -132,7 +132,8 @@ JUDGE_CONCLUSION_CARDS: dict[str, str] = {
     "Digest previewの共有に使います。"
   ),
   "input": (
-    "研究テーマと検索キーワードを設定し、候補特許のCSV/Excel取込やPDF入力口を確認します。"
+    "研究テーマと検索キーワードを設定し、候補特許のCSV/Excel取込と抽出フォーカス語彙を確認します。"
+    " Top5公報PDFの取得・解析は「読むべき特許｜Top5」タブで行います。"
   ),
   "sources": (
     "候補特許・論文・Web等のデータ出自を確認します。"
@@ -143,22 +144,28 @@ JUDGE_CONCLUSION_CARDS: dict[str, str] = {
   ),
 }
 
+INPUT_PDF_DEEP_DIVE_GUIDE = (
+  "Top5公報PDFの取得・アップロード・解析は、"
+  "「読むべき特許｜Top5」タブの Top5 Deep Dive｜公報PDF解析 で実行します。"
+)
+
+TOP5_PDF_DEEP_DIVE_HELP = (
+  "Top5に選ばれた特許について、Google Patentsで公報PDFを取得し、"
+  "PDF本文、実施例セクション、実施例ファクト、claimとの対応候補を順番に確認します。"
+)
+
 PDF_UPLOAD_HELP = (
   "Top5公報PDFをアップロードしてください。"
-  " 次Phaseでは、PDFから description / examples / comparative examples を抽出し、"
-  " 実施例条件・物性値・比較例を構造化します。"
-  " 現時点では手動確認・将来のPDF解析連携用として保持しています。"
+  " 操作は「読むべき特許｜Top5」タブの Top5 Deep Dive で行います。"
 )
 
 PDF_TEXT_EXTRACT_HELP = (
   "アップロード済みのTop5公報PDFから本文テキストを抽出します。"
-  " この段階ではOCRやGemini抽出は行わず、読めるPDFかどうかを判定します。"
-  " 実施例抽出・物性値抽出・claim-example対応は次Phaseです。"
+  " この段階ではOCRは自動実行しません。読めるPDFかどうかを判定します。"
 )
 
 PDF_SECTION_EXTRACT_HELP = (
   "抽出済みPDF本文から、description / examples / comparative examples / tables の候補を切り出します。"
-  " この段階ではGemini抽出は行わず、次に構造化すべき本文範囲を特定します。"
   " セクション判定は候補であり確定ではありません。"
 )
 

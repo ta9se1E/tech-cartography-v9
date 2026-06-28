@@ -11,15 +11,8 @@ from tech_cartography.services.v8_large_candidate_import import import_large_can
 from tech_cartography.services.v8_sources_table import load_case_profile
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box
 from tech_cartography.ui.v8_bigquery_admin_ui import render_bigquery_admin_section
-from tech_cartography.services.v8_google_patents_links import save_patent_pdf_upload
-from tech_cartography.services.v8_large_candidate_shortlist import load_top5_publications
-from tech_cartography.ui.v8_google_patents_links_ui import load_and_render_top5_pdf_links
-from tech_cartography.ui.v8_judge_mode_copy import PDF_UPLOAD_HELP
-from tech_cartography.ui.v8_patent_pdf_text_extract_ui import render_top5_pdf_text_extract_section
 from tech_cartography.ui.v8_extraction_vocabulary_ui import render_extraction_vocabulary_section
-from tech_cartography.ui.v8_claim_example_binding_ui import render_claim_example_binding_section
-from tech_cartography.ui.v8_example_facts_ui import render_gemini_example_facts_section
-from tech_cartography.ui.v8_patent_section_extract_ui import render_top5_pdf_section_extract_section
+from tech_cartography.ui.v8_judge_mode_copy import INPUT_PDF_DEEP_DIVE_GUIDE
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_research_theme_ui import render_research_theme_section
 from tech_cartography.ui.v8_tab_config import STATE_V8_INPUT, STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES, V8_TAB_LABELS
@@ -152,45 +145,15 @@ def render_v8_input_tab(*, project_root: Path | str) -> None:
       st.caption(f"input_row_count: {last_import.get('input_row_count')}")
       st.caption(f"accepted_row_count: {last_import.get('accepted_row_count')}")
 
-  st.markdown("#### PDFアップロード")
-  st.caption(PDF_UPLOAD_HELP)
-  st.caption(
-    "Google PatentsのページからユーザーがPDFを確認・取得してください。"
-  )
-  load_and_render_top5_pdf_links(theme_case, root, key_prefix="v8_gp_input")
+  st.markdown("#### Top5公報PDF")
+  st.caption(INPUT_PDF_DEEP_DIVE_GUIDE)
+  st.caption(f"次に進む: 「{V8_TAB_LABELS['patent_shortlist']}」タブの Top5 Deep Dive｜公報PDF解析")
 
-  top5_pubs = load_top5_publications(theme_case, root)
-  pub_options = top5_pubs if top5_pubs else ["（Top5未生成）"]
-  pdf_pub = st.selectbox(
-    "PDF対象特許（Top5）",
-    options=pub_options,
-    key="v8_input_pdf_pub",
-  )
-  pdf_file = st.file_uploader("特許PDF（公報PDF）", type=["pdf"], key="v8_input_pdf_upload")
-  if pdf_file is not None and pdf_pub and not pdf_pub.startswith("（"):
-    if st.button("PDFを保存", key="v8_input_pdf_save", type="primary"):
-      save_patent_pdf_upload(
-        case_id=theme_case,
-        publication_number=pdf_pub,
-        pdf_bytes=pdf_file.getvalue(),
-        original_filename=pdf_file.name,
-        project_root=root,
-      )
-      uploads = st.session_state.get("v8_patent_pdf_uploads")
-      if not isinstance(uploads, dict):
-        uploads = {}
-      uploads[pdf_pub] = pdf_file.name
-      st.session_state["v8_patent_pdf_uploads"] = uploads
-      state["pdf_upload_note"] = f"saved: {pdf_pub} ← {pdf_file.name}"
-      st.success(state["pdf_upload_note"])
-  elif pdf_file is not None:
-    state["pdf_upload_note"] = f"selected: {pdf_file.name} — 特許を選んで「PDFを保存」を押してください"
-    st.caption(state["pdf_upload_note"])
-
-  render_top5_pdf_text_extract_section(theme_case, root, key_prefix="v8_input_pdf_text")
-  render_top5_pdf_section_extract_section(theme_case, root, key_prefix="v8_input_pdf_section")
-  render_gemini_example_facts_section(theme_case, root, key_prefix="v8_input_efacts")
-  render_claim_example_binding_section(theme_case, root, key_prefix="v8_input_cebind")
+  with st.expander("開発者向け詳細（PDF解析UIはTop5タブへ移動）", expanded=False):
+    st.caption(
+      "PDFアップロード、本文抽出、セクション抽出、Gemini実施例ファクト、"
+      "Claim-Example対応候補の操作はすべて Top5 Deep Dive で実行します。"
+    )
 
   with st.expander("詳細設定（BigQuery SQL生成・管理者向け）", expanded=False):
     render_bigquery_admin_section(case_id=theme_case, project_root=root)

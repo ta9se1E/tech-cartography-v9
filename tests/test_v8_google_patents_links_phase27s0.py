@@ -97,10 +97,10 @@ def test_pdf_upload_status(tmp_path: Path) -> None:
 
 
 def test_ui_modules_reference_google_patents() -> None:
-  for rel in (
-    "src/tech_cartography/ui/v8_patent_shortlist_ui.py",
-    "src/tech_cartography/ui/v8_input_ui.py",
-    "src/tech_cartography/ui/v8_gap_next_actions_ui.py",
-  ):
-    text = Path(rel).read_text(encoding="utf-8")
-    assert "Google Patents" in text or "google_patents" in text
+  """Phase27S.4.1: Google Patents links live in Top5 Deep Dive, not input tab."""
+  deep_dive = Path("src/tech_cartography/ui/v8_top5_pdf_deep_dive_ui.py").read_text(encoding="utf-8")
+  assert "Google Patents" in deep_dive or "google_patents" in deep_dive
+  shortlist = Path("src/tech_cartography/ui/v8_patent_shortlist_ui.py").read_text(encoding="utf-8")
+  assert "render_top5_pdf_deep_dive_section" in shortlist
+  gap_text = Path("src/tech_cartography/ui/v8_gap_next_actions_ui.py").read_text(encoding="utf-8")
+  assert "Top5 Deep Dive" in gap_text

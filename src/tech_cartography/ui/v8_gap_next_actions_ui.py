@@ -32,7 +32,6 @@ from tech_cartography.ui.v8_executive_summary_ui import (
   render_gap_executive_summary,
   render_gap_how_to_read_section,
 )
-from tech_cartography.ui.v8_google_patents_links_ui import render_google_patents_caution
 from tech_cartography.ui.v8_claim_example_binding_ui import render_gap_document_pipeline_status
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
@@ -172,17 +171,13 @@ def _render_single_report(
       render_info_box(
         "<strong>実施例裏取り（example_support_missing）</strong><br>"
         f"{ex_missing} 件の未確認事項があります。"
-        " 実施例裏取りを進めるには、Top5公報PDFの description / examples 本文が必要です。"
-        f" 「{V8_TAB_LABELS['patent_shortlist']}」でGoogle Patentsリンクを開き、"
-        f" PDFを取得して「{V8_TAB_LABELS['input']}」にアップロードし、"
-        f" 「Top5公報PDF テキスト抽出」で Extract PDF text を実行し、"
-        f" 「Top5公報PDF セクション抽出」で Extract sections を実行してください。"
+        " PDF解析・実施例ファクト抽出・claim-example対応候補は"
+        f" 「{V8_TAB_LABELS['patent_shortlist']}」タブの Top5 Deep Dive｜公報PDF解析 で実行します。"
+        " ここでは未確認事項と次アクションのみ確認します。"
         " Gapは弱点ではなく未確認事項、Evidence Mapは証明ではなく裏取り候補です。"
-        " 実施例抽出・物性値抽出は次Phaseです。"
       ),
       unsafe_allow_html=True,
     )
-    render_google_patents_caution()
     render_gap_document_pipeline_status(report.case_id, project_root)
 
   st.caption("artifact missing と true zero を区別 — Gap artifact 未生成時は gap_count=0 と表示しません")

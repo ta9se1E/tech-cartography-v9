@@ -21,7 +21,7 @@ from tech_cartography.services.v8_patent_shortlist_export import (
 )
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box
 from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
-from tech_cartography.ui.v8_google_patents_links_ui import load_and_render_top5_pdf_links
+from tech_cartography.ui.v8_top5_pdf_deep_dive_ui import render_top5_pdf_deep_dive_section
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_top5_reading_ui import (
   load_stage_records,
@@ -206,7 +206,9 @@ def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
       project_root=root,
     )
     render_top5_deep_dive_cards(top5, case_id=selected_case, project_root=root)
-    load_and_render_top5_pdf_links(selected_case, root, key_prefix="v8_gp_shortlist")
+    render_top5_pdf_deep_dive_section(
+      selected_case, root, top5_records=top5, key_prefix="v8_top5_dd",
+    )
     render_why_top5_section(top5, case_id=selected_case, project_root=root)
     render_dropped_summary_section(
       top20, top5, case_id=selected_case, project_root=root, manifest=manifest,
@@ -263,7 +265,9 @@ def _render_large_candidate_mode(*, root: Path, selected_case: str) -> None:
   else:
     st.info("Large Candidate を取り込み後、「Generate Reading Priority」を押してください。")
     if latest:
-      load_and_render_top5_pdf_links(selected_case, root, key_prefix="v8_gp_cached")
+      render_top5_pdf_deep_dive_section(
+        selected_case, root, top5_records=None, key_prefix="v8_top5_dd_cached",
+      )
 
 
 def render_v8_patent_shortlist_tab(*, project_root: Path | str) -> None:

@@ -217,8 +217,10 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
 
   st.markdown("### Evidence Map｜裏取り候補")
   st.caption(
-    "PDF実施例から抽出した claim-example 対応候補は、入力タブの「Claim-Example対応候補」で生成できます。"
-    " 次Phaseで Evidence Map / Gap ロジックに反映予定です。"
+    "PDF解析・実施例ファクト抽出・claim-example対応候補は"
+    f"「{V8_TAB_LABELS['patent_shortlist']}」タブの Top5 Deep Dive で実行します。"
+    " claim-example対応候補は次Phaseで Evidence Map / Gap ロジックに反映予定です。"
+    " ここでは裏取り候補の整理のみ表示します（確定Evidenceではありません）。"
   )
 
   case_options = _case_options()
