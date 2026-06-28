@@ -201,7 +201,7 @@ def test_process_condition_candidate(tmp_path: Path) -> None:
   }]
   score, link = score_claim_example_candidate(claim, facts, vocab)
   assert score >= 2
-  assert link.support_type == "process_condition_candidate"
+  assert link.support_type == "process_support_candidate"
 
 
 def test_no_match_no_example_support(tmp_path: Path) -> None:

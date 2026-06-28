@@ -14,6 +14,8 @@ from tech_cartography.runtime.v8_top5_pdf_pipeline_status_schema import (
 from tech_cartography.services.v8_claim_example_binding import (
   bind_claims_to_example_facts,
   find_latest_claim_example_links_dir,
+  load_binding_summary_from_dir,
+  should_rerun_claim_example_binding,
   write_claim_example_binding_outputs,
 )
 from tech_cartography.services.v8_gemini_example_facts import (
@@ -295,6 +297,48 @@ def _render_next_action_for_patent(
       st.success("Claim-Example対応候補を生成しました（Top5一括）")
       st.rerun()
     return
+
+  needs_rerun, _, _ = should_rerun_claim_example_binding(case_id, project_root)
+  bind_dir = find_latest_claim_example_links_dir(case_id, project_root)
+  bind_summary = load_binding_summary_from_dir(bind_dir) if bind_dir else {}
+  bind_row = bind_summary.get(pub, {})
+
+  st.markdown("**Claim-Example Binding（候補）**")
+  st.caption("Claim-Example対応は候補です。OCR由来の数値・単位・実施例番号は必ず原文確認してください。")
+  st.caption(
+    f"linked_claim_count={bind_row.get('linked_claim_count', status.linked_claim_count or 0)} / "
+    f"linked_example_count={bind_row.get('linked_example_count', 0)} / "
+    f"linked_fact_count={bind_row.get('linked_fact_count', 0)} / "
+    f"mixed={bind_row.get('mixed_support_count', 0)} / "
+    f"property={bind_row.get('property_support_count', 0)} / "
+    f"process={bind_row.get('process_support_count', 0)} / "
+    f"table={bind_row.get('table_support_count', 0)} / "
+    f"structure={bind_row.get('structure_support_count', 0)}"
+  )
+
+  if bind_dir and (bind_dir / "claim_example_links.csv").exists():
+    import pandas as pd
+    links_df = pd.read_csv(bind_dir / "claim_example_links.csv")
+    pub_df = links_df[links_df["publication_number"] == pub] if "publication_number" in links_df.columns else links_df
+    if not pub_df.empty:
+      detail_cols = [
+        c for c in (
+          "claim_no", "example_id", "support_level", "support_type",
+          "matched_fact_types", "matched_fact_count", "top_evidence_snippets", "needs_human_review",
+        )
+        if c in pub_df.columns
+      ]
+      st.dataframe(pub_df[detail_cols], width="stretch", hide_index=True)
+
+  if needs_rerun:
+    if st.button(
+      "Re-run claim-example binding from latest example facts",
+      key=f"{key_prefix}_rebind_{pub}",
+    ):
+      results = bind_claims_to_example_facts(case_id, project_root, output_root)
+      write_claim_example_binding_outputs(case_id, results, output_root)
+      st.success("最新 example_facts から Claim-Example binding を再生成しました")
+      st.rerun()
 
   st.success(
     f"対応候補あり — linked={status.linked_claim_count}, unlinked={status.unlinked_claim_count}。"
