@@ -28,6 +28,10 @@ from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
 from tech_cartography.services.v8_patent_shortlist_export import find_latest_patent_shortlist_dir
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
+from tech_cartography.ui.v8_executive_summary_ui import (
+  render_gap_executive_summary,
+  render_gap_how_to_read_section,
+)
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
@@ -157,7 +161,7 @@ def _render_single_report(
   *,
   key_suffix: str,
 ) -> None:
-  _render_metrics(report)
+  render_gap_how_to_read_section(report=report)
 
   st.caption("artifact missing と true zero を区別 — Gap artifact 未生成時は gap_count=0 と表示しません")
   refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
@@ -179,10 +183,12 @@ def _render_single_report(
   else:
     st.caption("Manual Claim Refresh 結果はまだありません — Claim Map タブで保存後 refresh してください。")
 
-  st.markdown("#### Top 3 Next Actions")
+  st.markdown("#### Top 3 Next Actions（最優先）")
   _render_top_actions(report.top_3_actions)
 
-  with st.expander("Gap 一覧・詳細（全件）", expanded=False):
+  with st.expander(f"Gap 一覧・詳細（全{report.gap_count}件）", expanded=False):
+    with st.expander("gap_type 別詳細メトリクス", expanded=False):
+      _render_metrics(report)
     if report.count_by_gap_type:
       st.markdown("**gap_type 別 count:**")
       for gap_type, count in sorted(report.count_by_gap_type.items(), key=lambda x: -x[1]):
@@ -261,7 +267,8 @@ def _render_single_report(
       "digest_summary.md", digest_path.read_bytes(), digest_path.name,
       "text/markdown", key=f"v8_gap_dl_digest_{key_suffix}",
     )
-  st.caption(f"export dir: {export_info.get('output_dir', '')}")
+  with st.expander("export dir（開発者向け）", expanded=False):
+    st.caption(f"export dir: {export_info.get('output_dir', '')}")
 
 
 def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
@@ -372,9 +379,12 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
 
   cached = st.session_state.get(STATE_V8_GAP_NEXT_ACTIONS)
   if not cached:
-    latest_dir = find_latest_gap_next_actions_dir(active_case if selected_case != "all" else None, root)
-    if latest_dir:
-      st.caption(f"latest export: {latest_dir}")
+    render_gap_executive_summary(None)
+    render_gap_how_to_read_section()
+    with st.expander("latest export（開発者向け）", expanded=False):
+      latest_dir = find_latest_gap_next_actions_dir(active_case if selected_case != "all" else None, root)
+      if latest_dir:
+        st.caption(f"latest export: {latest_dir}")
     st.info("「Generate / Refresh Gap & Next Actions」を押してください。")
     st.markdown(
       render_next_action_box(f"先に「{V8_TAB_LABELS['evidence_map']}」で Evidence Map を生成してください。"),
@@ -391,9 +401,11 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
         continue
       report = _report_from_dict(bundle["report"])
       with st.expander(f"{sample['label']} — {report.gap_count} gaps / {report.action_count} actions", expanded=cid == active_case):
+        render_gap_executive_summary(report)
         _render_single_report(report, bundle.get("export") or {}, key_suffix=cid)
   else:
     report = _report_from_dict(cached["report"])
+    render_gap_executive_summary(report)
     _render_single_report(report, cached.get("export") or {}, key_suffix="single")
 
   with st.expander("次 Phase への接続（詳細）", expanded=False):
@@ -412,7 +424,7 @@ def render_v8_gap_next_actions_tab(*, project_root: Path | str) -> None:
   st.markdown(
     render_next_action_box(
       f"次: 「{V8_TAB_LABELS['fixed_point_observation']}」で定点観測ループを確認。"
-      " 次回タスク / Digest 計画 / Scheduler plan（no_email_send / no_scheduler_start）へ進んでください。"
+      " 次回タスク / Digest 計画 / Scheduler plan（デモではメール送信・Scheduler起動はOFF）へ進んでください。"
     ),
     unsafe_allow_html=True,
   )

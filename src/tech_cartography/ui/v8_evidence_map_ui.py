@@ -19,6 +19,10 @@ from tech_cartography.services.v8_large_candidate_shortlist import load_top5_pub
 from tech_cartography.services.v8_patent_shortlist import build_patent_shortlist
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box, render_next_action_box, render_warning_box
 from tech_cartography.ui.v8_demo_flow_ui import render_artifact_count_metric, render_demo_flow_banner
+from tech_cartography.ui.v8_executive_summary_ui import (
+  render_evidence_executive_summary,
+  render_evidence_how_to_read_section,
+)
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
@@ -167,7 +171,7 @@ def _render_aggregation_chips(evidence_map: V8EvidenceMap) -> None:
       st.caption(f"- {key}: {val}")
 
 
-def _render_top_links_preview(links: list[V8EvidenceLink], *, limit: int = 15) -> None:
+def _render_top_links_preview(links: list[V8EvidenceLink], *, limit: int = 20) -> None:
   if not links:
     return
   st.markdown(f"**Top evidence links preview（先頭 {min(limit, len(links))} / 全 {len(links)}）**")
@@ -212,22 +216,6 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
   st.markdown("### Evidence Map｜裏取り候補")
-  with st.expander("詳細ガイド・注意事項", expanded=False):
-    render_demo_flow_banner(
-      project_root=root,
-      current_tab="evidence_map",
-      tab_purpose="supporting evidence candidate — 裏取り候補（証明ではない）",
-      next_tab_key="gap_next_actions",
-    )
-    _render_how_to_read_card()
-    st.markdown(
-      render_caution_box(
-        "<strong>裏取り候補（supporting evidence candidate）のみ — 証明ではありません。</strong> "
-        " paper / web / company は確定 Evidence ではありません。"
-        " 原典確認は人間が行います。FTO・侵害・有効性判断ではありません。"
-      ),
-      unsafe_allow_html=True,
-    )
 
   case_options = _case_options()
   case_ids = [c for c, _ in case_options]
@@ -314,6 +302,24 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
 
   cached = st.session_state.get(STATE_V8_EVIDENCE_MAP)
   if not cached:
+    render_evidence_executive_summary(None)
+    render_evidence_how_to_read_section()
+    with st.expander("詳細ガイド・注意事項", expanded=False):
+      render_demo_flow_banner(
+        project_root=root,
+        current_tab="evidence_map",
+        tab_purpose="supporting evidence candidate — 裏取り候補（証明ではない）",
+        next_tab_key="gap_next_actions",
+      )
+      _render_how_to_read_card()
+      st.markdown(
+        render_caution_box(
+          "<strong>裏取り候補（supporting evidence candidate）のみ — 証明ではありません。</strong> "
+          " paper / web / company は確定 Evidence ではありません。"
+          " 原典確認は人間が行います。FTO・侵害・有効性判断ではありません。"
+        ),
+        unsafe_allow_html=True,
+      )
     st.info("「Generate / Refresh Evidence Map」を押してください。")
     st.markdown(
       render_next_action_box(f"先に「{V8_TAB_LABELS['claim_map']}」で Claim Map を生成してください。"),
@@ -350,9 +356,11 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
         continue
       emap = _to_map(bundle["evidence_map"])
       with st.expander(f"{sample['label']} — {emap.link_count} links", expanded=cid == active_case):
-        _render_metrics(emap)
-        _render_aggregation_chips(emap)
-        _render_top_links_preview(emap.links, limit=10)
+        render_evidence_executive_summary(emap)
+        with st.expander("詳細メトリクス・集計", expanded=False):
+          _render_metrics(emap)
+          _render_aggregation_chips(emap)
+        _render_top_links_preview(emap.links, limit=20)
     st.markdown(
       render_next_action_box(f"「{V8_TAB_LABELS['gap_next_actions']}」で Gap / Next Actions（Phase27G）へ進んでください。"),
       unsafe_allow_html=True,
@@ -361,12 +369,31 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
 
   evidence_map = _to_map(cached["evidence_map"])
   export_info = cached.get("export") or {}
-  st.caption("artifact missing と true zero を区別 — 未生成時は件数0として表示しません")
-  _render_metrics(evidence_map)
-  _render_aggregation_chips(evidence_map)
-  _render_top_links_preview(evidence_map.links, limit=15)
+  render_evidence_executive_summary(evidence_map)
+  render_evidence_how_to_read_section()
+  with st.expander("詳細ガイド・注意事項", expanded=False):
+    render_demo_flow_banner(
+      project_root=root,
+      current_tab="evidence_map",
+      tab_purpose="supporting evidence candidate — 裏取り候補（証明ではない）",
+      next_tab_key="gap_next_actions",
+    )
+    _render_how_to_read_card()
+    st.markdown(
+      render_caution_box(
+        "<strong>裏取り候補（supporting evidence candidate）のみ — 証明ではありません。</strong> "
+        " paper / web / company は確定 Evidence ではありません。"
+        " 原典確認は人間が行います。FTO・侵害・有効性判断ではありません。"
+      ),
+      unsafe_allow_html=True,
+    )
+  with st.expander("詳細メトリクス・集計", expanded=False):
+    st.caption("artifact missing と true zero を区別 — 未生成時は件数0として表示しません")
+    _render_metrics(evidence_map)
+    _render_aggregation_chips(evidence_map)
+  _render_top_links_preview(evidence_map.links, limit=20)
 
-  with st.expander("詳細（フィルタ・link一覧・claim投入メモ）", expanded=False):
+  with st.expander("全Evidence links（フィルタ・link一覧・claim投入メモ）", expanded=False):
     loaded_links = [
       l for l in evidence_map.links
       if l.claim_text_status in {"manual_input", "loaded", "csv_imported", "artifact_imported"}
@@ -411,7 +438,8 @@ def render_v8_evidence_map_tab(*, project_root: Path | str) -> None:
       "Excel", xlsx_path.read_bytes(), xlsx_path.name,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="v8_ev_dl_xlsx",
     )
-  st.caption(f"export dir: {export_info.get('output_dir', '')}")
+  with st.expander("export dir（開発者向け）", expanded=False):
+    st.caption(f"export dir: {export_info.get('output_dir', '')}")
 
   st.markdown(
     render_next_action_box(

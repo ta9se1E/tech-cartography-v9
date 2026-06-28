@@ -35,6 +35,7 @@ from tech_cartography.ui.live_run_history_ui import render_run_history_section
 from tech_cartography.ui.live_watch_expansion_ui import render_live_watch_expansion_section
 from tech_cartography.ui.login_ui import can_use_admin_features
 from tech_cartography.ui.v8_demo_flow_ui import render_demo_flow_banner
+from tech_cartography.ui.v8_executive_summary_ui import render_watch_executive_summary
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
 from tech_cartography.ui.v8_tab_config import (
@@ -81,13 +82,12 @@ def _report_from_dict(data: dict[str, Any]) -> V8ObservationLoopReport:
 
 
 def _render_metrics(report: V8ObservationLoopReport) -> None:
-  c1, c2, c3, c4, c5 = st.columns(5)
+  c1, c2, c3, c4 = st.columns(4)
   c1.metric("loop_status", report.loop_status)
   c2.metric("top_action_count", len(report.top_3_next_cycle_tasks))
   c3.metric("watch_proposals", len(report.watch_profile_update_proposals))
   sched = report.scheduler_followup_plan
   c4.metric("human_inputs", len(sched.required_human_inputs) if sched else 0)
-  c5.metric("no_email_send", str(report.no_email_send))
 
 
 def _render_single_report(
@@ -98,7 +98,6 @@ def _render_single_report(
 ) -> None:
   _render_metrics(report)
   st.markdown(f"**current_state_summary:** {report.current_state_summary}")
-  st.caption(f"no_scheduler_start={report.no_scheduler_start}")
 
   refresh_cached = st.session_state.get("v8_manual_claim_refresh_result")
   if isinstance(refresh_cached, dict):
@@ -109,7 +108,7 @@ def _render_single_report(
           "<strong>claim投入後の次回タスク変化 (Phase27K)</strong><br>"
           "before: claim本文取得 / load_claim_text<br>"
           "after: 実施例確認 / paper evidence確認 / property data確認<br>"
-          "no_email_send=true / no_scheduler_start=true — メール/Scheduler は必須機能として保持。"
+          "メール送信: デモではOFF / Scheduler起動: デモではOFF — 機能は必須として保持。"
         ),
         unsafe_allow_html=True,
       )
@@ -135,31 +134,32 @@ def _render_single_report(
   else:
     st.caption("提案なし")
 
-  st.markdown("#### Scheduler Follow-up Plan")
-  sched = report.scheduler_followup_plan
-  if sched:
-    st.markdown(f"- **schedule_mode:** {sched.schedule_mode}")
-    st.markdown(f"- **planned_steps:** {', '.join(sched.planned_steps)}")
-    if sched.blocked_steps:
-      st.markdown(f"- **blocked_steps:** {', '.join(sched.blocked_steps)}")
-    if sched.required_human_inputs:
-      st.markdown(f"- **required_human_inputs:** {', '.join(sched.required_human_inputs)}")
-    st.caption(sched.scheduler_followup_hint)
-    st.caption(f"no_scheduler_start={sched.no_scheduler_start}")
-  else:
-    st.caption("Scheduler plan 未生成")
+  with st.expander("Scheduler / Email Digest 詳細", expanded=False):
+    st.markdown("#### Scheduler Follow-up Plan")
+    sched = report.scheduler_followup_plan
+    if sched:
+      st.markdown(f"- **schedule_mode:** {sched.schedule_mode}")
+      st.markdown(f"- **planned_steps:** {', '.join(sched.planned_steps)}")
+      if sched.blocked_steps:
+        st.markdown(f"- **blocked_steps:** {', '.join(sched.blocked_steps)}")
+      if sched.required_human_inputs:
+        st.markdown(f"- **required_human_inputs:** {', '.join(sched.required_human_inputs)}")
+      st.caption(sched.scheduler_followup_hint)
+      st.caption("Scheduler起動: デモではOFF")
+    else:
+      st.caption("Scheduler plan 未生成")
 
-  st.markdown("#### Email Digest Plan")
-  email = report.email_digest_plan
-  if email:
-    st.markdown(f"- **digest_mode:** {email.digest_mode}")
-    st.markdown(f"- **subject_draft:** {email.subject_draft}")
-    st.markdown(f"- **no_email_send:** {email.no_email_send}")
-    with st.expander("digest_summary", expanded=False):
-      st.markdown(email.digest_summary)
-    st.caption(email.email_digest_hint)
-  else:
-    st.caption("Email digest plan 未生成")
+    st.markdown("#### Email Digest Plan")
+    email = report.email_digest_plan
+    if email:
+      st.markdown(f"- **digest_mode:** {email.digest_mode}")
+      st.markdown(f"- **subject_draft:** {email.subject_draft}")
+      st.caption("メール送信: デモではOFF")
+      with st.expander("digest_summary", expanded=False):
+        st.markdown(email.digest_summary)
+      st.caption(email.email_digest_hint)
+    else:
+      st.caption("Email digest plan 未生成")
 
   st.markdown("#### Artifact Trace")
   with st.expander("Artifact trace（開発者向け）", expanded=False):
@@ -210,6 +210,7 @@ def render_v8_fixed_point_observation_tab(*, project_root: Path | str) -> None:
   default_pub = str(st.session_state.get(STATE_V8_SELECTED_PUBLICATION) or "").strip()
 
   st.markdown("### 定点観測｜Weekly Watch")
+  render_watch_executive_summary()
   with st.expander("詳細ガイド・メール/Scheduler 注意", expanded=False):
     render_demo_flow_banner(
       project_root=root,
@@ -330,9 +331,10 @@ def render_v8_fixed_point_observation_tab(*, project_root: Path | str) -> None:
 
   cached = st.session_state.get(STATE_V8_OBSERVATION_LOOP)
   if not cached:
-    latest = find_latest_fixed_point_observation_dir(active_case if selected_case != "all" else None, root)
-    if latest:
-      st.caption(f"latest export: {latest}")
+    with st.expander("latest export（開発者向け）", expanded=False):
+      latest = find_latest_fixed_point_observation_dir(active_case if selected_case != "all" else None, root)
+      if latest:
+        st.caption(f"latest export: {latest}")
     st.info("「Generate / Refresh Fixed Point Observation Loop」を押してください。")
     st.markdown(
       render_next_action_box(f"先に「{V8_TAB_LABELS['gap_next_actions']}」で Gap / Next Actions を生成してください。"),

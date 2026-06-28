@@ -45,6 +45,7 @@ from tech_cartography.services.v8_patent_shortlist_export import find_latest_pat
 from tech_cartography.services.v8_sources_repository import filter_sources_table, load_sources_table, resolve_case_name
 from tech_cartography.ui.easy_japanese_ui import render_caution_box, render_info_box
 from tech_cartography.ui.v8_input_ui import get_v8_input_state
+from tech_cartography.ui.v8_executive_summary_ui import render_export_executive_summary
 from tech_cartography.ui.v8_judge_mode_ui import render_judge_conclusion_card, render_judge_next_tab_hint
 from tech_cartography.ui.v8_tab_config import STATE_V8_SELECTED_CASE, V8_CASE_SAMPLES
 
@@ -142,6 +143,7 @@ def render_v8_export_tab(*, project_root: Path | str) -> None:
   default_case = str(state.get("selected_case_id") or st.session_state.get(STATE_V8_SELECTED_CASE) or "").strip()
 
   st.markdown("### Export｜共有レポート")
+  render_export_executive_summary()
 
   case_options = [("all", "All cases")] + [(s["case_id"], s["label"]) for s in V8_CASE_SAMPLES]
   case_ids = [c for c, _ in case_options]
