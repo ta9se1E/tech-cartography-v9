@@ -1,0 +1,270 @@
+[
+  {
+    "id": "pat-demo-001",
+    "title": "DEMO Patent: PAN fiber sizing with epoxy wet-out control",
+    "type": "patent",
+    "source_url": "https://example.com/demo/patent/pat-demo-001",
+    "source_name": "Demo Patent Feed",
+    "published_date": "2026-07-01",
+    "score": 0.91,
+    "previous_score": 0.78,
+    "status": "Rising",
+    "action": "Read Now",
+    "why_read": "Demo signal showing a process change that may improve resin wet-out and interfacial consistency.",
+    "what_to_check": "Check whether the sizing chemistry targets epoxy compatibility or only general handling stability.",
+    "next_action": "Read claims and compare the sizing additives against the current internal resin system.",
+    "tags": [
+      "PAN carbon fiber",
+      "sizing",
+      "epoxy compatibility"
+    ],
+    "companies": [
+      "Toray Demo Materials"
+    ]
+  },
+  {
+    "id": "pat-demo-002",
+    "title": "DEMO Patent: Electrochemical oxidation route for PAN surface activation",
+    "type": "patent",
+    "source_url": "https://example.com/demo/patent/pat-demo-002",
+    "source_name": "Demo Patent Feed",
+    "published_date": "2026-06-30",
+    "score": 0.84,
+    "previous_score": null,
+    "status": "New",
+    "action": "Read Now",
+    "why_read": "Demo signal covering a new surface activation route that could change adhesion performance at low treatment load.",
+    "what_to_check": "Check electrolyte conditions, target oxygen functionality, and whether tensile modulus is preserved.",
+    "next_action": "Review the examples and note any process window that looks transferable to pilot-scale trials.",
+    "tags": [
+      "surface treatment",
+      "electrochemical oxidation",
+      "interface adhesion"
+    ],
+    "companies": [
+      "Hexcel Demo Labs"
+    ]
+  },
+  {
+    "id": "pat-demo-003",
+    "title": "DEMO Patent: Inline modulus screening after oxidative treatment",
+    "type": "patent",
+    "source_url": "https://example.com/demo/patent/pat-demo-003",
+    "source_name": "Demo Patent Feed",
+    "published_date": "2026-06-26",
+    "score": 0.68,
+    "previous_score": 0.71,
+    "status": "Stable",
+    "action": "Watch",
+    "why_read": "Demo signal tying inline screening to strand tensile modulus after treatment changes.",
+    "what_to_check": "Check whether modulus shifts are attributed to treatment severity or downstream sizing pickup.",
+    "next_action": "Watch for follow-on publications or family filings before escalating to full review.",
+    "tags": [
+      "strand tensile modulus",
+      "surface treatment",
+      "epoxy compatibility"
+    ],
+    "companies": [
+      "Teijin Demo Fibers"
+    ]
+  },
+  {
+    "id": "pat-demo-004",
+    "title": "DEMO Patent: Removable temporary sizing for tow spreading trials",
+    "type": "patent",
+    "source_url": "https://example.com/demo/patent/pat-demo-004",
+    "source_name": "Demo Patent Feed",
+    "published_date": "2026-06-18",
+    "score": 0.52,
+    "previous_score": 0.66,
+    "status": "Dropped",
+    "action": "Ignore",
+    "why_read": "Demo signal is less aligned with the main watch theme but may still matter for trial-line handling work.",
+    "what_to_check": "Check whether the removable layer changes only spreadability or also final interface performance.",
+    "next_action": "Ignore for now unless tow spreading becomes a near-term program priority.",
+    "tags": [
+      "pilot line",
+      "sizing removal"
+    ],
+    "companies": [
+      "SGL Demo Carbon"
+    ]
+  },
+  {
+    "id": "paper-demo-001",
+    "title": "DEMO Paper: Surface chemistry tuning for epoxy-compatible PAN fibers",
+    "type": "paper",
+    "source_url": "https://example.com/demo/paper/paper-demo-001",
+    "source_name": "Demo Paper Feed",
+    "published_date": "2026-07-02",
+    "score": 0.88,
+    "previous_score": 0.73,
+    "status": "Rising",
+    "action": "Read Now",
+    "why_read": "Demo paper links surface functionality to interfacial shear strength in an epoxy matrix.",
+    "what_to_check": "Check the test method, sample preparation, and whether the result comes from chemistry or roughness changes.",
+    "next_action": "Read the methods section and compare the treatment window with the current internal baseline.",
+    "tags": [
+      "epoxy compatibility",
+      "surface chemistry",
+      "interface adhesion"
+    ],
+    "companies": [
+      "University Demo A"
+    ]
+  },
+  {
+    "id": "paper-demo-002",
+    "title": "DEMO Paper: Plasma activation and sizing pickup balance in PAN carbon fibers",
+    "type": "paper",
+    "source_url": "https://example.com/demo/paper/paper-demo-002",
+    "source_name": "Demo Paper Feed",
+    "published_date": "2026-06-29",
+    "score": 0.8,
+    "previous_score": null,
+    "status": "New",
+    "action": "Read Now",
+    "why_read": "Demo paper could clarify how activation intensity affects later sizing pickup and adhesion.",
+    "what_to_check": "Check whether plasma dose improves bonding without driving brittle fiber-surface damage.",
+    "next_action": "Capture the reported activation window for discussion in the next watch review.",
+    "tags": [
+      "surface treatment",
+      "plasma activation",
+      "interface adhesion"
+    ],
+    "companies": [
+      "Institute Demo B"
+    ]
+  },
+  {
+    "id": "paper-demo-003",
+    "title": "DEMO Paper: Microbond study on strand tensile modulus and interface retention",
+    "type": "paper",
+    "source_url": "https://example.com/demo/paper/paper-demo-003",
+    "source_name": "Demo Paper Feed",
+    "published_date": "2026-06-24",
+    "score": 0.64,
+    "previous_score": 0.63,
+    "status": "Stable",
+    "action": "Watch",
+    "why_read": "Demo paper helps connect modulus retention to interface quality in a compact experimental design.",
+    "what_to_check": "Check whether the modulus and adhesion metrics move together or trade off across treatment levels.",
+    "next_action": "Watch and extract the key comparison table when the theme is refreshed next week.",
+    "tags": [
+      "strand tensile modulus",
+      "microbond",
+      "interface adhesion"
+    ],
+    "companies": []
+  },
+  {
+    "id": "paper-demo-004",
+    "title": "DEMO Paper: Aging behavior after oxidative PAN fiber surface treatment",
+    "type": "paper",
+    "source_url": "https://example.com/demo/paper/paper-demo-004",
+    "source_name": "Demo Paper Feed",
+    "published_date": "2026-06-17",
+    "score": 0.49,
+    "previous_score": 0.61,
+    "status": "Dropped",
+    "action": "Ignore",
+    "why_read": "Demo paper is more peripheral to the current weekly read list but may matter if shelf-life becomes urgent.",
+    "what_to_check": "Check whether aging changes the surface groups that drive adhesion or only moisture sensitivity.",
+    "next_action": "Ignore unless the team starts a storage-stability subtheme.",
+    "tags": [
+      "oxidation kinetics",
+      "aging"
+    ],
+    "companies": []
+  },
+  {
+    "id": "web-demo-001",
+    "title": "DEMO Web: Pilot line update on surface-treated PAN tow for epoxy systems",
+    "type": "web",
+    "source_url": "https://example.com/demo/web/web-demo-001",
+    "source_name": "Demo Web Feed",
+    "published_date": "2026-07-01",
+    "score": 0.77,
+    "previous_score": 0.65,
+    "status": "Rising",
+    "action": "Read Now",
+    "why_read": "Demo web signal suggests a pilot-line change that may influence both sizing choice and adhesion claims.",
+    "what_to_check": "Check whether the update mentions line speed, treatment severity, or downstream qualification plans.",
+    "next_action": "Read the announcement and note any concrete process parameters for follow-up.",
+    "tags": [
+      "pilot plant",
+      "surface treatment",
+      "sizing"
+    ],
+    "companies": [
+      "Hexcel Demo Labs"
+    ]
+  },
+  {
+    "id": "web-demo-002",
+    "title": "DEMO Web: PAN precursor and supply update touching modulus-sensitive grades",
+    "type": "web",
+    "source_url": "https://example.com/demo/web/web-demo-002",
+    "source_name": "Demo Web Feed",
+    "published_date": "2026-06-21",
+    "score": 0.59,
+    "previous_score": 0.6,
+    "status": "Stable",
+    "action": "Watch",
+    "why_read": "Demo web signal is relevant because precursor changes can quietly affect modulus and surface-treatment response.",
+    "what_to_check": "Check whether any change is linked to grade positioning, precursor chemistry, or downstream composite targets.",
+    "next_action": "Watch for a follow-up technical note before escalating it in the digest.",
+    "tags": [
+      "supply chain",
+      "PAN precursor"
+    ],
+    "companies": [
+      "Toray Demo Materials"
+    ]
+  },
+  {
+    "id": "company-demo-001",
+    "title": "DEMO Company: Hexcel Demo Labs highlights interface adhesion program",
+    "type": "company",
+    "source_url": "https://example.com/demo/company/company-demo-001",
+    "source_name": "Demo Company Feed",
+    "published_date": "2026-06-28",
+    "score": 0.74,
+    "previous_score": null,
+    "status": "New",
+    "action": "Watch",
+    "why_read": "Demo company update indicates focused investment around interface adhesion and epoxy-compatible surfaces.",
+    "what_to_check": "Check whether the program is research-stage messaging or tied to an announced production milestone.",
+    "next_action": "Watch and add the company to the profile if similar signals repeat next week.",
+    "tags": [
+      "capex",
+      "interface adhesion",
+      "epoxy compatibility"
+    ],
+    "companies": [
+      "Hexcel Demo Labs"
+    ]
+  },
+  {
+    "id": "company-demo-002",
+    "title": "DEMO Company: Teijin Demo Fibers partnership note on treated PAN strands",
+    "type": "company",
+    "source_url": "https://example.com/demo/company/company-demo-002",
+    "source_name": "Demo Company Feed",
+    "published_date": "2026-06-19",
+    "score": 0.56,
+    "previous_score": 0.7,
+    "status": "Dropped",
+    "action": "Watch",
+    "why_read": "Demo company signal may still matter because it points to partner validation on treated PAN strands.",
+    "what_to_check": "Check whether the note includes any concrete surface-treatment or sizing compatibility statement.",
+    "next_action": "Watch until a more technical follow-up appears.",
+    "tags": [
+      "joint development",
+      "surface treatment"
+    ],
+    "companies": [
+      "Teijin Demo Fibers"
+    ]
+  }
+]
