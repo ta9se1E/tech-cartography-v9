@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Sequence
 
 import streamlit as st
 
@@ -21,6 +21,7 @@ from ui_v9.labels import (
   bool_label_ja,
   cadence_label_ja,
   data_source_mode_label_ja,
+  score_level_label_ja,
   source_mode_label_ja,
   status_label_ja,
   type_label_ja,
@@ -63,6 +64,117 @@ def _render_profile_summary(summary: dict[str, object]) -> None:
   st.write(f"- 除外キーワード: 英語 {counts.get('exclude_en', 0)}件 / 日本語 {counts.get('exclude_ja', 0)}件")
   st.write(f"- Seed公報: {counts.get('seed_publications', 0)}件")
   st.write(f"- 追加候補公報: {counts.get('candidate_publications', 0)}件")
+
+
+def _signal_lookup_key(signal: Signal | dict[str, Any]) -> str:
+  if isinstance(signal, Signal):
+    signal_id = str(signal.id or "").strip()
+    if signal_id:
+      return f"id:{signal_id}"
+    return f"title:{signal.title}|type:{signal.type}|date:{signal.published_date}"
+
+  raw = signal or {}
+  signal_id = str(raw.get("id", "") or "").strip()
+  if signal_id:
+    return f"id:{signal_id}"
+  return (
+    f"title:{str(raw.get('title', '') or '').strip()}|"
+    f"type:{str(raw.get('type', '') or '').strip()}|"
+    f"date:{str(raw.get('published_date', '') or '').strip()}"
+  )
+
+
+def _build_score_explanation_lookup(display_signals: Sequence[dict[str, Any]] | None) -> dict[str, dict[str, Any]]:
+  lookup: dict[str, dict[str, Any]] = {}
+  for signal in display_signals or []:
+    lookup[_signal_lookup_key(signal)] = dict(signal.get("score_explanation", {}) or {})
+  return lookup
+
+
+def _merge_keyword_hits(
+  matched_keywords: dict[str, Any] | None,
+  keys: list[str],
+) -> list[str]:
+  if not isinstance(matched_keywords, dict):
+    return []
+
+  merged: list[str] = []
+  seen: set[str] = set()
+  for key in keys:
+    values = matched_keywords.get(key, [])
+    if not isinstance(values, list):
+      continue
+    for value in values:
+      normalized = str(value or "").strip()
+      if not normalized:
+        continue
+      dedupe_key = normalized.lower()
+      if dedupe_key in seen:
+        continue
+      seen.add(dedupe_key)
+      merged.append(normalized)
+  return merged
+
+
+def _render_keyword_hits(
+  title: str,
+  values: list[str],
+  empty_text: str = "一致なし",
+) -> None:
+  st.write(f"**{title}**")
+  if values:
+    st.write(", ".join(values))
+  else:
+    st.caption(empty_text)
+
+
+def _render_reason_list(
+  title: str,
+  values: list[str],
+  empty_text: str | None = None,
+) -> None:
+  if not values and empty_text is None:
+    return
+  st.write(f"**{title}**")
+  if values:
+    for value in values:
+      st.write(f"- {value}")
+  elif empty_text is not None:
+    st.caption(empty_text)
+
+
+def _render_score_explanation(explanation: dict[str, Any] | None) -> None:
+  payload = explanation or {}
+  matched_keywords = dict(payload.get("matched_keywords", {}) or {})
+  exclude_hits = dict(payload.get("exclude_hits", {}) or {})
+  core_hits = _merge_keyword_hits(matched_keywords, ["core_en", "core_ja"])
+  application_hits = _merge_keyword_hits(matched_keywords, ["application_en", "application_ja"])
+  material_process_hits = _merge_keyword_hits(matched_keywords, ["material_process_en", "material_process_ja"])
+  company_hits = _merge_keyword_hits(matched_keywords, ["target_companies"])
+  exclude_values = _merge_keyword_hits(exclude_hits, ["exclude_en", "exclude_ja"])
+  score = float(payload.get("score", 0.0) or 0.0)
+  score_level = score_level_label_ja(str(payload.get("score_level", "") or ""))
+
+  metric_left, metric_right = st.columns(2)
+  metric_left.metric("スコア", f"{score:.2f}")
+  metric_right.metric("関連度", score_level or "未設定")
+
+  _render_keyword_hits("一致したコアキーワード", core_hits)
+  _render_keyword_hits("一致した用途キーワード", application_hits)
+  _render_keyword_hits("一致した材料・プロセスキーワード", material_process_hits)
+  _render_keyword_hits("一致した注目企業", company_hits)
+
+  st.write("**除外キーワード一致**")
+  if exclude_values:
+    st.warning("除外キーワード一致: " + ", ".join(exclude_values))
+  else:
+    st.caption("なし")
+
+  _render_reason_list("スコアの主な理由", list(payload.get("score_reasons", []) or []), "明確な加点理由はありません。")
+  _render_reason_list("注意点", list(payload.get("negative_reasons", []) or []))
+
+  st.write("**システム判断の理由**")
+  st.write(str(payload.get("action_reason", "") or "説明はまだありません。"))
 
 
 def render_theme_setup_tab(profile_summary: dict[str, object], profile_status_message: str | None = None) -> dict[str, bool]:
@@ -228,6 +340,7 @@ def render_sources_tab(
 
 def render_top_signals_tab(
   signals: Sequence[Signal],
+  display_signals: Sequence[dict[str, Any]],
   source_info: dict[str, object],
   snapshot_status_message: str | None = None,
 ) -> dict[str, bool]:
@@ -235,6 +348,7 @@ def render_top_signals_tab(
   top_signals = select_diverse_top_signals(signals, top_n=10, max_per_type=4)
   top_reads = select_top_reads(top_signals, limit=3)
   diversity_counts = build_diversity_counts(signals)
+  score_explanation_lookup = _build_score_explanation_lookup(display_signals)
   st.caption(f"現在のデータソース: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
   if source_info.get("provisional_scoring"):
     st.info("アップロードデータは仮スコアリング済みです。これは外部APIなしの簡易評価です。")
@@ -246,10 +360,14 @@ def render_top_signals_tab(
     columns = st.columns(len(top_reads))
     for column, signal in zip(columns, top_reads):
       with column:
+        explanation = score_explanation_lookup.get(_signal_lookup_key(signal), {})
+        related_level = score_level_label_ja(str(explanation.get("score_level", "") or ""))
+        related_text = f" | 関連度 {related_level}" if related_level else ""
         st.markdown(f"**{signal.title}**")
         st.caption(
           f"{type_label_ja(signal.type)} | スコア {signal.score:.2f} | "
           f"{status_label_ja(signal.status)} | {action_label_ja(signal.action)}"
+          f"{related_text}"
         )
         st.write(signal.why_read)
         st.write(f"確認すべき点: {signal.what_to_check}")
@@ -301,7 +419,12 @@ def render_top_signals_tab(
     st.warning("現在のフィルター条件に一致するシグナルはありません。")
   else:
     st.markdown("### 注目シグナル一覧")
+    st.caption(
+      "スコア根拠は、現在の監視プロファイルとタイトル・概要・タグなどの簡易キーワード一致に基づく説明です。"
+      "技術的妥当性や法的評価を示すものではありません。"
+    )
     for index, signal in enumerate(filtered, start=1):
+      explanation = score_explanation_lookup.get(_signal_lookup_key(signal), {})
       st.markdown(f"#### {index}. {signal.title}")
       st.caption(
         f"種別: {type_label_ja(signal.type)} | スコア: {signal.score:.2f} | "
@@ -315,6 +438,8 @@ def render_top_signals_tab(
       st.write(f"**タグ:** {', '.join(signal.tags) if signal.tags else 'なし'}")
       st.write(f"**関連企業:** {', '.join(signal.companies) if signal.companies else 'なし'}")
       st.markdown(f"[出典URLを開く]({signal.source_url})")
+      with st.expander("スコア根拠を確認", expanded=False):
+        _render_score_explanation(explanation)
 
   st.text_input("実行メモ", key="ui_snapshot_run_note")
   save_snapshot_clicked = st.button("現在のスナップショットを保存", key="btn_save_snapshot", width="stretch")

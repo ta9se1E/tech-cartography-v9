@@ -34,6 +34,12 @@ DATA_SOURCE_MODE_LABELS_JA = {
   "json": "JSONアップロード",
 }
 
+SCORE_LEVEL_LABELS_JA = {
+  "high": "高",
+  "medium": "中",
+  "low": "低",
+}
+
 CADENCE_LABELS_JA = {
   "weekly": "毎週",
   "biweekly": "隔週",
@@ -89,6 +95,11 @@ def source_mode_label_ja(value: str) -> str:
 
 def data_source_mode_label_ja(value: str) -> str:
   return DATA_SOURCE_MODE_LABELS_JA.get(value, value)
+
+
+def score_level_label_ja(value: str | None) -> str:
+  normalized = str(value or "").strip()
+  return SCORE_LEVEL_LABELS_JA.get(normalized, normalized)
 
 
 def cadence_label_ja(value: str) -> str:

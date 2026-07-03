@@ -25,6 +25,7 @@ from services_v9.persistence import (
   save_watch_profile,
 )
 from services_v9.query_preview import build_query_preview_bundle
+from services_v9.score_explainer import attach_score_explanations
 from services_v9.signal_loader import (
   enrich_signals_with_profile,
   load_signals_from_csv_text,
@@ -348,8 +349,9 @@ def run_app() -> None:
     current_signal_dicts = apply_snapshot_status(current_signal_dicts, previous_snapshot_payload.get("signals", []))
     diff_result = compare_snapshots(previous_snapshot_payload.get("signals", []), current_signal_dicts)
 
+  display_signal_dicts = attach_score_explanations(current_signal_dicts, watch_profile_dict)
   signals = sorted(
-    [Signal.from_dict(item) for item in current_signal_dicts],
+    [Signal.from_dict(item) for item in display_signal_dicts],
     key=lambda item: (item.score, item.published_date, item.title),
     reverse=True,
   )
@@ -394,6 +396,7 @@ def run_app() -> None:
   with tabs[2]:
     signal_events = render_top_signals_tab(
       signals,
+      display_signal_dicts,
       source_info,
       st.session_state.get(STATE_SNAPSHOT_MESSAGE),
     )
