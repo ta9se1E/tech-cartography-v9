@@ -840,6 +840,7 @@ def render_digest_export_tab(
   st.subheader("ダイジェスト / エクスポート")
   st.caption("メール配信: プレビューのみ / 停止中")
   st.caption(f"現在のデータソース: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
+  st.caption("人間レビューが反映済みのSignalは、その判断を優先してダイジェストへ表示します。未レビューSignalはシステム判断に基づいて補完されます。")
   st.markdown(markdown_text)
 
   button_left, button_mid, button_right = st.columns(3)

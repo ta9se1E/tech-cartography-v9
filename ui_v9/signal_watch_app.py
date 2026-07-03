@@ -401,12 +401,6 @@ def run_app() -> None:
   drift = compute_theme_drift_alert(signals, watch_profile)
   source_rows = build_source_rows(signals)
   operation_rows = build_operation_status_rows()
-  markdown_text = build_weekly_digest_markdown(
-    signals,
-    watch_profile,
-    data_source=str(source_info["label"]),
-    loaded_count=int(source_info["loaded_count"]),
-  )
   csv_text = signals_to_csv(signals)
   json_text = signals_to_json(
     signals,
@@ -462,6 +456,19 @@ def run_app() -> None:
       suggestions,
       st.session_state.get(STATE_PROFILE_MESSAGE),
     )
+  latest_reviews_by_signal_id = dict(st.session_state.get(STATE_REVIEWS_BY_SIGNAL_ID, {}) or {})
+  latest_digest_signals = _prepare_display_signal_dicts(
+    current_signal_dicts,
+    watch_profile_dict,
+    latest_reviews_by_signal_id,
+  )
+  markdown_text = build_weekly_digest_markdown(
+    signals,
+    watch_profile,
+    data_source=str(source_info["label"]),
+    loaded_count=int(source_info["loaded_count"]),
+    reviewed_signals=latest_digest_signals,
+  )
   with tabs[5]:
     digest_events = render_digest_export_tab(
       markdown_text,

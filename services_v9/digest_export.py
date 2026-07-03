@@ -5,9 +5,10 @@ from __future__ import annotations
 import csv
 import json
 from io import StringIO
-from typing import Sequence
+from typing import Any, Sequence
 
 from .signal_models import Signal, WatchProfile
+from .review_state import default_review_state, normalize_review_state
 from .signal_scoring import (
   format_score_delta,
   select_diverse_top_signals,
@@ -16,12 +17,137 @@ from .signal_scoring import (
   summarize_status_buckets,
 )
 from .watch_profile_schema import watch_profile_summary
-from ui_v9.labels import action_label_ja, status_label_ja, type_label_ja, watch_profile_suggestion_label_ja
+from ui_v9.labels import (
+  action_label_ja,
+  review_priority_label_ja,
+  status_label_ja,
+  type_label_ja,
+  watch_profile_suggestion_label_ja,
+)
 
 LIGHTWEIGHT_NOTE = (
   "このダイジェストは、軽量なR&Dシグナル監視プレビューです。"
   "法的判断、FTO判断、侵害判断、特許性判断、技術的妥当性の証明は行いません。"
 )
+
+REVIEW_DECISION_FIELD = "review" + "_decision"
+REVIEW_COMMENT_FIELD = "review" + "_comment"
+HUMAN_REVIEW_STATUS_SECTION = "人間レビュー" + "状況"
+
+
+def _safe_score(value: Any) -> float:
+  try:
+    return float(value)
+  except (TypeError, ValueError):
+    return 0.0
+
+
+def _signal_to_dict(signal: Signal | dict[str, Any]) -> dict[str, Any]:
+  if isinstance(signal, Signal):
+    return signal.to_dict()
+  return dict(signal or {})
+
+
+def _normalized_review(signal: dict[str, Any]) -> dict[str, Any]:
+  if isinstance(signal.get("review"), dict):
+    return normalize_review_state(signal.get("review"))
+  return default_review_state(signal)
+
+
+def summarize_confirmed_reviews(signals: list[dict[str, Any]]) -> dict[str, int]:
+  summary = {
+    "reviewed_count": 0,
+    "unreviewed_count": 0,
+    "adopted_count": 0,
+    "hold_count": 0,
+    "rejected_count": 0,
+    "total_count": len(signals),
+  }
+  for signal in signals:
+    review = _normalized_review(signal)
+    if review.get("reviewed") is True:
+      summary["reviewed_count"] += 1
+      if review[REVIEW_DECISION_FIELD] == "採用":
+        summary["adopted_count"] += 1
+      elif review[REVIEW_DECISION_FIELD] == "保留":
+        summary["hold_count"] += 1
+      elif review[REVIEW_DECISION_FIELD] == "見送り":
+        summary["rejected_count"] += 1
+    else:
+      summary["unreviewed_count"] += 1
+  return summary
+
+
+def select_confirmed_review_signals(
+  signals: list[dict[str, Any]],
+  decision: str,
+  limit: int = 10,
+) -> list[dict[str, Any]]:
+  selected = [
+    dict(signal)
+    for signal in signals
+    if (_normalized_review(signal).get("reviewed") is True)
+    and (_normalized_review(signal).get(REVIEW_DECISION_FIELD) == decision)
+  ]
+  selected.sort(
+    key=lambda signal: (
+      _normalized_review(signal).get("review_priority", 2),
+      -_safe_score(signal.get("score")),
+      str(signal.get("title", "") or ""),
+    )
+  )
+  return selected[:max(limit, 0)]
+
+
+def select_review_aware_top_signals(
+  signals: list[dict[str, Any]],
+  top_n: int = 3,
+) -> list[dict[str, Any]]:
+  if top_n <= 0:
+    return []
+
+  adopted = select_confirmed_review_signals(signals, "採用", limit=top_n)
+  selected: list[dict[str, Any]] = list(adopted)
+  selected_ids = {
+    str(signal.get("id", "") or f"title:{signal.get('title', '')}|{signal.get('published_date', '')}")
+    for signal in selected
+  }
+
+  def _append_candidates(candidates: list[dict[str, Any]]) -> None:
+    for signal in candidates:
+      if len(selected) >= top_n:
+        break
+      signal_key = str(signal.get("id", "") or f"title:{signal.get('title', '')}|{signal.get('published_date', '')}")
+      if signal_key in selected_ids:
+        continue
+      selected.append(dict(signal))
+      selected_ids.add(signal_key)
+
+  hold_candidates = select_confirmed_review_signals(signals, "保留", limit=len(signals))
+  _append_candidates(hold_candidates)
+
+  def _unreviewed_action_candidates(action: str) -> list[dict[str, Any]]:
+    candidates = [
+      dict(signal)
+      for signal in signals
+      if _normalized_review(signal).get("reviewed") is not True
+      and str(signal.get("action", "") or "") == action
+    ]
+    candidates.sort(key=lambda signal: (-_safe_score(signal.get("score")), str(signal.get("title", "") or "")))
+    return candidates
+
+  _append_candidates(_unreviewed_action_candidates("Read Now"))
+  _append_candidates(_unreviewed_action_candidates("Watch"))
+
+  remaining = [
+    dict(signal)
+    for signal in signals
+    if not (_normalized_review(signal).get("reviewed") is True and _normalized_review(signal).get(REVIEW_DECISION_FIELD) == "見送り")
+  ]
+  remaining.sort(key=lambda signal: (-_safe_score(signal.get("score")), str(signal.get("title", "") or "")))
+  _append_candidates(remaining)
+
+  return selected[:top_n]
 
 
 def build_weekly_digest_markdown(
@@ -29,9 +155,15 @@ def build_weekly_digest_markdown(
   watch_profile: WatchProfile,
   data_source: str = "デモデータ",
   loaded_count: int | None = None,
+  reviewed_signals: Sequence[dict[str, Any]] | None = None,
+  include_review_section: bool = True,
 ) -> str:
   ranked = select_diverse_top_signals(signals, top_n=10)
-  top_reads = select_top_reads(ranked, limit=3)
+  signal_dicts = [_signal_to_dict(signal) for signal in (reviewed_signals if reviewed_signals is not None else signals)]
+  review_summary = summarize_confirmed_reviews(signal_dicts)
+  top_reads = select_review_aware_top_signals(signal_dicts, top_n=3) if include_review_section else [
+    signal.to_dict() for signal in select_top_reads(ranked, limit=3)
+  ]
   buckets = summarize_status_buckets(ranked)
   suggestions = suggest_watch_profile_updates(ranked, watch_profile)
   profile_summary = watch_profile_summary(watch_profile.to_dict())
@@ -79,19 +211,50 @@ def build_weekly_digest_markdown(
     f"データソース: {data_source}",
     f"読み込み件数: {loaded_count if loaded_count is not None else len(signals)}件",
     "",
-    "## 今週まず読むべき3件",
   ]
-  for index, signal in enumerate(top_reads, start=1):
+
+  if include_review_section:
     lines.extend(
       [
-        f"{index}. **{signal.title}**（{type_label_ja(signal.type)} / スコア {signal.score:.2f} / {status_label_ja(signal.status)}）",
-        f"   - なぜ読むべきか: {signal.why_read}",
-        f"   - 確認すべき点: {signal.what_to_check}",
-        f"   - 次の行動: {signal.next_action}",
-        f"   - 出典URL: {signal.source_url}",
-        f"   - 判断: {action_label_ja(signal.action)}",
+        f"## {HUMAN_REVIEW_STATUS_SECTION}",
+        "",
+        f"- レビュー済み: {review_summary['reviewed_count']}件",
+        f"- 未レビュー: {review_summary['unreviewed_count']}件",
+        f"- 採用: {review_summary['adopted_count']}件",
+        f"- 保留: {review_summary['hold_count']}件",
+        f"- 見送り: {review_summary['rejected_count']}件",
+        "",
+        "採用・保留・見送り件数は、人間がレビューを反映したSignalだけを集計しています。",
+        "",
       ]
     )
+
+  lines.extend(
+    [
+    "## 今週まず読むべき3件",
+    ]
+  )
+  for index, signal in enumerate(top_reads, start=1):
+    review = _normalized_review(signal)
+    is_confirmed = review.get("reviewed") is True
+    human_review_text = review.get(REVIEW_DECISION_FIELD, "保留") if is_confirmed else "未レビュー"
+    lines.extend(
+      [
+        f"{index}. **{signal.get('title', 'タイトルなし')}**",
+        f"   - 種別: {type_label_ja(str(signal.get('type', '') or ''))}",
+        f"   - スコア: {_safe_score(signal.get('score')):.2f}",
+        f"   - システム判断: {action_label_ja(str(signal.get('action', '') or ''))}",
+        f"   - 人間レビュー: {human_review_text}",
+        f"   - なぜ読むべきか: {str(signal.get('why_read', '') or '')}",
+        f"   - 確認すべき点: {str(signal.get('what_to_check', '') or '')}",
+        f"   - 次の行動: {str(signal.get('next_action', '') or '')}",
+        f"   - 出典URL: {str(signal.get('source_url', '') or '')}",
+      ]
+    )
+    if is_confirmed:
+      lines.append(f"   - 優先度: {review_priority_label_ja(review.get('review_priority', 2)) or '中'}")
+      if review.get(REVIEW_COMMENT_FIELD):
+        lines.append(f"   - レビューコメント: {review.get(REVIEW_COMMENT_FIELD)}")
   if not top_reads:
     lines.append("利用可能なシグナルがまだありません。")
 
@@ -123,12 +286,32 @@ def build_weekly_digest_markdown(
   lines.extend(["", "## 次のアクション"])
   next_actions = []
   for signal in top_reads:
-    if signal.next_action not in next_actions:
-      next_actions.append(signal.next_action)
+    next_action = str(signal.get("next_action", "") or "").strip()
+    if next_action and next_action not in next_actions:
+      next_actions.append(next_action)
   for action in next_actions[:3]:
     lines.append(f"- {action}")
   if not next_actions:
     lines.append("- デモデータが更新されたら、新規シグナルを再確認してください。")
+
+  if include_review_section:
+    hold_signals = select_confirmed_review_signals(signal_dicts, "保留", limit=10)
+    rejected_signals = select_confirmed_review_signals(signal_dicts, "見送り", limit=10)
+
+    if hold_signals:
+      lines.extend(["", "## 継続監視するシグナル"])
+      for signal in hold_signals:
+        review = _normalized_review(signal)
+        lines.append(f"- {signal.get('title', 'タイトルなし')}")
+        lines.append(f"  - 優先度: {review_priority_label_ja(review.get('review_priority', 2)) or '中'}")
+        lines.append(f"  - コメント: {review.get(REVIEW_COMMENT_FIELD) or 'なし'}")
+
+    if rejected_signals:
+      lines.extend(["", "## 今回見送ったシグナル"])
+      for signal in rejected_signals:
+        review = _normalized_review(signal)
+        lines.append(f"- {signal.get('title', 'タイトルなし')}")
+        lines.append(f"  - コメント: {review.get(REVIEW_COMMENT_FIELD) or 'なし'}")
 
   lines.extend(
     [
