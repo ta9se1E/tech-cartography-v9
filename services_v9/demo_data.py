@@ -14,6 +14,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEMO_DIR = PROJECT_ROOT / "data" / "demo"
 DEMO_SIGNALS_PATH = DEMO_DIR / "v9_demo_signals.json"
 DEMO_WATCH_PROFILE_PATH = DEMO_DIR / "v9_demo_watch_profile.json"
+SAMPLE_UPLOAD_CSV_PATH = DEMO_DIR / "v9_sample_upload_signals.csv"
+SAMPLE_UPLOAD_JSON_PATH = DEMO_DIR / "v9_sample_upload_signals.json"
 
 
 @lru_cache(maxsize=1)

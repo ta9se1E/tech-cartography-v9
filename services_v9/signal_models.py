@@ -12,6 +12,12 @@ VALID_STATUSES = ("New", "Rising", "Dropped", "Stable")
 VALID_ACTIONS = ("Read Now", "Watch", "Ignore")
 
 
+def _to_optional_float(value: Any) -> float | None:
+  if value is None or value == "":
+    return None
+  return float(value)
+
+
 @dataclass(slots=True)
 class Signal:
   id: str
@@ -20,6 +26,7 @@ class Signal:
   source_url: str
   source_name: str
   published_date: str
+  summary: str
   score: float
   previous_score: float | None
   status: str
@@ -29,6 +36,8 @@ class Signal:
   next_action: str
   tags: list[str] = field(default_factory=list)
   companies: list[str] = field(default_factory=list)
+  language: str = ""
+  memo: str = ""
 
   @classmethod
   def from_dict(cls, raw: dict[str, Any]) -> "Signal":
@@ -39,8 +48,9 @@ class Signal:
       source_url=str(raw.get("source_url", "")).strip(),
       source_name=str(raw.get("source_name", "")).strip(),
       published_date=str(raw.get("published_date", "")).strip(),
-      score=float(raw.get("score", 0.0)),
-      previous_score=None if raw.get("previous_score") is None else float(raw.get("previous_score")),
+      summary=str(raw.get("summary", "")).strip(),
+      score=float(raw.get("score", 0.0) or 0.0),
+      previous_score=_to_optional_float(raw.get("previous_score")),
       status=str(raw.get("status", "Stable")).strip(),
       action=str(raw.get("action", "Watch")).strip(),
       why_read=str(raw.get("why_read", "")).strip(),
@@ -48,6 +58,8 @@ class Signal:
       next_action=str(raw.get("next_action", "")).strip(),
       tags=[str(tag).strip() for tag in raw.get("tags", []) if str(tag).strip()],
       companies=[str(company).strip() for company in raw.get("companies", []) if str(company).strip()],
+      language=str(raw.get("language", "")).strip(),
+      memo=str(raw.get("memo", "")).strip(),
     )
 
   def to_dict(self) -> dict[str, Any]:

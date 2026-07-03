@@ -28,6 +28,12 @@ SOURCE_MODE_LABELS_JA = {
   "off": "停止中",
 }
 
+DATA_SOURCE_MODE_LABELS_JA = {
+  "demo": "デモデータ",
+  "csv": "CSVアップロード",
+  "json": "JSONアップロード",
+}
+
 CADENCE_LABELS_JA = {
   "weekly": "毎週",
   "biweekly": "隔週",
@@ -79,6 +85,10 @@ def action_label_ja(value: str) -> str:
 
 def source_mode_label_ja(value: str) -> str:
   return SOURCE_MODE_LABELS_JA.get(value, value)
+
+
+def data_source_mode_label_ja(value: str) -> str:
+  return DATA_SOURCE_MODE_LABELS_JA.get(value, value)
 
 
 def cadence_label_ja(value: str) -> str:

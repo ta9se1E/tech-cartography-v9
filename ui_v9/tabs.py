@@ -20,6 +20,7 @@ from ui_v9.labels import (
   action_label_ja,
   bool_label_ja,
   cadence_label_ja,
+  data_source_mode_label_ja,
   source_mode_label_ja,
   status_label_ja,
   type_label_ja,
@@ -99,9 +100,9 @@ def render_theme_setup_tab(profile_summary: dict[str, object], profile_status_me
   with upper_right:
     st.checkbox("デモモード", key="ui_demo_mode_input")
     st.markdown("**外部API:** 停止中")
-    st.markdown("**実行モード:** ローカルのデモデータのみ")
+    st.markdown("**実行モード:** ローカルのデモデータ / アップロードCSV/JSONのみ")
     st.markdown("**メール / スケジューラ:** プレビューのみ / 停止中")
-    st.caption("現在はデモモードです。BigQuery、OpenAlex、Web検索、Gemini APIは実行しません。")
+    st.caption("現在はローカル実行のみです。BigQuery、OpenAlex、Web検索、Gemini APIは実行しません。")
     st.text_area(
       "コアキーワード 日本語",
       key="ui_core_ja_input",
@@ -157,9 +158,59 @@ def render_theme_setup_tab(profile_summary: dict[str, object], profile_status_me
   }
 
 
-def render_sources_tab(source_rows: Sequence[dict[str, object]], operation_rows: Sequence[dict[str, str]]) -> None:
+def render_sources_tab(
+  source_rows: Sequence[dict[str, object]],
+  operation_rows: Sequence[dict[str, str]],
+  source_info: dict[str, object],
+  csv_template_text: str,
+  json_template_text: str,
+) -> None:
   st.subheader("情報源")
   st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
+  st.radio(
+    "データ投入モード",
+    options=["demo", "csv", "json"],
+    format_func=data_source_mode_label_ja,
+    key="ui_data_source_mode",
+    horizontal=True,
+  )
+  st.caption(f"現在のデータ投入モード: {data_source_mode_label_ja(str(source_info['requested_mode']))}")
+  st.info(
+    "このPhaseでは外部検索は実行しません。アップロードされたCSV/JSONを注目シグナルとして読み込み、"
+    "Watch Profileに基づく仮スコアを付けます。"
+  )
+
+  upload_left, upload_right = st.columns(2)
+  with upload_left:
+    st.markdown("### CSVアップロード")
+    st.file_uploader("CSVファイル", type=["csv"], key="ui_csv_upload")
+    st.download_button(
+      "CSVテンプレートをダウンロード",
+      data=csv_template_text,
+      file_name="v9_signal_upload_template.csv",
+      mime="text/csv",
+      use_container_width=True,
+    )
+  with upload_right:
+    st.markdown("### JSONアップロード")
+    st.file_uploader("JSONファイル", type=["json"], key="ui_json_upload")
+    st.download_button(
+      "JSONテンプレートをダウンロード",
+      data=json_template_text,
+      file_name="v9_signal_upload_template.json",
+      mime="application/json",
+      use_container_width=True,
+    )
+
+  st.write(f"- 現在のデータソース: {source_info['label']}")
+  st.write(f"- 読み込み件数: {source_info['loaded_count']}件")
+  if source_info.get("provisional_scoring"):
+    st.caption("アップロードデータは Watch Profile に基づく仮スコアリング済みです。既存スコアがある場合はその値を尊重します。")
+  warnings = list(source_info.get("warnings", []))
+  if warnings:
+    st.markdown("### 読み込み警告")
+    for warning in warnings:
+      st.warning(str(warning))
 
   for row in source_rows:
     st.markdown(
@@ -177,12 +228,16 @@ def render_sources_tab(source_rows: Sequence[dict[str, object]], operation_rows:
 
 def render_top_signals_tab(
   signals: Sequence[Signal],
+  source_info: dict[str, object],
   snapshot_status_message: str | None = None,
 ) -> dict[str, bool]:
   st.subheader("注目シグナル")
   top_signals = select_diverse_top_signals(signals, top_n=10, max_per_type=4)
   top_reads = select_top_reads(top_signals, limit=3)
   diversity_counts = build_diversity_counts(signals)
+  st.caption(f"現在のデータソース: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
+  if source_info.get("provisional_scoring"):
+    st.info("アップロードデータは仮スコアリング済みです。これは外部APIなしの簡易評価です。")
 
   st.markdown("### 今週まず読むべき3件")
   if not top_reads:
@@ -269,6 +324,7 @@ def render_top_signals_tab(
 
 def render_weekly_updates_tab(
   signals: Sequence[Signal],
+  source_info: dict[str, object],
   snapshot_options: Sequence[str],
   diff_result: dict | None,
   drift: dict[str, object],
@@ -277,6 +333,7 @@ def render_weekly_updates_tab(
   compare_status_message: str | None = None,
 ) -> dict[str, bool]:
   st.subheader("週次更新")
+  st.caption(f"現在の比較対象データ: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
   st.selectbox(
     "前回スナップショット選択",
     options=list(snapshot_options) if snapshot_options else ["利用可能なスナップショットはありません"],
@@ -452,10 +509,12 @@ def render_digest_export_tab(
   markdown_text: str,
   csv_text: str,
   json_text: str,
+  source_info: dict[str, object],
   digest_status_message: str | None = None,
 ) -> dict[str, bool]:
   st.subheader("ダイジェスト / エクスポート")
   st.caption("メール配信: プレビューのみ / 停止中")
+  st.caption(f"現在のデータソース: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
   st.markdown(markdown_text)
 
   button_left, button_mid, button_right = st.columns(3)

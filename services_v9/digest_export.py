@@ -24,7 +24,12 @@ LIGHTWEIGHT_NOTE = (
 )
 
 
-def build_weekly_digest_markdown(signals: Sequence[Signal], watch_profile: WatchProfile) -> str:
+def build_weekly_digest_markdown(
+  signals: Sequence[Signal],
+  watch_profile: WatchProfile,
+  data_source: str = "デモデータ",
+  loaded_count: int | None = None,
+) -> str:
   ranked = select_diverse_top_signals(signals, top_n=10)
   top_reads = select_top_reads(ranked, limit=3)
   buckets = summarize_status_buckets(ranked)
@@ -70,6 +75,9 @@ def build_weekly_digest_markdown(signals: Sequence[Signal], watch_profile: Watch
       f"追加候補公報一覧: "
       f"{', '.join(profile_summary['candidate_publications']) if profile_summary['candidate_publications'] else 'なし'}"
     ),
+    "",
+    f"データソース: {data_source}",
+    f"読み込み件数: {loaded_count if loaded_count is not None else len(signals)}件",
     "",
     "## 今週まず読むべき3件",
   ]
@@ -179,10 +187,17 @@ def signals_to_csv(signals: Sequence[Signal]) -> str:
   return output.getvalue()
 
 
-def signals_to_json(signals: Sequence[Signal], watch_profile: WatchProfile) -> str:
+def signals_to_json(
+  signals: Sequence[Signal],
+  watch_profile: WatchProfile,
+  data_source: str = "デモデータ",
+  loaded_count: int | None = None,
+) -> str:
   payload = {
     "app": "Tech Cartography v9",
     "mode": "lightweight_demo",
+    "data_source": data_source,
+    "loaded_count": loaded_count if loaded_count is not None else len(signals),
     "watch_profile": watch_profile.to_dict(),
     "watch_profile_summary": watch_profile_summary(watch_profile.to_dict()),
     "signals": [signal.to_dict() for signal in signals],

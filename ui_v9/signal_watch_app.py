@@ -7,6 +7,8 @@ from pathlib import Path
 import streamlit as st
 
 from services_v9.demo_data import (
+  SAMPLE_UPLOAD_CSV_PATH,
+  SAMPLE_UPLOAD_JSON_PATH,
   build_operation_status_rows,
   build_source_rows,
   load_demo_signals_payload,
@@ -23,6 +25,11 @@ from services_v9.persistence import (
   save_watch_profile,
 )
 from services_v9.query_preview import build_query_preview_bundle
+from services_v9.signal_loader import (
+  enrich_signals_with_profile,
+  load_signals_from_csv_text,
+  load_signals_from_json_text,
+)
 from services_v9.signal_models import Signal, WatchProfile
 from services_v9.signal_scoring import (
   apply_watch_profile_suggestions,
@@ -30,8 +37,10 @@ from services_v9.signal_scoring import (
   enrich_signals,
   suggest_watch_profile_updates,
 )
+from services_v9.signal_template import build_csv_template, build_json_template
 from services_v9.snapshot_diff import apply_snapshot_status, compare_snapshots
 from services_v9.watch_profile_schema import build_profile_from_form, watch_profile_summary
+from ui_v9.labels import data_source_mode_label_ja
 from ui_v9.tabs import (
   V9_TAB_LABELS,
   render_digest_export_tab,
@@ -63,6 +72,9 @@ UI_CADENCE_KEY = "ui_cadence_input"
 UI_PRIORITY_RULES_KEY = "ui_priority_rules_input"
 UI_SNAPSHOT_NOTE_KEY = "ui_snapshot_run_note"
 UI_PREVIOUS_SNAPSHOT_CHOICE_KEY = "ui_previous_snapshot_choice"
+UI_DATA_SOURCE_MODE_KEY = "ui_data_source_mode"
+UI_CSV_UPLOAD_KEY = "ui_csv_upload"
+UI_JSON_UPLOAD_KEY = "ui_json_upload"
 
 STATE_PENDING_PROFILE = "state_pending_watch_profile"
 STATE_PROFILE_MESSAGE = "state_profile_status_message"
@@ -73,6 +85,9 @@ STATE_PREVIOUS_SNAPSHOT = "state_previous_snapshot_payload"
 STATE_COMPARE_ENABLED = "state_compare_enabled"
 STATE_LAST_SNAPSHOT_PATH = "state_last_snapshot_path"
 STATE_LAST_SNAPSHOT_ID = "state_last_snapshot_id"
+STATE_CURRENT_SOURCE_INFO = "state_current_source_info"
+STATE_UPLOADED_SIGNALS = "state_uploaded_signals"
+STATE_UPLOAD_WARNINGS = "state_upload_warnings"
 
 
 @st.cache_data(show_spinner=False)
@@ -116,6 +131,7 @@ def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(UI_DEMO_KEY, True)
   st.session_state.setdefault(UI_SNAPSHOT_NOTE_KEY, "")
   st.session_state.setdefault(STATE_COMPARE_ENABLED, False)
+  st.session_state.setdefault(UI_DATA_SOURCE_MODE_KEY, "demo")
   if UI_THEME_NAME_KEY not in st.session_state:
     _set_profile_widgets(profile_dict)
 
@@ -142,6 +158,106 @@ def _build_ui_watch_profile_dict() -> dict[str, object]:
       "ui_priority_rules_input": st.session_state.get(UI_PRIORITY_RULES_KEY, ""),
     }
   )
+
+
+def _decode_uploaded_text(uploaded_file) -> tuple[str | None, list[str]]:
+  if uploaded_file is None:
+    return None, []
+  raw = uploaded_file.getvalue()
+  for encoding in ("utf-8-sig", "utf-8", "cp932"):
+    try:
+      return raw.decode(encoding), []
+    except UnicodeDecodeError:
+      continue
+  return None, ["アップロードファイルの文字コードを判定できませんでした。UTF-8 のCSV/JSONを使用してください。"]
+
+
+def _resolve_current_signal_source(
+  raw_demo_signals: list[dict[str, object]],
+  watch_profile_dict: dict[str, object],
+) -> dict[str, object]:
+  mode = str(st.session_state.get(UI_DATA_SOURCE_MODE_KEY, "demo"))
+  csv_file = st.session_state.get(UI_CSV_UPLOAD_KEY)
+  json_file = st.session_state.get(UI_JSON_UPLOAD_KEY)
+
+  demo_signals = [signal.to_dict() for signal in enrich_signals([Signal.from_dict(item) for item in raw_demo_signals])]
+  warnings: list[str] = []
+
+  if mode == "csv":
+    if csv_file is None:
+      warnings.append("CSVアップロードモードですが、まだCSVファイルが選択されていません。デモデータを表示します。")
+    else:
+      text, decode_warnings = _decode_uploaded_text(csv_file)
+      warnings.extend(decode_warnings)
+      if text is not None:
+        records, load_warnings = load_signals_from_csv_text(text)
+        prepared = sorted(
+          enrich_signals_with_profile(records, watch_profile_dict),
+          key=lambda item: (
+            float(item.get("score", 0.0)),
+            str(item.get("published_date", "")),
+            str(item.get("title", "")),
+          ),
+          reverse=True,
+        )
+        warnings.extend(load_warnings)
+        if prepared:
+          return {
+            "requested_mode": mode,
+            "mode": "csv",
+            "label": data_source_mode_label_ja("csv"),
+            "signals": prepared,
+            "loaded_count": len(prepared),
+            "warnings": warnings,
+            "provisional_scoring": True,
+            "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
+            "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
+          }
+        warnings.append("CSVから有効なシグナルを読み込めなかったため、デモデータを表示します。")
+
+  if mode == "json":
+    if json_file is None:
+      warnings.append("JSONアップロードモードですが、まだJSONファイルが選択されていません。デモデータを表示します。")
+    else:
+      text, decode_warnings = _decode_uploaded_text(json_file)
+      warnings.extend(decode_warnings)
+      if text is not None:
+        records, load_warnings = load_signals_from_json_text(text)
+        prepared = sorted(
+          enrich_signals_with_profile(records, watch_profile_dict),
+          key=lambda item: (
+            float(item.get("score", 0.0)),
+            str(item.get("published_date", "")),
+            str(item.get("title", "")),
+          ),
+          reverse=True,
+        )
+        warnings.extend(load_warnings)
+        if prepared:
+          return {
+            "requested_mode": mode,
+            "mode": "json",
+            "label": data_source_mode_label_ja("json"),
+            "signals": prepared,
+            "loaded_count": len(prepared),
+            "warnings": warnings,
+            "provisional_scoring": True,
+            "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
+            "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
+          }
+        warnings.append("JSONから有効なシグナルを読み込めなかったため、デモデータを表示します。")
+
+  return {
+    "requested_mode": mode,
+    "mode": "demo",
+    "label": data_source_mode_label_ja("demo"),
+    "signals": demo_signals,
+    "loaded_count": len(demo_signals),
+    "warnings": warnings,
+    "provisional_scoring": False,
+    "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
+    "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
+  }
 
 
 def _build_snapshot_history() -> tuple[list[str], dict[str, Path], list[dict[str, str]]]:
@@ -211,9 +327,17 @@ def run_app() -> None:
   watch_profile = WatchProfile.from_dict(watch_profile_dict)
   profile_summary = watch_profile_summary(watch_profile_dict)
   query_previews = build_query_preview_bundle(watch_profile_dict)
+  csv_template_text = build_csv_template()
+  json_template_text = build_json_template()
+  source_info = _resolve_current_signal_source(raw_signals, watch_profile_dict)
+  st.session_state[STATE_CURRENT_SOURCE_INFO] = source_info
+  st.session_state[STATE_UPLOAD_WARNINGS] = list(source_info["warnings"])
+  if source_info["mode"] in {"csv", "json"}:
+    st.session_state[STATE_UPLOADED_SIGNALS] = list(source_info["signals"])
+  else:
+    st.session_state.pop(STATE_UPLOADED_SIGNALS, None)
 
-  base_signals = enrich_signals([Signal.from_dict(item) for item in raw_signals])
-  current_signal_dicts = [signal.to_dict() for signal in base_signals]
+  current_signal_dicts = list(source_info["signals"])
 
   snapshot_labels, snapshot_map, history_rows = _build_snapshot_history()
   previous_snapshot_payload = st.session_state.get(STATE_PREVIOUS_SNAPSHOT)
@@ -224,20 +348,35 @@ def run_app() -> None:
     current_signal_dicts = apply_snapshot_status(current_signal_dicts, previous_snapshot_payload.get("signals", []))
     diff_result = compare_snapshots(previous_snapshot_payload.get("signals", []), current_signal_dicts)
 
-  signals = enrich_signals([Signal.from_dict(item) for item in current_signal_dicts])
+  signals = sorted(
+    [Signal.from_dict(item) for item in current_signal_dicts],
+    key=lambda item: (item.score, item.published_date, item.title),
+    reverse=True,
+  )
   suggestions = suggest_watch_profile_updates(signals, watch_profile)
   drift = compute_theme_drift_alert(signals, watch_profile)
   source_rows = build_source_rows(signals)
   operation_rows = build_operation_status_rows()
-  markdown_text = build_weekly_digest_markdown(signals, watch_profile)
+  markdown_text = build_weekly_digest_markdown(
+    signals,
+    watch_profile,
+    data_source=str(source_info["label"]),
+    loaded_count=int(source_info["loaded_count"]),
+  )
   csv_text = signals_to_csv(signals)
-  json_text = signals_to_json(signals, watch_profile)
+  json_text = signals_to_json(
+    signals,
+    watch_profile,
+    data_source=str(source_info["label"]),
+    loaded_count=int(source_info["loaded_count"]),
+  )
 
   st.title("Tech Cartography v9")
   st.caption("軽量R&Dシグナル監視エージェント")
   render_notice()
   st.caption(
-    "ローカルのデモデータのみで動作します。BigQuery、OpenAlex、Web検索、OCR、PDFスキャン、"
+    "ローカルのデモデータまたはアップロードされたCSV/JSONのみで動作します。"
+    "BigQuery、OpenAlex、Web検索、OCR、PDFスキャン、"
     "スケジューラ、外部APIは起動時に実行しません。"
   )
 
@@ -245,12 +384,23 @@ def run_app() -> None:
   with tabs[0]:
     theme_events = render_theme_setup_tab(profile_summary, st.session_state.get(STATE_PROFILE_MESSAGE))
   with tabs[1]:
-    render_sources_tab(source_rows, operation_rows)
+    render_sources_tab(
+      source_rows,
+      operation_rows,
+      source_info,
+      csv_template_text,
+      json_template_text,
+    )
   with tabs[2]:
-    signal_events = render_top_signals_tab(signals, st.session_state.get(STATE_SNAPSHOT_MESSAGE))
+    signal_events = render_top_signals_tab(
+      signals,
+      source_info,
+      st.session_state.get(STATE_SNAPSHOT_MESSAGE),
+    )
   with tabs[3]:
     weekly_events = render_weekly_updates_tab(
       signals,
+      source_info,
       snapshot_labels,
       diff_result,
       drift,
@@ -267,7 +417,13 @@ def run_app() -> None:
       st.session_state.get(STATE_PROFILE_MESSAGE),
     )
   with tabs[5]:
-    digest_events = render_digest_export_tab(markdown_text, csv_text, json_text, st.session_state.get(STATE_DIGEST_MESSAGE))
+    digest_events = render_digest_export_tab(
+      markdown_text,
+      csv_text,
+      json_text,
+      source_info,
+      st.session_state.get(STATE_DIGEST_MESSAGE),
+    )
 
   if theme_events["save_profile"] or profile_events["save_profile"]:
     _save_profile_and_rerun(watch_profile_dict)

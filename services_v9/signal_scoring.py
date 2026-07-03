@@ -132,7 +132,7 @@ def compute_theme_drift_alert(signals: Sequence[Signal], watch_profile: WatchPro
 
   low_overlap: list[Signal] = []
   for signal in reviewed:
-    searchable = " ".join([signal.title, *signal.tags, *signal.companies]).lower()
+    searchable = " ".join([signal.title, signal.summary, *signal.tags, *signal.companies]).lower()
     matches = sum(1 for keyword in include_keywords if keyword in searchable)
     if matches == 0:
       low_overlap.append(signal)
