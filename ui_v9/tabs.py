@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Sequence
 
 import streamlit as st
@@ -10,106 +9,123 @@ import streamlit as st
 from services_v9.signal_models import Signal, WatchProfile
 from services_v9.signal_scoring import (
   build_diversity_counts,
-  compute_theme_drift_alert,
   format_score_delta,
   select_diverse_top_signals,
   select_top_reads,
   summarize_status_buckets,
 )
-
-V9_TAB_LABELS = [
-  "Theme Setup",
-  "Sources",
-  "Top Signals",
-  "Weekly Updates",
-  "Watch Profile",
-  "Digest / Export",
-]
-
-FORBIDDEN_UI_LABELS = [
-  "PDF Deep Dive",
-  "Google Vision OCR",
-  "PDF Upload",
-  "Claim Map",
-  "Evidence Map",
-  "Gap",
-  "Strategic Brief",
-  "Pipeline Doctor",
-  "Publication Identity Guard",
-  "Quarantine",
-]
-
-NOTICE_EN = (
-  "v9 is a lightweight R&D signal watch preview. "
-  "It does not perform PDF/OCR deep dive, claim interpretation, legal judgment, "
-  "FTO judgment, infringement judgment, patentability judgment, or technical validation."
+from ui_v9.labels import (
+  FORBIDDEN_UI_LABELS,
+  V9_TAB_LABELS,
+  action_label_ja,
+  bool_label_ja,
+  cadence_label_ja,
+  source_mode_label_ja,
+  status_label_ja,
+  type_label_ja,
+  watch_profile_suggestion_label_ja,
 )
+
 NOTICE_JA = (
   "v9は軽量なR&Dシグナル監視プレビューです。"
-  "PDF/OCR深掘り、クレーム解釈、法的判断、FTO判断、侵害判断、特許性判断、"
-  "技術的妥当性の証明は行いません。"
+  "PDF/OCR深掘り、クレーム解釈、法的判断、FTO判断、侵害判断、"
+  "特許性判断、技術的妥当性の証明は行いません。"
 )
 
 
 def render_notice() -> None:
-  st.info(f"{NOTICE_EN}\n\n{NOTICE_JA}")
+  st.info(NOTICE_JA)
 
 
-def render_theme_setup_tab(watch_profile: WatchProfile) -> None:
+def _show_status_message(message: str | None, kind: str = "success") -> None:
+  if not message:
+    return
+  if kind == "warning":
+    st.warning(message)
+  elif kind == "error":
+    st.error(message)
+  else:
+    st.success(message)
+
+
+def render_theme_setup_tab(profile_status_message: str | None = None) -> dict[str, bool]:
   st.subheader("Tech Cartography v9")
-  st.caption("Lightweight R&D Signal Watch Agent")
+  st.caption("軽量R&Dシグナル監視エージェント")
 
   left, right = st.columns([2, 1])
   with left:
-    st.text_area("Research Theme", key="v9_theme", height=100)
-    st.text_input("Monitoring Goal", key="v9_watch_goal")
+    st.text_area("研究テーマ", key="ui_theme_input", height=100)
+    st.text_input("監視目的", key="ui_watch_goal_input")
   with right:
-    st.checkbox("Demo Mode", key="v9_demo_mode")
-    st.markdown("**External APIs:** OFF")
-    st.markdown("**Runtime mode:** local demo data only")
-    st.markdown("**Email / Scheduler:** Preview only / OFF")
+    st.checkbox("デモモード", key="ui_demo_mode_input")
+    st.markdown("**外部API:** 停止中")
+    st.markdown("**実行モード:** ローカルのデモデータのみ")
+    st.markdown("**メール / スケジューラ:** プレビューのみ / 停止中")
 
   st.caption(
-    "Initial theme example: PAN系炭素繊維のサイジング、表面処理、界面接着、"
+    "現在はデモモードです。BigQuery、OpenAlex、Web検索、Gemini APIは実行しません。"
+  )
+  st.caption(
+    "初期テーマ例: PAN系炭素繊維のサイジング、表面処理、界面接着、"
     "ストランド引張弾性率"
   )
-  st.write("Current watch cadence:", watch_profile.cadence)
+
+  button_left, button_right = st.columns(2)
+  with button_left:
+    save_clicked = st.button("監視プロファイルを保存", key="btn_theme_save_profile", width="stretch")
+  with button_right:
+    load_clicked = st.button("保存済み監視プロファイルを読み込む", key="btn_theme_load_profile", width="stretch")
+
+  _show_status_message(profile_status_message)
+  return {
+    "save_profile": save_clicked,
+    "load_profile": load_clicked,
+  }
 
 
-def render_sources_tab(source_rows: Sequence[dict[str, object]], operation_rows: Sequence[str]) -> None:
-  st.subheader("Sources")
-  st.caption("Patent / Paper / Web / Company are shown as lightweight local or staged preview sources only.")
+def render_sources_tab(source_rows: Sequence[dict[str, object]], operation_rows: Sequence[dict[str, str]]) -> None:
+  st.subheader("情報源")
+  st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
 
   for row in source_rows:
     st.markdown(
-      f"- **{row['source_type']}** | enabled: `{row['enabled']}` | mode: `{row['mode']}` | "
-      f"TopN: `{row['top_n']}` | last updated: `{row['last_updated']}` | note: {row['note']}"
+      f"- **{type_label_ja(str(row['source_type']))}** | "
+      f"有効/無効: `{bool_label_ja(bool(row['enabled']))}` | "
+      f"モード: `{source_mode_label_ja(str(row['mode']))}` | "
+      f"取得件数: `{row['top_n']}` | 最終更新: `{row['last_updated']}` | メモ: {row['note']}"
     )
 
-  st.markdown("### Operation Status")
+  st.markdown("### 個別ステータス")
   for item in operation_rows:
-    st.write(f"- {item}")
+    label = type_label_ja(item["label"]) if item["label"] in {"patent", "paper", "web", "company"} else item["label"]
+    st.write(f"- {label}: {source_mode_label_ja(item['mode'])}")
 
 
-def render_top_signals_tab(signals: Sequence[Signal]) -> None:
-  st.subheader("Top Signals")
+def render_top_signals_tab(
+  signals: Sequence[Signal],
+  snapshot_status_message: str | None = None,
+) -> dict[str, bool]:
+  st.subheader("注目シグナル")
   top_signals = select_diverse_top_signals(signals, top_n=10, max_per_type=4)
   top_reads = select_top_reads(top_signals, limit=3)
   diversity_counts = build_diversity_counts(signals)
 
-  st.markdown("### 今週読むべき3件 / This Week's Top 3 Reads")
+  st.markdown("### 今週まず読むべき3件")
   if not top_reads:
-    st.info("Top read candidates are not available yet.")
+    st.info("今週優先して読む候補はまだありません。")
   else:
     columns = st.columns(len(top_reads))
     for column, signal in zip(columns, top_reads):
       with column:
         st.markdown(f"**{signal.title}**")
-        st.caption(f"{signal.type} | score {signal.score:.2f} | {signal.status} | {signal.action}")
+        st.caption(
+          f"{type_label_ja(signal.type)} | スコア {signal.score:.2f} | "
+          f"{status_label_ja(signal.status)} | {action_label_ja(signal.action)}"
+        )
         st.write(signal.why_read)
-        st.write(f"次の確認: {signal.what_to_check}")
-        st.write(f"次アクション: {signal.next_action}")
-        st.markdown(f"[Source URL]({signal.source_url})")
+        st.write(f"確認すべき点: {signal.what_to_check}")
+        st.write(f"次の行動: {signal.next_action}")
+        st.markdown(f"[出典URLを開く]({signal.source_url})")
 
   available_types = sorted({signal.type for signal in top_signals})
   available_statuses = ["New", "Rising", "Dropped", "Stable"]
@@ -117,58 +133,134 @@ def render_top_signals_tab(signals: Sequence[Signal]) -> None:
 
   filter_left, filter_mid, filter_right = st.columns(3)
   with filter_left:
-    selected_types = st.multiselect("Type filter", available_types, default=available_types)
+    selected_types = st.multiselect(
+      "種別フィルター",
+      available_types,
+      default=available_types,
+      format_func=type_label_ja,
+      key="ui_type_filter",
+    )
   with filter_mid:
-    selected_statuses = st.multiselect("Status filter", available_statuses, default=available_statuses)
+    selected_statuses = st.multiselect(
+      "変化フィルター",
+      available_statuses,
+      default=available_statuses,
+      format_func=status_label_ja,
+      key="ui_status_filter",
+    )
   with filter_right:
-    selected_actions = st.multiselect("Action filter", available_actions, default=available_actions)
+    selected_actions = st.multiselect(
+      "判断フィルター",
+      available_actions,
+      default=available_actions,
+      format_func=action_label_ja,
+      key="ui_action_filter",
+    )
 
   filtered = [
     signal for signal in top_signals
     if signal.type in selected_types and signal.status in selected_statuses and signal.action in selected_actions
   ]
 
-  diversity_text = ", ".join(f"{signal_type}: {count}" for signal_type, count in diversity_counts.items())
-  st.caption(f"Diversity Control: {diversity_text} (same type capped at 4 in Top 10)")
-  st.caption("Top 10 is score-sorted after lightweight diversity balancing.")
+  diversity_text = " / ".join(
+    f"{type_label_ja(signal_type)}: {count}" for signal_type, count in diversity_counts.items()
+  )
+  st.caption("同じ種別に偏りすぎないように、特許・論文・Web情報・企業情報をバランスよく表示します。")
+  st.caption(f"簡易的な多様性制御: {diversity_text}")
 
   if not filtered:
-    st.warning("No signals match the current filters.")
-    return
+    st.warning("現在のフィルター条件に一致するシグナルはありません。")
+  else:
+    st.markdown("### 注目シグナル一覧")
+    for index, signal in enumerate(filtered, start=1):
+      st.markdown(f"#### {index}. {signal.title}")
+      st.caption(
+        f"種別: {type_label_ja(signal.type)} | スコア: {signal.score:.2f} | "
+        f"変化: {status_label_ja(signal.status)} | 判断: {action_label_ja(signal.action)} | "
+        f"公開日: {signal.published_date}"
+      )
+      st.write(f"**なぜ読むべきか:** {signal.why_read}")
+      st.write(f"**確認すべき点:** {signal.what_to_check}")
+      st.write(f"**次の行動:** {signal.next_action}")
+      st.write(f"**出典名:** {signal.source_name}")
+      st.write(f"**タグ:** {', '.join(signal.tags) if signal.tags else 'なし'}")
+      st.write(f"**関連企業:** {', '.join(signal.companies) if signal.companies else 'なし'}")
+      st.markdown(f"[出典URLを開く]({signal.source_url})")
 
-  for index, signal in enumerate(filtered, start=1):
-    st.markdown(f"#### {index}. {signal.title}")
+  st.text_input("実行メモ", key="ui_snapshot_run_note")
+  save_snapshot_clicked = st.button("現在のスナップショットを保存", key="btn_save_snapshot", width="stretch")
+  _show_status_message(snapshot_status_message)
+  return {"save_snapshot": save_snapshot_clicked}
+
+
+def render_weekly_updates_tab(
+  signals: Sequence[Signal],
+  snapshot_options: Sequence[str],
+  diff_result: dict | None,
+  drift: dict[str, object],
+  history_rows: Sequence[dict[str, str]],
+  previous_snapshot_info: dict | None,
+  compare_status_message: str | None = None,
+) -> dict[str, bool]:
+  st.subheader("週次更新")
+  st.selectbox(
+    "前回スナップショット選択",
+    options=list(snapshot_options) if snapshot_options else ["利用可能なスナップショットはありません"],
+    key="ui_previous_snapshot_choice",
+  )
+
+  button_left, button_right = st.columns(2)
+  with button_left:
+    load_clicked = st.button("前回スナップショットを読み込む", key="btn_load_previous_snapshot", width="stretch")
+  with button_right:
+    compare_clicked = st.button("現在データと比較", key="btn_compare_snapshot", width="stretch")
+
+  _show_status_message(compare_status_message)
+  if previous_snapshot_info:
     st.caption(
-      f"type: {signal.type} | score: {signal.score:.2f} | status: {signal.status} | "
-      f"action: {signal.action} | published: {signal.published_date}"
+      f"読み込み中の前回スナップショット: {previous_snapshot_info.get('snapshot_id', 'n/a')} "
+      f"（{previous_snapshot_info.get('created_at', 'n/a')}）"
     )
-    st.write(f"**Why read:** {signal.why_read}")
-    st.write(f"**What to check:** {signal.what_to_check}")
-    st.write(f"**Next action:** {signal.next_action}")
-    st.write(f"**Source:** {signal.source_name}")
-    st.write(f"**Tags:** {', '.join(signal.tags) if signal.tags else 'n/a'}")
-    st.write(f"**Companies:** {', '.join(signal.companies) if signal.companies else 'n/a'}")
-    st.markdown(f"[Open source URL]({signal.source_url})")
 
+  if diff_result:
+    counts = diff_result["counts"]
+    metrics = st.columns(4)
+    for column, status in zip(metrics, ("New", "Rising", "Dropped", "Stable")):
+      column.metric(status_label_ja(status), counts.get(status, 0))
 
-def render_weekly_updates_tab(signals: Sequence[Signal], watch_profile: WatchProfile) -> None:
-  st.subheader("Weekly Updates")
-  buckets = summarize_status_buckets(signals)
-  metrics = st.columns(4)
-  for column, status in zip(metrics, ("New", "Rising", "Dropped", "Stable")):
-    column.metric(status, len(buckets[status]))
+    st.markdown("### 前回Digestとの差分サマリー")
+    st.write(diff_result["summary"])
+    for status in ("New", "Rising", "Dropped", "Stable"):
+      items = diff_result["buckets"].get(status, [])
+      if not items:
+        st.write(f"- **{status_label_ja(status)}**: 0件")
+        continue
+      lead = items[0]
+      title = lead.get("title", "タイトルなし")
+      score_text = ""
+      if "score" in lead:
+        try:
+          signal = Signal.from_dict(lead)
+          score_text = f" | {format_score_delta(signal)}"
+        except Exception:
+          score_text = ""
+      st.write(f"- **{status_label_ja(status)}**: {len(items)}件 | 代表シグナル: {title}{score_text}")
 
-  st.markdown("### Difference Summary")
-  for status in ("New", "Rising", "Dropped", "Stable"):
-    items = buckets[status]
-    if not items:
-      st.write(f"- **{status}**: 0 items")
-      continue
-    lead = items[0]
-    st.write(f"- **{status}**: {len(items)} items | representative signal: {lead.title} | {format_score_delta(lead)}")
+    st.markdown("### 前回から消えたシグナル")
+    missing_signals = diff_result.get("missing_signals", [])
+    if not missing_signals:
+      st.write("- 前回から消えたシグナルはありません。")
+    else:
+      for item in missing_signals:
+        st.write(f"- {item.get('title', 'タイトルなし')} | 前回スコア: {item.get('score', 'n/a')}")
+  else:
+    buckets = summarize_status_buckets(signals)
+    metrics = st.columns(4)
+    for column, status in zip(metrics, ("New", "Rising", "Dropped", "Stable")):
+      column.metric(status_label_ja(status), len(buckets[status]))
+    st.info("前回スナップショットを読み込んで比較すると、差分サマリーを表示できます。")
 
-  drift = compute_theme_drift_alert(signals, watch_profile)
-  st.markdown("### Theme Drift Alert")
+  st.markdown("### テーマずれアラート")
   if drift["level"] == "warning":
     st.warning(str(drift["message"]))
   elif drift["level"] == "success":
@@ -176,41 +268,107 @@ def render_weekly_updates_tab(signals: Sequence[Signal], watch_profile: WatchPro
   else:
     st.info(str(drift["message"]))
   if drift["examples"]:
-    st.caption("Low-overlap examples: " + ", ".join(str(item) for item in drift["examples"]))
+    st.caption("監視キーワードとの一致が弱い例: " + " / ".join(str(item) for item in drift["examples"]))
+
+  st.markdown("### 週次run履歴")
+  if not history_rows:
+    st.write("- 保存済みrun履歴はまだありません。")
+  else:
+    for row in history_rows:
+      st.write(f"- {row['snapshot_id']} | {row['created_at']} | メモ: {row['run_note'] or 'なし'}")
+
+  return {
+    "load_previous_snapshot": load_clicked,
+    "compare_snapshot": compare_clicked,
+  }
 
 
-def render_watch_profile_tab(watch_profile: WatchProfile, suggestions: Sequence[str]) -> None:
-  st.subheader("Watch Profile")
-  st.write(f"**theme:** {watch_profile.theme}")
-  st.write(f"**include keywords:** {', '.join(watch_profile.include_keywords)}")
-  st.write(f"**exclude keywords:** {', '.join(watch_profile.exclude_keywords) if watch_profile.exclude_keywords else 'n/a'}")
-  st.write(f"**target companies:** {', '.join(watch_profile.target_companies) if watch_profile.target_companies else 'n/a'}")
-  st.write(f"**source types:** {', '.join(watch_profile.source_types)}")
-  st.write(f"**countries:** {', '.join(watch_profile.countries) if watch_profile.countries else 'n/a'}")
-  st.write(f"**cadence:** {watch_profile.cadence}")
-  st.write(f"**priority rules:** {', '.join(watch_profile.priority_rules) if watch_profile.priority_rules else 'n/a'}")
+def render_watch_profile_tab(
+  watch_profile: WatchProfile,
+  suggestions: Sequence[str],
+  profile_status_message: str | None = None,
+) -> dict[str, bool]:
+  st.subheader("監視プロファイル")
 
-  st.markdown("### Suggested Watch Profile Updates")
-  for suggestion in suggestions:
-    st.write(f"- {suggestion}")
+  st.text_area(
+    "含めるキーワード",
+    key="ui_include_keywords_input",
+    height=110,
+    help="1行に1件、またはカンマ区切りで入力できます。",
+  )
+  st.text_area(
+    "除外キーワード",
+    key="ui_exclude_keywords_input",
+    height=90,
+    help="1行に1件、またはカンマ区切りで入力できます。",
+  )
+  st.text_area(
+    "注目企業",
+    key="ui_target_companies_input",
+    height=90,
+    help="1行に1件、またはカンマ区切りで入力できます。",
+  )
+  st.multiselect(
+    "情報源タイプ",
+    options=["patent", "paper", "web", "company"],
+    format_func=type_label_ja,
+    key="ui_source_types_input",
+  )
+  st.text_input("対象国", key="ui_countries_input")
+  st.selectbox(
+    "更新頻度",
+    options=["Weekly", "Biweekly", "Monthly"],
+    format_func=cadence_label_ja,
+    key="ui_cadence_input",
+  )
+  st.text_area(
+    "優先ルール",
+    key="ui_priority_rules_input",
+    height=120,
+    help="1行に1件ずつ入力してください。",
+  )
 
-  st.caption("v9-0 では保存処理は未実装です。Export JSON から共有できます。")
-  st.code(json.dumps(watch_profile.to_dict(), ensure_ascii=False, indent=2), language="json")
+  st.markdown("### 監視プロファイル更新提案")
+  for index, suggestion in enumerate(suggestions, start=1):
+    st.write(f"提案{index}: {watch_profile_suggestion_label_ja(suggestion)}")
+
+  button_left, button_mid, button_right = st.columns(3)
+  with button_left:
+    load_clicked = st.button("保存済み監視プロファイルを読み込む", key="btn_profile_load", width="stretch")
+  with button_mid:
+    save_clicked = st.button("監視プロファイルを保存", key="btn_profile_save", width="stretch")
+  with button_right:
+    apply_clicked = st.button("デモ提案を反映", key="btn_profile_apply", width="stretch")
+
+  _show_status_message(profile_status_message)
+  st.caption(
+    "現在の監視プロファイル: "
+    f"研究テーマ={watch_profile.theme} / "
+    f"情報源タイプ={', '.join(type_label_ja(item) for item in watch_profile.source_types)} / "
+    f"更新頻度={cadence_label_ja(watch_profile.cadence)}"
+  )
+
+  return {
+    "save_profile": save_clicked,
+    "load_profile": load_clicked,
+    "apply_suggestions": apply_clicked,
+  }
 
 
 def render_digest_export_tab(
   markdown_text: str,
   csv_text: str,
   json_text: str,
-) -> None:
-  st.subheader("Digest / Export")
-  st.caption("Email delivery: Preview only / OFF")
+  digest_status_message: str | None = None,
+) -> dict[str, bool]:
+  st.subheader("ダイジェスト / エクスポート")
+  st.caption("メール配信: プレビューのみ / 停止中")
   st.markdown(markdown_text)
 
   button_left, button_mid, button_right = st.columns(3)
   with button_left:
     st.download_button(
-      "Download Markdown",
+      "Markdownをダウンロード",
       data=markdown_text,
       file_name="tech_cartography_v9_weekly_digest.md",
       mime="text/markdown",
@@ -218,7 +376,7 @@ def render_digest_export_tab(
     )
   with button_mid:
     st.download_button(
-      "Download CSV",
+      "CSVをダウンロード",
       data=csv_text,
       file_name="tech_cartography_v9_top_signals.csv",
       mime="text/csv",
@@ -226,9 +384,13 @@ def render_digest_export_tab(
     )
   with button_right:
     st.download_button(
-      "Download JSON",
+      "JSONをダウンロード",
       data=json_text,
       file_name="tech_cartography_v9_signal_watch.json",
       mime="application/json",
       use_container_width=True,
     )
+
+  save_digest_clicked = st.button("ダイジェストファイルを保存", key="btn_save_digest_files", width="stretch")
+  _show_status_message(digest_status_message)
+  return {"save_digest_files": save_digest_clicked}

@@ -106,10 +106,10 @@ def summarize_status_buckets(signals: Sequence[Signal]) -> dict[str, list[Signal
 
 def format_score_delta(signal: Signal) -> str:
   if signal.previous_score is None:
-    return "new this cycle"
+    return "今回新規"
   delta = signal.score - signal.previous_score
   sign = "+" if delta >= 0 else ""
-  return f"{sign}{delta:.2f} vs previous ({signal.previous_score:.2f} -> {signal.score:.2f})"
+  return f"{sign}{delta:.2f}（前回 {signal.previous_score:.2f} → 今回 {signal.score:.2f}）"
 
 
 def compute_theme_drift_alert(signals: Sequence[Signal], watch_profile: WatchProfile) -> dict[str, object]:
@@ -118,14 +118,14 @@ def compute_theme_drift_alert(signals: Sequence[Signal], watch_profile: WatchPro
   if not reviewed:
     return {
       "level": "info",
-      "message": "No signals are available yet for theme drift review.",
+      "message": "テーマずれ確認の対象シグナルがまだありません。",
       "matched_ratio": 0.0,
       "examples": [],
     }
   if not include_keywords:
     return {
       "level": "info",
-      "message": "Theme Drift Alert: include keywords are empty, so alignment cannot be scored yet.",
+      "message": "テーマずれ注意: 含めるキーワードが未設定のため、整合性をまだ判定できません。",
       "matched_ratio": 0.0,
       "examples": [],
     }
@@ -142,18 +142,18 @@ def compute_theme_drift_alert(signals: Sequence[Signal], watch_profile: WatchPro
   if low_ratio >= 0.40:
     level = "warning"
     message = (
-      f"Theme Drift Alert: {len(low_overlap)} / {len(reviewed)} top signals have low overlap "
-      "with the current watch profile keywords."
+      f"テーマずれ注意: 上位{len(reviewed)}件のうち{len(low_overlap)}件が、"
+      "現在の監視キーワードと一致しにくい状態です。"
     )
   elif low_overlap:
     level = "info"
     message = (
-      f"Theme alignment is mixed: {len(reviewed) - len(low_overlap)} / {len(reviewed)} top signals "
-      "match the current watch profile keywords."
+      f"テーマ整合は一部混在しています。上位{len(reviewed)}件のうち"
+      f"{len(reviewed) - len(low_overlap)}件が現在の監視キーワードと一致しています。"
     )
   else:
     level = "success"
-    message = "Top signals align well with the current watch profile keywords."
+    message = "上位シグナルは現在の監視キーワードと概ね一致しています。"
 
   return {
     "level": level,
@@ -184,6 +184,9 @@ def suggest_watch_profile_updates(
     if count >= 2 and tag not in included and tag not in excluded:
       suggestions.append(f"add keyword: {tag}")
       break
+
+  if "generic composite" not in excluded:
+    suggestions.append("exclude noisy keyword: generic composite")
 
   company_counts = Counter(
     company
@@ -216,6 +219,51 @@ def suggest_watch_profile_updates(
     suggestions.append("keep current watch profile: top signals align with the current source mix.")
 
   return suggestions[:limit]
+
+
+def apply_watch_profile_suggestions(
+  watch_profile: WatchProfile,
+  suggestions: Sequence[str],
+) -> WatchProfile:
+  include_keywords = list(watch_profile.include_keywords)
+  exclude_keywords = list(watch_profile.exclude_keywords)
+  target_companies = list(watch_profile.target_companies)
+  priority_rules = list(watch_profile.priority_rules)
+
+  for suggestion in suggestions:
+    if suggestion.startswith("add keyword:"):
+      keyword = suggestion.split(":", 1)[1].strip()
+      if keyword and keyword not in include_keywords:
+        include_keywords.append(keyword)
+    elif suggestion.startswith("exclude noisy keyword:"):
+      keyword = suggestion.split(":", 1)[1].strip()
+      if keyword and keyword not in exclude_keywords:
+        exclude_keywords.append(keyword)
+    elif suggestion.startswith("add company:"):
+      company = suggestion.split(":", 1)[1].strip()
+      if company and company not in target_companies:
+        target_companies.append(company)
+    elif suggestion.startswith("raise priority of source type:"):
+      source_type = suggestion.split(":", 1)[1].strip()
+      rule = f"次回の週次ダイジェストでは {source_type} を優先的に確認する。"
+      if source_type and rule not in priority_rules:
+        priority_rules.append(rule)
+    elif suggestion.startswith("lower priority of irrelevant source:"):
+      source_type = suggestion.split(":", 1)[1].strip()
+      rule = f"{source_type} のスコアが低い状態が続く場合は優先度を下げる。"
+      if source_type and rule not in priority_rules:
+        priority_rules.append(rule)
+
+  return WatchProfile(
+    theme=watch_profile.theme,
+    include_keywords=include_keywords,
+    exclude_keywords=exclude_keywords,
+    target_companies=target_companies,
+    source_types=list(watch_profile.source_types),
+    countries=list(watch_profile.countries),
+    cadence=watch_profile.cadence,
+    priority_rules=priority_rules,
+  )
 
 
 def build_diversity_counts(signals: Sequence[Signal]) -> dict[str, int]:

@@ -52,10 +52,10 @@ def test_digest_markdown_contains_top3_and_note() -> None:
   signals = _load_enriched_signals()
   watch_profile = load_demo_watch_profile()
   digest = build_weekly_digest_markdown(signals, watch_profile)
-  assert "## This Week's Top 3 Reads" in digest
+  assert "## 今週まず読むべき3件" in digest
   assert "1. **" in digest
-  assert "## Notes" in digest
-  assert "lightweight signal watch preview" in digest
+  assert "## 注意事項" in digest
+  assert "軽量なR&Dシグナル監視プレビュー" in digest
 
 
 def test_watch_profile_suggestions_are_generated() -> None:

@@ -1,18 +1,19 @@
 {
   "theme": "PAN系炭素繊維のサイジング、表面処理、界面接着、ストランド引張弾性率",
   "include_keywords": [
-    "PAN carbon fiber",
-    "sizing",
-    "surface treatment",
-    "interface adhesion",
-    "strand tensile modulus"
+    "PAN系炭素繊維",
+    "サイジング",
+    "表面処理",
+    "界面接着",
+    "ストランド引張弾性率"
   ],
   "exclude_keywords": [
-    "market overview"
+    "generic composite",
+    "市場概況"
   ],
   "target_companies": [
-    "Toray Demo Materials",
-    "Teijin Demo Fibers"
+    "東レ デモマテリアルズ",
+    "帝人 デモファイバーズ"
   ],
   "source_types": [
     "patent",
@@ -27,8 +28,8 @@
   ],
   "cadence": "Weekly",
   "priority_rules": [
-    "Prefer signals with clear process or material change.",
-    "Promote New or Rising items into the weekly digest.",
-    "Keep at least one patent, paper, and web signal in the shared summary."
+    "工程条件や材料変更が明確なシグナルを優先する。",
+    "新規または注目度上昇のシグナルは週次ダイジェスト候補として優先する。",
+    "共有時は少なくとも特許・論文・Web情報を1件ずつ含める。"
   ]
 }

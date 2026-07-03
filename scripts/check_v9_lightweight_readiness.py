@@ -19,7 +19,7 @@ from services_v9.demo_data import (  # noqa: E402
 from services_v9.digest_export import build_weekly_digest_markdown  # noqa: E402
 from services_v9.signal_models import VALID_ACTIONS, VALID_STATUSES  # noqa: E402
 from services_v9.signal_scoring import enrich_signals  # noqa: E402
-from ui_v9.tabs import FORBIDDEN_UI_LABELS, V9_TAB_LABELS  # noqa: E402
+from ui_v9.labels import FORBIDDEN_UI_LABELS, V9_TAB_LABELS  # noqa: E402
 
 REQUIRED_SIGNAL_FIELDS = {
   "id",
@@ -66,8 +66,19 @@ def main() -> int:
   signals = enrich_signals(load_demo_signals())
   watch_profile = load_demo_watch_profile()
   digest = build_weekly_digest_markdown(signals, watch_profile)
-  if "# Tech Cartography v9 Weekly Digest" not in digest:
+  if "# Tech Cartography v9 週次ダイジェスト" not in digest:
     errors.append("digest markdown header was not generated")
+  if "## 今週まず読むべき3件" not in digest:
+    errors.append("digest markdown top3 section was not generated")
+  if V9_TAB_LABELS != [
+    "テーマ設定",
+    "情報源",
+    "注目シグナル",
+    "週次更新",
+    "監視プロファイル",
+    "ダイジェスト / エクスポート",
+  ]:
+    errors.append("v9 tab labels are not fully Japanese")
 
   forbidden_in_tabs = [label for label in FORBIDDEN_UI_LABELS if label in V9_TAB_LABELS]
   if forbidden_in_tabs:

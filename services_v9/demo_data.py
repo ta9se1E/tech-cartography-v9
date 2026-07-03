@@ -42,47 +42,47 @@ def build_source_rows(signals: list[Signal]) -> list[dict[str, Any]]:
   return [
     {
       "enabled": True,
-      "source_type": "Patent",
+      "source_type": "patent",
       "mode": "demo",
-      "top_n": min(counts.get("patent", 0), 5),
+      "top_n": min(counts.get("patent", 0), 10),
       "last_updated": latest_date,
-      "note": "Local demo JSON only. No patent API call is executed.",
+      "note": "ローカルのデモJSONのみを表示します。特許APIは実行しません。",
     },
     {
       "enabled": True,
-      "source_type": "Paper",
+      "source_type": "paper",
       "mode": "demo",
-      "top_n": min(counts.get("paper", 0), 5),
+      "top_n": min(counts.get("paper", 0), 10),
       "last_updated": latest_date,
-      "note": "Local demo JSON only. OpenAlex is OFF in v9-0.",
+      "note": "ローカルのデモJSONのみを表示します。OpenAlexは停止中です。",
     },
     {
       "enabled": True,
-      "source_type": "Web",
+      "source_type": "web",
       "mode": "staged",
-      "top_n": min(counts.get("web", 0), 5),
+      "top_n": min(counts.get("web", 0), 10),
       "last_updated": latest_date,
-      "note": "Preview rows only. Web search is OFF in v9-0.",
+      "note": "準備中のプレビュー表示です。Web検索は停止中です。",
     },
     {
       "enabled": True,
-      "source_type": "Company",
+      "source_type": "company",
       "mode": "staged",
-      "top_n": min(counts.get("company", 0), 5),
+      "top_n": min(counts.get("company", 0), 10),
       "last_updated": latest_date,
-      "note": "Preview rows only. External company APIs are OFF.",
+      "note": "準備中のプレビュー表示です。外部企業APIは停止中です。",
     },
   ]
 
 
-def build_operation_status_rows() -> list[str]:
+def build_operation_status_rows() -> list[dict[str, str]]:
   return [
-    "Patent: demo mode",
-    "Paper: demo mode",
-    "Web: staged mode",
-    "Company: staged mode",
-    "BigQuery: OFF",
-    "OpenAlex: OFF",
-    "Web Search: OFF",
-    "Email Scheduler: OFF",
+    {"label": "patent", "mode": "demo"},
+    {"label": "paper", "mode": "demo"},
+    {"label": "web", "mode": "staged"},
+    {"label": "company", "mode": "staged"},
+    {"label": "BigQuery", "mode": "off"},
+    {"label": "OpenAlex", "mode": "off"},
+    {"label": "Web検索", "mode": "off"},
+    {"label": "メール配信", "mode": "off"},
   ]

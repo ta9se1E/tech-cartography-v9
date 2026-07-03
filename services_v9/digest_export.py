@@ -15,10 +15,11 @@ from .signal_scoring import (
   suggest_watch_profile_updates,
   summarize_status_buckets,
 )
+from ui_v9.labels import action_label_ja, status_label_ja, type_label_ja, watch_profile_suggestion_label_ja
 
 LIGHTWEIGHT_NOTE = (
-  "This is a lightweight signal watch preview. It does not provide legal judgment, "
-  "FTO judgment, infringement judgment, patentability judgment, or technical validation."
+  "このダイジェストは、軽量なR&Dシグナル監視プレビューです。"
+  "法的判断、FTO判断、侵害判断、特許性判断、技術的妥当性の証明は行いません。"
 )
 
 
@@ -32,48 +33,52 @@ def build_weekly_digest_markdown(signals: Sequence[Signal], watch_profile: Watch
     first_by_type.setdefault(signal.type, signal)
 
   lines = [
-    "# Tech Cartography v9 Weekly Digest",
+    "# Tech Cartography v9 週次ダイジェスト",
     "",
-    f"Theme: {watch_profile.theme}",
+    f"研究テーマ: {watch_profile.theme}",
     "",
-    "## This Week's Top 3 Reads",
+    "## 今週まず読むべき3件",
   ]
   for index, signal in enumerate(top_reads, start=1):
     lines.extend(
       [
-        f"{index}. **{signal.title}** ({signal.type}, score {signal.score:.2f}, {signal.status})",
-        f"   - Why read: {signal.why_read}",
-        f"   - What to check: {signal.what_to_check}",
-        f"   - Next action: {signal.next_action}",
-        f"   - Source: {signal.source_url}",
+        f"{index}. **{signal.title}**（{type_label_ja(signal.type)} / スコア {signal.score:.2f} / {status_label_ja(signal.status)}）",
+        f"   - なぜ読むべきか: {signal.why_read}",
+        f"   - 確認すべき点: {signal.what_to_check}",
+        f"   - 次の行動: {signal.next_action}",
+        f"   - 出典URL: {signal.source_url}",
+        f"   - 判断: {action_label_ja(signal.action)}",
       ]
     )
   if not top_reads:
-    lines.append("No signals are available yet.")
+    lines.append("利用可能なシグナルがまだありません。")
 
-  lines.extend(["", "## What Changed Since Last Digest"])
+  lines.extend(["", "## 前回からの主な変化"])
   for status in ("New", "Rising", "Dropped"):
     items = buckets.get(status, [])
     if items:
-      lines.append(f"- {status}: {len(items)} items. Lead signal: {items[0].title} ({format_score_delta(items[0])})")
+      lines.append(
+        f"- {status_label_ja(status)}: {len(items)}件。代表シグナル: {items[0].title} "
+        f"（{format_score_delta(items[0])}）"
+      )
     else:
-      lines.append(f"- {status}: 0 items.")
+      lines.append(f"- {status_label_ja(status)}: 0件。")
 
-  lines.extend(["", "## Patent / Paper / Web / Company Set"])
+  lines.extend(["", "## 特許・論文・Web情報・企業情報のセット"])
   for signal_type in ("patent", "paper", "web", "company"):
     signal = first_by_type.get(signal_type)
     if signal is None:
-      lines.append(f"- {signal_type.title()}: no signal in current Top 10.")
+      lines.append(f"- {type_label_ja(signal_type)}: 現在のTop 10には該当シグナルがありません。")
       continue
     lines.append(
-      f"- {signal_type.title()}: {signal.title} | why read: {signal.why_read} | next: {signal.next_action}"
+      f"- {type_label_ja(signal_type)}: {signal.title} | なぜ読むべきか: {signal.why_read} | 次の行動: {signal.next_action}"
     )
 
-  lines.extend(["", "## Suggested Watch Profile Updates"])
+  lines.extend(["", "## 監視プロファイル更新提案"])
   for suggestion in suggestions:
-    lines.append(f"- {suggestion}")
+    lines.append(f"- {watch_profile_suggestion_label_ja(suggestion)}")
 
-  lines.extend(["", "## Next Actions"])
+  lines.extend(["", "## 次のアクション"])
   next_actions = []
   for signal in top_reads:
     if signal.next_action not in next_actions:
@@ -81,14 +86,14 @@ def build_weekly_digest_markdown(signals: Sequence[Signal], watch_profile: Watch
   for action in next_actions[:3]:
     lines.append(f"- {action}")
   if not next_actions:
-    lines.append("- Review new signals once demo data is refreshed.")
+    lines.append("- デモデータが更新されたら、新規シグナルを再確認してください。")
 
   lines.extend(
     [
       "",
-      "## Notes",
+      "## 注意事項",
       LIGHTWEIGHT_NOTE,
-      "Demo data only. External APIs, PDF/OCR deep dive, and scheduler delivery are disabled in v9-0.",
+      "このPhaseではデモ / staged データのみを扱い、外部API、PDF/OCR深掘り、メール送信、scheduler起動は行いません。",
     ]
   )
   return "\n".join(lines)
@@ -99,42 +104,42 @@ def signals_to_csv(signals: Sequence[Signal]) -> str:
   writer = csv.DictWriter(
     output,
     fieldnames=[
-      "id",
-      "title",
-      "type",
-      "source_name",
-      "source_url",
-      "published_date",
-      "score",
-      "previous_score",
-      "status",
-      "action",
-      "why_read",
-      "what_to_check",
-      "next_action",
-      "tags",
-      "companies",
+      "ID",
+      "タイトル",
+      "種別",
+      "出典名",
+      "出典URL",
+      "公開日",
+      "スコア",
+      "前回スコア",
+      "変化",
+      "判断",
+      "なぜ読むべきか",
+      "確認すべき点",
+      "次の行動",
+      "タグ",
+      "企業",
     ],
   )
   writer.writeheader()
   for signal in signals:
     writer.writerow(
       {
-        "id": signal.id,
-        "title": signal.title,
-        "type": signal.type,
-        "source_name": signal.source_name,
-        "source_url": signal.source_url,
-        "published_date": signal.published_date,
-        "score": f"{signal.score:.2f}",
-        "previous_score": "" if signal.previous_score is None else f"{signal.previous_score:.2f}",
-        "status": signal.status,
-        "action": signal.action,
-        "why_read": signal.why_read,
-        "what_to_check": signal.what_to_check,
-        "next_action": signal.next_action,
-        "tags": " | ".join(signal.tags),
-        "companies": " | ".join(signal.companies),
+        "ID": signal.id,
+        "タイトル": signal.title,
+        "種別": type_label_ja(signal.type),
+        "出典名": signal.source_name,
+        "出典URL": signal.source_url,
+        "公開日": signal.published_date,
+        "スコア": f"{signal.score:.2f}",
+        "前回スコア": "" if signal.previous_score is None else f"{signal.previous_score:.2f}",
+        "変化": status_label_ja(signal.status),
+        "判断": action_label_ja(signal.action),
+        "なぜ読むべきか": signal.why_read,
+        "確認すべき点": signal.what_to_check,
+        "次の行動": signal.next_action,
+        "タグ": " | ".join(signal.tags),
+        "企業": " | ".join(signal.companies),
       }
     )
   return output.getvalue()
@@ -147,5 +152,10 @@ def signals_to_json(signals: Sequence[Signal], watch_profile: WatchProfile) -> s
     "watch_profile": watch_profile.to_dict(),
     "signals": [signal.to_dict() for signal in signals],
     "notes": LIGHTWEIGHT_NOTE,
+    "display_labels_ja": {
+      "types": {signal.type: type_label_ja(signal.type) for signal in signals},
+      "statuses": {signal.status: status_label_ja(signal.status) for signal in signals},
+      "actions": {signal.action: action_label_ja(signal.action) for signal in signals},
+    },
   }
   return json.dumps(payload, ensure_ascii=False, indent=2)

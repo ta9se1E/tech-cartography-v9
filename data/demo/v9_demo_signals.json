@@ -1,270 +1,270 @@
 [
   {
     "id": "pat-demo-001",
-    "title": "DEMO Patent: PAN fiber sizing with epoxy wet-out control",
+    "title": "サイジング処理による炭素繊維/樹脂界面接着の改善に関するデモ特許",
     "type": "patent",
     "source_url": "https://example.com/demo/patent/pat-demo-001",
-    "source_name": "Demo Patent Feed",
+    "source_name": "デモ特許フィード",
     "published_date": "2026-07-01",
     "score": 0.91,
     "previous_score": 0.78,
     "status": "Rising",
     "action": "Read Now",
-    "why_read": "Demo signal showing a process change that may improve resin wet-out and interfacial consistency.",
-    "what_to_check": "Check whether the sizing chemistry targets epoxy compatibility or only general handling stability.",
-    "next_action": "Read claims and compare the sizing additives against the current internal resin system.",
+    "why_read": "デモ用途の架空シグナルですが、サイジング変更が樹脂含浸性と界面安定性を同時に改善する可能性を示しています。",
+    "what_to_check": "エポキシ適合を狙った組成なのか、搬送安定化の一般処方なのかを確認してください。",
+    "next_action": "請求項相当の説明を読み、現行樹脂系で比較したい添加剤候補をメモしてください。",
     "tags": [
-      "PAN carbon fiber",
-      "sizing",
-      "epoxy compatibility"
+      "PAN系炭素繊維",
+      "サイジング",
+      "エポキシ適合"
     ],
     "companies": [
-      "Toray Demo Materials"
+      "東レ デモマテリアルズ"
     ]
   },
   {
     "id": "pat-demo-002",
-    "title": "DEMO Patent: Electrochemical oxidation route for PAN surface activation",
+    "title": "PAN系炭素繊維の表面活性化に向けた電気化学酸化ルートのデモ特許",
     "type": "patent",
     "source_url": "https://example.com/demo/patent/pat-demo-002",
-    "source_name": "Demo Patent Feed",
+    "source_name": "デモ特許フィード",
     "published_date": "2026-06-30",
     "score": 0.84,
     "previous_score": null,
     "status": "New",
     "action": "Read Now",
-    "why_read": "Demo signal covering a new surface activation route that could change adhesion performance at low treatment load.",
-    "what_to_check": "Check electrolyte conditions, target oxygen functionality, and whether tensile modulus is preserved.",
-    "next_action": "Review the examples and note any process window that looks transferable to pilot-scale trials.",
+    "why_read": "デモ用途の架空シグナルですが、低負荷処理で界面接着を変えられる新しい活性化ルートとして説明しやすい内容です。",
+    "what_to_check": "電解条件、酸素官能基の狙い、引張弾性率の維持有無を確認してください。",
+    "next_action": "実施例相当の条件を確認し、パイロット試験に持ち込めそうな処理窓を抜き出してください。",
     "tags": [
-      "surface treatment",
-      "electrochemical oxidation",
-      "interface adhesion"
+      "表面処理",
+      "電気化学酸化",
+      "界面接着"
     ],
     "companies": [
-      "Hexcel Demo Labs"
+      "ヘクセル デモラボ"
     ]
   },
   {
     "id": "pat-demo-003",
-    "title": "DEMO Patent: Inline modulus screening after oxidative treatment",
+    "title": "酸化処理後の弾性率インライン評価に関するデモ特許",
     "type": "patent",
     "source_url": "https://example.com/demo/patent/pat-demo-003",
-    "source_name": "Demo Patent Feed",
+    "source_name": "デモ特許フィード",
     "published_date": "2026-06-26",
     "score": 0.68,
     "previous_score": 0.71,
     "status": "Stable",
     "action": "Watch",
-    "why_read": "Demo signal tying inline screening to strand tensile modulus after treatment changes.",
-    "what_to_check": "Check whether modulus shifts are attributed to treatment severity or downstream sizing pickup.",
-    "next_action": "Watch for follow-on publications or family filings before escalating to full review.",
+    "why_read": "デモ用途の架空シグナルですが、表面処理変更後のストランド引張弾性率監視として使いやすい題材です。",
+    "what_to_check": "弾性率変化が処理強度由来か、後工程のサイジング付着量由来かを確認してください。",
+    "next_action": "関連出願や続報が出るまでは監視対象として維持してください。",
     "tags": [
-      "strand tensile modulus",
-      "surface treatment",
-      "epoxy compatibility"
+      "ストランド引張弾性率",
+      "表面処理",
+      "エポキシ適合"
     ],
     "companies": [
-      "Teijin Demo Fibers"
+      "帝人 デモファイバーズ"
     ]
   },
   {
     "id": "pat-demo-004",
-    "title": "DEMO Patent: Removable temporary sizing for tow spreading trials",
+    "title": "トウ拡幅試験向けの可逆サイジングに関するデモ特許",
     "type": "patent",
     "source_url": "https://example.com/demo/patent/pat-demo-004",
-    "source_name": "Demo Patent Feed",
+    "source_name": "デモ特許フィード",
     "published_date": "2026-06-18",
     "score": 0.52,
     "previous_score": 0.66,
     "status": "Dropped",
     "action": "Ignore",
-    "why_read": "Demo signal is less aligned with the main watch theme but may still matter for trial-line handling work.",
-    "what_to_check": "Check whether the removable layer changes only spreadability or also final interface performance.",
-    "next_action": "Ignore for now unless tow spreading becomes a near-term program priority.",
+    "why_read": "デモ用途の架空シグナルで、主テーマとの一致は弱いものの試験ライン条件を考える時には参考になります。",
+    "what_to_check": "可逆層が拡幅性だけに効くのか、最終界面性能にも影響するのかを確認してください。",
+    "next_action": "当面は見送り、トウ拡幅が主要テーマになった時だけ再確認してください。",
     "tags": [
-      "pilot line",
-      "sizing removal"
+      "パイロットライン",
+      "サイジング除去"
     ],
     "companies": [
-      "SGL Demo Carbon"
+      "SGL デモカーボン"
     ]
   },
   {
     "id": "paper-demo-001",
-    "title": "DEMO Paper: Surface chemistry tuning for epoxy-compatible PAN fibers",
+    "title": "PAN系炭素繊維の表面酸素官能基と樹脂接着に関するデモ論文",
     "type": "paper",
     "source_url": "https://example.com/demo/paper/paper-demo-001",
-    "source_name": "Demo Paper Feed",
+    "source_name": "デモ論文フィード",
     "published_date": "2026-07-02",
     "score": 0.88,
     "previous_score": 0.73,
     "status": "Rising",
     "action": "Read Now",
-    "why_read": "Demo paper links surface functionality to interfacial shear strength in an epoxy matrix.",
-    "what_to_check": "Check the test method, sample preparation, and whether the result comes from chemistry or roughness changes.",
-    "next_action": "Read the methods section and compare the treatment window with the current internal baseline.",
+    "why_read": "デモ用途の架空論文ですが、表面官能基とエポキシ界面せん断強度の関係を説明しやすい構成です。",
+    "what_to_check": "評価法、試料作製条件、化学変化と粗さ変化のどちらが効いているかを確認してください。",
+    "next_action": "方法節を先に読み、現在の社内ベースラインと比較したい処理条件を抜き出してください。",
     "tags": [
-      "epoxy compatibility",
-      "surface chemistry",
-      "interface adhesion"
+      "エポキシ適合",
+      "表面化学",
+      "界面接着"
     ],
     "companies": [
-      "University Demo A"
+      "大学デモA"
     ]
   },
   {
     "id": "paper-demo-002",
-    "title": "DEMO Paper: Plasma activation and sizing pickup balance in PAN carbon fibers",
+    "title": "PAN系炭素繊維におけるプラズマ活性化とサイジング付着量の両立を扱うデモ論文",
     "type": "paper",
     "source_url": "https://example.com/demo/paper/paper-demo-002",
-    "source_name": "Demo Paper Feed",
+    "source_name": "デモ論文フィード",
     "published_date": "2026-06-29",
     "score": 0.8,
     "previous_score": null,
     "status": "New",
     "action": "Read Now",
-    "why_read": "Demo paper could clarify how activation intensity affects later sizing pickup and adhesion.",
-    "what_to_check": "Check whether plasma dose improves bonding without driving brittle fiber-surface damage.",
-    "next_action": "Capture the reported activation window for discussion in the next watch review.",
+    "why_read": "デモ用途の架空論文ですが、活性化強度と後段サイジング付着量のバランスを見る上で使いやすい題材です。",
+    "what_to_check": "プラズマ投入量が接着改善に効きつつ、繊維表面の脆化を招いていないかを確認してください。",
+    "next_action": "報告されている活性化条件を抜き出し、次回レビューで比較候補として共有してください。",
     "tags": [
-      "surface treatment",
-      "plasma activation",
-      "interface adhesion"
+      "表面処理",
+      "プラズマ活性化",
+      "界面接着"
     ],
     "companies": [
-      "Institute Demo B"
+      "研究所デモB"
     ]
   },
   {
     "id": "paper-demo-003",
-    "title": "DEMO Paper: Microbond study on strand tensile modulus and interface retention",
+    "title": "ストランド引張弾性率と界面保持の関係を扱うデモ論文",
     "type": "paper",
     "source_url": "https://example.com/demo/paper/paper-demo-003",
-    "source_name": "Demo Paper Feed",
+    "source_name": "デモ論文フィード",
     "published_date": "2026-06-24",
     "score": 0.64,
     "previous_score": 0.63,
     "status": "Stable",
     "action": "Watch",
-    "why_read": "Demo paper helps connect modulus retention to interface quality in a compact experimental design.",
-    "what_to_check": "Check whether the modulus and adhesion metrics move together or trade off across treatment levels.",
-    "next_action": "Watch and extract the key comparison table when the theme is refreshed next week.",
+    "why_read": "デモ用途の架空論文ですが、弾性率保持と界面品質のトレードオフを短時間で把握できます。",
+    "what_to_check": "弾性率と接着指標が同じ方向に動くのか、処理条件ごとに逆相関になるのかを確認してください。",
+    "next_action": "次回テーマ更新時に比較表だけ抜き出せるよう監視対象として保持してください。",
     "tags": [
-      "strand tensile modulus",
-      "microbond",
-      "interface adhesion"
+      "ストランド引張弾性率",
+      "マイクロボンド",
+      "界面接着"
     ],
     "companies": []
   },
   {
     "id": "paper-demo-004",
-    "title": "DEMO Paper: Aging behavior after oxidative PAN fiber surface treatment",
+    "title": "酸化表面処理後の経時変化を扱うデモ論文",
     "type": "paper",
     "source_url": "https://example.com/demo/paper/paper-demo-004",
-    "source_name": "Demo Paper Feed",
+    "source_name": "デモ論文フィード",
     "published_date": "2026-06-17",
     "score": 0.49,
     "previous_score": 0.61,
     "status": "Dropped",
     "action": "Ignore",
-    "why_read": "Demo paper is more peripheral to the current weekly read list but may matter if shelf-life becomes urgent.",
-    "what_to_check": "Check whether aging changes the surface groups that drive adhesion or only moisture sensitivity.",
-    "next_action": "Ignore unless the team starts a storage-stability subtheme.",
+    "why_read": "デモ用途の架空論文で、現時点では優先度が低いものの保管安定性を議論する際には参考になります。",
+    "what_to_check": "経時変化が接着に効く表面官能基に影響するのか、吸湿性の変化だけなのかを確認してください。",
+    "next_action": "保管安定性サブテーマが立ち上がるまでは見送りで構いません。",
     "tags": [
-      "oxidation kinetics",
-      "aging"
+      "酸化挙動",
+      "経時変化"
     ],
     "companies": []
   },
   {
     "id": "web-demo-001",
-    "title": "DEMO Web: Pilot line update on surface-treated PAN tow for epoxy systems",
+    "title": "表面処理済みPANトウの試験ライン更新に関するデモWeb情報",
     "type": "web",
     "source_url": "https://example.com/demo/web/web-demo-001",
-    "source_name": "Demo Web Feed",
+    "source_name": "デモWebフィード",
     "published_date": "2026-07-01",
     "score": 0.77,
     "previous_score": 0.65,
     "status": "Rising",
     "action": "Read Now",
-    "why_read": "Demo web signal suggests a pilot-line change that may influence both sizing choice and adhesion claims.",
-    "what_to_check": "Check whether the update mentions line speed, treatment severity, or downstream qualification plans.",
-    "next_action": "Read the announcement and note any concrete process parameters for follow-up.",
+    "why_read": "デモ用途の架空Web情報ですが、試験ライン変更がサイジング選定や接着訴求に影響する可能性があります。",
+    "what_to_check": "ライン速度、処理強度、後段の評価計画に関する具体記述があるかを確認してください。",
+    "next_action": "告知文を読み、追跡したい工程パラメータをメモしてください。",
     "tags": [
-      "pilot plant",
-      "surface treatment",
-      "sizing"
+      "パイロット設備",
+      "表面処理",
+      "サイジング"
     ],
     "companies": [
-      "Hexcel Demo Labs"
+      "ヘクセル デモラボ"
     ]
   },
   {
     "id": "web-demo-002",
-    "title": "DEMO Web: PAN precursor and supply update touching modulus-sensitive grades",
+    "title": "弾性率感度の高いグレードに関するPAN前駆体供給更新のデモWeb情報",
     "type": "web",
     "source_url": "https://example.com/demo/web/web-demo-002",
-    "source_name": "Demo Web Feed",
+    "source_name": "デモWebフィード",
     "published_date": "2026-06-21",
     "score": 0.59,
     "previous_score": 0.6,
     "status": "Stable",
     "action": "Watch",
-    "why_read": "Demo web signal is relevant because precursor changes can quietly affect modulus and surface-treatment response.",
-    "what_to_check": "Check whether any change is linked to grade positioning, precursor chemistry, or downstream composite targets.",
-    "next_action": "Watch for a follow-up technical note before escalating it in the digest.",
+    "why_read": "デモ用途の架空Web情報ですが、前駆体変更が弾性率や表面処理応答に静かに効く可能性があります。",
+    "what_to_check": "グレード戦略、前駆体化学、複合材用途との結び付きが示されているかを確認してください。",
+    "next_action": "技術補足が出るまでは監視継続とし、ダイジェスト昇格は保留してください。",
     "tags": [
-      "supply chain",
-      "PAN precursor"
+      "供給網",
+      "PAN前駆体"
     ],
     "companies": [
-      "Toray Demo Materials"
+      "東レ デモマテリアルズ"
     ]
   },
   {
     "id": "company-demo-001",
-    "title": "DEMO Company: Hexcel Demo Labs highlights interface adhesion program",
+    "title": "界面接着プログラムを強調するデモ企業情報",
     "type": "company",
     "source_url": "https://example.com/demo/company/company-demo-001",
-    "source_name": "Demo Company Feed",
+    "source_name": "デモ企業フィード",
     "published_date": "2026-06-28",
     "score": 0.74,
     "previous_score": null,
     "status": "New",
     "action": "Watch",
-    "why_read": "Demo company update indicates focused investment around interface adhesion and epoxy-compatible surfaces.",
-    "what_to_check": "Check whether the program is research-stage messaging or tied to an announced production milestone.",
-    "next_action": "Watch and add the company to the profile if similar signals repeat next week.",
+    "why_read": "デモ用途の架空企業情報で、界面接着とエポキシ適合表面への投資意図を簡潔に説明できます。",
+    "what_to_check": "研究段階の発信なのか、生産マイルストーンに紐づく計画なのかを確認してください。",
+    "next_action": "同種シグナルが続くようなら注目企業としてプロファイルに追加してください。",
     "tags": [
-      "capex",
-      "interface adhesion",
-      "epoxy compatibility"
+      "設備投資",
+      "界面接着",
+      "エポキシ適合"
     ],
     "companies": [
-      "Hexcel Demo Labs"
+      "ヘクセル デモラボ"
     ]
   },
   {
     "id": "company-demo-002",
-    "title": "DEMO Company: Teijin Demo Fibers partnership note on treated PAN strands",
+    "title": "処理済みPANストランドの提携情報に関するデモ企業情報",
     "type": "company",
     "source_url": "https://example.com/demo/company/company-demo-002",
-    "source_name": "Demo Company Feed",
+    "source_name": "デモ企業フィード",
     "published_date": "2026-06-19",
     "score": 0.56,
     "previous_score": 0.7,
     "status": "Dropped",
     "action": "Watch",
-    "why_read": "Demo company signal may still matter because it points to partner validation on treated PAN strands.",
-    "what_to_check": "Check whether the note includes any concrete surface-treatment or sizing compatibility statement.",
-    "next_action": "Watch until a more technical follow-up appears.",
+    "why_read": "デモ用途の架空企業情報ですが、処理済みPANストランドの共同検証先を知る手掛かりになります。",
+    "what_to_check": "表面処理条件やサイジング適合に関する具体記載があるかを確認してください。",
+    "next_action": "より技術的な続報が出るまでは監視継続としてください。",
     "tags": [
-      "joint development",
-      "surface treatment"
+      "共同開発",
+      "表面処理"
     ],
     "companies": [
-      "Teijin Demo Fibers"
+      "帝人 デモファイバーズ"
     ]
   }
 ]

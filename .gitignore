@@ -15,3 +15,7 @@ credentials/
 *.egg-info/
 config/email_recipients.json
 config/theme_validation_cases.json
+data/v9_runs/snapshots/
+data/v9_runs/digests/
+data/v9_runs/watch_profile_current.json
+!data/v9_runs/.gitkeep
