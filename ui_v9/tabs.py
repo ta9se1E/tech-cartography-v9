@@ -7,7 +7,13 @@ from typing import Any, Sequence
 import streamlit as st
 
 from services_v9.signal_models import Signal, WatchProfile
-from services_v9.review_state import default_review_state, normalize_review_state
+from services_v9.review_state import (
+  apply_reviews_to_signals,
+  default_review_state,
+  normalize_review_state,
+  sort_signals_by_review,
+  summarize_reviews,
+)
 from services_v9.signal_scoring import (
   build_diversity_counts,
   format_score_delta,
@@ -263,6 +269,47 @@ def _render_review_input(signal: dict[str, Any], signal_id: str) -> None:
     st.write(f"コメント: {applied_review.get(REVIEW_COMMENT_FIELD) or 'なし'}")
   else:
     st.caption("未レビュー")
+
+
+def _review_progress(summary: dict[str, int] | None) -> dict[str, float | int]:
+  payload = summary or {}
+  total_count = max(int(payload.get("合計", 0) or 0), 0)
+  unreviewed_count = max(int(payload.get("未レビュー", 0) or 0), 0)
+  reviewed_count = max(total_count - unreviewed_count, 0)
+  ratio = (reviewed_count / total_count) if total_count else 0.0
+  ratio = min(max(ratio, 0.0), 1.0)
+  return {
+    "reviewed_count": reviewed_count,
+    "total_count": total_count,
+    "ratio": ratio,
+    "percent": int(round(ratio * 100)),
+  }
+
+
+def _select_adopted_signals(
+  signals: list[dict[str, Any]] | None,
+  limit: int = 10,
+) -> list[dict[str, Any]]:
+  ranked = sort_signals_by_review(list(signals or []))
+  adopted = [
+    signal for signal in ranked
+    if isinstance(signal.get("review"), dict)
+    and str(signal["review"].get("review_decision", "") or "") == "採用"
+  ]
+  return adopted[:max(limit, 0)]
+
+
+def _select_unreviewed_signals(
+  signals: list[dict[str, Any]] | None,
+  limit: int = 10,
+) -> list[dict[str, Any]]:
+  ranked = sort_signals_by_review(list(signals or []))
+  unreviewed = [
+    signal for signal in ranked
+    if isinstance(signal.get("review"), dict)
+    and not bool(signal["review"].get("reviewed", False))
+  ]
+  return unreviewed[:max(limit, 0)]
 
 
 def render_theme_setup_tab(profile_summary: dict[str, object], profile_status_message: str | None = None) -> dict[str, bool]:
@@ -542,6 +589,7 @@ def render_top_signals_tab(
 
 def render_weekly_updates_tab(
   signals: Sequence[Signal],
+  reviewed_signals: Sequence[dict[str, Any]],
   source_info: dict[str, object],
   snapshot_options: Sequence[str],
   diff_result: dict | None,
@@ -608,6 +656,65 @@ def render_weekly_updates_tab(
     for column, status in zip(metrics, ("New", "Rising", "Dropped", "Stable")):
       column.metric(status_label_ja(status), len(buckets[status]))
     st.info("前回スナップショットを読み込んで比較すると、差分サマリーを表示できます。")
+
+  current_reviews_by_signal_id = dict(st.session_state.get("reviews_by_signal_id", {}) or {})
+  review_signal_list = apply_reviews_to_signals([dict(signal) for signal in reviewed_signals], current_reviews_by_signal_id)
+  review_summary = summarize_reviews(review_signal_list)
+  review_progress = _review_progress(review_summary)
+  adopted_signals = _select_adopted_signals(review_signal_list, limit=10)
+  unreviewed_signals = _select_unreviewed_signals(review_signal_list, limit=10)
+
+  st.markdown("### レビュー状況")
+  review_metrics = st.columns(5)
+  review_metrics[0].metric("採用", f"{review_summary['採用']}件")
+  review_metrics[1].metric("保留", f"{review_summary['保留']}件")
+  review_metrics[2].metric("見送り", f"{review_summary['見送り']}件")
+  review_metrics[3].metric("未レビュー", f"{review_summary['未レビュー']}件")
+  review_metrics[4].metric("合計", f"{review_summary['合計']}件")
+  st.caption(
+    "未レビュー件数は、人間が「レビューを反映」していないSignalの件数です。"
+    "未レビューSignalにもシステム判断に基づく初期分類が表示されています。"
+  )
+  st.write(
+    f"**レビュー進捗:** {review_progress['percent']}%（"
+    f"{review_progress['reviewed_count']} / {review_progress['total_count']}件）"
+  )
+  st.progress(float(review_progress["ratio"]))
+
+  st.markdown("### 採用したシグナル")
+  if not adopted_signals:
+    st.write("採用されたシグナルはありません。")
+  else:
+    adopted_total_count = sum(
+      1
+      for signal in review_signal_list
+      if isinstance(signal.get("review"), dict)
+      and str(signal["review"].get("review_decision", "") or "") == "採用"
+    )
+    if adopted_total_count > len(adopted_signals):
+      st.caption("件数が多いため、上位10件のみ表示しています。")
+    for index, signal in enumerate(adopted_signals, start=1):
+      review = dict(signal.get("review", {}) or {})
+      st.write(f"{index}. {signal.get('title', 'タイトルなし')}")
+      st.write(f"- 種別: {type_label_ja(str(signal.get('type', '') or ''))}")
+      st.write(f"- スコア: {float(signal.get('score', 0.0) or 0.0):.2f}")
+      st.write(f"- 優先度: {review_priority_label_ja(review.get('review_priority', 2)) or '中'}")
+      st.write(f"- 状態: {'レビュー済み' if review.get('reviewed') else '未レビュー'}")
+      st.write(f"- コメント: {review.get(REVIEW_COMMENT_FIELD) or 'なし'}")
+
+  st.markdown("### 未レビューのシグナル")
+  if not unreviewed_signals:
+    st.write("すべてのシグナルがレビュー済みです。")
+  else:
+    if review_summary["未レビュー"] > len(unreviewed_signals):
+      st.caption("件数が多いため、上位10件のみ表示しています。")
+    for index, signal in enumerate(unreviewed_signals, start=1):
+      review = dict(signal.get("review", {}) or {})
+      st.write(f"{index}. {signal.get('title', 'タイトルなし')}")
+      st.write(f"- 種別: {type_label_ja(str(signal.get('type', '') or ''))}")
+      st.write(f"- システム判断: {action_label_ja(str(signal.get('action', '') or ''))}")
+      st.write(f"- 初期レビュー判断: {str(review.get('review_decision', '保留') or '保留')}")
+      st.write(f"- スコア: {float(signal.get('score', 0.0) or 0.0):.2f}")
 
   st.markdown("### テーマずれアラート")
   if drift["level"] == "warning":

@@ -445,6 +445,7 @@ def run_app() -> None:
   with tabs[3]:
     weekly_events = render_weekly_updates_tab(
       signals,
+      display_signal_dicts,
       source_info,
       snapshot_labels,
       diff_result,
