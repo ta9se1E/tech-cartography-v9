@@ -28,6 +28,13 @@ from .signal_loader import (
   prepare_uploaded_signals,
   score_signal_with_profile,
 )
+from .score_explainer import (
+  attach_score_explanations,
+  build_signal_text_blob,
+  explain_action,
+  explain_signal_score,
+  find_keyword_hits,
+)
 from .signal_template import build_csv_template, build_json_template
 from .signal_models import Signal, WatchProfile
 from .signal_scoring import (
@@ -54,6 +61,8 @@ __all__ = [
   "WatchProfile",
   "apply_snapshot_status",
   "apply_watch_profile_suggestions",
+  "attach_score_explanations",
+  "build_signal_text_blob",
   "build_weekly_digest_markdown",
   "build_company_query_preview",
   "build_csv_template",
@@ -69,6 +78,9 @@ __all__ = [
   "default_bilingual_watch_profile",
   "ensure_v9_run_dirs",
   "enrich_signals_with_profile",
+  "explain_action",
+  "explain_signal_score",
+  "find_keyword_hits",
   "get_v9_runs_dir",
   "list_snapshots",
   "load_demo_signals",
