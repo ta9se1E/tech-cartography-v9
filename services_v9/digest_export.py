@@ -48,6 +48,12 @@ def _signal_to_dict(signal: Signal | dict[str, Any]) -> dict[str, Any]:
   return dict(signal or {})
 
 
+def _export_signal_dict(signal: Signal | dict[str, Any]) -> dict[str, Any]:
+  payload = _signal_to_dict(signal)
+  payload.pop("score_explanation", None)
+  return payload
+
+
 def _normalized_review(signal: dict[str, Any]) -> dict[str, Any]:
   if isinstance(signal.get("review"), dict):
     return normalize_review_state(signal.get("review"))
@@ -371,11 +377,12 @@ def signals_to_csv(signals: Sequence[Signal]) -> str:
 
 
 def signals_to_json(
-  signals: Sequence[Signal],
+  signals: Sequence[Signal | dict[str, Any]],
   watch_profile: WatchProfile,
   data_source: str = "デモデータ",
   loaded_count: int | None = None,
 ) -> str:
+  signal_payloads = [_export_signal_dict(signal) for signal in signals]
   payload = {
     "app": "Tech Cartography v9",
     "mode": "lightweight_demo",
@@ -383,12 +390,21 @@ def signals_to_json(
     "loaded_count": loaded_count if loaded_count is not None else len(signals),
     "watch_profile": watch_profile.to_dict(),
     "watch_profile_summary": watch_profile_summary(watch_profile.to_dict()),
-    "signals": [signal.to_dict() for signal in signals],
+    "signals": signal_payloads,
     "notes": LIGHTWEIGHT_NOTE,
     "display_labels_ja": {
-      "types": {signal.type: type_label_ja(signal.type) for signal in signals},
-      "statuses": {signal.status: status_label_ja(signal.status) for signal in signals},
-      "actions": {signal.action: action_label_ja(signal.action) for signal in signals},
+      "types": {
+        str(signal.get("type", "") or ""): type_label_ja(str(signal.get("type", "") or ""))
+        for signal in signal_payloads
+      },
+      "statuses": {
+        str(signal.get("status", "") or ""): status_label_ja(str(signal.get("status", "") or ""))
+        for signal in signal_payloads
+      },
+      "actions": {
+        str(signal.get("action", "") or ""): action_label_ja(str(signal.get("action", "") or ""))
+        for signal in signal_payloads
+      },
     },
   }
   return json.dumps(payload, ensure_ascii=False, indent=2)

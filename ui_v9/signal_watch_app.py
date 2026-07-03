@@ -302,6 +302,24 @@ def _prepare_display_signal_dicts(
   return attach_score_explanations(reviewed_signals, watch_profile_dict)
 
 
+def _prepare_reviewed_signal_dicts(
+  signal_dicts: list[dict[str, object]],
+  watch_profile_dict: dict[str, object],
+  reviews_by_signal_id: dict[str, dict[str, object]],
+) -> list[dict[str, object]]:
+  reviewed_display_signals = _prepare_display_signal_dicts(
+    signal_dicts,
+    watch_profile_dict,
+    reviews_by_signal_id,
+  )
+  cleaned_signals: list[dict[str, object]] = []
+  for signal in reviewed_display_signals:
+    cleaned_signal = dict(signal)
+    cleaned_signal.pop("score_explanation", None)
+    cleaned_signals.append(cleaned_signal)
+  return cleaned_signals
+
+
 def _build_snapshot_history() -> tuple[list[str], dict[str, Path], list[dict[str, str]]]:
   snapshot_labels: list[str] = []
   snapshot_map: dict[str, Path] = {}
@@ -402,12 +420,6 @@ def run_app() -> None:
   source_rows = build_source_rows(signals)
   operation_rows = build_operation_status_rows()
   csv_text = signals_to_csv(signals)
-  json_text = signals_to_json(
-    signals,
-    watch_profile,
-    data_source=str(source_info["label"]),
-    loaded_count=int(source_info["loaded_count"]),
-  )
 
   st.title("Tech Cartography v9")
   st.caption("軽量R&Dシグナル監視エージェント")
@@ -457,6 +469,11 @@ def run_app() -> None:
       st.session_state.get(STATE_PROFILE_MESSAGE),
     )
   latest_reviews_by_signal_id = dict(st.session_state.get(STATE_REVIEWS_BY_SIGNAL_ID, {}) or {})
+  latest_reviewed_signals = _prepare_reviewed_signal_dicts(
+    current_signal_dicts,
+    watch_profile_dict,
+    latest_reviews_by_signal_id,
+  )
   latest_digest_signals = _prepare_display_signal_dicts(
     current_signal_dicts,
     watch_profile_dict,
@@ -468,6 +485,12 @@ def run_app() -> None:
     data_source=str(source_info["label"]),
     loaded_count=int(source_info["loaded_count"]),
     reviewed_signals=latest_digest_signals,
+  )
+  json_text = signals_to_json(
+    latest_reviewed_signals,
+    watch_profile,
+    data_source=str(source_info["label"]),
+    loaded_count=int(source_info["loaded_count"]),
   )
   with tabs[5]:
     digest_events = render_digest_export_tab(
@@ -489,7 +512,7 @@ def run_app() -> None:
 
   if signal_events["save_snapshot"]:
     path = save_snapshot(
-      signals=[signal.to_dict() for signal in signals],
+      signals=latest_reviewed_signals,
       watch_profile=watch_profile_dict,
       run_note=str(st.session_state.get(UI_SNAPSHOT_NOTE_KEY, "")).strip(),
     )
@@ -518,7 +541,7 @@ def run_app() -> None:
     auto_snapshot_path = None
     if not snapshot_id:
       auto_snapshot_path = save_snapshot(
-        signals=[signal.to_dict() for signal in signals],
+        signals=latest_reviewed_signals,
         watch_profile=watch_profile_dict,
         run_note=auto_snapshot_note or "digest export auto snapshot",
       )
