@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import streamlit as st
@@ -25,6 +26,7 @@ from services_v9.persistence import (
   save_watch_profile,
 )
 from services_v9.query_preview import build_query_preview_bundle
+from services_v9.review_state import apply_reviews_to_signals
 from services_v9.score_explainer import attach_score_explanations
 from services_v9.signal_loader import (
   enrich_signals_with_profile,
@@ -89,6 +91,7 @@ STATE_LAST_SNAPSHOT_ID = "state_last_snapshot_id"
 STATE_CURRENT_SOURCE_INFO = "state_current_source_info"
 STATE_UPLOADED_SIGNALS = "state_uploaded_signals"
 STATE_UPLOAD_WARNINGS = "state_upload_warnings"
+STATE_REVIEWS_BY_SIGNAL_ID = "reviews_by_signal_id"
 
 
 @st.cache_data(show_spinner=False)
@@ -133,6 +136,7 @@ def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(UI_SNAPSHOT_NOTE_KEY, "")
   st.session_state.setdefault(STATE_COMPARE_ENABLED, False)
   st.session_state.setdefault(UI_DATA_SOURCE_MODE_KEY, "demo")
+  st.session_state.setdefault(STATE_REVIEWS_BY_SIGNAL_ID, {})
   if UI_THEME_NAME_KEY not in st.session_state:
     _set_profile_widgets(profile_dict)
 
@@ -261,6 +265,43 @@ def _resolve_current_signal_source(
   }
 
 
+def _stable_signal_id(signal: dict[str, object], index: int = 0) -> str:
+  signal_id = str(signal.get("id", "") or "").strip()
+  if signal_id:
+    return signal_id
+
+  parts = [
+    str(signal.get("title", "") or "").strip(),
+    str(signal.get("type", "") or "").strip(),
+    str(signal.get("source_url", "") or "").strip(),
+    str(signal.get("source_name", "") or "").strip(),
+    str(signal.get("published_date", "") or "").strip(),
+    str(signal.get("summary", "") or "").strip(),
+    " | ".join(str(item).strip() for item in signal.get("tags", []) if str(item).strip()),
+    " | ".join(str(item).strip() for item in signal.get("companies", []) if str(item).strip()),
+  ]
+  raw_key = "||".join(parts)
+  if not raw_key.strip():
+    raw_key = f"signal-index-{index}"
+  digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()[:12]
+  return f"generated_{digest}"
+
+
+def _prepare_display_signal_dicts(
+  signal_dicts: list[dict[str, object]],
+  watch_profile_dict: dict[str, object],
+  reviews_by_signal_id: dict[str, dict[str, object]],
+) -> list[dict[str, object]]:
+  ensured_ids: list[dict[str, object]] = []
+  for index, signal in enumerate(signal_dicts):
+    copied_signal = dict(signal)
+    copied_signal["id"] = _stable_signal_id(copied_signal, index=index)
+    ensured_ids.append(copied_signal)
+
+  reviewed_signals = apply_reviews_to_signals(ensured_ids, reviews_by_signal_id)
+  return attach_score_explanations(reviewed_signals, watch_profile_dict)
+
+
 def _build_snapshot_history() -> tuple[list[str], dict[str, Path], list[dict[str, str]]]:
   snapshot_labels: list[str] = []
   snapshot_map: dict[str, Path] = {}
@@ -339,6 +380,7 @@ def run_app() -> None:
     st.session_state.pop(STATE_UPLOADED_SIGNALS, None)
 
   current_signal_dicts = list(source_info["signals"])
+  reviews_by_signal_id = dict(st.session_state.get(STATE_REVIEWS_BY_SIGNAL_ID, {}) or {})
 
   snapshot_labels, snapshot_map, history_rows = _build_snapshot_history()
   previous_snapshot_payload = st.session_state.get(STATE_PREVIOUS_SNAPSHOT)
@@ -349,7 +391,7 @@ def run_app() -> None:
     current_signal_dicts = apply_snapshot_status(current_signal_dicts, previous_snapshot_payload.get("signals", []))
     diff_result = compare_snapshots(previous_snapshot_payload.get("signals", []), current_signal_dicts)
 
-  display_signal_dicts = attach_score_explanations(current_signal_dicts, watch_profile_dict)
+  display_signal_dicts = _prepare_display_signal_dicts(current_signal_dicts, watch_profile_dict, reviews_by_signal_id)
   signals = sorted(
     [Signal.from_dict(item) for item in display_signal_dicts],
     key=lambda item: (item.score, item.published_date, item.title),

@@ -40,6 +40,26 @@ SCORE_LEVEL_LABELS_JA = {
   "low": "低",
 }
 
+REVIEW_DECISION_LABELS_JA = {
+  "採用": "採用",
+  "保留": "保留",
+  "見送り": "見送り",
+}
+
+REVIEW_PRIORITY_LABELS_JA = {
+  1: "高",
+  2: "中",
+  3: "低",
+}
+
+REVIEW_PRIORITY_VALUES = {
+  "高": 1,
+  "中": 2,
+  "低": 3,
+}
+
+REVIEW_COMMENT_LABEL_JA = "レビューコメント"
+
 CADENCE_LABELS_JA = {
   "weekly": "毎週",
   "biweekly": "隔週",
@@ -100,6 +120,26 @@ def data_source_mode_label_ja(value: str) -> str:
 def score_level_label_ja(value: str | None) -> str:
   normalized = str(value or "").strip()
   return SCORE_LEVEL_LABELS_JA.get(normalized, normalized)
+
+
+def review_decision_label_ja(value: str | None) -> str:
+  normalized = str(value or "").strip()
+  return REVIEW_DECISION_LABELS_JA.get(normalized, normalized)
+
+
+def review_priority_label_ja(value: int | str | None) -> str:
+  try:
+    normalized = int(value) if value not in {None, ""} else None
+  except (TypeError, ValueError):
+    normalized = None
+  if normalized is None:
+    return ""
+  return REVIEW_PRIORITY_LABELS_JA.get(normalized, str(normalized))
+
+
+def review_priority_value_ja(value: str | None) -> int:
+  normalized = str(value or "").strip()
+  return REVIEW_PRIORITY_VALUES.get(normalized, 2)
 
 
 def cadence_label_ja(value: str) -> str:

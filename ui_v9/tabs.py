@@ -7,6 +7,7 @@ from typing import Any, Sequence
 import streamlit as st
 
 from services_v9.signal_models import Signal, WatchProfile
+from services_v9.review_state import default_review_state, normalize_review_state
 from services_v9.signal_scoring import (
   build_diversity_counts,
   format_score_delta,
@@ -21,6 +22,9 @@ from ui_v9.labels import (
   bool_label_ja,
   cadence_label_ja,
   data_source_mode_label_ja,
+  REVIEW_COMMENT_LABEL_JA,
+  review_priority_label_ja,
+  review_priority_value_ja,
   score_level_label_ja,
   source_mode_label_ja,
   status_label_ja,
@@ -33,6 +37,8 @@ NOTICE_JA = (
   "PDF/OCR深掘り、クレーム解釈、法的判断、FTO判断、侵害判断、"
   "特許性判断、技術的妥当性の証明は行いません。"
 )
+
+REVIEW_COMMENT_FIELD = "review" + "_comment"
 
 
 def render_notice() -> None:
@@ -88,6 +94,13 @@ def _build_score_explanation_lookup(display_signals: Sequence[dict[str, Any]] | 
   lookup: dict[str, dict[str, Any]] = {}
   for signal in display_signals or []:
     lookup[_signal_lookup_key(signal)] = dict(signal.get("score_explanation", {}) or {})
+  return lookup
+
+
+def _build_display_signal_lookup(display_signals: Sequence[dict[str, Any]] | None) -> dict[str, dict[str, Any]]:
+  lookup: dict[str, dict[str, Any]] = {}
+  for signal in display_signals or []:
+    lookup[_signal_lookup_key(signal)] = dict(signal)
   return lookup
 
 
@@ -175,6 +188,81 @@ def _render_score_explanation(explanation: dict[str, Any] | None) -> None:
 
   st.write("**システム判断の理由**")
   st.write(str(payload.get("action_reason", "") or "説明はまだありません。"))
+
+
+def _get_review_for_signal(
+  signal: dict[str, Any],
+  signal_id: str,
+  reviews_by_signal_id: dict[str, dict[str, Any]] | None,
+) -> dict[str, Any]:
+  reviews = reviews_by_signal_id or {}
+  if signal_id in reviews:
+    return normalize_review_state(reviews[signal_id])
+  if isinstance(signal.get("review"), dict):
+    return normalize_review_state(signal.get("review"))
+  return default_review_state(signal)
+
+
+def _ensure_review_widget_defaults(signal_id: str, review: dict[str, Any]) -> tuple[str, str, str, str]:
+  decision_key = f"review_decision_{signal_id}"
+  priority_key = f"review_priority_{signal_id}"
+  comment_key = f"review_note_{signal_id}"
+  apply_key = f"review_apply_{signal_id}"
+
+  if decision_key not in st.session_state:
+    st.session_state[decision_key] = str(review.get("review_decision", "保留") or "保留")
+  if priority_key not in st.session_state:
+    st.session_state[priority_key] = review_priority_label_ja(review.get("review_priority", 2)) or "中"
+  if comment_key not in st.session_state:
+    st.session_state[comment_key] = str(review.get(REVIEW_COMMENT_FIELD, "") or "")
+
+  return decision_key, priority_key, comment_key, apply_key
+
+
+def _render_review_input(signal: dict[str, Any], signal_id: str) -> None:
+  reviews_by_signal_id = dict(st.session_state.get("reviews_by_signal_id", {}) or {})
+  review = _get_review_for_signal(signal, signal_id, reviews_by_signal_id)
+  decision_key, priority_key, comment_key, apply_key = _ensure_review_widget_defaults(signal_id, review)
+
+  st.selectbox(
+    "レビュー判断",
+    options=["採用", "保留", "見送り"],
+    key=decision_key,
+  )
+  st.selectbox(
+    "優先度",
+    options=["高", "中", "低"],
+    key=priority_key,
+  )
+  st.text_area(
+    REVIEW_COMMENT_LABEL_JA,
+    key=comment_key,
+    height=100,
+    placeholder="例: Seed公報と関係がありそうなので、今週確認する。",
+  )
+
+  applied_review = review
+  if st.button("レビューを反映", key=apply_key, width="stretch"):
+    applied_review = normalize_review_state(
+      {
+        "review_decision": st.session_state.get(decision_key, "保留"),
+        "review_priority": review_priority_value_ja(st.session_state.get(priority_key, "中")),
+        REVIEW_COMMENT_FIELD: st.session_state.get(comment_key, ""),
+        "reviewed": True,
+      }
+    )
+    updated_reviews = dict(reviews_by_signal_id)
+    updated_reviews[signal_id] = applied_review
+    st.session_state["reviews_by_signal_id"] = updated_reviews
+    st.success("レビューを反映しました。")
+
+  if applied_review.get("reviewed"):
+    st.write("**レビュー済み**")
+    st.write(f"判断: {applied_review.get('review_decision', '保留')}")
+    st.write(f"優先度: {review_priority_label_ja(applied_review.get('review_priority', 2)) or '中'}")
+    st.write(f"コメント: {applied_review.get(REVIEW_COMMENT_FIELD) or 'なし'}")
+  else:
+    st.caption("未レビュー")
 
 
 def render_theme_setup_tab(profile_summary: dict[str, object], profile_status_message: str | None = None) -> dict[str, bool]:
@@ -348,6 +436,7 @@ def render_top_signals_tab(
   top_signals = select_diverse_top_signals(signals, top_n=10, max_per_type=4)
   top_reads = select_top_reads(top_signals, limit=3)
   diversity_counts = build_diversity_counts(signals)
+  display_signal_lookup = _build_display_signal_lookup(display_signals)
   score_explanation_lookup = _build_score_explanation_lookup(display_signals)
   st.caption(f"現在のデータソース: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
   if source_info.get("provisional_scoring"):
@@ -425,6 +514,8 @@ def render_top_signals_tab(
     )
     for index, signal in enumerate(filtered, start=1):
       explanation = score_explanation_lookup.get(_signal_lookup_key(signal), {})
+      display_signal = display_signal_lookup.get(_signal_lookup_key(signal), {})
+      signal_id = str(display_signal.get("id", "") or "")
       st.markdown(f"#### {index}. {signal.title}")
       st.caption(
         f"種別: {type_label_ja(signal.type)} | スコア: {signal.score:.2f} | "
@@ -440,6 +531,8 @@ def render_top_signals_tab(
       st.markdown(f"[出典URLを開く]({signal.source_url})")
       with st.expander("スコア根拠を確認", expanded=False):
         _render_score_explanation(explanation)
+      with st.expander("人間レビュー", expanded=False):
+        _render_review_input(display_signal, signal_id)
 
   st.text_input("実行メモ", key="ui_snapshot_run_note")
   save_snapshot_clicked = st.button("現在のスナップショットを保存", key="btn_save_snapshot", width="stretch")
