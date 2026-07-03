@@ -48,27 +48,100 @@ def _show_status_message(message: str | None, kind: str = "success") -> None:
     st.success(message)
 
 
-def render_theme_setup_tab(profile_status_message: str | None = None) -> dict[str, bool]:
+def _render_profile_summary(summary: dict[str, object]) -> None:
+  counts = dict(summary.get("counts", {}))
+  st.markdown("### 入力サマリー")
+  st.write(f"- コアキーワード: 英語 {counts.get('core_en', 0)}件 / 日本語 {counts.get('core_ja', 0)}件")
+  st.write(
+    f"- 用途キーワード: 英語 {counts.get('application_en', 0)}件 / 日本語 {counts.get('application_ja', 0)}件"
+  )
+  st.write(
+    f"- 材料・プロセスキーワード: 英語 {counts.get('material_process_en', 0)}件 / "
+    f"日本語 {counts.get('material_process_ja', 0)}件"
+  )
+  st.write(f"- 除外キーワード: 英語 {counts.get('exclude_en', 0)}件 / 日本語 {counts.get('exclude_ja', 0)}件")
+  st.write(f"- Seed公報: {counts.get('seed_publications', 0)}件")
+  st.write(f"- 追加候補公報: {counts.get('candidate_publications', 0)}件")
+
+
+def render_theme_setup_tab(profile_summary: dict[str, object], profile_status_message: str | None = None) -> dict[str, bool]:
   st.subheader("Tech Cartography v9")
   st.caption("軽量R&Dシグナル監視エージェント")
 
-  left, right = st.columns([2, 1])
-  with left:
-    st.text_area("研究テーマ", key="ui_theme_input", height=100)
-    st.text_input("監視目的", key="ui_watch_goal_input")
-  with right:
+  upper_left, upper_right = st.columns(2)
+  with upper_left:
+    st.text_input("テーマ名", key="ui_theme_name_input")
+    st.text_area("テーマ説明", key="ui_theme_description_input", height=160)
+    st.text_area(
+      "コアキーワード 英語",
+      key="ui_core_en_input",
+      height=160,
+      help="カンマ区切り・改行区切りのどちらでも入力できます。",
+    )
+    st.text_area(
+      "用途キーワード 英語",
+      key="ui_application_en_input",
+      height=140,
+      help="カンマ区切り・改行区切りのどちらでも入力できます。",
+    )
+    st.text_area(
+      "材料・プロセスキーワード 英語",
+      key="ui_material_process_en_input",
+      height=180,
+      help="カンマ区切り・改行区切りのどちらでも入力できます。",
+    )
+    st.text_area(
+      "除外キーワード 英語",
+      key="ui_exclude_en_input",
+      height=120,
+      help="カンマ区切り・改行区切りのどちらでも入力できます。",
+    )
+  with upper_right:
     st.checkbox("デモモード", key="ui_demo_mode_input")
     st.markdown("**外部API:** 停止中")
     st.markdown("**実行モード:** ローカルのデモデータのみ")
     st.markdown("**メール / スケジューラ:** プレビューのみ / 停止中")
+    st.caption("現在はデモモードです。BigQuery、OpenAlex、Web検索、Gemini APIは実行しません。")
+    st.text_area(
+      "コアキーワード 日本語",
+      key="ui_core_ja_input",
+      height=160,
+      help="カンマ区切り・改行区切りのどちらでも入力できます。",
+    )
+    st.text_area(
+      "用途キーワード 日本語",
+      key="ui_application_ja_input",
+      height=140,
+      help="カンマ区切り・改行区切りのどちらでも入力できます。",
+    )
+    st.text_area(
+      "材料・プロセスキーワード 日本語",
+      key="ui_material_process_ja_input",
+      height=180,
+      help="カンマ区切り・改行区切りのどちらでも入力できます。",
+    )
+    st.text_area(
+      "除外キーワード 日本語",
+      key="ui_exclude_ja_input",
+      height=120,
+      help="カンマ区切り・改行区切りのどちらでも入力できます。",
+    )
 
-  st.caption(
-    "現在はデモモードです。BigQuery、OpenAlex、Web検索、Gemini APIは実行しません。"
-  )
-  st.caption(
-    "初期テーマ例: PAN系炭素繊維のサイジング、表面処理、界面接着、"
-    "ストランド引張弾性率"
-  )
+  pub_left, pub_right = st.columns(2)
+  with pub_left:
+    st.text_area(
+      "Seed publication numbers",
+      key="ui_seed_publications_input",
+      height=120,
+      help="カンマ区切り・改行区切りのどちらでも入力できます。",
+    )
+  with pub_right:
+    st.text_area(
+      "追加候補 publication numbers",
+      key="ui_candidate_publications_input",
+      height=120,
+      help="カンマ区切り・改行区切りのどちらでも入力できます。",
+    )
 
   button_left, button_right = st.columns(2)
   with button_left:
@@ -77,6 +150,7 @@ def render_theme_setup_tab(profile_status_message: str | None = None) -> dict[st
     load_clicked = st.button("保存済み監視プロファイルを読み込む", key="btn_theme_load_profile", width="stretch")
 
   _show_status_message(profile_status_message)
+  _render_profile_summary(profile_summary)
   return {
     "save_profile": save_clicked,
     "load_profile": load_clicked,
@@ -285,39 +359,29 @@ def render_weekly_updates_tab(
 
 def render_watch_profile_tab(
   watch_profile: WatchProfile,
+  profile_summary: dict[str, object],
+  query_previews: dict[str, str],
   suggestions: Sequence[str],
   profile_status_message: str | None = None,
 ) -> dict[str, bool]:
   st.subheader("監視プロファイル")
 
   st.text_area(
-    "含めるキーワード",
-    key="ui_include_keywords_input",
-    height=110,
-    help="1行に1件、またはカンマ区切りで入力できます。",
-  )
-  st.text_area(
-    "除外キーワード",
-    key="ui_exclude_keywords_input",
-    height=90,
-    help="1行に1件、またはカンマ区切りで入力できます。",
-  )
-  st.text_area(
     "注目企業",
     key="ui_target_companies_input",
     height=90,
-    help="1行に1件、またはカンマ区切りで入力できます。",
+    help="カンマ区切り・改行区切りのどちらでも入力できます。",
   )
+  st.text_input("対象国", key="ui_countries_input")
   st.multiselect(
     "情報源タイプ",
     options=["patent", "paper", "web", "company"],
     format_func=type_label_ja,
     key="ui_source_types_input",
   )
-  st.text_input("対象国", key="ui_countries_input")
   st.selectbox(
     "更新頻度",
-    options=["Weekly", "Biweekly", "Monthly"],
+    options=["weekly", "biweekly", "monthly"],
     format_func=cadence_label_ja,
     key="ui_cadence_input",
   )
@@ -328,9 +392,46 @@ def render_watch_profile_tab(
     help="1行に1件ずつ入力してください。",
   )
 
+  _show_status_message(profile_status_message)
+
+  st.markdown("### 現在の監視プロファイル")
+  st.write(f"**テーマ名:** {profile_summary.get('theme_name') or '未設定'}")
+  st.write(f"**テーマ説明:** {profile_summary.get('theme_description') or '未設定'}")
+  st.write(f"**注目企業:** {', '.join(profile_summary.get('target_companies', [])) or 'なし'}")
+  st.write(f"**対象国:** {', '.join(watch_profile.countries) if watch_profile.countries else 'なし'}")
+  st.write(f"**情報源タイプ:** {', '.join(type_label_ja(item) for item in watch_profile.source_types)}")
+  st.write(f"**更新頻度:** {cadence_label_ja(watch_profile.cadence)}")
+
+  _render_profile_summary(profile_summary)
+
+  st.markdown("### Seed publication numbers")
+  if watch_profile.seed_publications:
+    for item in watch_profile.seed_publications:
+      st.write(f"- {item}")
+  else:
+    st.write("- なし")
+
+  st.markdown("### 追加候補 publication numbers")
+  if watch_profile.candidate_publications:
+    for item in watch_profile.candidate_publications:
+      st.write(f"- {item}")
+  else:
+    st.write("- なし")
+
   st.markdown("### 監視プロファイル更新提案")
   for index, suggestion in enumerate(suggestions, start=1):
     st.write(f"提案{index}: {watch_profile_suggestion_label_ja(suggestion)}")
+
+  st.markdown("### 簡易検索クエリPreview")
+  st.caption("これは検索実行ではなくPreviewです。外部APIや外部検索は実行しません。")
+  for label, key in [
+    ("特許検索Preview", "patent"),
+    ("論文検索Preview", "paper"),
+    ("Web検索Preview", "web"),
+    ("企業情報検索Preview", "company"),
+  ]:
+    with st.expander(label):
+      st.code(query_previews.get(key, "Previewを生成できませんでした。"))
 
   button_left, button_mid, button_right = st.columns(3)
   with button_left:
@@ -339,14 +440,6 @@ def render_watch_profile_tab(
     save_clicked = st.button("監視プロファイルを保存", key="btn_profile_save", width="stretch")
   with button_right:
     apply_clicked = st.button("デモ提案を反映", key="btn_profile_apply", width="stretch")
-
-  _show_status_message(profile_status_message)
-  st.caption(
-    "現在の監視プロファイル: "
-    f"研究テーマ={watch_profile.theme} / "
-    f"情報源タイプ={', '.join(type_label_ja(item) for item in watch_profile.source_types)} / "
-    f"更新頻度={cadence_label_ja(watch_profile.cadence)}"
-  )
 
   return {
     "save_profile": save_clicked,

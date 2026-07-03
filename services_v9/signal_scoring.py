@@ -225,20 +225,23 @@ def apply_watch_profile_suggestions(
   watch_profile: WatchProfile,
   suggestions: Sequence[str],
 ) -> WatchProfile:
-  include_keywords = list(watch_profile.include_keywords)
-  exclude_keywords = list(watch_profile.exclude_keywords)
+  keywords = {key: list(value) for key, value in watch_profile.keywords.items()}
   target_companies = list(watch_profile.target_companies)
   priority_rules = list(watch_profile.priority_rules)
 
   for suggestion in suggestions:
     if suggestion.startswith("add keyword:"):
       keyword = suggestion.split(":", 1)[1].strip()
-      if keyword and keyword not in include_keywords:
-        include_keywords.append(keyword)
+      if keyword:
+        bucket = "core_en" if any("A" <= ch <= "Z" or "a" <= ch <= "z" for ch in keyword) else "core_ja"
+        if keyword not in keywords.get(bucket, []):
+          keywords.setdefault(bucket, []).append(keyword)
     elif suggestion.startswith("exclude noisy keyword:"):
       keyword = suggestion.split(":", 1)[1].strip()
-      if keyword and keyword not in exclude_keywords:
-        exclude_keywords.append(keyword)
+      if keyword:
+        bucket = "exclude_en" if any("A" <= ch <= "Z" or "a" <= ch <= "z" for ch in keyword) else "exclude_ja"
+        if keyword not in keywords.get(bucket, []):
+          keywords.setdefault(bucket, []).append(keyword)
     elif suggestion.startswith("add company:"):
       company = suggestion.split(":", 1)[1].strip()
       if company and company not in target_companies:
@@ -255,14 +258,18 @@ def apply_watch_profile_suggestions(
         priority_rules.append(rule)
 
   return WatchProfile(
-    theme=watch_profile.theme,
-    include_keywords=include_keywords,
-    exclude_keywords=exclude_keywords,
+    schema_version=watch_profile.schema_version,
+    theme_name=watch_profile.theme_name,
+    theme_description=watch_profile.theme_description,
+    keywords=keywords,
+    seed_publications=list(watch_profile.seed_publications),
+    candidate_publications=list(watch_profile.candidate_publications),
     target_companies=target_companies,
     source_types=list(watch_profile.source_types),
     countries=list(watch_profile.countries),
     cadence=watch_profile.cadence,
     priority_rules=priority_rules,
+    notes=watch_profile.notes,
   )
 
 

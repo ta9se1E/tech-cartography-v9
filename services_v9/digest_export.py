@@ -15,6 +15,7 @@ from .signal_scoring import (
   suggest_watch_profile_updates,
   summarize_status_buckets,
 )
+from .watch_profile_schema import watch_profile_summary
 from ui_v9.labels import action_label_ja, status_label_ja, type_label_ja, watch_profile_suggestion_label_ja
 
 LIGHTWEIGHT_NOTE = (
@@ -28,6 +29,7 @@ def build_weekly_digest_markdown(signals: Sequence[Signal], watch_profile: Watch
   top_reads = select_top_reads(ranked, limit=3)
   buckets = summarize_status_buckets(ranked)
   suggestions = suggest_watch_profile_updates(ranked, watch_profile)
+  profile_summary = watch_profile_summary(watch_profile.to_dict())
   first_by_type: dict[str, Signal] = {}
   for signal in ranked:
     first_by_type.setdefault(signal.type, signal)
@@ -35,7 +37,39 @@ def build_weekly_digest_markdown(signals: Sequence[Signal], watch_profile: Watch
   lines = [
     "# Tech Cartography v9 週次ダイジェスト",
     "",
-    f"研究テーマ: {watch_profile.theme}",
+    "## 監視テーマ",
+    "",
+    "### テーマ名",
+    profile_summary["theme_name"] or "未設定",
+    "",
+    "### テーマ説明",
+    profile_summary["theme_description"] or "未設定",
+    "",
+    "### 入力サマリー",
+    (
+      f"- コアキーワード: 英語 {profile_summary['counts']['core_en']}件 / "
+      f"日本語 {profile_summary['counts']['core_ja']}件"
+    ),
+    (
+      f"- 用途キーワード: 英語 {profile_summary['counts']['application_en']}件 / "
+      f"日本語 {profile_summary['counts']['application_ja']}件"
+    ),
+    (
+      f"- 材料・プロセスキーワード: 英語 {profile_summary['counts']['material_process_en']}件 / "
+      f"日本語 {profile_summary['counts']['material_process_ja']}件"
+    ),
+    (
+      f"- 除外キーワード: 英語 {profile_summary['counts']['exclude_en']}件 / "
+      f"日本語 {profile_summary['counts']['exclude_ja']}件"
+    ),
+    f"- Seed公報: {profile_summary['counts']['seed_publications']}件",
+    f"- 追加候補公報: {profile_summary['counts']['candidate_publications']}件",
+    "",
+    f"Seed公報一覧: {', '.join(profile_summary['seed_publications']) if profile_summary['seed_publications'] else 'なし'}",
+    (
+      f"追加候補公報一覧: "
+      f"{', '.join(profile_summary['candidate_publications']) if profile_summary['candidate_publications'] else 'なし'}"
+    ),
     "",
     "## 今週まず読むべき3件",
   ]
@@ -150,6 +184,7 @@ def signals_to_json(signals: Sequence[Signal], watch_profile: WatchProfile) -> s
     "app": "Tech Cartography v9",
     "mode": "lightweight_demo",
     "watch_profile": watch_profile.to_dict(),
+    "watch_profile_summary": watch_profile_summary(watch_profile.to_dict()),
     "signals": [signal.to_dict() for signal in signals],
     "notes": LIGHTWEIGHT_NOTE,
     "display_labels_ja": {

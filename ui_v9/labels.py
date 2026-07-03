@@ -29,6 +29,9 @@ SOURCE_MODE_LABELS_JA = {
 }
 
 CADENCE_LABELS_JA = {
+  "weekly": "毎週",
+  "biweekly": "隔週",
+  "monthly": "毎月",
   "Weekly": "毎週",
   "Biweekly": "隔週",
   "Monthly": "毎月",

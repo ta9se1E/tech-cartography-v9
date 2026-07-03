@@ -58,7 +58,7 @@ def main() -> int:
 
     saved_profile_path = save_watch_profile(watch_profile_payload, base_dir=base_dir)
     loaded_profile = load_watch_profile(base_dir=base_dir)
-    if loaded_profile.get("theme") != watch_profile_payload.get("theme"):
+    if loaded_profile.get("theme_name") != watch_profile_payload.get("theme_name"):
       errors.append("監視プロファイルの保存/読み込みに失敗しました")
 
     snapshot_path = save_snapshot(

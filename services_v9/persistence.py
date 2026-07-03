@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .watch_profile_schema import default_bilingual_watch_profile, migrate_watch_profile
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -66,7 +68,7 @@ def _build_next_snapshot_id(base_dir: Path | None = None) -> str:
 def save_watch_profile(profile: dict[str, Any], base_dir: Path | None = None) -> Path:
   dirs = ensure_v9_run_dirs(base_dir)
   path = dirs["watch_profile"]
-  _json_dump(path, profile)
+  _json_dump(path, migrate_watch_profile(profile))
   return path
 
 
@@ -77,8 +79,8 @@ def load_watch_profile(
   dirs = ensure_v9_run_dirs(base_dir)
   path = dirs["watch_profile"]
   if not path.exists():
-    return dict(default_profile or {})
-  return _json_load(path)
+    return migrate_watch_profile(default_profile or default_bilingual_watch_profile())
+  return migrate_watch_profile(_json_load(path))
 
 
 def save_snapshot(
@@ -94,7 +96,7 @@ def save_snapshot(
     "snapshot_id": snapshot_id,
     "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
     "run_note": run_note.strip(),
-    "watch_profile": watch_profile,
+    "watch_profile": migrate_watch_profile(watch_profile),
     "signals": signals,
   }
   _json_dump(path, payload)
@@ -108,7 +110,9 @@ def list_snapshots(limit: int = 20, base_dir: Path | None = None) -> list[Path]:
 
 
 def load_snapshot(path: Path) -> dict[str, Any]:
-  return _json_load(path)
+  payload = _json_load(path)
+  payload["watch_profile"] = migrate_watch_profile(payload.get("watch_profile", {}))
+  return payload
 
 
 def save_digest_files(

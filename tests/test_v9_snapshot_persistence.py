@@ -48,7 +48,7 @@ def test_save_and_load_watch_profile(tmp_path: Path) -> None:
   path = save_watch_profile(profile, base_dir=tmp_path / "v9_runs")
   loaded = load_watch_profile(base_dir=tmp_path / "v9_runs")
   assert path.exists()
-  assert loaded["theme"] == profile["theme"]
+  assert loaded["theme_name"] == profile["theme_name"]
 
 
 def test_save_and_load_snapshot(tmp_path: Path) -> None:
@@ -59,6 +59,7 @@ def test_save_and_load_snapshot(tmp_path: Path) -> None:
   assert path.exists()
   assert payload["run_note"] == "test"
   assert len(payload["signals"]) >= 10
+  assert payload["watch_profile"]["schema_version"] == "v9.2"
 
 
 def test_list_snapshots_returns_saved_files(tmp_path: Path) -> None:
