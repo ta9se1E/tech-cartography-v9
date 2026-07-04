@@ -26,10 +26,13 @@ def test_v9_deploy_script_prepares_service_job_and_scheduler() -> None:
   text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
   required_tokens = [
     "scripts/run_v9_cloud_weekly_job.py",
+    "scripts/bootstrap_v9_cloud_weekly_settings.py",
     "cloudscheduler.googleapis.com",
+    "iap.googleapis.com",
     "gcloud run deploy",
     "gcloud run jobs create",
     "gcloud run jobs update",
+    "gcloud run jobs add-iam-policy-binding",
     "gcloud scheduler jobs pause",
     "--region \"${REGION}\"",
     "--no-allow-unauthenticated",
@@ -39,7 +42,6 @@ def test_v9_deploy_script_prepares_service_job_and_scheduler() -> None:
     "--max-retries=0",
     "--task-timeout=30m",
     "--max-retry-attempts=0",
-    "printf '%s\\n' '{\"enabled\": false}'",
     "gcloud run jobs execute",
     "V9_CLOUD_CHANGE_APPROVED=true",
     "MODE=\"${1:---plan}\"",
@@ -61,13 +63,13 @@ def test_dockerignore_excludes_local_secrets_and_artifacts() -> None:
 def test_build_command_uses_cloudbuild_yaml_and_not_invalid_file_flag() -> None:
   text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
   assert "--config cloudbuild.v9.yaml" in text
-  assert "--substitutions \"_IMAGE_URI=${IMAGE_URI}\"" in text
+  assert '--substitutions "_IMAGE_URI=${IMAGE_URI}"' in text
   assert "--file Dockerfile.v9" not in text
 
 
 def test_service_does_not_receive_smtp_or_tavily_secrets() -> None:
   text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
-  service_section = text.split("service_deploy_cmd() {", 1)[1].split("job_deploy_cmd() {", 1)[0]
+  service_section = text.split("deploy_service() {", 1)[1].split("grant_iap_access() {", 1)[0]
   assert "--set-secrets" not in service_section
   assert "SMTP_HOST=" not in service_section
   assert "SMTP_PORT=" not in service_section
@@ -79,7 +81,7 @@ def test_service_does_not_receive_smtp_or_tavily_secrets() -> None:
 
 def test_job_references_required_secrets_and_nonsecret_smtp_envs() -> None:
   text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
-  job_section = text.split("job_deploy_cmd() {", 1)[1].split("bootstrap_settings_cmd() {", 1)[0]
+  job_section = text.split("deploy_job() {", 1)[1].split("bootstrap_settings() {", 1)[0]
   assert "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest" in job_section
   assert "TAVILY_API_KEY=${TAVILY_API_KEY_SECRET}:latest" in job_section
   assert "SMTP_HOST=${SMTP_HOST}" in job_section
@@ -93,13 +95,34 @@ def test_job_references_required_secrets_and_nonsecret_smtp_envs() -> None:
 
 def test_scheduler_is_created_after_enabled_false_bootstrap_and_paused() -> None:
   text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
-  bootstrap_index = text.index("bootstrap_settings_cmd()")
-  scheduler_index = text.index("scheduler_create_cmd()")
-  pause_index = text.index("scheduler_pause_cmd()")
+  bootstrap_index = text.index("bootstrap_settings() {")
+  scheduler_index = text.index("deploy_scheduler() {")
+  pause_index = text.index("pause_scheduler() {")
   apply_body = text.split("apply_plan() {", 1)[1]
   assert bootstrap_index < scheduler_index < pause_index
-  assert apply_body.index("bootstrap_settings_cmd") < apply_body.index("scheduler_create_cmd")
-  assert apply_body.index("scheduler_create_cmd") < apply_body.index("scheduler_pause_cmd")
+  assert apply_body.index("bootstrap_settings") < apply_body.index("deploy_scheduler")
+  assert apply_body.index("deploy_scheduler") < apply_body.index("pause_scheduler")
+
+
+def test_deploy_script_loads_nonsecret_smtp_values_without_echoing_secrets() -> None:
+  text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
+  assert "load_nonsecret_smtp_env_from_dotenv()" in text
+  assert 'Path(".env")' in text
+  assert "SMTP_USERNAME" in text and "SMTP_USER" in text
+  assert "V9_ALLOWED_RECIPIENTS" in text
+  assert "cat .env" not in text
+  assert "set -x" not in text
+
+
+def test_deploy_script_adds_required_bucket_secret_and_iap_steps() -> None:
+  text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
+  assert "gcloud storage buckets create" in text
+  assert "roles/storage.objectUser" in text
+  assert "roles/secretmanager.secretAccessor" in text
+  assert "gcloud run services add-iam-policy-binding" in text
+  assert "roles/run.invoker" in text
+  assert "gcloud iap web add-iam-policy-binding" in text
+  assert "roles/iap.httpsResourceAccessor" in text
 
 
 def test_apply_requires_approval_guard_and_plan_is_default() -> None:

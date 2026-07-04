@@ -175,6 +175,7 @@ def main() -> None:
   dockerfile = (PROJECT_ROOT / "Dockerfile.v9").read_text(encoding="utf-8")
   cloudbuild = (PROJECT_ROOT / "cloudbuild.v9.yaml").read_text(encoding="utf-8")
   deploy_script = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
+  bootstrap_script = (PROJECT_ROOT / "scripts" / "bootstrap_v9_cloud_weekly_settings.py").read_text(encoding="utf-8")
   assert "streamlit" in dockerfile and "app.py" in dockerfile
   assert "Dockerfile.v9" in cloudbuild
   assert "docker" in cloudbuild
@@ -182,8 +183,10 @@ def main() -> None:
   assert "--file Dockerfile.v9" not in deploy_script
   assert "--config cloudbuild.v9.yaml" in deploy_script
   assert "scripts/run_v9_cloud_weekly_job.py" in deploy_script
+  assert "scripts/bootstrap_v9_cloud_weekly_settings.py" in deploy_script
   assert "--region \"${REGION}\"" in deploy_script
   assert "--iap" in deploy_script
+  assert "iap.googleapis.com" in deploy_script
   assert "V9_ENABLE_CLOUD_SCHEDULER_ADMIN=false" in deploy_script
   assert "cloudscheduler.googleapis.com" in deploy_script
   assert "--tasks=1" in deploy_script
@@ -193,18 +196,30 @@ def main() -> None:
   assert "--max-retry-attempts=0" in deploy_script
   assert 'MODE="${1:---plan}"' in deploy_script
   assert 'if [[ "${V9_CLOUD_CHANGE_APPROVED:-false}" != "true" ]]' in deploy_script
-  service_section = deploy_script.split("service_deploy_cmd() {", 1)[1].split("job_deploy_cmd() {", 1)[0]
+  assert "load_nonsecret_smtp_env_from_dotenv()" in deploy_script
+  assert "Path(\".env\")" in deploy_script
+  assert "cat .env" not in deploy_script
+  service_section = deploy_script.split("deploy_service() {", 1)[1].split("grant_iap_access() {", 1)[0]
   assert "--set-secrets" not in service_section
   assert "SMTP_PASSWORD" not in service_section
   assert "TAVILY_API_KEY" not in service_section
-  job_section = deploy_script.split("job_deploy_cmd() {", 1)[1].split("bootstrap_settings_cmd() {", 1)[0]
+  job_section = deploy_script.split("deploy_job() {", 1)[1].split("bootstrap_settings() {", 1)[0]
   assert "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest" in job_section
   assert "TAVILY_API_KEY=${TAVILY_API_KEY_SECRET}:latest" in job_section
   assert "DISABLE_EMAIL_SEND=true" in job_section
   assert "EMAIL_SEND_MODE=preview" in job_section
   assert "V9_ENABLE_EMAIL_SEND=false" in job_section
-  assert deploy_script.index("bootstrap_settings_cmd") < deploy_script.index("scheduler_create_cmd")
-  assert deploy_script.index("scheduler_create_cmd") < deploy_script.index("scheduler_pause_cmd")
+  assert "roles/storage.objectUser" in deploy_script
+  assert "roles/secretmanager.secretAccessor" in deploy_script
+  assert "gcloud run jobs add-iam-policy-binding" in deploy_script
+  assert "gcloud iap web add-iam-policy-binding" in deploy_script
+  assert "roles/iap.httpsResourceAccessor" in deploy_script
+  assert deploy_script.index("bootstrap_settings") < deploy_script.index("deploy_scheduler")
+  assert deploy_script.index("deploy_scheduler") < deploy_script.index("pause_scheduler")
+  assert "save_weekly_delivery_settings" in bootstrap_script
+  assert "load_weekly_delivery_settings" in bootstrap_script
+  assert "printf '%s\\n' '{\"enabled\": false}'" not in deploy_script
+  assert '"enabled": False' in bootstrap_script
   for banned in ("tech-cartography-v7-demo", "tech-cartography-v7-live", "tech-cartography-v8-demo"):
     assert banned not in deploy_script
 
