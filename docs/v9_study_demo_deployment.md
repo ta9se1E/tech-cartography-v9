@@ -56,8 +56,33 @@ V9_STUDY_DEMO_CLEANUP_APPROVED=true bash scripts/cleanup_v9_study_demo.sh --appl
 
 Do not modify production resources during cleanup.
 
-## User verification
+## Browser Acceptance Validation
 
-Open the service URL in a browser, enter the shared study demo password, and confirm all six tabs render with copied production artifacts.
+Validation status:
+PASSED
 
-Acceptance tag `v9-study-demo-live-validated` should be created only after that manual browser confirmation.
+Validated by:
+User
+
+Validation date:
+2026-07-05 04:40:00 JST
+
+Validated items:
+
+- Public URLからpassword gateを表示できた
+- ログイン前は6タブとデータを表示しなかった
+- 誤ったパスワードではログインできなかった
+- 正しい共通パスワードでログインできた
+- 6タブを正常に表示できた
+- 勉強会用バナーを表示できた
+- 保存済み実データを表示できた
+- 外部検索停止の案内を確認できた
+- メール送信停止の案内を確認できた
+- ログアウト後にpassword gateへ戻った
+- ブラウザ上のエラーはなかった
+
+Acceptance conclusion:
+The isolated study demo is ready for the study session.
+
+Expiry:
+2026-07-12 04:27:30 JST
