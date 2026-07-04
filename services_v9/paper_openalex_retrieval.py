@@ -359,6 +359,9 @@ def _compose_openalex_search_text(theme_name: str, terms: list[str]) -> str:
 
 
 def _publication_window_from_time_range(time_range: str) -> tuple[str, str]:
+  normalized = str(time_range or "12m").strip().lower()
+  if normalized in {"all", "none", "unbounded"}:
+    return "", ""
   today = date.today()
   months = {
     "1m": 1,
@@ -366,7 +369,7 @@ def _publication_window_from_time_range(time_range: str) -> tuple[str, str]:
     "6m": 6,
     "12m": 12,
     "24m": 24,
-  }.get(str(time_range or "12m"), 12)
+  }.get(normalized, 12)
   start_year = today.year
   start_month = today.month - months + 1
   while start_month <= 0:

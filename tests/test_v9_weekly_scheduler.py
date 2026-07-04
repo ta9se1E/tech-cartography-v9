@@ -467,10 +467,11 @@ def test_paper_provider_contract_adapter_passes_query_limit_retry_and_normalizes
 
 def test_web_provider_contract_adapter_filters_plan_and_normalizes(tmp_path: Path) -> None:
   config = _base_config(_write_watch_profile(tmp_path))
+  config["limits"]["web_max_results"] = 2
   original_plan = {
     "global_web_plan": {
       "queries": [
-        {"query_id": "gw_q001", "enabled": True, "duplicate_of": "", "query_local": "a", "max_results": 5},
+        {"query_id": "gw_q001", "enabled": True, "duplicate_of": "", "query_local": "a", "max_results": 5, "result_bucket": "web"},
         {"query_id": "gw_q999", "enabled": True, "duplicate_of": "", "query_local": "b", "max_results": 5},
       ]
     }
@@ -481,6 +482,7 @@ def test_web_provider_contract_adapter_filters_plan_and_normalizes(tmp_path: Pat
     preview_calls.append(
       {
         "query_ids": [item["query_id"] for item in search_plan["global_web_plan"]["queries"]],
+        "query_max_results": [item["max_results"] for item in search_plan["global_web_plan"]["queries"]],
         "max_query_count": max_query_count,
         "verification_limit": verification_limit,
       }
@@ -512,6 +514,7 @@ def test_web_provider_contract_adapter_filters_plan_and_normalizes(tmp_path: Pat
   assert result["retrieval_run_id"] == "web_real_run_001"
   assert result["candidate_count"] == 1
   assert preview_calls[0]["query_ids"] == ["gw_q001"]
+  assert preview_calls[0]["query_max_results"] == [2]
   assert preview_calls[0]["verification_limit"] == 30
   assert original_plan["global_web_plan"]["queries"][1]["query_id"] == "gw_q999"
 

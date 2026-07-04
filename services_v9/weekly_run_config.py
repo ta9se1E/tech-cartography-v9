@@ -124,7 +124,7 @@ def validate_weekly_run_config(config: dict[str, Any]) -> dict[str, Any]:
 
   paper = dict(merged.get("paper", {}) or {})
   paper["approved_query_ids"] = _normalize_string_list(paper.get("approved_query_ids", []))
-  paper["time_range"] = str(paper.get("time_range", "12m") or "12m").strip() or "12m"
+  paper["time_range"] = str(paper.get("time_range", "12m") or "12m").strip().lower() or "12m"
   paper["per_page"] = max(_safe_int(paper.get("per_page", 25), 25), 1)
   paper["retry_limit"] = min(max(_safe_int(paper.get("retry_limit", 2), 2), 0), 5)
   paper["polite_email"] = str(paper.get("polite_email", "") or "").strip()

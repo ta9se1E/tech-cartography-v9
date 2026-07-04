@@ -1272,6 +1272,12 @@ def run_web_company_provider_for_weekly(
       for query in list(filtered_plan.get("global_web_plan", {}).get("queries", []) or [])
       if str(dict(query or {}).get("query_id", "") or "").strip() in approved_query_ids
     ]
+    web_limit = max(int(config.get("limits", {}).get("web_max_results", 100) or 100), 1)
+    company_limit = max(int(config.get("limits", {}).get("company_max_results", 100) or 100), 1)
+    for query in filtered_queries:
+      result_bucket = str(dict(query or {}).get("result_bucket", "") or "").strip().lower()
+      bucket_limit = company_limit if result_bucket == "company" else web_limit
+      query["max_results"] = min(max(int(dict(query or {}).get("max_results", bucket_limit) or bucket_limit), 1), bucket_limit)
     filtered_plan.setdefault("global_web_plan", {})["queries"] = filtered_queries
     if not filtered_queries:
       return _blocked_provider_stage("web_company", "approved query と一致する Global Web query がありません。")

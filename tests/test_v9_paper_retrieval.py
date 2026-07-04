@@ -108,6 +108,18 @@ def test_search_url_includes_cursor_and_filter() -> None:
   assert "from_publication_date:" in params["filter"][0]
 
 
+def test_search_url_omits_filter_for_all_time_range() -> None:
+  plan = build_unified_search_plan(_profile())
+  preview = build_openalex_paper_preview(plan, _profile(), time_range="all", max_results=5)
+  request = dict(preview["request"])
+  assert request["publication_date_from"] == ""
+  assert request["publication_date_to"] == ""
+  url = build_openalex_search_url(request, cursor="abc123")
+  parsed = urllib.parse.urlparse(url)
+  params = urllib.parse.parse_qs(parsed.query)
+  assert "filter" not in params
+
+
 def test_execute_openalex_pages_and_normalizes_rows() -> None:
   preview = _preview(max_results=3)
   payloads = {
