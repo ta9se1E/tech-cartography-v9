@@ -18,6 +18,11 @@ from services_v9.demo_data import (
   load_demo_watch_profile_payload,
 )
 from services_v9.digest_export import build_weekly_digest_markdown, signals_to_csv, signals_to_json
+from services_v9.paper_openalex_retrieval import (
+  build_openalex_paper_preview,
+  execute_openalex_paper_retrieval,
+  save_openalex_paper_retrieval_artifacts,
+)
 from services_v9.patent_bigquery_query import (
   build_patent_bigquery_preview,
   execute_patent_bigquery_retrieval,
@@ -111,6 +116,8 @@ STATE_PATENT_BIGQUERY_DRY_RUN = "state_patent_bigquery_dry_run"
 STATE_PATENT_BIGQUERY_APPROVED_QUERY_IDS = "state_patent_bigquery_approved_query_ids"
 STATE_PATENT_RETRIEVAL_RESULT = "state_patent_retrieval_result"
 STATE_PATENT_RETRIEVAL_MESSAGE = "state_patent_retrieval_message"
+STATE_PAPER_RETRIEVAL_RESULT = "state_paper_retrieval_result"
+STATE_PAPER_RETRIEVAL_MESSAGE = "state_paper_retrieval_message"
 
 UI_SEARCH_TOTAL_LIMIT_KEY = "ui_search_total_limit"
 UI_SEARCH_PATENT_LIMIT_KEY = "ui_search_patent_limit"
@@ -137,6 +144,8 @@ UI_MANUAL_QUERY_FALLBACK_KEY = "ui_manual_query_fallback"
 UI_MANUAL_QUERY_MAX_RESULTS_KEY = "ui_manual_query_max_results"
 UI_PATENT_BIGQUERY_QUERY_ID_KEY = "ui_patent_bigquery_query_id"
 UI_PATENT_BIGQUERY_MAX_RESULTS_KEY = "ui_patent_bigquery_max_results"
+UI_PAPER_OPENALEX_QUERY_ID_KEY = "ui_paper_openalex_query_id"
+UI_PAPER_OPENALEX_MAX_RESULTS_KEY = "ui_paper_openalex_max_results"
 
 
 @st.cache_data(show_spinner=False)
@@ -184,6 +193,7 @@ def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(STATE_REVIEWS_BY_SIGNAL_ID, {})
   st.session_state.setdefault(STATE_PATENT_BIGQUERY_DRY_RUN, {})
   st.session_state.setdefault(STATE_PATENT_BIGQUERY_APPROVED_QUERY_IDS, [])
+  st.session_state.setdefault(STATE_PAPER_RETRIEVAL_RESULT, {})
   if UI_THEME_NAME_KEY not in st.session_state:
     _set_profile_widgets(profile_dict)
   _ensure_search_plan_widget_defaults(profile_dict)
@@ -732,6 +742,37 @@ def _build_patent_bigquery_ui_state(
   }
 
 
+def _ensure_paper_openalex_widget_defaults(search_plan_state: dict[str, object]) -> None:
+  paper_queries = list(dict(search_plan_state.get("plan", {}) or {}).get("plans", {}).get("paper", {}).get("queries", []) or [])
+  if paper_queries:
+    first_query_id = str(paper_queries[0].get("query_id", "") or "")
+    if first_query_id:
+      st.session_state.setdefault(UI_PAPER_OPENALEX_QUERY_ID_KEY, first_query_id)
+  paper_limit = int(
+    dict(search_plan_state.get("plan", {}) or {}).get("plans", {}).get("paper", {}).get("limit", 50) or 50
+  )
+  st.session_state.setdefault(UI_PAPER_OPENALEX_MAX_RESULTS_KEY, min(max(paper_limit, 1), 200))
+
+
+def _build_paper_openalex_ui_state(
+  search_plan_state: dict[str, object],
+  watch_profile_dict: dict[str, object],
+) -> dict[str, object]:
+  _ensure_paper_openalex_widget_defaults(search_plan_state)
+  plan = dict(search_plan_state.get("plan", {}) or {})
+  preview = build_openalex_paper_preview(
+    plan,
+    watch_profile_dict,
+    selected_query_id=str(st.session_state.get(UI_PAPER_OPENALEX_QUERY_ID_KEY, "") or ""),
+    time_range=str(st.session_state.get(UI_SEARCH_TIME_RANGE_KEY, "12m") or "12m"),
+    max_results=int(st.session_state.get(UI_PAPER_OPENALEX_MAX_RESULTS_KEY, 50) or 50),
+  )
+  return {
+    "preview": preview,
+    "retrieval_result": dict(st.session_state.get(STATE_PAPER_RETRIEVAL_RESULT, {}) or {}),
+  }
+
+
 def _build_snapshot_history() -> tuple[list[str], dict[str, Path], list[dict[str, str]]]:
   snapshot_labels: list[str] = []
   snapshot_map: dict[str, Path] = {}
@@ -826,6 +867,7 @@ def run_app() -> None:
   )
   st.session_state[STATE_SEARCH_PLAN_DATA] = search_plan_state
   patent_bigquery_state = _build_patent_bigquery_ui_state(search_plan_state, watch_profile_dict)
+  paper_openalex_state = _build_paper_openalex_ui_state(search_plan_state, watch_profile_dict)
   profile_summary = watch_profile_summary(watch_profile_dict)
   query_previews = build_query_preview_bundle(watch_profile_dict)
   csv_template_text = build_csv_template()
@@ -891,6 +933,8 @@ def run_app() -> None:
       patent_bigquery_state,
       st.session_state.get(STATE_PATENT_BIGQUERY_MESSAGE),
       st.session_state.get(STATE_PATENT_RETRIEVAL_MESSAGE),
+      paper_openalex_state,
+      st.session_state.get(STATE_PAPER_RETRIEVAL_MESSAGE),
     )
   with tabs[2]:
     signal_events = render_top_signals_tab(
@@ -1040,6 +1084,21 @@ def run_app() -> None:
     st.session_state[STATE_PATENT_RETRIEVAL_MESSAGE] = (
       f"特許候補 staging を保存しました: {artifact_paths['staged_json']} / {artifact_paths['staged_csv']} "
       f"(log: {artifact_paths['retrieval_log_json']})"
+    )
+    st.rerun()
+
+  if source_events.get("run_paper_retrieval"):
+    paper_retrieval_result = execute_openalex_paper_retrieval(
+      dict(paper_openalex_state.get("preview", {}) or {}),
+    )
+    st.session_state[STATE_PAPER_RETRIEVAL_RESULT] = paper_retrieval_result
+    artifact_paths = save_openalex_paper_retrieval_artifacts(
+      dict(paper_openalex_state.get("preview", {}) or {}),
+      paper_retrieval_result,
+    )
+    st.session_state[STATE_PAPER_RETRIEVAL_MESSAGE] = (
+      f"OpenAlex論文候補 staging を保存しました: {artifact_paths['staged_json']} / {artifact_paths['staged_csv']} "
+      f"(log: {artifact_paths['provider_log_json']})"
     )
     st.rerun()
 

@@ -161,7 +161,7 @@ def build_paper_search_plan(
     "queries": _finalize_queries("paper", query_specs, _PAPER_MAX_QUERIES),
     "exclude_terms": exclude_terms,
     "notes": [
-      "検索実行は未実装です。OpenAlex などの論文APIはまだ呼び出しません。",
+      "OpenAlex staged retrieval を明示実行できます。ページ表示だけでは検索しません。",
       "Seed公報番号は論文検索クエリへ直接挿入しません。",
     ],
   }

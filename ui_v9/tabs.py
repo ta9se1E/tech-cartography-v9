@@ -278,6 +278,57 @@ def _render_patent_bigquery_preview(
   }
 
 
+def _render_paper_openalex_preview(
+  paper_openalex_state: dict[str, Any],
+  paper_retrieval_status_message: str | None = None,
+) -> bool:
+  preview = dict(paper_openalex_state.get("preview", {}) or {})
+  request = dict(preview.get("request", {}) or {})
+  validation_rows = list(preview.get("validation_rows", []) or [])
+  retrieval_result = dict(paper_openalex_state.get("retrieval_result", {}) or {})
+
+  st.markdown("### OpenAlex Paper Retrieval")
+  _show_status_message(paper_retrieval_status_message)
+  st.caption("OpenAlex 検索は明示ボタン時だけ実行します。Google Scholar 非公式スクレイピングは行いません。")
+  if not request:
+    st.warning("論文検索計画が未生成のため、OpenAlex query preview を作成できません。")
+    return False
+
+  query_options = list(preview.get("query_options", []) or [])
+  if query_options:
+    st.selectbox("論文query_id", options=query_options, key="ui_paper_openalex_query_id")
+  st.number_input("OpenAlex max results", min_value=1, max_value=200, step=5, key="ui_paper_openalex_max_results")
+  st.write(f"- query_id: `{request.get('query_id', '')}`")
+  st.write(f"- strategy: `{request.get('strategy', '')}` / language: `{request.get('language', '')}`")
+  st.write(f"- provider: `OpenAlex` / fallback interface: `Semantic Scholar future only`")
+  st.write(f"- cursor paging: `ON` / per-page: `{request.get('per_page', 25)}` / retry_limit: `{request.get('retry_limit', 0)}`")
+
+  with st.expander("OpenAlex URL Preview", expanded=False):
+    st.code(str(preview.get("url_preview", "") or ""), language="text")
+
+  st.write("**query validation**")
+  for row in validation_rows:
+    status = str(row.get("status", "") or "")
+    message = str(row.get("message", "") or "")
+    if status == "error":
+      st.error(message)
+    elif status == "warning":
+      st.warning(message)
+    else:
+      st.success(message)
+
+  if retrieval_result:
+    st.write("**最新 retrieval 結果**")
+    st.write(f"- provider status: `{retrieval_result.get('provider_status', '')}`")
+    st.write(f"- retrieval_run_id: `{retrieval_result.get('retrieval_run_id', '')}`")
+    st.write(f"- pages fetched: `{retrieval_result.get('pages_fetched', 0)}`")
+    st.write(f"- staged rows: `{retrieval_result.get('rows_retrieved', 0)}`")
+    if retrieval_result.get("error"):
+      st.warning(str(retrieval_result.get("error")))
+
+  return st.button("OpenAlex論文取得を実行", key="btn_openalex_paper_retrieval", width="stretch")
+
+
 def _signal_lookup_key(signal: Signal | dict[str, Any]) -> str:
   if isinstance(signal, Signal):
     signal_id = str(signal.id or "").strip()
@@ -640,6 +691,8 @@ def render_sources_tab(
   patent_bigquery_state: dict[str, Any] | None = None,
   patent_bigquery_status_message: str | None = None,
   patent_retrieval_status_message: str | None = None,
+  paper_openalex_state: dict[str, Any] | None = None,
+  paper_retrieval_status_message: str | None = None,
 ) -> dict[str, object]:
   st.subheader("情報源")
   st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
@@ -833,6 +886,7 @@ def render_sources_tab(
   run_patent_dry_run = False
   approve_patent_query = False
   run_patent_retrieval = False
+  run_paper_retrieval = False
   with st.expander("特許計画", expanded=False):
     patent_plan = dict(source_plans.get("patent", {}) or {})
     st.caption(f"最大件数: {patent_plan.get('limit', 0)}件")
@@ -848,9 +902,17 @@ def render_sources_tab(
     run_patent_dry_run = bool(patent_bigquery_events.get("run_patent_dry_run"))
     approve_patent_query = bool(patent_bigquery_events.get("approve_patent_query"))
     run_patent_retrieval = bool(patent_bigquery_events.get("run_patent_retrieval"))
-  delete_manual_query_ids.extend(
-    _render_source_plan_expander("論文計画", "paper", dict(source_plans.get("paper", {}) or {}), manual_queries_by_source["paper"])
-  )
+  with st.expander("論文計画", expanded=False):
+    paper_plan = dict(source_plans.get("paper", {}) or {})
+    st.caption(f"最大件数: {paper_plan.get('limit', 0)}件")
+    for note in list(paper_plan.get("notes", []) or []):
+      st.write(f"- {note}")
+    _render_generated_queries("paper", list(paper_plan.get("queries", []) or []))
+    delete_manual_query_ids.extend(_render_manual_queries("paper", manual_queries_by_source["paper"]))
+    run_paper_retrieval = _render_paper_openalex_preview(
+      dict(paper_openalex_state or {}),
+      paper_retrieval_status_message,
+    )
   delete_manual_query_ids.extend(
     _render_source_plan_expander("Web計画", "web", dict(source_plans.get("web", {}) or {}), manual_queries_by_source["web"])
   )
@@ -872,6 +934,7 @@ def render_sources_tab(
     "run_patent_dry_run": run_patent_dry_run,
     "approve_patent_query": approve_patent_query,
     "run_patent_retrieval": run_patent_retrieval,
+    "run_paper_retrieval": run_paper_retrieval,
   }
 
 
