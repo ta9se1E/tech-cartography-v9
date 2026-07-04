@@ -23,6 +23,7 @@ from services_v9.weekly_scheduler import (  # noqa: E402
   build_launchd_preview,
   release_weekly_run_lock,
   run_weekly_watch,
+  validate_approved_query_ids,
 )
 
 
@@ -67,6 +68,8 @@ def main() -> None:
   assert validation["status"] == "ok"
   assert config["enabled"] is False
   assert config["execution"]["dry_run"] is True
+  assert validate_approved_query_ids(["patent_q01"], {"patent_q01"}, "patent")["status"] == "ready"
+  assert validate_approved_query_ids(["unknown_patent"], {"patent_q01"}, "patent")["status"] == "blocked"
 
   with tempfile.TemporaryDirectory() as tmp_dir:
     root = Path(tmp_dir)
@@ -173,6 +176,76 @@ def main() -> None:
     assert (run_dir / "weekly_diff.json").exists()
     assert (run_dir / "weekly_digest.md").exists()
     assert (run_dir / "email_preview.json").exists()
+
+    live_config = default_weekly_run_config()
+    live_config["enabled"] = True
+    live_config["watch_profile_path"] = str(watch_profile_path)
+    live_config["execution"]["dry_run"] = False
+    live_config["execution"]["patent_enabled"] = True
+    live_config["execution"]["paper_enabled"] = True
+    live_config["execution"]["web_company_enabled"] = True
+    live_config["patent"]["approved_query_ids"] = ["unknown_patent_q99"]
+    live_config["patent"]["maximum_bytes_billed"] = 1000000
+    live_config["paper"]["approved_query_ids"] = ["paper_q01"]
+    live_config["web_company"]["approved_query_ids"] = ["gw_q001"]
+
+    calls = {"patent": 0, "paper": 0, "web_company": 0}
+
+    def _blocked_patent(**kwargs):
+      calls["patent"] += 1
+      raise AssertionError("blocked patent adapter must not run")
+
+    def _paper_ok(**kwargs):
+      calls["paper"] += 1
+      return {
+        "status": "success",
+        "message": "paper ok",
+        "rows": paper_rows,
+        "warnings": [],
+        "errors": [],
+        "provider_log": {"provider": "paper"},
+        "source_run": {
+          "run_id": "paper_live_run",
+          "artifact_dir": str(_write_artifact(root, "paper", "paper_live_run", paper_rows)),
+          "status": "success",
+          "candidate_count": len(paper_rows),
+        },
+        "details": {"rows_retrieved": len(paper_rows)},
+      }
+
+    def _web_ok(**kwargs):
+      calls["web_company"] += 1
+      return {
+        "status": "success",
+        "message": "web ok",
+        "rows": web_rows,
+        "warnings": [],
+        "errors": [],
+        "provider_log": {"provider": "web_company"},
+        "source_run": {
+          "run_id": "web_live_run",
+          "artifact_dir": str(_write_artifact(root, "web_company", "web_live_run", web_rows)),
+          "status": "success",
+          "candidate_count": len(web_rows),
+        },
+        "details": {"rows_retrieved": len(web_rows)},
+      }
+
+    live_result = run_weekly_watch(
+      live_config,
+      output_root=root / "live_case",
+      provider_adapters={
+        "patent": _blocked_patent,
+        "paper": _paper_ok,
+        "web_company": _web_ok,
+      },
+    )
+    assert live_result["status"] == "partial_success"
+    assert calls["patent"] == 0
+    assert calls["paper"] == 1
+    assert calls["web_company"] == 1
+    live_provider_log = json.loads((Path(live_result["run_dir"]) / "provider_log.json").read_text(encoding="utf-8"))
+    assert live_provider_log["patent"]["approved_query_validation"]["unknown_query_ids"] == ["unknown_patent_q99"]
 
     lock = acquire_weekly_run_lock("a" * 64, "run-lock", root / "weekly_locks", stale_timeout_seconds=60)
     assert lock["acquired"] is True

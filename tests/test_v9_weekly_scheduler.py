@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import os
 import subprocess
@@ -22,6 +23,7 @@ from services_v9.weekly_scheduler import (
   find_previous_successful_weekly_run,
   release_weekly_run_lock,
   run_weekly_watch,
+  validate_approved_query_ids,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -221,6 +223,32 @@ def test_load_and_validate_weekly_run_config_defaults() -> None:
   assert validated["status"] == "ok"
 
 
+def test_validate_approved_query_ids_ready_for_patent_paper_web() -> None:
+  patent = validate_approved_query_ids(["patent_q01"], {"patent_q01", "patent_q02"}, "patent")
+  paper = validate_approved_query_ids(["paper_q01"], {"paper_q01", "paper_q02"}, "paper")
+  web = validate_approved_query_ids(["gw_q001"], {"gw_q001", "gw_q002"}, "web_company")
+  assert patent["status"] == "ready"
+  assert paper["status"] == "ready"
+  assert web["status"] == "ready"
+  assert patent["valid_query_ids"] == ["patent_q01"]
+  assert paper["valid_query_ids"] == ["paper_q01"]
+  assert web["valid_query_ids"] == ["gw_q001"]
+
+
+def test_validate_approved_query_ids_blocks_unknown_ids_without_replacement() -> None:
+  patent = validate_approved_query_ids(["patent_q01", "unknown_patent"], {"patent_q01"}, "patent")
+  paper = validate_approved_query_ids(["unknown_paper"], {"paper_q01"}, "paper")
+  web = validate_approved_query_ids(["gw_q001", "unknown_web"], {"gw_q001"}, "web_company")
+  assert patent["status"] == "blocked"
+  assert paper["status"] == "blocked"
+  assert web["status"] == "blocked"
+  assert patent["unknown_query_ids"] == ["unknown_patent"]
+  assert paper["unknown_query_ids"] == ["unknown_paper"]
+  assert web["unknown_query_ids"] == ["unknown_web"]
+  assert patent["valid_query_ids"] == ["patent_q01"]
+  assert web["valid_query_ids"] == ["gw_q001"]
+
+
 def test_load_weekly_run_config_from_file(tmp_path: Path) -> None:
   config_path = tmp_path / "weekly_config.json"
   config_path.write_text(json.dumps(default_weekly_run_config(), ensure_ascii=False, indent=2), encoding="utf-8")
@@ -259,6 +287,105 @@ def test_run_weekly_watch_blocks_invalid_config(tmp_path: Path) -> None:
   status_path = Path(result["run_dir"]) / "weekly_run_status.json"
   payload = json.loads(status_path.read_text(encoding="utf-8"))
   assert payload["stage_statuses"]["load_config"] == "blocked"
+
+
+def test_provider_validation_blocks_unknown_patent_id_but_allows_other_providers(tmp_path: Path) -> None:
+  watch_profile_path = _write_watch_profile(tmp_path)
+  config = _base_config(watch_profile_path)
+  config["execution"]["dry_run"] = False
+  config["execution"]["patent_enabled"] = True
+  config["execution"]["paper_enabled"] = True
+  config["execution"]["web_company_enabled"] = True
+  config["patent"]["approved_query_ids"] = ["unknown_patent_q99"]
+  original_config = deepcopy(config)
+
+  calls = {"patent": 0, "paper": 0, "web_company": 0}
+
+  def _patent_adapter(**kwargs):
+    calls["patent"] += 1
+    raise AssertionError("blocked patent adapter must not be called")
+
+  def _paper_adapter(**kwargs):
+    calls["paper"] += 1
+    return _stage_adapter("paper", _paper_rows(), tmp_path, status="success", message="paper ok")(**kwargs)
+
+  def _web_adapter(**kwargs):
+    calls["web_company"] += 1
+    return _stage_adapter("web_company", _web_company_rows(), tmp_path, status="success", message="web ok")(**kwargs)
+
+  result = run_weekly_watch(
+    config,
+    output_root=tmp_path,
+    provider_adapters={"patent": _patent_adapter, "paper": _paper_adapter, "web_company": _web_adapter},
+  )
+  assert result["status"] == "partial_success"
+  assert calls["patent"] == 0
+  assert calls["paper"] == 1
+  assert calls["web_company"] == 1
+  assert config == original_config
+
+  run_dir = Path(result["run_dir"])
+  status_payload = json.loads((run_dir / "weekly_run_status.json").read_text(encoding="utf-8"))
+  assert status_payload["stage_statuses"]["retrieve_patent"] == "blocked"
+  assert status_payload["stage_statuses"]["retrieve_paper"] == "success"
+  assert status_payload["stage_statuses"]["retrieve_web_company"] == "success"
+  provider_log = json.loads((run_dir / "provider_log.json").read_text(encoding="utf-8"))
+  validation = provider_log["patent"]["approved_query_validation"]
+  assert validation["unknown_query_ids"] == ["unknown_patent_q99"]
+  assert validation["valid_query_ids"] == []
+
+
+def test_provider_validation_blocks_unknown_paper_and_web_ids(tmp_path: Path) -> None:
+  watch_profile_path = _write_watch_profile(tmp_path)
+  config = _base_config(watch_profile_path)
+  config["execution"]["dry_run"] = False
+  config["execution"]["patent_enabled"] = False
+  config["execution"]["paper_enabled"] = True
+  config["execution"]["web_company_enabled"] = True
+  config["paper"]["approved_query_ids"] = ["unknown_paper_q99"]
+  config["web_company"]["approved_query_ids"] = ["unknown_gw_q999"]
+
+  calls = {"paper": 0, "web_company": 0}
+
+  def _paper_adapter(**kwargs):
+    calls["paper"] += 1
+    raise AssertionError("blocked paper adapter must not be called")
+
+  def _web_adapter(**kwargs):
+    calls["web_company"] += 1
+    raise AssertionError("blocked web adapter must not be called")
+
+  result = run_weekly_watch(
+    config,
+    output_root=tmp_path,
+    provider_adapters={"paper": _paper_adapter, "web_company": _web_adapter},
+  )
+  assert calls["paper"] == 0
+  assert calls["web_company"] == 0
+  status_payload = json.loads((Path(result["run_dir"]) / "weekly_run_status.json").read_text(encoding="utf-8"))
+  assert status_payload["stage_statuses"]["retrieve_paper"] == "blocked"
+  assert status_payload["stage_statuses"]["retrieve_web_company"] == "blocked"
+
+
+def test_empty_approved_query_ids_keep_existing_safety_behavior_and_disabled_skips_validation(tmp_path: Path) -> None:
+  watch_profile_path = _write_watch_profile(tmp_path)
+  config = _base_config(watch_profile_path)
+  config["execution"]["dry_run"] = False
+  config["execution"]["patent_enabled"] = True
+  config["execution"]["paper_enabled"] = False
+  config["execution"]["web_company_enabled"] = False
+  config["patent"]["approved_query_ids"] = []
+  result = run_weekly_watch(config, output_root=tmp_path, provider_adapters={})
+  status_payload = json.loads((Path(result["run_dir"]) / "weekly_run_status.json").read_text(encoding="utf-8"))
+  assert status_payload["stage_statuses"]["load_config"] == "blocked"
+
+  disabled_config = _base_config(watch_profile_path)
+  disabled_config["execution"]["dry_run"] = False
+  disabled_config["execution"]["patent_enabled"] = False
+  disabled_config["patent"]["approved_query_ids"] = ["unknown_patent_q99"]
+  disabled_result = run_weekly_watch(disabled_config, output_root=tmp_path / "disabled_case", provider_adapters={})
+  disabled_status = json.loads((Path(disabled_result["run_dir"]) / "weekly_run_status.json").read_text(encoding="utf-8"))
+  assert disabled_status["stage_statuses"]["retrieve_patent"] == "skipped"
 
 
 def test_dry_run_skips_external_calls_and_can_reuse_saved_manifest(tmp_path: Path) -> None:

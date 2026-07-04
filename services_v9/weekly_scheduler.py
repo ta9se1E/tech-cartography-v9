@@ -831,6 +831,31 @@ def _run_provider_stage(
     "paper": _default_paper_stage_adapter,
     "web_company": _default_web_company_stage_adapter,
   }
+  provider_config = dict(config.get(source_type, {}) or {})
+  approved_query_ids = list(provider_config.get("approved_query_ids", []) or [])
+  if approved_query_ids:
+    approval_validation = validate_approved_query_ids(
+      approved_query_ids,
+      _available_query_ids_for_provider(search_plan, source_type),
+      source_type,
+    )
+    if approval_validation["status"] == "blocked":
+      return {
+        "status": "blocked",
+        "message": f"{source_type} approved query ID に不一致があります。",
+        "rows": [],
+        "warnings": list(approval_validation.get("warnings", []) or []),
+        "errors": list(approval_validation.get("errors", []) or []),
+        "provider_log": {
+          "provider": source_type,
+          "mode": "approved_query_validation_blocked",
+          "approved_query_validation": approval_validation,
+        },
+        "details": {
+          "approved_query_count": len(list(approval_validation.get("approved_query_ids", []) or [])),
+          "unknown_query_ids": list(approval_validation.get("unknown_query_ids", []) or []),
+        },
+      }
   adapter = provider_adapters.get(source_type) or default_adapter_map[source_type]
   timeout_key = f"{source_type}_seconds"
   if source_type == "web_company":
@@ -847,6 +872,68 @@ def _run_provider_stage(
     retries=stage_retry_limit,
     timeout_seconds=timeout_seconds,
   )
+
+
+def validate_approved_query_ids(
+  approved_query_ids: list[str],
+  available_query_ids: set[str],
+  provider_name: str,
+) -> dict[str, Any]:
+  cleaned_ids: list[str] = []
+  warnings: list[str] = []
+  seen: set[str] = set()
+  for raw in list(approved_query_ids or []):
+    text = str(raw or "").strip()
+    if not text:
+      warnings.append(f"{provider_name}: 空の approved query ID を無視しました。")
+      continue
+    if text in seen:
+      continue
+    seen.add(text)
+    cleaned_ids.append(text)
+  available = {str(item or "").strip() for item in set(available_query_ids or set()) if str(item or "").strip()}
+  valid_query_ids = [query_id for query_id in cleaned_ids if query_id in available]
+  unknown_query_ids = [query_id for query_id in cleaned_ids if query_id not in available]
+  errors: list[str] = []
+  status = "ready"
+  if unknown_query_ids:
+    status = "blocked"
+    errors.append(
+      f"{provider_name}: 現在の検索計画に存在しない approved query ID があります: {', '.join(unknown_query_ids)}"
+    )
+  return {
+    "status": status,
+    "provider": str(provider_name or "").strip(),
+    "approved_query_ids": list(cleaned_ids),
+    "valid_query_ids": valid_query_ids,
+    "unknown_query_ids": unknown_query_ids,
+    "errors": errors,
+    "warnings": warnings,
+  }
+
+
+def _available_query_ids_for_provider(search_plan: dict[str, Any], provider_name: str) -> set[str]:
+  provider = str(provider_name or "").strip()
+  if provider in {"patent", "paper"}:
+    queries = list(dict(search_plan.get("plans", {}).get(provider, {}) or {}).get("queries", []) or [])
+    return {
+      str(query.get("query_id", "") or "").strip()
+      for query in queries
+      if str(dict(query or {}).get("query_id", "") or "").strip()
+      and str(dict(query or {}).get("query_text", "") or "").strip()
+    }
+  if provider == "web_company":
+    queries = list(dict(search_plan.get("global_web_plan", {}) or {}).get("queries", []) or [])
+    return {
+      str(query.get("query_id", "") or "").strip()
+      for query in queries
+      if str(dict(query or {}).get("query_id", "") or "").strip()
+      and bool(dict(query or {}).get("enabled", False))
+      and not str(dict(query or {}).get("duplicate_of", "") or "").strip()
+      and str(dict(query or {}).get("query_local", "") or "").strip()
+      and int(dict(query or {}).get("max_results", 0) or 0) > 0
+    }
+  return set()
 
 
 def _default_patent_stage_adapter(
@@ -1447,5 +1534,6 @@ __all__ = [
   "load_weekly_run_config",
   "release_weekly_run_lock",
   "run_weekly_watch",
+  "validate_approved_query_ids",
   "validate_weekly_run_config",
 ]
