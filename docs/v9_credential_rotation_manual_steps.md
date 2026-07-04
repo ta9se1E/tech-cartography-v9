@@ -31,7 +31,9 @@ LangChain and LangSmith are separate credentials in the current inventory. Do no
 
 ```bash
 V9_CREDENTIAL_ROTATION_APPROVED=true \
-  python scripts/rotate_v9_credentials_secure.py --apply
+  python scripts/rotate_v9_credentials_secure.py \
+  --apply \
+  --only SMTP_PASSWORD,TAVILY_API_KEY
 ```
 
 4. Confirm the helper reports new Secret Manager version numbers only.

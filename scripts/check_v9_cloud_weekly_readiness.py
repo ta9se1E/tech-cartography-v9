@@ -480,7 +480,8 @@ def main() -> None:
   rotation_runbook = (PROJECT_ROOT / "docs" / "v9_credential_rotation_manual_steps.md").read_text(encoding="utf-8")
   assert "getpass" in rotation_module
   assert "V9_CREDENTIAL_ROTATION_APPROVED" in rotation_module
-  assert 'mode = "--apply" if args.apply else "--plan"' in rotation_module or "--plan" in rotation_module
+  assert "--only" in rotation_module
+  assert "resolve_selected_targets" in rotation_module
   assert ":latest" in deploy_script
   assert "<NEW_NUMERIC_VERSION>" in rotation_module
   assert "Scheduler remains PAUSED" in rotation_runbook

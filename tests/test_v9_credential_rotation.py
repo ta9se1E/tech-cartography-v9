@@ -10,6 +10,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 import scripts.rotate_v9_credentials_secure as rotation_script
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -61,25 +63,80 @@ def test_build_rotation_plan_defaults_to_latest_detection() -> None:
   assert plan["secret_versions"]["tech-cartography-smtp-password"]["latest_enabled_version"] == "2"
 
 
+def test_resolve_selected_targets_deduplicates_and_rejects_unknown() -> None:
+  assert rotation_script.resolve_selected_targets(
+    only="SMTP_PASSWORD,TAVILY_API_KEY,SMTP_PASSWORD",
+    credentials=[],
+  ) == ["SMTP_PASSWORD", "TAVILY_API_KEY"]
+  with pytest.raises(ValueError, match="unknown credential"):
+    rotation_script.resolve_selected_targets(only="NOT_A_REAL_KEY", credentials=[])
+
+
+def test_apply_requires_explicit_targets() -> None:
+  with patch.dict(os.environ, {"V9_CREDENTIAL_ROTATION_APPROVED": "true"}, clear=False):
+    with pytest.raises(ValueError, match="--apply requires --only or --credential"):
+      rotation_script.apply_rotation(
+        dotenv_path=PROJECT_ROOT / ".env.example",
+        targets=[],
+        secret_manager_client=_FakeSecretManagerClient(),
+        prompt_fn=lambda _name: "value",
+      )
+
+
 def test_apply_requires_approval_env() -> None:
   with patch.dict(os.environ, {}, clear=True):
-    try:
-      rotation_script.apply_rotation(targets=["SMTP_PASSWORD"], prompt_fn=lambda _name: "new-secret")
-    except RuntimeError as exc:
-      assert "V9_CREDENTIAL_ROTATION_APPROVED=true" in str(exc)
-    else:
-      raise AssertionError("expected apply guard failure")
+    with pytest.raises(RuntimeError, match="V9_CREDENTIAL_ROTATION_APPROVED=true"):
+      rotation_script.apply_rotation(
+        targets=["SMTP_PASSWORD"],
+        prompt_fn=lambda _name: "new-secret",
+        secret_manager_client=_FakeSecretManagerClient(),
+      )
+
+
+def test_apply_only_smtp_and_tavily_does_not_touch_langchain(tmp_path: Path) -> None:
+  dotenv_path = tmp_path / ".env"
+  dotenv_path.write_text(
+    "SMTP_PASSWORD=old-smtp\nTAVILY_API_KEY=old-tavily\nLANGCHAIN_API_KEY=keep-me\n",
+    encoding="utf-8",
+  )
+  os.chmod(dotenv_path, stat.S_IRUSR | stat.S_IWUSR)
+  state_path = tmp_path / "rotation_state.json"
+  client = _FakeSecretManagerClient()
+  prompts: list[str] = []
+
+  def _prompt(name: str) -> str:
+    prompts.append(name)
+    return f"new-{name.lower()}"
+
+  with patch.dict(os.environ, {"V9_CREDENTIAL_ROTATION_APPROVED": "true"}, clear=False):
+    result = rotation_script.apply_rotation(
+      dotenv_path=dotenv_path,
+      targets=["SMTP_PASSWORD", "TAVILY_API_KEY"],
+      state_path=state_path,
+      secret_manager_client=client,
+      prompt_fn=_prompt,
+    )
+  assert prompts == ["SMTP_PASSWORD", "TAVILY_API_KEY"]
+  assert "LANGCHAIN_API_KEY" not in prompts
+  assert result["status"] == "applied"
+  text = dotenv_path.read_text(encoding="utf-8")
+  assert "LANGCHAIN_API_KEY=keep-me" in text
+  assert "new-smtp_password" in text
+  assert client.added[0][0] == "tech-cartography-smtp-password"
+  assert client.added[1][0] == "tech-cartography-tavily-api-key"
 
 
 def test_apply_uses_getpass_and_returns_version_numbers_only(tmp_path: Path) -> None:
   dotenv_path = tmp_path / ".env"
   dotenv_path.write_text("SMTP_PASSWORD=old-value\n", encoding="utf-8")
   os.chmod(dotenv_path, stat.S_IRUSR | stat.S_IWUSR)
+  state_path = tmp_path / "rotation_state.json"
   client = _FakeSecretManagerClient()
   with patch.dict(os.environ, {"V9_CREDENTIAL_ROTATION_APPROVED": "true"}, clear=False):
     result = rotation_script.apply_rotation(
       dotenv_path=dotenv_path,
       targets=["SMTP_PASSWORD"],
+      state_path=state_path,
       secret_manager_client=client,
       prompt_fn=lambda _name: "new-secret-value",
     )
@@ -89,31 +146,71 @@ def test_apply_uses_getpass_and_returns_version_numbers_only(tmp_path: Path) -> 
   updated = dotenv_path.read_text(encoding="utf-8")
   assert updated.count("SMTP_PASSWORD=") == 1
   assert "new-secret-value" in updated
-  assert oct(dotenv_path.stat().st_mode & 0o777) == oct(stat.S_IRUSR | stat.S_IWUSR)
 
 
-def test_unused_credentials_do_not_create_secret_versions() -> None:
+def test_partial_failure_reports_applied_versions_without_secrets(tmp_path: Path) -> None:
+  dotenv_path = tmp_path / ".env"
+  dotenv_path.write_text("SMTP_PASSWORD=old\nTAVILY_API_KEY=old\n", encoding="utf-8")
+  state_path = tmp_path / "rotation_state.json"
+  client = _FakeSecretManagerClient()
+
+  def _prompt(name: str) -> str:
+    if name == "TAVILY_API_KEY":
+      raise RuntimeError(f"{name} input was empty; rotation aborted.")
+    return "new-smtp"
+
+  with patch.dict(os.environ, {"V9_CREDENTIAL_ROTATION_APPROVED": "true"}, clear=False):
+    result = rotation_script.apply_rotation(
+      dotenv_path=dotenv_path,
+      targets=["SMTP_PASSWORD", "TAVILY_API_KEY"],
+      state_path=state_path,
+      secret_manager_client=client,
+      prompt_fn=_prompt,
+    )
+  assert result["status"] == "partial"
+  assert result["applied_credentials"] == ["SMTP_PASSWORD"]
+  assert result["failed_credentials"] == ["TAVILY_API_KEY"]
+  assert result["results"][0]["new_secret_version"] == "3"
+  assert "new-smtp" not in json.dumps(result)
+  assert dotenv_path.read_text(encoding="utf-8").count("SMTP_PASSWORD=") == 1
+
+
+def test_reuse_existing_version_when_dotenv_is_older(tmp_path: Path, monkeypatch) -> None:
+  dotenv_path = tmp_path / ".env"
+  dotenv_path.write_text("SMTP_PASSWORD=old\n", encoding="utf-8")
+  os.utime(dotenv_path, (1000.0, 1000.0))
+  state_path = tmp_path / "rotation_state.json"
+  client = _FakeSecretManagerClient({
+    "tech-cartography-smtp-password": [
+      {"version": "3", "state": "enabled", "create_time": "2026-07-04T16:44:41+00:00"},
+      {"version": "2", "state": "enabled", "create_time": "2026-06-21T13:58:26"},
+    ],
+  })
+  with patch.dict(os.environ, {"V9_CREDENTIAL_ROTATION_APPROVED": "true"}, clear=False):
+    result = rotation_script.apply_rotation(
+      dotenv_path=dotenv_path,
+      targets=["SMTP_PASSWORD"],
+      state_path=state_path,
+      secret_manager_client=client,
+      prompt_fn=lambda _name: "local-only-update",
+    )
+  assert client.added == []
+  assert result["results"][0]["secret_version_reused"] is True
+  assert result["results"][0]["new_secret_version"] == "3"
+
+
+def test_unused_credentials_do_not_create_secret_versions(tmp_path: Path) -> None:
   client = _FakeSecretManagerClient()
   with patch.dict(os.environ, {"V9_CREDENTIAL_ROTATION_APPROVED": "true"}, clear=False):
     result = rotation_script.apply_rotation(
-      dotenv_path=PROJECT_ROOT / ".env.example",
+      dotenv_path=tmp_path / ".env",
       targets=["OPENAI_API_KEY", "OPENALEX_API_KEY"],
+      state_path=tmp_path / "rotation_state.json",
       secret_manager_client=client,
       prompt_fn=lambda _name: "should-not-be-used",
     )
   assert client.added == []
   assert all(item["status"] == "skipped" for item in result["results"])
-
-
-def test_alias_credentials_are_not_double_rotated_in_default_apply_list() -> None:
-  selected = [
-    name for name, action in rotation_script.ROTATION_CLASS.items()
-    if action in {"ROTATE_CLOUD", "ROTATE_LOCAL"}
-  ]
-  assert selected.count("LANGCHAIN_API_KEY") == 1
-  assert selected.count("LANGSMITH_API_KEY") == 1
-  assert "SMTP_PASSWORD" in selected
-  assert "OPENAI_API_KEY" not in selected
 
 
 def test_atomic_dotenv_update_preserves_other_lines_and_permissions(tmp_path: Path) -> None:
@@ -140,7 +237,7 @@ def test_helper_defaults_to_plan_mode(capsys) -> None:
   with patch.object(
     rotation_script,
     "build_rotation_plan",
-    return_value={"status": "plan", "credentials": []},
+    return_value={"status": "plan", "credentials": [], "selected_targets": []},
   ):
     exit_code = rotation_script.main([])
   captured = capsys.readouterr().out
@@ -148,17 +245,29 @@ def test_helper_defaults_to_plan_mode(capsys) -> None:
   assert '"status": "plan"' in captured
 
 
+def test_plan_mode_with_only_lists_selected_targets(capsys) -> None:
+  with patch.object(
+    rotation_script,
+    "build_rotation_plan",
+    return_value={"status": "plan", "credentials": [], "selected_targets": ["SMTP_PASSWORD", "TAVILY_API_KEY"]},
+  ) as mocked_plan:
+    rotation_script.main(["--only", "SMTP_PASSWORD,TAVILY_API_KEY"])
+  mocked_plan.assert_called_once()
+  assert mocked_plan.call_args.kwargs["selected_targets"] == ["SMTP_PASSWORD", "TAVILY_API_KEY"]
+
+
 def test_helper_does_not_define_secret_cli_arguments() -> None:
   text = (PROJECT_ROOT / "scripts" / "rotate_v9_credentials_secure.py").read_text(encoding="utf-8").lower()
   banned_tokens = ("--secret", "--password", "--api-key", "add_argument(\"--smtp", "add_argument('--smtp")
   assert all(token not in text for token in banned_tokens)
   assert "getpass" in text
+  assert "--only" in text
 
 
 def test_helper_apply_without_approval_exits_non_zero() -> None:
   helper_path = PROJECT_ROOT / "scripts" / "rotate_v9_credentials_secure.py"
   completed = subprocess.run(
-    ["python", str(helper_path), "--apply"],
+    ["python", str(helper_path), "--apply", "--only", "SMTP_PASSWORD"],
     cwd=PROJECT_ROOT,
     check=False,
     capture_output=True,
@@ -183,7 +292,7 @@ def test_plan_output_does_not_include_secret_values(capsys) -> None:
     "summarize_secret_versions",
     return_value={"tech-cartography-smtp-password": {"latest_enabled_version": "2", "versions": []}},
   ):
-    rotation_script.main(["--plan"])
+    rotation_script.main(["--plan", "--only", "SMTP_PASSWORD"])
   captured = capsys.readouterr().out
   assert "SMTP_PASSWORD" in captured
   assert "secret-one" not in captured
