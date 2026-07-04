@@ -77,7 +77,9 @@ Run locally in a normal terminal (not via chat):
 ```bash
 cd /path/to/PatentScout_AI_v9_study_demo
 conda activate 2026hack
-V9_STUDY_DEMO_PASSWORD_APPROVED=true PYTHONPATH=.:src python scripts/create_v9_study_demo_password.py --apply
+V9_STUDY_DEMO_PASSWORD_APPROVED=true \
+V9_STUDY_DEMO_STAGE_B_APPROVED=true \
+PYTHONPATH=.:src python scripts/create_v9_study_demo_password.py --apply
 ```
 
 Rules: getpass twice, minimum 16 characters, no CLI args, no file output.
