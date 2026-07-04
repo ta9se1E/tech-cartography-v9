@@ -9,6 +9,7 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
+import services_v9.email_delivery as email_delivery_module
 from services_v9.email_delivery import (
   EMAIL_SEND_MODE_PREVIEW,
   EMAIL_SEND_MODE_SELF_ONLY,
@@ -140,6 +141,36 @@ def _write_email_delivery_log(root: Path, run_id: str, payload: dict) -> Path:
   return path
 
 
+def _log_result(
+  *,
+  delivery_run_id: str = "email_delivery_test",
+  status: str = "sent",
+  digest_sha256: str | None = None,
+  send_attempted: bool = True,
+  send_succeeded: bool = True,
+  error_type: str = "",
+  safe_error_message: str = "",
+) -> dict[str, object]:
+  preview = _preview()
+  return {
+    "delivery_run_id": delivery_run_id,
+    "created_at": "2026-07-04T17:00:00+09:00",
+    "status": status,
+    "send_mode": EMAIL_SEND_MODE_SELF_ONLY,
+    "recipient_masked": "m***@example.com",
+    "sender_masked": "s***@example.com",
+    "subject": str(preview["subject"]),
+    "data_source": str(preview["data_source"]),
+    "signal_count": int(preview["signal_count"]),
+    "digest_sha256": digest_sha256 or str(preview["digest_sha256"]),
+    "send_attempted": send_attempted,
+    "send_succeeded": send_succeeded,
+    "smtp_host": "smtp.example.com",
+    "error_type": error_type,
+    "safe_error_message": safe_error_message,
+  }
+
+
 def test_build_subject_sanitizes_newlines_and_truncates() -> None:
   subject = build_digest_email_subject("テーマ名\nInjected: nope")
   assert "\n" not in subject
@@ -166,6 +197,121 @@ def test_load_config_has_safe_defaults() -> None:
   assert config.disabled is True
   assert config.send_mode == EMAIL_SEND_MODE_PREVIEW
   assert config.use_starttls is True
+
+
+def test_load_config_uses_smtp_aliases_when_canonical_names_missing() -> None:
+  config = load_email_delivery_config(
+    {
+      "DISABLE_EMAIL_SEND": "false",
+      "EMAIL_SEND_MODE": "self_only",
+      "SMTP_HOST": "smtp.example.com",
+      "SMTP_PORT": "587",
+      "SMTP_USER": "alias-user",
+      "SMTP_PASSWORD": "alias-password",
+      "SMTP_FROM_EMAIL": "alias@example.com",
+    }
+  )
+  assert config.disabled is False
+  assert config.send_mode == EMAIL_SEND_MODE_SELF_ONLY
+  assert config.smtp_username == "alias-user"
+  assert config.sender == "alias@example.com"
+  assert config.self_recipient == "alias@example.com"
+  assert config.recipient_allowlist == ("alias@example.com",)
+
+
+def test_load_config_prefers_canonical_names_over_aliases() -> None:
+  config = load_email_delivery_config(
+    {
+      "SMTP_USERNAME": "canonical-user",
+      "SMTP_USER": "alias-user",
+      "EMAIL_SENDER": "sender@example.com",
+      "SMTP_FROM_EMAIL": "alias@example.com",
+      "EMAIL_SELF_RECIPIENT": "self@example.com",
+      "EMAIL_RECIPIENT_ALLOWLIST": "self@example.com;other@example.com",
+      "SMTP_HOST": "smtp.example.com",
+      "SMTP_PORT": "587",
+      "SMTP_PASSWORD": "alias-password",
+    }
+  )
+  assert config.smtp_username == "canonical-user"
+  assert config.sender == "sender@example.com"
+  assert config.self_recipient == "self@example.com"
+  assert config.recipient_allowlist == ("other@example.com", "self@example.com")
+
+
+def test_load_config_ignores_empty_alias_values() -> None:
+  config = load_email_delivery_config(
+    {
+      "SMTP_HOST": "smtp.example.com",
+      "SMTP_PORT": "587",
+      "SMTP_USER": "   ",
+      "SMTP_PASSWORD": "alias-password",
+      "SMTP_FROM_EMAIL": " ",
+    }
+  )
+  assert config.smtp_username == ""
+  assert config.sender == ""
+  assert config.self_recipient == ""
+  assert config.recipient_allowlist == ()
+
+
+def test_load_config_reads_project_dotenv_for_aliases(monkeypatch, tmp_path: Path) -> None:
+  (tmp_path / ".env").write_text(
+    "\n".join(
+      [
+        "SMTP_HOST=smtp.example.com",
+        "SMTP_PORT=587",
+        "SMTP_USER=dotenv-user",
+        "SMTP_PASSWORD=dotenv-password",
+        "SMTP_FROM_EMAIL=dotenv@example.com",
+      ]
+    )
+    + "\n",
+    encoding="utf-8",
+  )
+  monkeypatch.setattr(email_delivery_module, "PROJECT_ROOT", tmp_path)
+  for name in [
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_USERNAME",
+    "SMTP_PASSWORD",
+    "SMTP_FROM_EMAIL",
+    "EMAIL_SENDER",
+    "EMAIL_SELF_RECIPIENT",
+    "EMAIL_RECIPIENT_ALLOWLIST",
+  ]:
+    monkeypatch.delenv(name, raising=False)
+  config = load_email_delivery_config()
+  assert config.smtp_host == "smtp.example.com"
+  assert config.smtp_port == 587
+  assert config.smtp_username == "dotenv-user"
+  assert config.sender == "dotenv@example.com"
+  assert config.self_recipient == "dotenv@example.com"
+  assert config.recipient_allowlist == ("dotenv@example.com",)
+
+
+def test_alias_based_config_passes_self_only_validation() -> None:
+  preview = _preview()
+  config = load_email_delivery_config(
+    {
+      "DISABLE_EMAIL_SEND": "false",
+      "EMAIL_SEND_MODE": "self_only",
+      "SMTP_HOST": "smtp.example.com",
+      "SMTP_PORT": "587",
+      "SMTP_USER": "alias-user",
+      "SMTP_PASSWORD": "alias-password",
+      "SMTP_FROM_EMAIL": "me@example.com",
+    }
+  )
+  rows = validate_self_only_delivery(
+    config,
+    "me@example.com",
+    preview["signals"],
+    preview["data_source"],
+    data_source_mode=preview["data_source_mode"],
+  )
+  assert not [row for row in rows if row["status"] == "error"]
 
 
 def test_validate_blocks_preview_mode_and_disable_flag() -> None:
@@ -374,6 +520,89 @@ def test_save_email_delivery_log_keeps_send_flags_strict_booleans(tmp_path: Path
   assert payload["send_attempted"] is False
   assert payload["send_succeeded"] is False
   assert has_successful_digest_delivery(tmp_path, payload["digest_sha256"]) is False
+
+
+def test_save_email_delivery_log_does_not_mutate_input_dict(tmp_path: Path) -> None:
+  original = _log_result(delivery_run_id="email_delivery_input_preserved")
+  before = json.loads(json.dumps(original))
+  save_email_delivery_log(original, tmp_path)
+  assert original == before
+
+
+def test_success_and_duplicate_blocked_logs_use_distinct_run_ids(tmp_path: Path) -> None:
+  digest = _preview()["digest_sha256"]
+  success_result = _log_result(delivery_run_id="email_delivery_same", digest_sha256=digest)
+  blocked_result = _log_result(
+    delivery_run_id="email_delivery_same",
+    status="blocked",
+    digest_sha256=digest,
+    send_attempted=False,
+    send_succeeded=False,
+    safe_error_message="duplicate digest blocked before SMTP",
+  )
+  success_path = save_email_delivery_log(success_result, tmp_path)
+  blocked_path = save_email_delivery_log(blocked_result, tmp_path)
+  success_payload = json.loads(success_path.read_text(encoding="utf-8"))
+  blocked_payload = json.loads(blocked_path.read_text(encoding="utf-8"))
+  assert success_payload["delivery_run_id"] == "email_delivery_same"
+  assert blocked_payload["delivery_run_id"] != success_payload["delivery_run_id"]
+  assert blocked_payload["delivery_run_id"].startswith("email_delivery_same_")
+  assert blocked_payload["status"] == "blocked"
+  assert has_successful_digest_delivery(tmp_path, digest) is True
+
+
+def test_preview_and_failed_logs_do_not_overwrite_success_log(tmp_path: Path) -> None:
+  digest = _preview()["digest_sha256"]
+  success_path = save_email_delivery_log(_log_result(delivery_run_id="email_delivery_shared", digest_sha256=digest), tmp_path)
+  preview_path = save_email_delivery_log(
+    _log_result(
+      delivery_run_id="email_delivery_shared",
+      status="preview",
+      digest_sha256=digest,
+      send_attempted=False,
+      send_succeeded=False,
+    ),
+    tmp_path,
+  )
+  failed_path = save_email_delivery_log(
+    _log_result(
+      delivery_run_id="email_delivery_shared",
+      status="error",
+      digest_sha256=digest,
+      send_attempted=True,
+      send_succeeded=False,
+      error_type="SMTPException",
+    ),
+    tmp_path,
+  )
+  success_payload = json.loads(success_path.read_text(encoding="utf-8"))
+  assert success_payload["status"] == "sent"
+  assert success_path != preview_path
+  assert success_path != failed_path
+  assert has_successful_digest_delivery(tmp_path, digest) is True
+
+
+def test_save_email_delivery_log_avoids_generated_id_collision_same_second(tmp_path: Path, monkeypatch) -> None:
+  monkeypatch.setattr(email_delivery_module, "_build_delivery_run_id", lambda: "email_delivery_fixed")
+  first_path = save_email_delivery_log(_log_result(delivery_run_id=""), tmp_path)
+  second_path = save_email_delivery_log(_log_result(delivery_run_id=""), tmp_path)
+  first_payload = json.loads(first_path.read_text(encoding="utf-8"))
+  second_payload = json.loads(second_path.read_text(encoding="utf-8"))
+  assert first_payload["delivery_run_id"] == "email_delivery_fixed"
+  assert second_payload["delivery_run_id"] != first_payload["delivery_run_id"]
+  assert second_payload["delivery_run_id"].startswith("email_delivery_fixed_")
+
+
+def test_save_email_delivery_log_preserves_existing_broken_log_and_switches_id(tmp_path: Path) -> None:
+  broken_dir = tmp_path / "email_delivery_runs" / "email_delivery_broken"
+  broken_dir.mkdir(parents=True, exist_ok=True)
+  broken_path = broken_dir / "email_delivery_log.json"
+  broken_path.write_text("{broken-json\n", encoding="utf-8")
+  new_path = save_email_delivery_log(_log_result(delivery_run_id="email_delivery_broken"), tmp_path)
+  assert broken_path.read_text(encoding="utf-8") == "{broken-json\n"
+  assert new_path != broken_path
+  new_payload = json.loads(new_path.read_text(encoding="utf-8"))
+  assert new_payload["delivery_run_id"].startswith("email_delivery_broken_")
 
 
 def test_page_render_keeps_six_tabs_and_email_buttons_without_sending(monkeypatch) -> None:

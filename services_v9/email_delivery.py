@@ -14,8 +14,9 @@ from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Mapping
+from uuid import uuid4
 
-from .persistence import ensure_v9_run_dirs
+from .persistence import PROJECT_ROOT, ensure_v9_run_dirs
 
 EMAIL_SCHEMA_VERSION = "v9.6a"
 EMAIL_SEND_MODE_PREVIEW = "preview"
@@ -47,24 +48,25 @@ class EmailDeliveryConfig:
 def load_email_delivery_config(
   environ: Mapping[str, str] | None = None,
 ) -> EmailDeliveryConfig:
-  env = dict(environ or os.environ)
+  env = _load_email_delivery_environment(environ)
   disabled = _env_bool(env, "DISABLE_EMAIL_SEND", True)
   send_mode = str(env.get("EMAIL_SEND_MODE", EMAIL_SEND_MODE_PREVIEW) or EMAIL_SEND_MODE_PREVIEW).strip().lower()
   if send_mode not in _ALLOWED_SEND_MODES:
     send_mode = EMAIL_SEND_MODE_PREVIEW
-  sender = _sanitize_single_line(str(env.get("EMAIL_SENDER", "") or ""))
-  self_recipient = _sanitize_single_line(str(env.get("EMAIL_SELF_RECIPIENT", "") or ""))
+  sender = _sanitize_single_line(_first_non_empty_env_value(env, "EMAIL_SENDER", "SMTP_FROM_EMAIL"))
+  self_recipient = _sanitize_single_line(_first_non_empty_env_value(env, "EMAIL_SELF_RECIPIENT", "SMTP_FROM_EMAIL"))
+  allowlist_value = _first_non_empty_env_value(env, "EMAIL_RECIPIENT_ALLOWLIST", "SMTP_FROM_EMAIL")
   allowlist = tuple(
     sorted(
       {
         _sanitize_single_line(item).lower()
-        for item in re.split(r"[,\n;]+", str(env.get("EMAIL_RECIPIENT_ALLOWLIST", "") or ""))
+        for item in re.split(r"[,\n;]+", allowlist_value)
         if _sanitize_single_line(item)
       }
     )
   )
   smtp_port = _safe_int(str(env.get("SMTP_PORT", "") or ""), default=0)
-  smtp_password = str(env.get("SMTP_PASSWORD", "") or "").strip()
+  smtp_password = _first_non_empty_env_value(env, "SMTP_PASSWORD")
   if smtp_password.lower() in _INVALID_SECRET_VALUES:
     smtp_password = ""
   return EmailDeliveryConfig(
@@ -73,12 +75,12 @@ def load_email_delivery_config(
     sender=sender,
     self_recipient=self_recipient,
     recipient_allowlist=allowlist,
-    smtp_host=_sanitize_single_line(str(env.get("SMTP_HOST", "") or "")),
+    smtp_host=_sanitize_single_line(_first_non_empty_env_value(env, "SMTP_HOST")),
     smtp_port=smtp_port,
-    smtp_username=_sanitize_single_line(str(env.get("SMTP_USERNAME", "") or "")),
+    smtp_username=_sanitize_single_line(_first_non_empty_env_value(env, "SMTP_USERNAME", "SMTP_USER")),
     smtp_password=smtp_password,
     use_starttls=_env_bool(env, "SMTP_USE_STARTTLS", True),
-    timeout_seconds=max(_safe_int(str(env.get("SMTP_TIMEOUT_SECONDS", "") or ""), default=30), 1),
+    timeout_seconds=max(_safe_int(_first_non_empty_env_value(env, "SMTP_TIMEOUT_SECONDS", "SMTP_TIMEOUT"), default=30), 1),
   )
 
 
@@ -285,27 +287,29 @@ def save_email_delivery_log(
   dirs = ensure_v9_run_dirs(Path(output_dir) if output_dir is not None else None)
   runs_dir = dirs["root"] / "email_delivery_runs"
   runs_dir.mkdir(parents=True, exist_ok=True)
-  delivery_run_id = str(result.get("delivery_run_id", "") or "").strip() or _build_delivery_run_id()
-  target_dir = runs_dir / delivery_run_id
-  target_dir.mkdir(parents=True, exist_ok=True)
+  result_payload = dict(result or {})
+  delivery_run_id, target_dir = _reserve_email_delivery_run_dir(
+    runs_dir,
+    preferred_run_id=str(result_payload.get("delivery_run_id", "") or "").strip(),
+  )
   path = target_dir / "email_delivery_log.json"
   payload = {
     "schema_version": EMAIL_SCHEMA_VERSION,
     "delivery_run_id": delivery_run_id,
-    "created_at": str(result.get("created_at", "") or _now_iso()),
-    "status": str(result.get("status", "") or ""),
-    "send_mode": str(result.get("send_mode", "") or ""),
-    "recipient_masked": str(result.get("recipient_masked", "") or ""),
-    "sender_masked": str(result.get("sender_masked", "") or ""),
-    "subject": str(result.get("subject", "") or ""),
-    "data_source": str(result.get("data_source", "") or ""),
-    "signal_count": int(result.get("signal_count", 0) or 0),
-    "digest_sha256": str(result.get("digest_sha256", "") or ""),
-    "send_attempted": _is_true_bool(result.get("send_attempted")),
-    "send_succeeded": _is_true_bool(result.get("send_succeeded")),
-    "smtp_host": str(result.get("smtp_host", "") or ""),
-    "error_type": str(result.get("error_type", "") or ""),
-    "safe_error_message": str(result.get("safe_error_message", "") or ""),
+    "created_at": str(result_payload.get("created_at", "") or _now_iso()),
+    "status": str(result_payload.get("status", "") or ""),
+    "send_mode": str(result_payload.get("send_mode", "") or ""),
+    "recipient_masked": str(result_payload.get("recipient_masked", "") or ""),
+    "sender_masked": str(result_payload.get("sender_masked", "") or ""),
+    "subject": str(result_payload.get("subject", "") or ""),
+    "data_source": str(result_payload.get("data_source", "") or ""),
+    "signal_count": int(result_payload.get("signal_count", 0) or 0),
+    "digest_sha256": str(result_payload.get("digest_sha256", "") or ""),
+    "send_attempted": _is_true_bool(result_payload.get("send_attempted")),
+    "send_succeeded": _is_true_bool(result_payload.get("send_succeeded")),
+    "smtp_host": str(result_payload.get("smtp_host", "") or ""),
+    "error_type": str(result_payload.get("error_type", "") or ""),
+    "safe_error_message": str(result_payload.get("safe_error_message", "") or ""),
   }
   path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
   return path
@@ -537,7 +541,7 @@ def _safe_int(value: str, default: int) -> int:
 
 
 def _build_delivery_run_id() -> str:
-  return "email_delivery_" + datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+  return "email_delivery_" + datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f") + f"_{uuid4().hex[:8]}"
 
 
 def _now_iso() -> str:
@@ -549,6 +553,73 @@ def _resolve_email_delivery_runs_dir(delivery_log_root: Path | str) -> Path:
   if root.name == "email_delivery_runs":
     return root
   return root / "email_delivery_runs"
+
+
+def _load_email_delivery_environment(
+  environ: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+  if environ is not None:
+    return dict(environ)
+  env = _read_project_dotenv(PROJECT_ROOT / ".env")
+  env.update(os.environ)
+  return env
+
+
+def _read_project_dotenv(path: Path) -> dict[str, str]:
+  try:
+    lines = path.read_text(encoding="utf-8").splitlines()
+  except FileNotFoundError:
+    return {}
+  except OSError:
+    return {}
+  payload: dict[str, str] = {}
+  for raw_line in lines:
+    line = raw_line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+      continue
+    key, value = line.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if value and len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+      value = value[1:-1]
+    payload[key] = value
+  return payload
+
+
+def _first_non_empty_env_value(
+  env: Mapping[str, str],
+  *names: str,
+) -> str:
+  for name in names:
+    value = str(env.get(name, "") or "").strip()
+    if value:
+      return value
+  return ""
+
+
+def _reserve_email_delivery_run_dir(
+  runs_dir: Path,
+  *,
+  preferred_run_id: str = "",
+) -> tuple[str, Path]:
+  base_run_id = _sanitize_delivery_run_id(preferred_run_id) or _build_delivery_run_id()
+  candidate_run_id = base_run_id
+  while True:
+    target_dir = runs_dir / candidate_run_id
+    try:
+      target_dir.mkdir(parents=True, exist_ok=False)
+      return candidate_run_id, target_dir
+    except FileExistsError:
+      candidate_run_id = _derive_collision_safe_delivery_run_id(base_run_id)
+
+
+def _derive_collision_safe_delivery_run_id(base_run_id: str) -> str:
+  return f"{base_run_id}_{uuid4().hex[:8]}"
+
+
+def _sanitize_delivery_run_id(value: str) -> str:
+  cleaned = re.sub(r"[^a-zA-Z0-9_.-]+", "_", _sanitize_single_line(value))
+  return cleaned.strip("._")
 
 
 def _is_true_bool(value: object) -> bool:

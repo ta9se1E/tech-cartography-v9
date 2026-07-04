@@ -1081,6 +1081,17 @@ def test_email_send_control_and_duplicate_digest_block(tmp_path: Path) -> None:
   assert second_status["stage_statuses"]["send_email"] == "blocked"
   second_email = json.loads((Path(second["run_dir"]) / "email_preview.json").read_text(encoding="utf-8"))
   assert second_email["message"].startswith("同一 Digest")
+  delivery_logs = sorted((tmp_path / "email_delivery_runs").glob("*/email_delivery_log.json"))
+  assert len(delivery_logs) == 2
+  log_payloads = [json.loads(path.read_text(encoding="utf-8")) for path in delivery_logs]
+  sent_logs = [payload for payload in log_payloads if payload["status"] == "sent"]
+  blocked_logs = [payload for payload in log_payloads if payload["status"] == "blocked"]
+  assert len(sent_logs) == 1
+  assert len(blocked_logs) == 1
+  assert sent_logs[0]["delivery_run_id"] == "email_delivery_mock"
+  assert blocked_logs[0]["delivery_run_id"] != sent_logs[0]["delivery_run_id"]
+  assert blocked_logs[0]["send_attempted"] is False
+  assert blocked_logs[0]["send_succeeded"] is False
 
 
 def _write_previous_weekly_email_status(

@@ -427,6 +427,17 @@ def _assert_digest_duplicate_detection(root: Path, watch_profile_path: Path) -> 
   assert len(send_calls) == 1
   blocked_status = json.loads((Path(blocked_duplicate["run_dir"]) / "weekly_run_status.json").read_text(encoding="utf-8"))
   assert blocked_status["stage_statuses"]["send_email"] == "blocked"
+  delivery_logs = sorted((root / "duplicate_preview_case" / "email_delivery_runs").glob("*/email_delivery_log.json"))
+  assert len(delivery_logs) == 2
+  log_payloads = [json.loads(path.read_text(encoding="utf-8")) for path in delivery_logs]
+  sent_logs = [payload for payload in log_payloads if payload["status"] == "sent"]
+  blocked_logs = [payload for payload in log_payloads if payload["status"] == "blocked"]
+  assert len(sent_logs) == 1
+  assert len(blocked_logs) == 1
+  assert sent_logs[0]["delivery_run_id"] == "email_delivery_duplicate_case"
+  assert blocked_logs[0]["delivery_run_id"] != sent_logs[0]["delivery_run_id"]
+  assert blocked_logs[0]["send_attempted"] is False
+  assert blocked_logs[0]["send_succeeded"] is False
 
 
 def _assert_lock_safety(root: Path, watch_profile_path: Path) -> None:

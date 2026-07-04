@@ -20,6 +20,7 @@ from services_v9.email_delivery import (  # noqa: E402
   build_digest_email_preview,
   build_digest_email_subject,
   has_successful_digest_delivery,
+  load_email_delivery_config,
   run_email_delivery_dry_run,
   save_email_delivery_log,
   send_digest_email_self_only,
@@ -104,6 +105,40 @@ def _preview(*, source_mode: str = "retrieval_saved", partial: bool = False) -> 
 
 
 def main() -> None:
+  alias_config = load_email_delivery_config(
+    {
+      "DISABLE_EMAIL_SEND": "false",
+      "EMAIL_SEND_MODE": "self_only",
+      "SMTP_HOST": "smtp.example.com",
+      "SMTP_PORT": "587",
+      "SMTP_USER": "smtp-user",
+      "SMTP_PASSWORD": "smtp-password",
+      "SMTP_FROM_EMAIL": "me@example.com",
+    }
+  )
+  assert alias_config.smtp_username == "smtp-user"
+  assert alias_config.sender == "me@example.com"
+  assert alias_config.self_recipient == "me@example.com"
+  assert alias_config.recipient_allowlist == ("me@example.com",)
+
+  canonical_config = load_email_delivery_config(
+    {
+      "SMTP_USERNAME": "canonical-user",
+      "SMTP_USER": "alias-user",
+      "EMAIL_SENDER": "sender@example.com",
+      "SMTP_FROM_EMAIL": "alias@example.com",
+      "EMAIL_SELF_RECIPIENT": "self@example.com",
+      "EMAIL_RECIPIENT_ALLOWLIST": "self@example.com",
+      "SMTP_HOST": "smtp.example.com",
+      "SMTP_PORT": "587",
+      "SMTP_PASSWORD": "smtp-password",
+    }
+  )
+  assert canonical_config.smtp_username == "canonical-user"
+  assert canonical_config.sender == "sender@example.com"
+  assert canonical_config.self_recipient == "self@example.com"
+  assert canonical_config.recipient_allowlist == ("self@example.com",)
+
   preview = _preview()
   subject = build_digest_email_subject("テーマ名\nInjected")
   assert "\n" not in subject
@@ -149,6 +184,31 @@ def main() -> None:
     payload = json.loads(log_path.read_text(encoding="utf-8"))
     assert payload["send_succeeded"] is True
     assert "smtp-password" not in log_path.read_text(encoding="utf-8")
+    assert has_successful_digest_delivery(tmp_dir, str(preview.get("digest_sha256", "") or "")) is True
+
+  with tempfile.TemporaryDirectory() as tmp_dir:
+    success_result = dict(send_result)
+    success_result["delivery_run_id"] = "email_delivery_ready"
+    success_path = save_email_delivery_log(success_result, tmp_dir)
+    blocked_path = save_email_delivery_log(
+      {
+        "delivery_run_id": "email_delivery_ready",
+        "status": "blocked",
+        "digest_sha256": preview["digest_sha256"],
+        "send_attempted": False,
+        "send_succeeded": False,
+        "send_mode": "self_only",
+        "recipient_masked": "m***@example.com",
+        "sender_masked": "s***@example.com",
+        "safe_error_message": "duplicate digest blocked before SMTP",
+      },
+      tmp_dir,
+    )
+    success_payload = json.loads(success_path.read_text(encoding="utf-8"))
+    blocked_payload = json.loads(blocked_path.read_text(encoding="utf-8"))
+    assert success_payload["delivery_run_id"] == "email_delivery_ready"
+    assert blocked_payload["delivery_run_id"] != success_payload["delivery_run_id"]
+    assert blocked_payload["status"] == "blocked"
     assert has_successful_digest_delivery(tmp_dir, str(preview.get("digest_sha256", "") or "")) is True
 
   with tempfile.TemporaryDirectory() as tmp_dir:

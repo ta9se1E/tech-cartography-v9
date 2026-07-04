@@ -735,6 +735,25 @@ def run_weekly_watch(
         email_preview_payload["message"] = "同一 Digest はすでに self-only 送信済みです。"
         email_preview_payload["duplicate_of_weekly_run_id"] = str((previous_sent or {}).get("weekly_run_id", "") or "")
         _write_json(run_dir / "email_preview.json", email_preview_payload)
+        save_email_delivery_log(
+          {
+            "created_at": _now_iso(),
+            "status": "blocked",
+            "send_mode": email_config.send_mode,
+            "recipient_masked": str(email_dry_run_result.get("recipient_masked", "") or ""),
+            "sender_masked": str(email_dry_run_result.get("sender_masked", "") or ""),
+            "subject": str(email_preview.get("subject", "") or ""),
+            "data_source": str(email_preview.get("data_source", "") or ""),
+            "signal_count": int(email_preview.get("signal_count", 0) or 0),
+            "digest_sha256": str(email_preview.get("digest_sha256", "") or ""),
+            "send_attempted": False,
+            "send_succeeded": False,
+            "smtp_host": email_config.smtp_host,
+            "error_type": "",
+            "safe_error_message": "duplicate digest blocked before SMTP",
+          },
+          base_root,
+        )
         _set_stage(stage_log, "send_email", "blocked", message=email_preview_payload["message"])
       else:
         send_fn = provider_adapters.get("email_send") or send_digest_email_self_only
