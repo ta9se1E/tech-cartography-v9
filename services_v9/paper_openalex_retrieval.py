@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .persistence import ensure_v9_run_dirs
+from .study_demo_guard import assert_external_execution_allowed
 from .watch_profile_schema import migrate_watch_profile, normalize_terms
 
 OpenUrl = Callable[[urllib.request.Request, int], Any]
@@ -138,6 +139,7 @@ def execute_openalex_paper_retrieval(
   timeout_sec: int = 30,
   rate_limit_sleep_sec: float = 0.2,
 ) -> dict[str, Any]:
+  assert_external_execution_allowed("openalex_execute")
   request = dict(preview.get("request", {}) or {})
   validation_rows = list(preview.get("validation_rows", []) or [])
   retrieval_run_id = _build_retrieval_run_id(str(request.get("query_id", "") or "paper"))

@@ -19,6 +19,7 @@ from .patent_bigquery_safety import (
   estimate_usd_from_bytes,
   resolve_project_id,
 )
+from .study_demo_guard import assert_external_execution_allowed
 
 from .persistence import ensure_v9_run_dirs
 from .watch_profile_schema import migrate_watch_profile, normalize_publication_number, normalize_terms
@@ -297,6 +298,7 @@ def run_patent_bigquery_dry_run(
   job_config_builder: JobConfigBuilder | None = None,
   config: BigQuerySafetyConfig | None = None,
 ) -> dict[str, Any]:
+  assert_external_execution_allowed("bigquery_dry_run")
   cfg = config or BigQuerySafetyConfig.from_env()
   request = dict(preview.get("request", {}) or {})
   sql = str(preview.get("sql", "") or "")
@@ -482,6 +484,7 @@ def execute_patent_bigquery_retrieval(
   job_config_builder: JobConfigBuilder | None = None,
   config: BigQuerySafetyConfig | None = None,
 ) -> dict[str, Any]:
+  assert_external_execution_allowed("bigquery_execute")
   cfg = config or BigQuerySafetyConfig.from_env()
   request = dict(preview.get("request", {}) or {})
   sql = str(preview.get("sql", "") or "")

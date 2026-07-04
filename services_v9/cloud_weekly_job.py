@@ -18,6 +18,7 @@ from .retrieval_run_store import stable_payload_signature
 from .web_company_retrieval import build_global_web_retrieval_preview, execute_global_web_retrieval
 from .weekly_run_config import default_weekly_run_config
 from .weekly_scheduler import run_web_company_provider_for_weekly, run_weekly_watch
+from .study_demo_guard import assert_external_execution_allowed
 
 STRICT_BOOL_VALUES = {
   "true": True,
@@ -105,6 +106,7 @@ def run_cloud_weekly_job(
   output_root: Path | str | None = None,
   storage_client: Any | None = None,
 ) -> dict[str, Any]:
+  assert_external_execution_allowed("cloud_run_job")
   env = dict(environ or os.environ)
   persist_root = Path(output_root) if output_root is not None else get_persist_root(env)
   settings = load_weekly_delivery_settings(base_dir=persist_root, environ=env, storage_client=storage_client)

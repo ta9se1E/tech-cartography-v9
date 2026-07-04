@@ -88,7 +88,9 @@ from services_v9.web_company_retrieval import (
   save_global_web_retrieval_artifacts,
 )
 from services_v9.watch_profile_schema import build_profile_from_form, watch_profile_summary
+from services_v9.study_demo_config import is_study_demo_mode
 from ui_v9.labels import data_source_mode_label_ja
+from ui_v9.study_demo_gate import render_study_demo_banner, render_study_demo_login_screen
 from ui_v9.tabs import (
   V9_TAB_LABELS,
   render_digest_export_tab,
@@ -1131,6 +1133,11 @@ def run_app() -> None:
     layout="wide",
     initial_sidebar_state="collapsed",
   )
+
+  if is_study_demo_mode():
+    if not render_study_demo_login_screen():
+      return
+    render_study_demo_banner()
 
   ensure_v9_run_dirs()
   raw_signals, raw_profile = load_demo_bundle()

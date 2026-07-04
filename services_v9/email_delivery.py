@@ -17,6 +17,7 @@ from typing import Any, Mapping
 from uuid import uuid4
 
 from .persistence import PROJECT_ROOT, ensure_v9_run_dirs
+from .study_demo_guard import assert_external_execution_allowed
 
 EMAIL_SCHEMA_VERSION = "v9.6a"
 EMAIL_PREVIEW_SCHEMA_VERSION = "v9.6e"
@@ -287,6 +288,7 @@ def send_digest_email_self_only(
   smtp_factory: type[smtplib.SMTP] | None = None,
   smtp_ssl_factory: type[smtplib.SMTP_SSL] | None = None,
 ) -> dict:
+  assert_external_execution_allowed("smtp_send")
   dry_run_result = run_email_delivery_dry_run(preview, config)
   result = dict(dry_run_result)
   result["send_attempted"] = False

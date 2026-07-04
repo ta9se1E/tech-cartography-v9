@@ -14,6 +14,7 @@ from .cloud_runtime import (
   get_scheduler_region,
   is_cloud_scheduler_admin_enabled,
 )
+from .study_demo_guard import assert_external_execution_allowed
 
 SchedulerCall = Callable[[str, str, dict[str, Any] | None], dict[str, Any]]
 
@@ -52,6 +53,7 @@ def apply_scheduler_settings(
   environ: Mapping[str, str] | None = None,
   call_api: SchedulerCall | None = None,
 ) -> dict[str, Any]:
+  assert_external_execution_allowed("cloud_scheduler")
   if not is_cloud_scheduler_admin_enabled(environ):
     return _blocked_response("クラウド管理機能が無効です。")
   project = get_google_cloud_project(environ)
@@ -99,6 +101,7 @@ def _toggle_scheduler_state(
   environ: Mapping[str, str] | None = None,
   call_api: SchedulerCall | None = None,
 ) -> dict[str, Any]:
+  assert_external_execution_allowed("cloud_scheduler")
   if not is_cloud_scheduler_admin_enabled(environ):
     return _blocked_response("クラウド管理機能が無効です。")
   project = get_google_cloud_project(environ)
