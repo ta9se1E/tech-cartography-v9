@@ -796,6 +796,18 @@ def render_sources_tab(
   st.write(f"- 読み込み件数: {source_info['loaded_count']}件")
   if source_info.get("provisional_scoring"):
     st.caption("アップロードデータは Watch Profile に基づく仮スコアリング済みです。既存スコアがある場合はその値を尊重します。")
+  integration_summary = dict(source_info.get("integration_summary", {}) or {})
+  if integration_summary:
+    st.markdown("### 統合・重複除去サマリー")
+    st.write(
+      f"- run_id: `{integration_summary.get('integration_run_id', '')}` | "
+      f"raw: `{integration_summary.get('raw_count', 0)}` | "
+      f"capped: `{integration_summary.get('capped_count', 0)}` | "
+      f"deduped: `{integration_summary.get('deduped_count', 0)}` | "
+      f"ranked top100: `{integration_summary.get('ranked_count', 0)}`"
+    )
+    active_sources = ", ".join(str(item) for item in list(integration_summary.get("active_sources", []) or [])) or "none"
+    st.write(f"- active retrieval sources: `{active_sources}`")
   warnings = list(source_info.get("warnings", []))
   if warnings:
     st.markdown("### 読み込み警告")
@@ -814,6 +826,22 @@ def render_sources_tab(
   for item in operation_rows:
     label = type_label_ja(item["label"]) if item["label"] in {"patent", "paper", "web", "company"} else item["label"]
     st.write(f"- {label}: {source_mode_label_ja(item['mode'])}")
+
+  if integration_summary:
+    st.markdown("### 情報源別Top5")
+    top_by_source = dict(integration_summary.get("top_by_source", {}) or {})
+    for source_type in ("patent", "paper", "web", "company"):
+      st.write(f"**{type_label_ja(source_type)} Top5**")
+      rows = list(top_by_source.get(source_type, []) or [])
+      if not rows:
+        st.caption("候補なし")
+        continue
+      for row in rows[:5]:
+        st.write(
+          f"- #{row.get('current_rank', '-')} {row.get('title', '')} | "
+          f"score `{float(row.get('final_score', row.get('score', 0.0)) or 0.0):.2f}` | "
+          f"{row.get('organization', '') or row.get('source_name', '')}"
+        )
 
   plan = dict(search_plan_state.get("plan", {}) or {})
   plan_summary = dict(search_plan_state.get("summary", {}) or {})

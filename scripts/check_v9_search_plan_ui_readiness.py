@@ -10,6 +10,9 @@ from streamlit.testing.v1 import AppTest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
   sys.path.insert(0, str(PROJECT_ROOT))
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+  sys.path.insert(0, str(SRC_ROOT))
 
 from ui_v9.signal_watch_app import _build_search_plan_view, _default_search_plan_settings  # noqa: E402
 from ui_v9.tabs import V9_TAB_LABELS  # noqa: E402

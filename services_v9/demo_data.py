@@ -77,14 +77,20 @@ def build_source_rows(signals: list[Signal]) -> list[dict[str, Any]]:
   ]
 
 
-def build_operation_status_rows() -> list[dict[str, str]]:
+def build_operation_status_rows(
+  *,
+  bigquery_mode: str = "off",
+  openalex_mode: str = "off",
+  web_search_mode: str = "off",
+  email_mode: str = "off",
+) -> list[dict[str, str]]:
   return [
     {"label": "patent", "mode": "demo"},
     {"label": "paper", "mode": "demo"},
     {"label": "web", "mode": "staged"},
     {"label": "company", "mode": "staged"},
-    {"label": "BigQuery", "mode": "off"},
-    {"label": "OpenAlex", "mode": "off"},
-    {"label": "Web検索", "mode": "off"},
-    {"label": "メール配信", "mode": "off"},
+    {"label": "BigQuery", "mode": bigquery_mode},
+    {"label": "OpenAlex", "mode": openalex_mode},
+    {"label": "Web検索", "mode": web_search_mode},
+    {"label": "メール配信", "mode": email_mode},
   ]

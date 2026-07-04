@@ -49,6 +49,7 @@ from services_v9.signal_loader import (
   load_signals_from_csv_text,
   load_signals_from_json_text,
 )
+from services_v9.signal_integration import apply_signal_change_tracking, integrate_multi_source_signals
 from services_v9.signal_models import Signal, WatchProfile
 from services_v9.signal_scoring import (
   apply_watch_profile_suggestions,
@@ -257,6 +258,8 @@ def _resolve_current_signal_source(
   demo_signals = [signal.to_dict() for signal in enrich_signals([Signal.from_dict(item) for item in raw_demo_signals])]
   warnings: list[str] = []
 
+  source_payload: dict[str, object] | None = None
+
   if mode == "csv":
     if csv_file is None:
       warnings.append("CSVアップロードモードですが、まだCSVファイルが選択されていません。デモデータを表示します。")
@@ -276,7 +279,7 @@ def _resolve_current_signal_source(
         )
         warnings.extend(load_warnings)
         if prepared:
-          return {
+          source_payload = {
             "requested_mode": mode,
             "mode": "csv",
             "label": data_source_mode_label_ja("csv"),
@@ -287,7 +290,8 @@ def _resolve_current_signal_source(
             "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
             "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
           }
-        warnings.append("CSVから有効なシグナルを読み込めなかったため、デモデータを表示します。")
+        else:
+          warnings.append("CSVから有効なシグナルを読み込めなかったため、デモデータを表示します。")
 
   if mode == "json":
     if json_file is None:
@@ -308,7 +312,7 @@ def _resolve_current_signal_source(
         )
         warnings.extend(load_warnings)
         if prepared:
-          return {
+          source_payload = {
             "requested_mode": mode,
             "mode": "json",
             "label": data_source_mode_label_ja("json"),
@@ -319,19 +323,72 @@ def _resolve_current_signal_source(
             "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
             "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
           }
-        warnings.append("JSONから有効なシグナルを読み込めなかったため、デモデータを表示します。")
+        else:
+          warnings.append("JSONから有効なシグナルを読み込めなかったため、デモデータを表示します。")
 
-  return {
-    "requested_mode": mode,
-    "mode": "demo",
-    "label": data_source_mode_label_ja("demo"),
-    "signals": demo_signals,
-    "loaded_count": len(demo_signals),
-    "warnings": warnings,
-    "provisional_scoring": False,
-    "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
-    "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
+  if source_payload is None:
+    source_payload = {
+      "requested_mode": mode,
+      "mode": "demo",
+      "label": data_source_mode_label_ja("demo"),
+      "signals": demo_signals,
+      "loaded_count": len(demo_signals),
+      "warnings": warnings,
+      "provisional_scoring": False,
+      "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
+      "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
+    }
+
+  patent_rows = list(dict(st.session_state.get(STATE_PATENT_RETRIEVAL_RESULT, {}) or {}).get("rows", []) or [])
+  paper_rows = list(dict(st.session_state.get(STATE_PAPER_RETRIEVAL_RESULT, {}) or {}).get("rows", []) or [])
+  web_company_rows = list(dict(st.session_state.get(STATE_GLOBAL_WEB_RETRIEVAL_RESULT, {}) or {}).get("rows", []) or [])
+  if not patent_rows and not paper_rows and not web_company_rows:
+    return source_payload
+  if str(source_payload.get("mode", "") or "") in {"csv", "json"}:
+    source_payload = dict(source_payload)
+    source_payload["warnings"] = list(source_payload.get("warnings", []) or []) + [
+      "CSV/JSONモードでは staged retrieval 結果を自動統合しません。統合Signalを確認するときはデモモードへ戻してください。"
+    ]
+    return source_payload
+
+  integrated = integrate_multi_source_signals(
+    base_signals=list(source_payload.get("signals", []) or []),
+    watch_profile=watch_profile_dict,
+    patent_rows=patent_rows,
+    paper_rows=paper_rows,
+    web_company_rows=web_company_rows,
+    max_items=1000,
+    ranking_limit=100,
+  )
+  integration_mode_parts = []
+  if patent_rows:
+    integration_mode_parts.append("patent")
+  if paper_rows:
+    integration_mode_parts.append("paper")
+  if web_company_rows:
+    integration_mode_parts.append("web/company")
+  integration_label = f"{source_payload['label']} + staged retrieval"
+  source_payload = {
+    **source_payload,
+    "mode": "integrated",
+    "label": integration_label,
+    "signals": list(integrated.get("signals", []) or []),
+    "loaded_count": int(integrated.get("ranked_count", 0) or 0),
+    "provisional_scoring": True,
+    "integration_summary": {
+      "integration_run_id": str(integrated.get("integration_run_id", "") or ""),
+      "raw_count": int(integrated.get("raw_count", 0) or 0),
+      "capped_count": int(integrated.get("capped_count", 0) or 0),
+      "deduped_count": int(integrated.get("deduped_count", 0) or 0),
+      "ranked_count": int(integrated.get("ranked_count", 0) or 0),
+      "active_sources": integration_mode_parts,
+      "top_by_source": dict(integrated.get("top_by_source", {}) or {}),
+    },
   }
+  source_payload["warnings"] = list(source_payload.get("warnings", []) or []) + [
+    "staged retrieval 結果を既存Signalへ統合しました。Top100候補のみをランキング表示します。"
+  ]
+  return source_payload
 
 
 def _stable_signal_id(signal: dict[str, object], index: int = 0) -> str:
@@ -831,6 +888,18 @@ def _build_snapshot_history() -> tuple[list[str], dict[str, Path], list[dict[str
   return snapshot_labels, snapshot_map, history_rows
 
 
+def _build_operation_rows() -> list[dict[str, str]]:
+  patent_mode = "live" if bool(dict(st.session_state.get(STATE_PATENT_RETRIEVAL_RESULT, {}) or {}).get("rows")) else "off"
+  paper_mode = "live" if bool(dict(st.session_state.get(STATE_PAPER_RETRIEVAL_RESULT, {}) or {}).get("rows")) else "off"
+  web_mode = "live" if bool(dict(st.session_state.get(STATE_GLOBAL_WEB_RETRIEVAL_RESULT, {}) or {}).get("rows")) else "off"
+  return build_operation_status_rows(
+    bigquery_mode=patent_mode,
+    openalex_mode=paper_mode,
+    web_search_mode=web_mode,
+    email_mode="off",
+  )
+
+
 def _resolve_selected_snapshot(snapshot_map: dict[str, Path]) -> tuple[Path | None, dict | None]:
   selected_label = st.session_state.get(UI_PREVIOUS_SNAPSHOT_CHOICE_KEY, "")
   path = snapshot_map.get(str(selected_label))
@@ -922,6 +991,12 @@ def run_app() -> None:
   previous_snapshot_payload = st.session_state.get(STATE_PREVIOUS_SNAPSHOT)
   compare_enabled = bool(st.session_state.get(STATE_COMPARE_ENABLED, False))
 
+  if previous_snapshot_payload:
+    current_signal_dicts = apply_signal_change_tracking(
+      current_signal_dicts,
+      list(previous_snapshot_payload.get("signals", []) or []),
+    )
+
   diff_result = None
   if compare_enabled and previous_snapshot_payload:
     current_signal_dicts = apply_snapshot_status(current_signal_dicts, previous_snapshot_payload.get("signals", []))
@@ -936,7 +1011,7 @@ def run_app() -> None:
   suggestions = suggest_watch_profile_updates(signals, watch_profile)
   drift = compute_theme_drift_alert(signals, watch_profile)
   source_rows = build_source_rows(signals)
-  operation_rows = build_operation_status_rows()
+  operation_rows = _build_operation_rows()
   csv_text = signals_to_csv(signals)
 
   st.title("Tech Cartography v9")

@@ -115,6 +115,13 @@ from .signal_loader import (
   prepare_uploaded_signals,
   score_signal_with_profile,
 )
+from .signal_integration import (
+  apply_signal_change_tracking,
+  build_source_top_signals,
+  deduplicate_signal_candidates,
+  integrate_multi_source_signals,
+  rank_integrated_signals,
+)
 from .score_explainer import (
   attach_score_explanations,
   build_signal_text_blob,
@@ -165,6 +172,7 @@ __all__ = [
   "DEFAULT_GLOBAL_WEB_INTENTS",
   "GLOBAL_WEB_PLAN_SCHEMA_VERSION",
   "apply_snapshot_status",
+  "apply_signal_change_tracking",
   "apply_watch_profile_suggestions",
   "apply_review_to_signal",
   "apply_reviews_to_signals",
@@ -180,6 +188,7 @@ __all__ = [
   "build_global_web_search_plan_markdown",
   "build_global_web_validation_csv",
   "build_signal_text_blob",
+  "build_source_top_signals",
   "build_weekly_digest_markdown",
   "build_company_query_preview",
   "build_company_search_plan",
@@ -209,6 +218,7 @@ __all__ = [
   "compare_snapshots",
   "default_bilingual_watch_profile",
   "default_review_state",
+  "deduplicate_signal_candidates",
   "ensure_v9_run_dirs",
   "enrich_signals_with_profile",
   "execute_global_web_retrieval",
@@ -219,6 +229,7 @@ __all__ = [
   "export_global_web_search_plan",
   "find_keyword_hits",
   "get_v9_runs_dir",
+  "integrate_multi_source_signals",
   "list_snapshots",
   "load_demo_signals",
   "load_demo_watch_profile",
@@ -240,6 +251,7 @@ __all__ = [
   "parse_publication_numbers",
   "parse_terms",
   "prepare_uploaded_signals",
+  "rank_integrated_signals",
   "score_signal_with_profile",
   "select_diverse_top_signals",
   "save_digest_files",
