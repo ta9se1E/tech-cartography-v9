@@ -480,6 +480,10 @@ def main() -> None:
 
   rotation_module = (PROJECT_ROOT / "scripts" / "rotate_v9_credentials_secure.py").read_text(encoding="utf-8")
   rotation_runbook = (PROJECT_ROOT / "docs" / "v9_credential_rotation_manual_steps.md").read_text(encoding="utf-8")
+  enabled_toggle_script = (PROJECT_ROOT / "scripts" / "set_v9_cloud_weekly_enabled.py").read_text(encoding="utf-8")
+  assert "save_weekly_delivery_settings" in enabled_toggle_script
+  assert "V9_CLOUD_CHANGE_APPROVED" in enabled_toggle_script
+  assert "mask_email_address" in enabled_toggle_script
   assert "getpass" in rotation_module
   assert "V9_CREDENTIAL_ROTATION_APPROVED" in rotation_module
   assert "--only" in rotation_module
