@@ -46,8 +46,11 @@ def main() -> int:
     if os.environ.get("V9_STUDY_DEMO_RESET_APPROVED", "").lower() != "true":
       print("ERROR: --apply requires V9_STUDY_DEMO_RESET_APPROVED=true", file=sys.stderr)
       return 1
-    print(json.dumps({"status": "blocked_in_stage_a", "plan": plan}, indent=2))
-    return 0
+    from services_v9.study_demo_gcs import default_storage_client, reset_active_from_seed
+
+    result = reset_active_from_seed(default_storage_client(), demo_bucket=demo_bucket)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get("status") == "reset" else 1
 
   print(json.dumps(plan, ensure_ascii=False, indent=2))
   return 0

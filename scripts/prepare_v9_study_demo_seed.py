@@ -77,13 +77,15 @@ def main() -> int:
     if os.environ.get("V9_STUDY_DEMO_DATA_COPY_APPROVED", "").lower() != "true":
       print("ERROR: --apply requires V9_STUDY_DEMO_DATA_COPY_APPROVED=true", file=sys.stderr)
       return 1
-    manifest = build_seed_manifest(
+    from services_v9.study_demo_gcs import copy_seed_from_production, default_storage_client
+
+    result = copy_seed_from_production(
+      default_storage_client(),
       source_run_id=args.source_run_id,
-      copied_objects=[item for item in build_plan(source_run_id=args.source_run_id, demo_bucket=demo_bucket)["planned_seed_objects"]],
-      excluded_objects=build_plan(source_run_id=args.source_run_id, demo_bucket=demo_bucket)["excluded"],
+      demo_bucket=demo_bucket,
     )
-    print(json.dumps({"status": "blocked_in_stage_a", "manifest_preview_keys": list(manifest.keys())}, indent=2))
-    return 0
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get("status") == "copied" else 1
 
   print(json.dumps(build_plan(source_run_id=args.source_run_id, demo_bucket=demo_bucket), ensure_ascii=False, indent=2))
   return 0

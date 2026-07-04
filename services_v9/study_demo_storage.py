@@ -48,6 +48,7 @@ EXCLUDED_COPY_NAMES = (
 SENSITIVE_JSON_KEYS = frozenset(
   {
     "recipient",
+    "recipient_email",
     "recipient_masked",
     "sender",
     "sender_masked",
@@ -132,6 +133,7 @@ def sanitize_weekly_delivery_settings(payload: Mapping[str, Any]) -> dict[str, A
   cleaned["enabled"] = False
   cleaned["email_mode"] = "preview"
   cleaned["recipient"] = ""
+  cleaned["recipient_email"] = ""
   cleaned["recipient_masked"] = "study-demo-masked"
   cleaned.pop("scheduler", None)
   cleaned.pop("scheduler_job_name", None)

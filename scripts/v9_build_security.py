@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 V9_IMAGE_MARKER = "tech-cartography-v9-signal-watch"
+STUDY_DEMO_IMAGE_MARKER = "tech-cartography-v9-study-demo"
 EXCLUDED_BUILD_MARKERS = ("tech-cartography-v7-", "tech-cartography-v8-")
 
 FORBIDDEN_UPLOAD_PATTERNS = (
@@ -247,7 +248,7 @@ def _collect_build_strings(build_payload: dict[str, Any]) -> list[str]:
 def is_v9_build(build_payload: dict[str, Any]) -> bool:
   strings = _collect_build_strings(build_payload)
   joined = "\n".join(strings)
-  if V9_IMAGE_MARKER not in joined:
+  if V9_IMAGE_MARKER not in joined and STUDY_DEMO_IMAGE_MARKER not in joined:
     return False
   return not any(marker in joined for marker in EXCLUDED_BUILD_MARKERS)
 
