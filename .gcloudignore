@@ -1,13 +1,33 @@
-# Cloud Run source upload — exclude secrets and bulk local artifacts.
-# Canonical copy for Cloud Build workspace (gcloud never uploads .gcloudignore itself).
-.git/
-.gitignore
-.venv/
-**/__pycache__/
-*.pyc
+# Explicit Cloud Build upload exclusions for v9.
+.git
+.git/**
 .env
+.env.*
+config/v9_weekly_run_config.local.json
+data/v9_runs
+data/v9_runs/**
 .streamlit/secrets.toml
-credentials/
+**/__pycache__
+**/__pycache__/**
+*.pyc
+.pytest_cache
+.pytest_cache/**
+.mypy_cache
+.mypy_cache/**
+.venv
+.venv/**
+venv
+venv/**
+outputs
+outputs/**
+credentials
+credentials/**
+application_default_credentials.json
+service-account*.json
+*.pem
+*.p12
+
+# Existing local-only/generated artifacts.
 data/runtime/
 data/cache/
 *.db
@@ -16,6 +36,3 @@ config/theme_validation_cases.json
 inputs/manual/*
 !inputs/manual/.gitkeep
 .DS_Store
-
-# Local generated outputs are not uploaded; use tracked demo_outputs bundle instead.
-outputs/

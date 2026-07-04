@@ -73,6 +73,7 @@ run_local_checks() {
   "${PY[@]}" scripts/check_v9_email_delivery_readiness.py
   "${PY[@]}" scripts/check_v9_scheduler_readiness.py
   "${PY[@]}" scripts/check_v9_cloud_weekly_readiness.py
+  "${PY[@]}" scripts/check_v9_build_context.py --ignore-file .gcloudignore
 }
 
 resolve_image_uri() {
@@ -179,9 +180,11 @@ grant_secret_iam() {
 
 build_image() {
   IMAGE_URI="$(resolve_image_uri)"
+  "${PY[@]}" scripts/check_v9_build_context.py --ignore-file .gcloudignore
   gcloud builds submit . \
     --project "${PROJECT_ID}" \
     --region "${REGION}" \
+    --ignore-file=.gcloudignore \
     --config cloudbuild.v9.yaml \
     --substitutions "_IMAGE_URI=${IMAGE_URI}"
 }
@@ -406,6 +409,7 @@ gcloud secrets add-iam-policy-binding "${TAVILY_API_KEY_SECRET}" --project "${PR
 gcloud builds submit . \
   --project "${PROJECT_ID}" \
   --region "${REGION}" \
+  --ignore-file=.gcloudignore \
   --config cloudbuild.v9.yaml \
   --substitutions "_IMAGE_URI=${image_preview}"
 

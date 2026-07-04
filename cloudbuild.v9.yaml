@@ -9,6 +9,65 @@ steps:
       - ${_IMAGE_URI}
       - .
 
+  - id: image-prepush-scan
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        image_uri="${_IMAGE_URI}"
+        container_id="$(docker create "${image_uri}")"
+        file_list="$(mktemp)"
+        env_list="$(mktemp)"
+        cleanup() {
+          docker rm -f "${container_id}" >/dev/null 2>&1 || true
+          rm -f "${file_list}" "${env_list}"
+        }
+        trap cleanup EXIT
+
+        docker export "${container_id}" | tar -tf - > "${file_list}"
+        docker image inspect "${image_uri}" --format='{{range .Config.Env}}{{println .}}{{end}}' > "${env_list}"
+
+        forbidden_file_count=0
+        while IFS= read -r entry; do
+          normalized="/${entry#./}"
+          normalized="${normalized%/}"
+          if [[ \
+            "${normalized}" == "/.env" || \
+            "${normalized}" == */.env || \
+            "${normalized}" == */.env.* || \
+            "${normalized}" == "/app/config/v9_weekly_run_config.local.json" || \
+            "${normalized}" == */config/v9_weekly_run_config.local.json || \
+            "${normalized}" == */data/v9_runs || \
+            "${normalized}" == */data/v9_runs/* || \
+            "${normalized}" == */.streamlit/secrets.toml || \
+            "${normalized}" == */application_default_credentials.json || \
+            "${normalized}" == */service-account*.json || \
+            "${normalized}" == *.pem || \
+            "${normalized}" == *.p12 \
+          ]]; then
+            printf 'FORBIDDEN_FILE %s\n' "${normalized}" >&2
+            forbidden_file_count=$((forbidden_file_count + 1))
+          fi
+        done < "${file_list}"
+
+        forbidden_env_count=0
+        while IFS= read -r env_entry; do
+          env_key="${env_entry%%=*}"
+          case "${env_key}" in
+            SMTP_PASSWORD|TAVILY_API_KEY|GOOGLE_API_KEY|OPENAI_API_KEY|GOOGLE_APPLICATION_CREDENTIALS_JSON)
+              printf 'FORBIDDEN_ENV_KEY %s\n' "${env_key}" >&2
+              forbidden_env_count=$((forbidden_env_count + 1))
+              ;;
+          esac
+        done < "${env_list}"
+
+        if [[ "${forbidden_file_count}" -gt 0 || "${forbidden_env_count}" -gt 0 ]]; then
+          printf 'IMAGE_SCAN FAIL %s\n' "${image_uri}" >&2
+          exit 1
+        fi
+        printf 'IMAGE_SCAN PASS %s\n' "${image_uri}"
+
   - id: docker-push
     name: gcr.io/cloud-builders/docker
     args:

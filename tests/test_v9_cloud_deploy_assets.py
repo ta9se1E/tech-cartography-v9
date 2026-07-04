@@ -19,6 +19,10 @@ def test_cloudbuild_v9_uses_dockerfile_v9_and_pushes_image() -> None:
   assert "Dockerfile.v9" in text
   assert "docker" in text
   assert "${_IMAGE_URI}" in text
+  assert "image-prepush-scan" in text
+  assert text.index("image-prepush-scan") < text.index("docker-push")
+  assert "docker export" in text
+  assert "docker image inspect" in text
   assert "push" in text
 
 
@@ -56,15 +60,48 @@ def test_dockerignore_excludes_local_secrets_and_artifacts() -> None:
     ".env.*",
     "config/v9_weekly_run_config.local.json",
     "data/v9_runs",
+    "data/v9_runs/**",
+    "credentials/**",
+    "application_default_credentials.json",
+    "service-account*.json",
+  ]
+  assert all(line in text for line in required_lines)
+
+
+def test_gcloudignore_excludes_build_context_secrets_and_local_artifacts() -> None:
+  text = (PROJECT_ROOT / ".gcloudignore").read_text(encoding="utf-8")
+  required_lines = [
+    ".git",
+    ".git/**",
+    ".env",
+    ".env.*",
+    "config/v9_weekly_run_config.local.json",
+    "data/v9_runs",
+    "data/v9_runs/**",
+    "credentials/**",
+    "application_default_credentials.json",
+    "service-account*.json",
   ]
   assert all(line in text for line in required_lines)
 
 
 def test_build_command_uses_cloudbuild_yaml_and_not_invalid_file_flag() -> None:
   text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
+  assert "--ignore-file=.gcloudignore" in text
   assert "--config cloudbuild.v9.yaml" in text
   assert '--substitutions "_IMAGE_URI=${IMAGE_URI}"' in text
   assert "--file Dockerfile.v9" not in text
+
+
+def test_safe_build_helper_defaults_to_plan_and_cleans_exact_source_object() -> None:
+  text = (PROJECT_ROOT / "scripts" / "submit_v9_cloud_build_safe.sh").read_text(encoding="utf-8")
+  assert 'MODE="${1:---plan}"' in text
+  assert 'if [[ "${V9_CLOUD_CHANGE_APPROVED:-false}" != "true" ]]' in text
+  assert "--ignore-file=.gcloudignore" in text
+  assert "trap cleanup_source_archive EXIT" in text
+  assert "gcloud storage rm" in text
+  assert "gcloud storage ls" in text
+  assert "set -x" not in text
 
 
 def test_service_does_not_receive_smtp_or_tavily_secrets() -> None:

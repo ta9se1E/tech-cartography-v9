@@ -312,7 +312,12 @@ def main() -> None:
 
   dockerfile = (PROJECT_ROOT / "Dockerfile.v9").read_text(encoding="utf-8")
   cloudbuild = (PROJECT_ROOT / "cloudbuild.v9.yaml").read_text(encoding="utf-8")
+  gcloudignore = (PROJECT_ROOT / ".gcloudignore").read_text(encoding="utf-8")
+  dockerignore = (PROJECT_ROOT / ".dockerignore").read_text(encoding="utf-8")
   deploy_script = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
+  build_context_script = (PROJECT_ROOT / "scripts" / "check_v9_build_context.py").read_text(encoding="utf-8")
+  safe_build_script = (PROJECT_ROOT / "scripts" / "submit_v9_cloud_build_safe.sh").read_text(encoding="utf-8")
+  build_security_module = (PROJECT_ROOT / "scripts" / "v9_build_security.py").read_text(encoding="utf-8")
   bootstrap_script = (PROJECT_ROOT / "scripts" / "bootstrap_v9_cloud_weekly_settings.py").read_text(encoding="utf-8")
   sync_script = (PROJECT_ROOT / "scripts" / "sync_v9_cloud_watch_profile.py").read_text(encoding="utf-8")
   cloud_job_script = (PROJECT_ROOT / "scripts" / "run_v9_cloud_weekly_job.py").read_text(encoding="utf-8")
@@ -324,10 +329,41 @@ def main() -> None:
   assert "Dockerfile.v9" in cloudbuild
   assert "docker" in cloudbuild
   assert "${_IMAGE_URI}" in cloudbuild
+  assert "image-prepush-scan" in cloudbuild
+  assert cloudbuild.index("image-prepush-scan") < cloudbuild.index("docker-push")
+  assert "FORBIDDEN_ENV_KEY" in cloudbuild
+  assert "FORBIDDEN_FILE" in cloudbuild
+  assert "IMAGE_SCAN PASS" in cloudbuild
+  assert "docker export" in cloudbuild
+  assert "docker image inspect" in cloudbuild
+  for required_line in (
+    ".env",
+    ".env.*",
+    "config/v9_weekly_run_config.local.json",
+    "data/v9_runs",
+    "data/v9_runs/**",
+    "credentials/**",
+    "application_default_credentials.json",
+    "service-account*.json",
+  ):
+    assert required_line in gcloudignore
+  for required_line in (
+    ".env",
+    ".env.*",
+    "config/v9_weekly_run_config.local.json",
+    "data/v9_runs",
+    "data/v9_runs/**",
+    "credentials/**",
+    "application_default_credentials.json",
+    "service-account*.json",
+  ):
+    assert required_line in dockerignore
   assert "--file Dockerfile.v9" not in deploy_script
   assert "--config cloudbuild.v9.yaml" in deploy_script
+  assert "--ignore-file=.gcloudignore" in deploy_script
   assert "scripts/run_v9_cloud_weekly_job.py" in deploy_script
   assert "scripts/bootstrap_v9_cloud_weekly_settings.py" in deploy_script
+  assert "scripts/check_v9_build_context.py --ignore-file .gcloudignore" in deploy_script
   assert "--region \"${REGION}\"" in deploy_script
   assert "--iap" in deploy_script
   assert "iap.googleapis.com" in deploy_script
@@ -408,6 +444,21 @@ def main() -> None:
   assert "sql_fingerprint" in patent_query_module
   assert "ERROR_CATEGORY_BLOCKED_COST_GUARD" in patent_query_module
   assert "_resolve_error_category" in patent_query_module
+  assert "validate_upload_file_list" in build_context_script
+  assert "list-files-for-upload" in build_context_script
+  assert "--ignore-file" in build_context_script
+  assert "FORBIDDEN_UPLOAD_PATTERNS" in build_security_module
+  assert "FORBIDDEN_IMAGE_ENV_KEYS" in build_security_module
+  assert 'MODE="${1:---plan}"' in safe_build_script
+  assert 'if [[ "${V9_CLOUD_CHANGE_APPROVED:-false}" != "true" ]]' in safe_build_script
+  assert "--ignore-file=.gcloudignore" in safe_build_script
+  assert "check_v9_build_context.py --ignore-file .gcloudignore" in safe_build_script
+  assert "trap cleanup_source_archive EXIT" in safe_build_script
+  assert "gcloud storage rm" in safe_build_script
+  assert "gcloud storage ls" in safe_build_script
+  assert "set -x" not in safe_build_script
+  assert "not_source_object" in build_security_module
+  assert "log_bucket" in build_security_module
   assert "build_email_preview_artifact" in email_delivery_module
   assert "preview_schema_version" in email_delivery_module
   assert "body_text" in email_delivery_module
