@@ -11,6 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
   sys.path.insert(0, str(PROJECT_ROOT))
 
+import scripts.run_v9_cloud_weekly_job as cloud_job_entrypoint
 from services_v9.cloud_runtime import DEFAULT_WEEKLY_CONFIG_OBJECT, get_persist_root, get_runtime_mode
 from services_v9.cloud_scheduler_admin import get_scheduler_job_status
 from services_v9.cloud_lock import acquire_cloud_weekly_lock, release_cloud_weekly_lock
@@ -316,6 +317,7 @@ def main() -> None:
   sync_script = (PROJECT_ROOT / "scripts" / "sync_v9_cloud_watch_profile.py").read_text(encoding="utf-8")
   cloud_job_script = (PROJECT_ROOT / "scripts" / "run_v9_cloud_weekly_job.py").read_text(encoding="utf-8")
   cloud_job_module = (PROJECT_ROOT / "services_v9" / "cloud_weekly_job.py").read_text(encoding="utf-8")
+  email_delivery_module = (PROJECT_ROOT / "services_v9" / "email_delivery.py").read_text(encoding="utf-8")
   patent_query_module = (PROJECT_ROOT / "services_v9" / "patent_bigquery_query.py").read_text(encoding="utf-8")
   weekly_scheduler_module = (PROJECT_ROOT / "services_v9" / "weekly_scheduler.py").read_text(encoding="utf-8")
   assert "streamlit" in dockerfile and "app.py" in dockerfile
@@ -375,11 +377,25 @@ def main() -> None:
   assert "--expected-current-signature" in sync_script
   assert "--expected-source-signature" in sync_script
   assert "--print-config-summary" in cloud_job_script
+  original_run_cloud_weekly_job = cloud_job_entrypoint.run_cloud_weekly_job
+  try:
+    cloud_job_entrypoint.run_cloud_weekly_job = lambda output_root=None: {
+      "status": "blocked",
+      "block_reason": "blocked_cost_guard",
+      "controlled_outcome": True,
+    }
+    assert cloud_job_entrypoint.main([]) == 0
+    cloud_job_entrypoint.run_cloud_weekly_job = lambda output_root=None: {"status": "failed"}
+    assert cloud_job_entrypoint.main([]) == 1
+  finally:
+    cloud_job_entrypoint.run_cloud_weekly_job = original_run_cloud_weekly_job
   assert "run_weekly_watch(" in cloud_job_module
   assert "resolve_cloud_job_controls" in cloud_job_module
   assert "summarize_cloud_weekly_job_config" in cloud_job_module
   assert 'CLOUD_JOB_LOCK_NAMESPACE = "cloud_job_locks"' in cloud_job_module
   assert 'object_prefix=CLOUD_JOB_LOCK_NAMESPACE' in cloud_job_module
+  assert "controlled_outcome" in cloud_job_script
+  assert "blocked_cost_guard" in cloud_job_script
   assert "V9_CLOUD_PATENT_APPROVED_QUERY_IDS" in cloud_job_module
   assert "V9_CLOUD_BIGQUERY_PROJECT" in cloud_job_module
   assert "V9_CLOUD_BIGQUERY_LOCATION" in cloud_job_module
@@ -390,8 +406,16 @@ def main() -> None:
   assert "total_bytes_billed" in patent_query_module
   assert "cache_hit" in patent_query_module
   assert "sql_fingerprint" in patent_query_module
+  assert "build_email_preview_artifact" in email_delivery_module
+  assert "preview_schema_version" in email_delivery_module
+  assert "body_text" in email_delivery_module
+  assert "body_sha256" in email_delivery_module
+  assert "recipient_masked" in email_delivery_module
+  assert "EMAIL_PREVIEW_BODY_TEXT_MAX_BYTES" in email_delivery_module
   assert "blocked_cost_guard" in weekly_scheduler_module
   assert "blocked_execution_cap" in weekly_scheduler_module
+  assert "baseline_eligible" in weekly_scheduler_module
+  assert "controlled_outcome" in weekly_scheduler_module
   assert "printf '%s\\n' '{\"enabled\": false}'" not in deploy_script
   assert '"enabled": False' in bootstrap_script
   for banned in ("tech-cartography-v7-demo", "tech-cartography-v7-live", "tech-cartography-v8-demo"):

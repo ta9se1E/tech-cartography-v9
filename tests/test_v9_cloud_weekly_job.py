@@ -6,6 +6,7 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
+import scripts.run_v9_cloud_weekly_job as cloud_job_entrypoint
 import services_v9.cloud_weekly_job as cloud_weekly_job_module
 from services_v9.cloud_weekly_settings import resolve_weekly_delivery_settings_path
 from services_v9.persistence import save_watch_profile
@@ -524,3 +525,39 @@ def test_cloud_job_real_run_can_pass_build_search_plan_with_separate_locks(tmp_p
   assert status_payload["stage_statuses"]["retrieve_web_company"] == "success"
   assert not list((root / "weekly_locks").glob("*.lock"))
   assert not storage_client.bucket("bucket").objects
+
+
+def test_cloud_job_entrypoint_returns_zero_for_controlled_block(monkeypatch) -> None:
+  monkeypatch.setattr(
+    cloud_job_entrypoint,
+    "run_cloud_weekly_job",
+    lambda output_root=None: {
+      "status": "blocked",
+      "block_reason": "blocked_cost_guard",
+      "controlled_outcome": True,
+      "weekly_run_id": "weekly_blocked",
+    },
+  )
+  assert cloud_job_entrypoint.main([]) == 0
+
+
+def test_cloud_job_entrypoint_keeps_nonzero_for_uncontrolled_block_and_failure(monkeypatch) -> None:
+  monkeypatch.setattr(
+    cloud_job_entrypoint,
+    "run_cloud_weekly_job",
+    lambda output_root=None: {
+      "status": "blocked",
+      "block_reason": "",
+      "controlled_outcome": False,
+    },
+  )
+  assert cloud_job_entrypoint.main([]) == 2
+
+  monkeypatch.setattr(
+    cloud_job_entrypoint,
+    "run_cloud_weekly_job",
+    lambda output_root=None: {
+      "status": "failed",
+    },
+  )
+  assert cloud_job_entrypoint.main([]) == 1

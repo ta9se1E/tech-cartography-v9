@@ -592,6 +592,77 @@ def test_patent_provider_zero_results_is_safe_partial_success(tmp_path: Path) ->
   assert result["candidate_count"] == 0
 
 
+def test_run_weekly_watch_treats_blocked_cost_guard_as_controlled_block(tmp_path: Path) -> None:
+  watch_profile_path = _write_watch_profile(tmp_path)
+  config = _base_config(watch_profile_path)
+  config["execution"]["dry_run"] = False
+  config["execution"]["patent_enabled"] = True
+  config["execution"]["paper_enabled"] = False
+  config["execution"]["web_company_enabled"] = False
+  config["email"]["self_send_enabled"] = False
+
+  def _blocked_patent_adapter(**kwargs):
+    del kwargs
+    return {
+      "status": "blocked",
+      "message": "patent cost guard blocked",
+      "rows": [],
+      "warnings": [],
+      "errors": [],
+      "provider_log": {
+        "provider": "patent",
+        "query_logs": [
+          {
+            "query_id": "patent_q01",
+            "provider_status": "blocked_cost_guard",
+            "estimated_bytes": 261000000000,
+            "maximum_bytes_billed": 200000000000,
+            "total_bytes_processed": 0,
+            "total_bytes_billed": 0,
+            "bigquery_job_id": "",
+            "cache_hit": False,
+            "error_category": "cost_guard",
+          }
+        ],
+      },
+      "source_run": {},
+      "details": {"block_reason": "blocked_cost_guard"},
+    }
+
+  result = run_weekly_watch(
+    config,
+    output_root=tmp_path,
+    provider_adapters={"patent": _blocked_patent_adapter},
+  )
+  assert result["status"] == "blocked"
+  assert result["controlled_outcome"] is True
+  assert result["block_reason"] == "blocked_cost_guard"
+  assert result["baseline_eligible"] is False
+
+  run_dir = Path(result["run_dir"])
+  status_payload = json.loads((run_dir / "weekly_run_status.json").read_text(encoding="utf-8"))
+  manifest_payload = json.loads((run_dir / "retrieval_run_manifest.json").read_text(encoding="utf-8"))
+  diff_payload = json.loads((run_dir / "weekly_diff.json").read_text(encoding="utf-8"))
+  email_payload = json.loads((run_dir / "email_preview.json").read_text(encoding="utf-8"))
+  digest_text = (run_dir / "weekly_digest.md").read_text(encoding="utf-8")
+
+  assert status_payload["overall_status"] == "blocked"
+  assert status_payload["block_reason"] == "blocked_cost_guard"
+  assert status_payload["baseline_eligible"] is False
+  assert manifest_payload["status"] == "blocked"
+  assert manifest_payload["provider_summary"]["patent"]["provider_status"] == "blocked_cost_guard"
+  assert manifest_payload["query_execution_count"] == 0
+  assert manifest_payload["total_bytes_billed"] == 0
+  assert diff_payload["status"] == "unavailable"
+  assert diff_payload["reason"] == "blocked_cost_guard"
+  assert "費用ガード" in digest_text
+  assert email_payload["status"] == "blocked"
+  assert email_payload["send_attempted"] is False
+  assert email_payload["send_succeeded"] is False
+  assert email_payload["body_text"].strip()
+  assert find_previous_successful_weekly_run(tmp_path, status_payload["watch_profile_signature"]) is None
+
+
 def test_paper_provider_contract_adapter_passes_query_limit_retry_and_normalizes(tmp_path: Path) -> None:
   config = _base_config(_write_watch_profile(tmp_path))
   config["paper"]["retry_limit"] = 4

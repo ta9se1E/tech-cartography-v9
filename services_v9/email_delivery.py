@@ -19,8 +19,10 @@ from uuid import uuid4
 from .persistence import PROJECT_ROOT, ensure_v9_run_dirs
 
 EMAIL_SCHEMA_VERSION = "v9.6a"
+EMAIL_PREVIEW_SCHEMA_VERSION = "v9.6e"
 EMAIL_SEND_MODE_PREVIEW = "preview"
 EMAIL_SEND_MODE_SELF_ONLY = "self_only"
+EMAIL_PREVIEW_BODY_TEXT_MAX_BYTES = 256 * 1024
 _ALLOWED_SEND_MODES = {EMAIL_SEND_MODE_PREVIEW, EMAIL_SEND_MODE_SELF_ONLY}
 _INVALID_SECRET_VALUES = {"", "dummy", "placeholder", "<secret-manager-only>"}
 _URL_PATTERN = re.compile(r"(https?://[^\s<>()]+)")
@@ -224,6 +226,58 @@ def run_email_delivery_dry_run(
     "smtp_host": config.smtp_host or "",
     "safe_error_message": errors[0] if errors else "",
   }
+
+
+def build_email_preview_artifact(
+  preview: Mapping[str, Any] | dict[str, Any],
+  dry_run_result: Mapping[str, Any] | dict[str, Any],
+  *,
+  source_digest_path: str,
+) -> dict[str, Any]:
+  preview_payload = dict(preview or {})
+  dry_run_payload = dict(dry_run_result or {})
+  body_text = str(preview_payload.get("plain_text_body", "") or "")
+  body_html = str(preview_payload.get("html_body", "") or "")
+  body_bytes = body_text.encode("utf-8")
+  body_length = len(body_bytes)
+  validation_errors = [str(item or "") for item in list(dry_run_payload.get("validation_errors", []) or []) if str(item or "")]
+  validation_warnings = [str(item or "") for item in list(dry_run_payload.get("validation_warnings", []) or []) if str(item or "")]
+  status = str(dry_run_payload.get("status", "blocked") or "blocked")
+  message = "Email Preview を生成しました。"
+  if not body_text.strip():
+    validation_errors.append("Email Preview body_text が空です。")
+    status = "blocked"
+    message = "Email Preview body_text が空のため preview を停止しました。"
+  elif body_length > EMAIL_PREVIEW_BODY_TEXT_MAX_BYTES:
+    validation_errors.append(
+      f"Email Preview body_text が上限 {EMAIL_PREVIEW_BODY_TEXT_MAX_BYTES} bytes を超えました。"
+    )
+    status = "blocked"
+    message = "Email Preview body_text が上限を超えたため preview を停止しました。"
+  payload = {
+    "preview_schema_version": EMAIL_PREVIEW_SCHEMA_VERSION,
+    "status": status,
+    "subject": str(preview_payload.get("subject", "") or ""),
+    "body_text": body_text,
+    "body_sha256": hashlib.sha256(body_bytes).hexdigest(),
+    "body_length": body_length,
+    "source_digest_path": str(source_digest_path or "").strip(),
+    "recipient_masked": str(dry_run_payload.get("recipient_masked", "") or ""),
+    "email_mode": str(dry_run_payload.get("send_mode", "") or ""),
+    "send_attempted": False,
+    "send_succeeded": False,
+    "generated_at": str(dry_run_payload.get("created_at", "") or _now_iso()),
+    "digest_sha256": str(preview_payload.get("digest_sha256", "") or ""),
+    "data_source": str(preview_payload.get("data_source", "") or ""),
+    "signal_count": int(preview_payload.get("signal_count", 0) or 0),
+    "validation_errors": _dedupe_strings(validation_errors),
+    "validation_warnings": _dedupe_strings(validation_warnings),
+    "message": message,
+  }
+  if body_html.strip():
+    payload["body_html"] = body_html
+    payload["body_html_sha256"] = hashlib.sha256(body_html.encode("utf-8")).hexdigest()
+  return payload
 
 
 def send_digest_email_self_only(
@@ -640,9 +694,12 @@ def _dedupe_strings(values: list[str]) -> list[str]:
 
 __all__ = [
   "EMAIL_SCHEMA_VERSION",
+  "EMAIL_PREVIEW_BODY_TEXT_MAX_BYTES",
+  "EMAIL_PREVIEW_SCHEMA_VERSION",
   "EMAIL_SEND_MODE_PREVIEW",
   "EMAIL_SEND_MODE_SELF_ONLY",
   "EmailDeliveryConfig",
+  "build_email_preview_artifact",
   "build_digest_email_preview",
   "build_digest_email_subject",
   "has_successful_digest_delivery",

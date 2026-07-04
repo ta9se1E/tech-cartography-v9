@@ -14,6 +14,7 @@ from typing import Any, Callable
 from .digest_export import build_weekly_digest_markdown
 from .email_delivery import (
   EmailDeliveryConfig,
+  build_email_preview_artifact,
   build_digest_email_preview,
   is_successful_digest_delivery_record,
   load_email_delivery_config,
@@ -66,6 +67,7 @@ WEEKLY_STAGE_SEQUENCE = [
 ]
 TERMINAL_WEEKLY_STATUSES = {"success", "partial_success", "blocked", "failed"}
 SUCCESSFUL_WEEKLY_STATUSES = {"success", "partial_success"}
+CONTROLLED_BLOCK_REASONS = {"approved_query_validation", "blocked_cost_guard", "blocked_execution_cap"}
 _LOCK_SIGNATURE_PATTERN = set("0123456789abcdef")
 _SOURCE_TO_STAGE = {
   "patent": "retrieve_patent",
@@ -253,6 +255,8 @@ def find_previous_successful_weekly_run(
       status_payload = json.loads(status_path.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
       continue
+    if status_payload.get("baseline_eligible") is False:
+      continue
     if bool(status_payload.get("dry_run", False)) is True:
       continue
     if str(status_payload.get("watch_profile_signature", "") or "") != signature:
@@ -320,6 +324,10 @@ def run_weekly_watch(
   normalized_config = dict(config_validation.get("normalized_config", {}) or {})
   normalized_config["_run_id"] = weekly_run_id
   _write_json(run_dir / "weekly_run_config_snapshot.json", sanitize_weekly_run_config(normalized_config))
+  email_config = _build_effective_email_config(
+    load_email_delivery_config(),
+    dict(normalized_config.get("email", {}) or {}),
+  )
 
   try:
     if not isinstance(config, dict):
@@ -517,6 +525,7 @@ def run_weekly_watch(
         details=dict(stage_result.get("details", {}) or {}),
       )
 
+    controlled_block_reason = _resolve_controlled_block_reason(provider_log)
     if source_runs_for_manifest:
       retrieval_manifest = build_retrieval_run_manifest(watch_profile, source_runs_for_manifest)
       save_retrieval_run_manifest(retrieval_manifest, base_root)
@@ -529,7 +538,22 @@ def run_weekly_watch(
         details={"manifest_id": str(retrieval_manifest.get("manifest_id", "") or "")},
       )
     else:
-      if bool(normalized_config.get("execution", {}).get("dry_run", True)):
+      if controlled_block_reason:
+        retrieval_manifest = _build_controlled_block_retrieval_manifest(
+          weekly_run_id=weekly_run_id,
+          watch_profile_signature=watch_profile_signature,
+          theme_name=str(watch_profile.get("theme_name", "") or ""),
+          provider_log=provider_log,
+          block_reason=controlled_block_reason,
+        )
+        _set_stage(
+          stage_log,
+          "save_retrieval_manifest",
+          "success",
+          message="controlled blocked retrieval manifest を生成しました。",
+          details={"block_reason": controlled_block_reason},
+        )
+      elif bool(normalized_config.get("execution", {}).get("dry_run", True)):
         retrieval_manifest = find_latest_compatible_manifest(base_root, watch_profile_signature)
         if retrieval_manifest is not None:
           loaded_bundle = load_candidates_from_manifest(retrieval_manifest)
@@ -570,6 +594,55 @@ def run_weekly_watch(
     total_candidate_count = sum(len(rows) for rows in current_candidates.values())
     if total_candidate_count <= 0:
       overall_status = "blocked" if bool(normalized_config.get("execution", {}).get("dry_run", True)) else "failed"
+      if controlled_block_reason:
+        weekly_diff = _build_unavailable_weekly_diff(
+          controlled_block_reason,
+          watch_profile_signature=watch_profile_signature,
+        )
+        digest_markdown = _build_controlled_block_digest_markdown(
+          controlled_block_reason,
+          watch_profile=watch_profile,
+          provider_log=provider_log,
+        )
+        email_preview = build_digest_email_preview(
+          digest_markdown,
+          theme_name=str(watch_profile.get("theme_name", "") or ""),
+          data_source="取得済みデータ",
+          signals=[],
+          data_source_mode="retrieval_saved",
+          watch_profile=watch_profile,
+        )
+        email_dry_run_result = run_email_delivery_dry_run(email_preview, email_config)
+        email_preview_payload = build_email_preview_artifact(
+          email_preview,
+          email_dry_run_result,
+          source_digest_path=str(run_dir / "weekly_digest.md"),
+        )
+        email_preview_payload["status"] = "blocked"
+        email_preview_payload["message"] = _controlled_block_message(controlled_block_reason)
+        _set_stage(
+          stage_log,
+          "integrate_signals",
+          "skipped",
+          message="controlled blocked outcome のため Signal 統合は実行しません。",
+        )
+        _set_stage(
+          stage_log,
+          "load_previous_success",
+          "skipped",
+          message="controlled blocked outcome は baseline 候補になりません。",
+        )
+        _set_stage(
+          stage_log,
+          "calculate_weekly_diff",
+          "blocked",
+          message="controlled blocked outcome のため weekly diff は unavailable です。",
+          details={"reason": controlled_block_reason},
+        )
+        _set_stage(stage_log, "build_digest", "success", message="controlled blocked outcome digest を生成しました。")
+        _set_stage(stage_log, "build_email_preview", "success", message="controlled blocked Email Preview を生成しました。")
+        _set_stage(stage_log, "send_email", "skipped", message="controlled blocked outcome のためメール送信は実行しません。")
+        overall_status = "blocked"
       return _finalize_weekly_run(
         run_dir=run_dir,
         weekly_run_id=weekly_run_id,
@@ -582,9 +655,9 @@ def run_weekly_watch(
         config=normalized_config,
         retrieval_manifest=retrieval_manifest,
         integrated_payload=None,
-        weekly_diff=None,
-        digest_markdown="",
-        email_preview_payload={
+        weekly_diff=weekly_diff,
+        digest_markdown=digest_markdown,
+        email_preview_payload=email_preview_payload or {
           "status": "blocked",
           "message": "取得候補が 0 件のため Email Preview を生成しませんでした。",
         },
@@ -686,10 +759,6 @@ def run_weekly_watch(
     (run_dir / "weekly_digest.md").write_text(digest_markdown, encoding="utf-8")
     _set_stage(stage_log, "build_digest", "success", message="Digest を生成しました。")
 
-    email_config = _build_effective_email_config(
-      load_email_delivery_config(),
-      dict(normalized_config.get("email", {}) or {}),
-    )
     email_preview = build_digest_email_preview(
       digest_markdown,
       theme_name=str(watch_profile.get("theme_name", "") or ""),
@@ -699,20 +768,11 @@ def run_weekly_watch(
       watch_profile=watch_profile,
     )
     email_dry_run_result = run_email_delivery_dry_run(email_preview, email_config)
-    email_preview_payload = {
-      "schema_version": WEEKLY_SCHEDULER_SCHEMA_VERSION,
-      "status": str(email_dry_run_result.get("status", "") or ""),
-      "subject": str(email_preview.get("subject", "") or ""),
-      "digest_sha256": str(email_preview.get("digest_sha256", "") or ""),
-      "data_source": str(email_preview.get("data_source", "") or ""),
-      "signal_count": int(email_preview.get("signal_count", 0) or 0),
-      "validation_errors": list(email_dry_run_result.get("validation_errors", []) or []),
-      "validation_warnings": list(email_dry_run_result.get("validation_warnings", []) or []),
-      "recipient_masked": str(email_dry_run_result.get("recipient_masked", "") or ""),
-      "send_attempted": False,
-      "send_succeeded": False,
-      "message": "Email Preview を生成しました。",
-    }
+    email_preview_payload = build_email_preview_artifact(
+      email_preview,
+      email_dry_run_result,
+      source_digest_path=str(run_dir / "weekly_digest.md"),
+    )
     _write_json(run_dir / "email_preview.json", email_preview_payload)
     _set_stage(stage_log, "build_email_preview", "success", message="Email Preview を生成しました。")
 
@@ -921,11 +981,13 @@ def _run_provider_stage(
         "provider_log": {
           "provider": source_type,
           "mode": "approved_query_validation_blocked",
+          "block_reason": "approved_query_validation",
           "approved_query_validation": approval_validation,
         },
         "details": {
           "approved_query_count": len(list(approval_validation.get("approved_query_ids", []) or [])),
           "unknown_query_ids": list(approval_validation.get("unknown_query_ids", []) or []),
+          "block_reason": "approved_query_validation",
         },
       }
   adapter = provider_adapters.get(source_type) or default_adapter_map[source_type]
@@ -1533,6 +1595,41 @@ def _blocked_provider_stage(source_type: str, message: str) -> dict[str, Any]:
   }
 
 
+def _resolve_controlled_block_reason(provider_log: dict[str, Any]) -> str:
+  for source_type in ("patent", "paper", "web_company"):
+    payload = dict(provider_log.get(source_type, {}) or {})
+    block_reason = str(payload.get("block_reason", "") or "").strip()
+    if block_reason in CONTROLLED_BLOCK_REASONS:
+      return block_reason
+  patent_log = dict(provider_log.get("patent", {}) or {})
+  query_logs = [dict(item or {}) for item in list(patent_log.get("query_logs", []) or [])]
+  provider_statuses = {
+    str(item.get("provider_status", "") or "").strip()
+    for item in query_logs
+    if str(item.get("provider_status", "") or "").strip()
+  }
+  if provider_statuses == {"blocked_cost_guard"}:
+    return "blocked_cost_guard"
+  if provider_statuses == {"blocked_execution_cap"}:
+    return "blocked_execution_cap"
+  return ""
+
+
+def _is_controlled_block_reason(block_reason: str) -> bool:
+  return str(block_reason or "").strip() in CONTROLLED_BLOCK_REASONS
+
+
+def _controlled_block_message(block_reason: str) -> str:
+  reason = str(block_reason or "").strip()
+  if reason == "blocked_cost_guard":
+    return "BigQuery の費用ガードにより本取得を停止しました。"
+  if reason == "blocked_execution_cap":
+    return "BigQuery の実行回数上限により本取得を停止しました。"
+  if reason == "approved_query_validation":
+    return "承認済み query 条件に一致しないため取得を停止しました。"
+  return "承認された安全 block により取得を停止しました。"
+
+
 def _combine_provider_stage_status(provider_statuses: list[str], row_count: int) -> str:
   normalized = [str(status or "").strip().lower() for status in provider_statuses if str(status or "").strip()]
   if row_count <= 0:
@@ -1602,6 +1699,112 @@ def _blocked_patent_query_result(
       "error": message,
     },
   }
+
+
+def _build_controlled_block_retrieval_manifest(
+  *,
+  weekly_run_id: str,
+  watch_profile_signature: str,
+  theme_name: str,
+  provider_log: dict[str, Any],
+  block_reason: str,
+) -> dict[str, Any]:
+  patent_log = dict(provider_log.get("patent", {}) or {})
+  patent_query_logs = [dict(item or {}) for item in list(patent_log.get("query_logs", []) or [])]
+  query_execution_count = sum(1 for item in patent_query_logs if str(item.get("bigquery_job_id", "") or "").strip())
+  total_bytes_billed = sum(int(item.get("total_bytes_billed", 0) or 0) for item in patent_query_logs)
+  total_bytes_processed = sum(int(item.get("total_bytes_processed", 0) or 0) for item in patent_query_logs)
+  total_estimated_bytes = sum(int(item.get("estimated_bytes", 0) or 0) for item in patent_query_logs)
+  patent_status = ""
+  if patent_query_logs:
+    patent_status = str(patent_query_logs[-1].get("provider_status", "") or "").strip()
+  return {
+    "schema_version": WEEKLY_SCHEDULER_SCHEMA_VERSION,
+    "manifest_id": f"blocked_{weekly_run_id}",
+    "created_at": _now_iso(),
+    "watch_profile_signature": watch_profile_signature,
+    "theme_name": theme_name,
+    "status": "blocked",
+    "block_reason": block_reason,
+    "baseline_eligible": False,
+    "query_execution_count": query_execution_count,
+    "total_bytes_processed": total_bytes_processed,
+    "total_bytes_billed": total_bytes_billed,
+    "estimated_bytes_total": total_estimated_bytes,
+    "total_candidate_count": 0,
+    "data_origin": "controlled_block",
+    "provider_summary": {
+      "patent": {
+        "provider_status": patent_status or block_reason,
+        "query_execution_count": query_execution_count,
+        "total_bytes_processed": total_bytes_processed,
+        "total_bytes_billed": total_bytes_billed,
+        "estimated_bytes_total": total_estimated_bytes,
+      },
+    },
+    "source_runs": {
+      "patent": {
+        "run_id": "",
+        "artifact_dir": "",
+        "status": "blocked",
+        "candidate_count": 0,
+        "provider_status": patent_status or block_reason,
+      },
+    },
+    "message": _controlled_block_message(block_reason),
+  }
+
+
+def _build_unavailable_weekly_diff(
+  block_reason: str,
+  *,
+  watch_profile_signature: str,
+) -> dict[str, Any]:
+  return {
+    "schema_version": WEEKLY_SCHEDULER_SCHEMA_VERSION,
+    "status": "unavailable",
+    "reason": str(block_reason or "").strip(),
+    "watch_profile_signature": watch_profile_signature,
+    "previous_weekly_run_id": "",
+    "counts": {"New": 0, "Rising": 0, "Dropped": 0, "Stable": 0},
+    "summary": _controlled_block_message(block_reason),
+  }
+
+
+def _build_controlled_block_digest_markdown(
+  block_reason: str,
+  *,
+  watch_profile: dict[str, Any],
+  provider_log: dict[str, Any],
+) -> str:
+  patent_log = dict(provider_log.get("patent", {}) or {})
+  query_logs = [dict(item or {}) for item in list(patent_log.get("query_logs", []) or [])]
+  estimated_bytes = sum(int(item.get("estimated_bytes", 0) or 0) for item in query_logs)
+  maximum_bytes_billed = max((int(item.get("maximum_bytes_billed", 0) or 0) for item in query_logs), default=0)
+  lines = [
+    "# Tech Cartography v9 Weekly Digest",
+    "",
+    f"対象テーマ: {str(watch_profile.get('theme_name', '') or '').strip()}",
+    "",
+    "## Controlled Block",
+    "",
+    _controlled_block_message(block_reason),
+  ]
+  if estimated_bytes > 0 or maximum_bytes_billed > 0:
+    lines.extend(
+      [
+        "",
+        f"- estimated_bytes: {estimated_bytes}",
+        f"- maximum_bytes_billed: {maximum_bytes_billed}",
+      ]
+    )
+  lines.extend(
+    [
+      "",
+      "この run は baseline 候補に保存されません。",
+    ]
+  )
+  return "\n".join(lines).strip() + "\n"
 
 
 def _per_query_limit(total_limit: int, query_count: int) -> int:
@@ -1730,6 +1933,13 @@ def _finalize_weekly_run(
   digest_markdown: str,
   email_preview_payload: dict[str, Any],
 ) -> dict[str, Any]:
+  block_reason = _resolve_controlled_block_reason(provider_log) if overall_status == "blocked" else ""
+  controlled_outcome = overall_status == "blocked" and _is_controlled_block_reason(block_reason)
+  baseline_eligible = (
+    overall_status in SUCCESSFUL_WEEKLY_STATUSES
+    and not bool(dict(config or {}).get("execution", {}).get("dry_run", True))
+    and int(dict(integrated_payload or {}).get("ranked_count", 0) or 0) > 0
+  )
   _set_stage(stage_log, "finalize", overall_status, message="weekly scheduler run を完了しました。")
   _write_json(run_dir / "stage_log.json", stage_log)
   _write_json(run_dir / "provider_log.json", provider_log)
@@ -1777,6 +1987,9 @@ def _finalize_weekly_run(
     "created_at": created_at,
     "completed_at": _now_iso(),
     "overall_status": overall_status,
+    "block_reason": block_reason,
+    "controlled_outcome": controlled_outcome,
+    "baseline_eligible": baseline_eligible,
     "watch_profile_signature": watch_profile_signature,
     "theme_name": theme_name,
     "dry_run": bool(dict(config or {}).get("execution", {}).get("dry_run", True)),
@@ -1793,6 +2006,9 @@ def _finalize_weekly_run(
   return {
     "weekly_run_id": weekly_run_id,
     "status": overall_status,
+    "block_reason": block_reason,
+    "controlled_outcome": controlled_outcome,
+    "baseline_eligible": baseline_eligible,
     "run_dir": str(run_dir),
     "watch_profile_signature": watch_profile_signature,
     "theme_name": theme_name,

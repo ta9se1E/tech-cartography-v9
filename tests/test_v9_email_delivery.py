@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import smtplib
@@ -11,9 +12,11 @@ from streamlit.testing.v1 import AppTest
 
 import services_v9.email_delivery as email_delivery_module
 from services_v9.email_delivery import (
+  EMAIL_PREVIEW_BODY_TEXT_MAX_BYTES,
   EMAIL_SEND_MODE_PREVIEW,
   EMAIL_SEND_MODE_SELF_ONLY,
   EmailDeliveryConfig,
+  build_email_preview_artifact,
   build_digest_email_preview,
   build_digest_email_subject,
   has_successful_digest_delivery,
@@ -402,6 +405,44 @@ def test_dry_run_does_not_connect_smtp_and_returns_ready() -> None:
   assert result["send_attempted"] is False
   assert result["recipient"] == "me@example.com"
   assert result["validation_errors"] == []
+
+
+def test_build_email_preview_artifact_reuses_payload_body_and_masks_recipient() -> None:
+  preview = _preview()
+  dry_run_result = run_email_delivery_dry_run(preview, _config())
+  artifact = build_email_preview_artifact(
+    preview,
+    dry_run_result,
+    source_digest_path="weekly_runs/run_a/weekly_digest.md",
+  )
+  assert artifact["subject"] == preview["subject"]
+  assert artifact["body_text"] == preview["plain_text_body"]
+  assert artifact["body_sha256"] == hashlib.sha256(preview["plain_text_body"].encode("utf-8")).hexdigest()
+  assert artifact["body_length"] == len(preview["plain_text_body"].encode("utf-8"))
+  assert artifact["source_digest_path"] == "weekly_runs/run_a/weekly_digest.md"
+  assert artifact["recipient_masked"] == "m***@example.com"
+  assert artifact["email_mode"] == EMAIL_SEND_MODE_SELF_ONLY
+  assert artifact["send_attempted"] is False
+  assert artifact["send_succeeded"] is False
+  raw_artifact = json.dumps(artifact, ensure_ascii=False)
+  assert "me@example.com" not in raw_artifact
+  assert "smtp-password" not in raw_artifact
+  assert "credential" not in raw_artifact.lower()
+
+
+def test_build_email_preview_artifact_blocks_oversized_body_without_truncation() -> None:
+  preview = _preview()
+  preview["plain_text_body"] = "A" * (EMAIL_PREVIEW_BODY_TEXT_MAX_BYTES + 1)
+  dry_run_result = run_email_delivery_dry_run(preview, _config())
+  artifact = build_email_preview_artifact(
+    preview,
+    dry_run_result,
+    source_digest_path="weekly_runs/run_b/weekly_digest.md",
+  )
+  assert artifact["status"] == "blocked"
+  assert artifact["body_text"] == preview["plain_text_body"]
+  assert artifact["body_length"] == EMAIL_PREVIEW_BODY_TEXT_MAX_BYTES + 1
+  assert any("上限" in message for message in artifact["validation_errors"])
 
 
 def test_send_self_only_uses_starttls_login_and_single_send() -> None:

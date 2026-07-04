@@ -19,6 +19,12 @@ from services_v9.cloud_weekly_job import (  # noqa: E402
 from services_v9.cloud_runtime import get_persist_root  # noqa: E402
 from services_v9.cloud_weekly_settings import load_weekly_delivery_settings  # noqa: E402
 
+CONTROLLED_ZERO_EXIT_BLOCK_REASONS = {
+  "approved_query_validation",
+  "blocked_cost_guard",
+  "blocked_execution_cap",
+}
+
 
 def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(description="Run Tech Cartography v9 Cloud weekly delivery job.")
@@ -42,6 +48,9 @@ def main(argv: list[str] | None = None) -> int:
   if status in {"success", "partial_success", "skipped"}:
     return 0
   if status == "blocked":
+    block_reason = str(result.get("block_reason", "") or "").strip()
+    if bool(result.get("controlled_outcome", False)) and block_reason in CONTROLLED_ZERO_EXIT_BLOCK_REASONS:
+      return 0
     return 2
   return 1
 
