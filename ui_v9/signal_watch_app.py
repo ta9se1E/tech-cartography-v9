@@ -58,6 +58,11 @@ from services_v9.signal_scoring import (
 )
 from services_v9.signal_template import build_csv_template, build_json_template
 from services_v9.snapshot_diff import apply_snapshot_status, compare_snapshots
+from services_v9.web_company_retrieval import (
+  build_global_web_retrieval_preview,
+  execute_global_web_retrieval,
+  save_global_web_retrieval_artifacts,
+)
 from services_v9.watch_profile_schema import build_profile_from_form, watch_profile_summary
 from ui_v9.labels import data_source_mode_label_ja
 from ui_v9.tabs import (
@@ -118,6 +123,8 @@ STATE_PATENT_RETRIEVAL_RESULT = "state_patent_retrieval_result"
 STATE_PATENT_RETRIEVAL_MESSAGE = "state_patent_retrieval_message"
 STATE_PAPER_RETRIEVAL_RESULT = "state_paper_retrieval_result"
 STATE_PAPER_RETRIEVAL_MESSAGE = "state_paper_retrieval_message"
+STATE_GLOBAL_WEB_RETRIEVAL_RESULT = "state_global_web_retrieval_result"
+STATE_GLOBAL_WEB_RETRIEVAL_MESSAGE = "state_global_web_retrieval_message"
 
 UI_SEARCH_TOTAL_LIMIT_KEY = "ui_search_total_limit"
 UI_SEARCH_PATENT_LIMIT_KEY = "ui_search_patent_limit"
@@ -146,6 +153,9 @@ UI_PATENT_BIGQUERY_QUERY_ID_KEY = "ui_patent_bigquery_query_id"
 UI_PATENT_BIGQUERY_MAX_RESULTS_KEY = "ui_patent_bigquery_max_results"
 UI_PAPER_OPENALEX_QUERY_ID_KEY = "ui_paper_openalex_query_id"
 UI_PAPER_OPENALEX_MAX_RESULTS_KEY = "ui_paper_openalex_max_results"
+UI_GLOBAL_WEB_MAX_QUERIES_KEY = "ui_global_web_max_queries"
+UI_GLOBAL_WEB_VERIFICATION_LIMIT_KEY = "ui_global_web_verification_limit"
+UI_GLOBAL_WEB_SUMMARY_TOP_N_KEY = "ui_global_web_summary_top_n"
 
 
 @st.cache_data(show_spinner=False)
@@ -194,6 +204,7 @@ def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(STATE_PATENT_BIGQUERY_DRY_RUN, {})
   st.session_state.setdefault(STATE_PATENT_BIGQUERY_APPROVED_QUERY_IDS, [])
   st.session_state.setdefault(STATE_PAPER_RETRIEVAL_RESULT, {})
+  st.session_state.setdefault(STATE_GLOBAL_WEB_RETRIEVAL_RESULT, {})
   if UI_THEME_NAME_KEY not in st.session_state:
     _set_profile_widgets(profile_dict)
   _ensure_search_plan_widget_defaults(profile_dict)
@@ -773,6 +784,29 @@ def _build_paper_openalex_ui_state(
   }
 
 
+def _ensure_global_web_retrieval_widget_defaults(search_plan_state: dict[str, object]) -> None:
+  global_web_plan = dict(dict(search_plan_state.get("plan", {}) or {}).get("global_web_plan", {}) or {})
+  enabled_count = int(global_web_plan.get("enabled_query_count", 0) or 0)
+  st.session_state.setdefault(UI_GLOBAL_WEB_MAX_QUERIES_KEY, max(enabled_count, 1))
+  st.session_state.setdefault(UI_GLOBAL_WEB_VERIFICATION_LIMIT_KEY, 40)
+  st.session_state.setdefault(UI_GLOBAL_WEB_SUMMARY_TOP_N_KEY, 8)
+
+
+def _build_global_web_retrieval_ui_state(search_plan_state: dict[str, object]) -> dict[str, object]:
+  _ensure_global_web_retrieval_widget_defaults(search_plan_state)
+  plan = dict(search_plan_state.get("plan", {}) or {})
+  preview = build_global_web_retrieval_preview(
+    plan,
+    max_query_count=int(st.session_state.get(UI_GLOBAL_WEB_MAX_QUERIES_KEY, 1) or 1),
+    verification_limit=int(st.session_state.get(UI_GLOBAL_WEB_VERIFICATION_LIMIT_KEY, 40) or 40),
+    summary_top_n=int(st.session_state.get(UI_GLOBAL_WEB_SUMMARY_TOP_N_KEY, 8) or 8),
+  )
+  return {
+    "preview": preview,
+    "retrieval_result": dict(st.session_state.get(STATE_GLOBAL_WEB_RETRIEVAL_RESULT, {}) or {}),
+  }
+
+
 def _build_snapshot_history() -> tuple[list[str], dict[str, Path], list[dict[str, str]]]:
   snapshot_labels: list[str] = []
   snapshot_map: dict[str, Path] = {}
@@ -868,6 +902,7 @@ def run_app() -> None:
   st.session_state[STATE_SEARCH_PLAN_DATA] = search_plan_state
   patent_bigquery_state = _build_patent_bigquery_ui_state(search_plan_state, watch_profile_dict)
   paper_openalex_state = _build_paper_openalex_ui_state(search_plan_state, watch_profile_dict)
+  global_web_retrieval_state = _build_global_web_retrieval_ui_state(search_plan_state)
   profile_summary = watch_profile_summary(watch_profile_dict)
   query_previews = build_query_preview_bundle(watch_profile_dict)
   csv_template_text = build_csv_template()
@@ -935,6 +970,8 @@ def run_app() -> None:
       st.session_state.get(STATE_PATENT_RETRIEVAL_MESSAGE),
       paper_openalex_state,
       st.session_state.get(STATE_PAPER_RETRIEVAL_MESSAGE),
+      global_web_retrieval_state,
+      st.session_state.get(STATE_GLOBAL_WEB_RETRIEVAL_MESSAGE),
     )
   with tabs[2]:
     signal_events = render_top_signals_tab(
@@ -1099,6 +1136,22 @@ def run_app() -> None:
     st.session_state[STATE_PAPER_RETRIEVAL_MESSAGE] = (
       f"OpenAlex論文候補 staging を保存しました: {artifact_paths['staged_json']} / {artifact_paths['staged_csv']} "
       f"(log: {artifact_paths['provider_log_json']})"
+    )
+    st.rerun()
+
+  if source_events.get("run_global_web_retrieval"):
+    global_web_result = execute_global_web_retrieval(
+      dict(global_web_retrieval_state.get("preview", {}) or {}),
+    )
+    st.session_state[STATE_GLOBAL_WEB_RETRIEVAL_RESULT] = global_web_result
+    artifact_paths = save_global_web_retrieval_artifacts(
+      dict(global_web_retrieval_state.get("preview", {}) or {}),
+      global_web_result,
+    )
+    st.session_state[STATE_GLOBAL_WEB_RETRIEVAL_MESSAGE] = (
+      f"Global Web / 企業候補 staging を保存しました: {artifact_paths['staged_json']} / "
+      f"{artifact_paths['staged_csv']} (discovery: {artifact_paths['discovery_json']}, "
+      f"verification: {artifact_paths['verification_json']})"
     )
     st.rerun()
 

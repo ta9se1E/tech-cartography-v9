@@ -329,6 +329,65 @@ def _render_paper_openalex_preview(
   return st.button("OpenAlex論文取得を実行", key="btn_openalex_paper_retrieval", width="stretch")
 
 
+def _render_global_web_retrieval_preview(
+  global_web_retrieval_state: dict[str, Any],
+  global_web_retrieval_status_message: str | None = None,
+) -> bool:
+  preview = dict(global_web_retrieval_state.get("preview", {}) or {})
+  request = dict(preview.get("request", {}) or {})
+  validation_rows = list(preview.get("validation_rows", []) or [])
+  retrieval_result = dict(global_web_retrieval_state.get("retrieval_result", {}) or {})
+
+  st.markdown("### Global Web / Company Retrieval")
+  _show_status_message(global_web_retrieval_status_message)
+  st.caption("Global Web 検索は明示ボタン時だけ実行します。Discovery は Tavily、Verification fallback は Google Search Grounding を想定します。")
+  if not request:
+    st.warning("Global Web retrieval preview を作成できません。")
+    return False
+
+  input_cols = st.columns(3)
+  with input_cols[0]:
+    st.number_input("Global Web実行query上限", min_value=1, max_value=100, step=1, key="ui_global_web_max_queries")
+  with input_cols[1]:
+    st.number_input("Verification対象上限", min_value=1, max_value=50, step=1, key="ui_global_web_verification_limit")
+  with input_cols[2]:
+    st.number_input("日本語要約上位件数", min_value=1, max_value=50, step=1, key="ui_global_web_summary_top_n")
+
+  st.write(f"- selected query数: `{preview.get('query_count', 0)}`")
+  st.write(f"- verification limit: `{request.get('verification_limit', 0)}`")
+  st.write(f"- summary top n: `{request.get('summary_top_n', 0)}`")
+  st.write(f"- provider: `Tavily` / fallback: `Google Search Grounding`")
+
+  with st.expander("Global Web execute preview", expanded=False):
+    st.json({
+      "selected_query_ids": preview.get("selected_query_ids", []),
+      "verification_limit": request.get("verification_limit", 0),
+      "summary_top_n": request.get("summary_top_n", 0),
+    })
+
+  st.write("**query validation**")
+  for row in validation_rows:
+    status = str(row.get("status", "") or "")
+    message = str(row.get("message", "") or "")
+    if status == "error":
+      st.error(message)
+    elif status == "warning":
+      st.warning(message)
+    else:
+      st.success(message)
+
+  if retrieval_result:
+    st.write("**最新 retrieval 結果**")
+    st.write(f"- provider status: `{retrieval_result.get('provider_status', '')}`")
+    st.write(f"- retrieval_run_id: `{retrieval_result.get('retrieval_run_id', '')}`")
+    st.write(f"- query count: `{retrieval_result.get('query_count', 0)}`")
+    st.write(f"- staged rows: `{retrieval_result.get('rows_retrieved', 0)}`")
+    if retrieval_result.get("error"):
+      st.warning(str(retrieval_result.get("error")))
+
+  return st.button("Global Web / 企業情報取得を実行", key="btn_global_web_retrieval", width="stretch")
+
+
 def _signal_lookup_key(signal: Signal | dict[str, Any]) -> str:
   if isinstance(signal, Signal):
     signal_id = str(signal.id or "").strip()
@@ -693,6 +752,8 @@ def render_sources_tab(
   patent_retrieval_status_message: str | None = None,
   paper_openalex_state: dict[str, Any] | None = None,
   paper_retrieval_status_message: str | None = None,
+  global_web_retrieval_state: dict[str, Any] | None = None,
+  global_web_retrieval_status_message: str | None = None,
 ) -> dict[str, object]:
   st.subheader("情報源")
   st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
@@ -705,8 +766,8 @@ def render_sources_tab(
   )
   st.caption(f"現在のデータ投入モード: {data_source_mode_label_ja(str(source_info['requested_mode']))}")
   st.info(
-    "このPhaseでは外部検索は実行しません。アップロードされたCSV/JSONを注目シグナルとして読み込み、"
-    "Watch Profileに基づく仮スコアを付けます。"
+    "ページ表示だけでは外部検索を実行しません。アップロードされたCSV/JSONの仮スコア表示に加えて、"
+    "特許 / 論文 / Global Web は明示ボタン時のみ取得します。"
   )
 
   upload_left, upload_right = st.columns(2)
@@ -887,6 +948,7 @@ def render_sources_tab(
   approve_patent_query = False
   run_patent_retrieval = False
   run_paper_retrieval = False
+  run_global_web_retrieval = False
   with st.expander("特許計画", expanded=False):
     patent_plan = dict(source_plans.get("patent", {}) or {})
     st.caption(f"最大件数: {patent_plan.get('limit', 0)}件")
@@ -926,6 +988,10 @@ def render_sources_tab(
     )
     _render_generated_queries("global_web", list(global_web_plan.get("queries", []) or []))
     delete_manual_query_ids.extend(_render_manual_queries("global_web", manual_queries_by_source["global_web"]))
+    run_global_web_retrieval = _render_global_web_retrieval_preview(
+      dict(global_web_retrieval_state or {}),
+      global_web_retrieval_status_message,
+    )
 
   return {
     "regenerate_search_plan": regenerate_from_sources,
@@ -935,6 +1001,7 @@ def render_sources_tab(
     "approve_patent_query": approve_patent_query,
     "run_patent_retrieval": run_patent_retrieval,
     "run_paper_retrieval": run_paper_retrieval,
+    "run_global_web_retrieval": run_global_web_retrieval,
   }
 
 
