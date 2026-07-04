@@ -409,20 +409,26 @@ def test_email_send_control_and_duplicate_digest_block(tmp_path: Path) -> None:
   assert second_email["message"].startswith("同一 Digest")
 
 
-def test_find_previous_successful_weekly_run_ignores_failed_runs(tmp_path: Path) -> None:
-  signature = stable_payload_signature(_watch_profile())
-  weekly_root = tmp_path / "weekly_runs"
-  good_dir = weekly_root / "good_run"
-  bad_dir = weekly_root / "bad_run"
-  good_dir.mkdir(parents=True, exist_ok=True)
-  bad_dir.mkdir(parents=True, exist_ok=True)
-  (good_dir / "weekly_run_status.json").write_text(
+def _write_previous_weekly_run(
+  weekly_root: Path,
+  *,
+  run_id: str,
+  signature: str,
+  created_at: str,
+  overall_status: str,
+  dry_run: bool,
+  signals: list[dict[str, object]] | None,
+) -> Path:
+  run_dir = weekly_root / run_id
+  run_dir.mkdir(parents=True, exist_ok=True)
+  (run_dir / "weekly_run_status.json").write_text(
     json.dumps(
       {
-        "weekly_run_id": "good_run",
-        "created_at": "2026-07-04T09:00:00+09:00",
-        "overall_status": "success",
+        "weekly_run_id": run_id,
+        "created_at": created_at,
+        "overall_status": overall_status,
         "watch_profile_signature": signature,
+        "dry_run": dry_run,
       },
       ensure_ascii=False,
       indent=2,
@@ -430,23 +436,144 @@ def test_find_previous_successful_weekly_run_ignores_failed_runs(tmp_path: Path)
     + "\n",
     encoding="utf-8",
   )
-  (bad_dir / "weekly_run_status.json").write_text(
-    json.dumps(
-      {
-        "weekly_run_id": "bad_run",
-        "created_at": "2026-07-04T10:00:00+09:00",
-        "overall_status": "failed",
-        "watch_profile_signature": signature,
-      },
-      ensure_ascii=False,
-      indent=2,
+  if signals is not None:
+    (run_dir / "integrated_signals.json").write_text(
+      json.dumps({"signals": signals}, ensure_ascii=False, indent=2) + "\n",
+      encoding="utf-8",
     )
-    + "\n",
-    encoding="utf-8",
+  return run_dir
+
+
+def test_find_previous_successful_weekly_run_ignores_failed_runs(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  weekly_root = tmp_path / "weekly_runs"
+  _write_previous_weekly_run(
+    weekly_root,
+    run_id="good_run",
+    signature=signature,
+    created_at="2026-07-04T09:00:00+09:00",
+    overall_status="success",
+    dry_run=False,
+    signals=[{"id": "sig-1", "title": "A"}],
+  )
+  _write_previous_weekly_run(
+    weekly_root,
+    run_id="bad_run",
+    signature=signature,
+    created_at="2026-07-04T10:00:00+09:00",
+    overall_status="failed",
+    dry_run=False,
+    signals=[{"id": "sig-2", "title": "B"}],
   )
   latest = find_previous_successful_weekly_run(tmp_path, signature)
   assert latest is not None
   assert latest["weekly_run_id"] == "good_run"
+
+
+def test_find_previous_successful_weekly_run_prefers_real_run_over_newer_dry_run(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  weekly_root = tmp_path / "weekly_runs"
+  _write_previous_weekly_run(
+    weekly_root,
+    run_id="real_run",
+    signature=signature,
+    created_at="2026-07-04T09:00:00+09:00",
+    overall_status="success",
+    dry_run=False,
+    signals=[{"id": "sig-1", "title": "A"}],
+  )
+  _write_previous_weekly_run(
+    weekly_root,
+    run_id="dry_run_newer",
+    signature=signature,
+    created_at="2026-07-04T10:00:00+09:00",
+    overall_status="partial_success",
+    dry_run=True,
+    signals=[{"id": "sig-2", "title": "B"}],
+  )
+  latest = find_previous_successful_weekly_run(tmp_path, signature)
+  assert latest is not None
+  assert latest["weekly_run_id"] == "real_run"
+
+
+def test_find_previous_successful_weekly_run_returns_none_when_only_dry_runs_exist(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  weekly_root = tmp_path / "weekly_runs"
+  _write_previous_weekly_run(
+    weekly_root,
+    run_id="dry_only",
+    signature=signature,
+    created_at="2026-07-04T10:00:00+09:00",
+    overall_status="success",
+    dry_run=True,
+    signals=[{"id": "sig-1", "title": "A"}],
+  )
+  assert find_previous_successful_weekly_run(tmp_path, signature) is None
+
+
+def test_find_previous_successful_weekly_run_excludes_empty_or_missing_integrated_signals(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  weekly_root = tmp_path / "weekly_runs"
+  _write_previous_weekly_run(
+    weekly_root,
+    run_id="missing_signals",
+    signature=signature,
+    created_at="2026-07-04T09:00:00+09:00",
+    overall_status="success",
+    dry_run=False,
+    signals=None,
+  )
+  _write_previous_weekly_run(
+    weekly_root,
+    run_id="empty_signals",
+    signature=signature,
+    created_at="2026-07-04T10:00:00+09:00",
+    overall_status="partial_success",
+    dry_run=False,
+    signals=[],
+  )
+  assert find_previous_successful_weekly_run(tmp_path, signature) is None
+
+
+def test_find_previous_successful_weekly_run_accepts_partial_success_real_run_with_signals(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  weekly_root = tmp_path / "weekly_runs"
+  _write_previous_weekly_run(
+    weekly_root,
+    run_id="partial_real_run",
+    signature=signature,
+    created_at="2026-07-04T10:00:00+09:00",
+    overall_status="partial_success",
+    dry_run=False,
+    signals=[{"id": "sig-1", "title": "A"}],
+  )
+  latest = find_previous_successful_weekly_run(tmp_path, signature)
+  assert latest is not None
+  assert latest["weekly_run_id"] == "partial_real_run"
+
+
+def test_find_previous_successful_weekly_run_excludes_blocked_and_failed_runs(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  weekly_root = tmp_path / "weekly_runs"
+  _write_previous_weekly_run(
+    weekly_root,
+    run_id="blocked_run",
+    signature=signature,
+    created_at="2026-07-04T09:00:00+09:00",
+    overall_status="blocked",
+    dry_run=False,
+    signals=[{"id": "sig-1", "title": "A"}],
+  )
+  _write_previous_weekly_run(
+    weekly_root,
+    run_id="failed_run",
+    signature=signature,
+    created_at="2026-07-04T10:00:00+09:00",
+    overall_status="failed",
+    dry_run=False,
+    signals=[{"id": "sig-2", "title": "B"}],
+  )
+  assert find_previous_successful_weekly_run(tmp_path, signature) is None
 
 
 def test_cron_and_launchd_preview_are_generated_without_installing() -> None:

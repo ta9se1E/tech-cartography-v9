@@ -205,19 +205,30 @@ def find_previous_successful_weekly_run(
       status_payload = json.loads(status_path.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
       continue
+    if bool(status_payload.get("dry_run", False)) is True:
+      continue
     if str(status_payload.get("watch_profile_signature", "") or "") != signature:
       continue
-    if str(status_payload.get("overall_status", "") or "") not in SUCCESSFUL_WEEKLY_STATUSES:
+    run_status = str(status_payload.get("overall_status", status_payload.get("status", "")) or "")
+    if run_status not in SUCCESSFUL_WEEKLY_STATUSES:
       continue
     run_dir = status_path.parent
+    integrated_signals_path = run_dir / "integrated_signals.json"
+    try:
+      integrated_payload = json.loads(integrated_signals_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+      continue
+    integrated_signals = list(dict(integrated_payload or {}).get("signals", []) or [])
+    if not integrated_signals:
+      continue
     matches.append(
       {
         "weekly_run_id": str(status_payload.get("weekly_run_id", run_dir.name) or run_dir.name),
-        "overall_status": str(status_payload.get("overall_status", "") or ""),
+        "overall_status": run_status,
         "created_at": str(status_payload.get("created_at", "") or ""),
         "run_dir": run_dir,
         "status_path": status_path,
-        "integrated_signals_path": run_dir / "integrated_signals.json",
+        "integrated_signals_path": integrated_signals_path,
         "weekly_diff_path": run_dir / "weekly_diff.json",
         "retrieval_manifest_path": run_dir / "retrieval_run_manifest.json",
       }
