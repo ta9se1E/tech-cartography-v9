@@ -16,6 +16,8 @@ JOB_SERVICE_ACCOUNT="${JOB_SERVICE_ACCOUNT:-}"
 SCHEDULER_SERVICE_ACCOUNT="${SCHEDULER_SERVICE_ACCOUNT:-}"
 SMTP_PASSWORD_SECRET="${SMTP_PASSWORD_SECRET:-}"
 TAVILY_API_KEY_SECRET="${TAVILY_API_KEY_SECRET:-}"
+SMTP_PASSWORD_SECRET_VERSION="${SMTP_PASSWORD_SECRET_VERSION:-}"
+TAVILY_API_KEY_SECRET_VERSION="${TAVILY_API_KEY_SECRET_VERSION:-}"
 V9_WEEKLY_CONFIG_OBJECT="${V9_WEEKLY_CONFIG_OBJECT:-v9_config/weekly_delivery_config.json}"
 V9_PERSIST_ROOT="${V9_PERSIST_ROOT:-/mnt/v9_persist}"
 V9_ALLOWED_RECIPIENTS="${V9_ALLOWED_RECIPIENTS:-}"
@@ -57,6 +59,31 @@ require_var() {
     printf 'ERROR: %s is required for --apply.\n' "${name}" >&2
     exit 1
   fi
+}
+
+require_positive_integer_secret_version() {
+  local name="$1"
+  local value="${!name:-}"
+  if [[ -z "${value}" ]]; then
+    printf 'ERROR: %s is required for --apply.\n' "${name}" >&2
+    exit 1
+  fi
+  if [[ "${value}" == "latest" ]]; then
+    printf 'ERROR: %s must be a positive integer, not latest.\n' "${name}" >&2
+    exit 1
+  fi
+  if ! [[ "${value}" =~ ^[1-9][0-9]*$ ]]; then
+    printf 'ERROR: %s must be a positive integer secret version.\n' "${name}" >&2
+    exit 1
+  fi
+}
+
+job_secret_refs() {
+  printf 'SMTP_PASSWORD=%s:%s,TAVILY_API_KEY=%s:%s' \
+    "${SMTP_PASSWORD_SECRET}" \
+    "${SMTP_PASSWORD_SECRET_VERSION}" \
+    "${TAVILY_API_KEY_SECRET}" \
+    "${TAVILY_API_KEY_SECRET_VERSION}"
 }
 
 require_apply_guard() {
@@ -241,7 +268,7 @@ deploy_job() {
       --add-volume "name=v9-persist,type=cloud-storage,bucket=${BUCKET}" \
       --add-volume-mount "volume=v9-persist,mount-path=/mnt/v9_persist" \
       --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_WEEKLY_JOB_NAME=${JOB}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=${V9_WEEKLY_CONFIG_OBJECT}#V9_ALLOWED_RECIPIENTS=${V9_ALLOWED_RECIPIENTS}#SMTP_HOST=${SMTP_HOST}#SMTP_PORT=${SMTP_PORT}#SMTP_USERNAME=${SMTP_USERNAME}#SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_JOB_DRY_RUN=true#V9_CLOUD_ENABLE_PATENT=false#V9_CLOUD_ENABLE_PAPER=false#V9_CLOUD_ENABLE_WEB_COMPANY=false#V9_CLOUD_PAPER_APPROVED_QUERY_IDS=#V9_CLOUD_WEB_APPROVED_QUERY_IDS=#V9_CLOUD_PAPER_MAX_RESULTS=#V9_CLOUD_WEB_MAX_RESULTS=#V9_CLOUD_WEB_VERIFICATION_LIMIT=#V9_CLOUD_PAPER_TIME_RANGE=#V9_CLOUD_WEB_ENGLISH_FALLBACK=false#V9_CLOUD_GOOGLE_GROUNDING=false" \
-      --set-secrets "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest,TAVILY_API_KEY=${TAVILY_API_KEY_SECRET}:latest"
+      --set-secrets "$(job_secret_refs)"
   else
     gcloud run jobs create "${JOB}" \
       --project "${PROJECT_ID}" \
@@ -257,7 +284,7 @@ deploy_job() {
       --add-volume "name=v9-persist,type=cloud-storage,bucket=${BUCKET}" \
       --add-volume-mount "volume=v9-persist,mount-path=/mnt/v9_persist" \
       --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_WEEKLY_JOB_NAME=${JOB}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=${V9_WEEKLY_CONFIG_OBJECT}#V9_ALLOWED_RECIPIENTS=${V9_ALLOWED_RECIPIENTS}#SMTP_HOST=${SMTP_HOST}#SMTP_PORT=${SMTP_PORT}#SMTP_USERNAME=${SMTP_USERNAME}#SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_JOB_DRY_RUN=true#V9_CLOUD_ENABLE_PATENT=false#V9_CLOUD_ENABLE_PAPER=false#V9_CLOUD_ENABLE_WEB_COMPANY=false#V9_CLOUD_PAPER_APPROVED_QUERY_IDS=#V9_CLOUD_WEB_APPROVED_QUERY_IDS=#V9_CLOUD_PAPER_MAX_RESULTS=#V9_CLOUD_WEB_MAX_RESULTS=#V9_CLOUD_WEB_VERIFICATION_LIMIT=#V9_CLOUD_PAPER_TIME_RANGE=#V9_CLOUD_WEB_ENGLISH_FALLBACK=false#V9_CLOUD_GOOGLE_GROUNDING=false" \
-      --set-secrets "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest,TAVILY_API_KEY=${TAVILY_API_KEY_SECRET}:latest"
+      --set-secrets "$(job_secret_refs)"
   fi
 }
 
@@ -346,8 +373,8 @@ Resolved resource targets:
 - service SA: ${SERVICE_ACCOUNT}
 - job SA: ${JOB_SERVICE_ACCOUNT}
 - scheduler SA: ${SCHEDULER_SERVICE_ACCOUNT}
-- SMTP secret: ${SMTP_PASSWORD_SECRET}
-- Tavily secret: ${TAVILY_API_KEY_SECRET}
+- SMTP secret: ${SMTP_PASSWORD_SECRET} (version ${SMTP_PASSWORD_SECRET_VERSION:-unset})
+- Tavily secret: ${TAVILY_API_KEY_SECRET} (version ${TAVILY_API_KEY_SECRET_VERSION:-unset})
 - bootstrap settings object: gs://${BUCKET}/${V9_WEEKLY_CONFIG_OBJECT}
 
 Planned order:
@@ -448,7 +475,7 @@ if gcloud run jobs describe "${JOB}" --project "${PROJECT_ID}" --region "${REGIO
     --add-volume "name=v9-persist,type=cloud-storage,bucket=${BUCKET}" \
     --add-volume-mount "volume=v9-persist,mount-path=/mnt/v9_persist" \
     --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_WEEKLY_JOB_NAME=${JOB}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=${V9_WEEKLY_CONFIG_OBJECT}#V9_ALLOWED_RECIPIENTS=\${V9_ALLOWED_RECIPIENTS}#SMTP_HOST=\${SMTP_HOST}#SMTP_PORT=\${SMTP_PORT}#SMTP_USERNAME=\${SMTP_USERNAME}#SMTP_FROM_EMAIL=\${SMTP_FROM_EMAIL}#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_JOB_DRY_RUN=true#V9_CLOUD_ENABLE_PATENT=false#V9_CLOUD_ENABLE_PAPER=false#V9_CLOUD_ENABLE_WEB_COMPANY=false#V9_CLOUD_PAPER_APPROVED_QUERY_IDS=#V9_CLOUD_WEB_APPROVED_QUERY_IDS=#V9_CLOUD_PAPER_MAX_RESULTS=#V9_CLOUD_WEB_MAX_RESULTS=#V9_CLOUD_WEB_VERIFICATION_LIMIT=#V9_CLOUD_PAPER_TIME_RANGE=#V9_CLOUD_WEB_ENGLISH_FALLBACK=false#V9_CLOUD_GOOGLE_GROUNDING=false" \
-    --set-secrets "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest,TAVILY_API_KEY=${TAVILY_API_KEY_SECRET}:latest"
+    --set-secrets "$(job_secret_refs)"
 else
   gcloud run jobs create "${JOB}" \
     --project "${PROJECT_ID}" \
@@ -464,7 +491,7 @@ else
     --add-volume "name=v9-persist,type=cloud-storage,bucket=${BUCKET}" \
     --add-volume-mount "volume=v9-persist,mount-path=/mnt/v9_persist" \
     --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_WEEKLY_JOB_NAME=${JOB}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=${V9_WEEKLY_CONFIG_OBJECT}#V9_ALLOWED_RECIPIENTS=\${V9_ALLOWED_RECIPIENTS}#SMTP_HOST=\${SMTP_HOST}#SMTP_PORT=\${SMTP_PORT}#SMTP_USERNAME=\${SMTP_USERNAME}#SMTP_FROM_EMAIL=\${SMTP_FROM_EMAIL}#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_JOB_DRY_RUN=true#V9_CLOUD_ENABLE_PATENT=false#V9_CLOUD_ENABLE_PAPER=false#V9_CLOUD_ENABLE_WEB_COMPANY=false#V9_CLOUD_PAPER_APPROVED_QUERY_IDS=#V9_CLOUD_WEB_APPROVED_QUERY_IDS=#V9_CLOUD_PAPER_MAX_RESULTS=#V9_CLOUD_WEB_MAX_RESULTS=#V9_CLOUD_WEB_VERIFICATION_LIMIT=#V9_CLOUD_PAPER_TIME_RANGE=#V9_CLOUD_WEB_ENGLISH_FALLBACK=false#V9_CLOUD_GOOGLE_GROUNDING=false" \
-    --set-secrets "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest,TAVILY_API_KEY=${TAVILY_API_KEY_SECRET}:latest"
+    --set-secrets "$(job_secret_refs)"
 fi
 
 ## Bootstrap enabled=false settings object
@@ -521,6 +548,8 @@ apply_plan() {
   require_var SCHEDULER_SERVICE_ACCOUNT
   require_var SMTP_PASSWORD_SECRET
   require_var TAVILY_API_KEY_SECRET
+  require_positive_integer_secret_version SMTP_PASSWORD_SECRET_VERSION
+  require_positive_integer_secret_version TAVILY_API_KEY_SECRET_VERSION
   load_nonsecret_smtp_env_from_dotenv
   require_var V9_ALLOWED_RECIPIENTS
   require_var SMTP_HOST

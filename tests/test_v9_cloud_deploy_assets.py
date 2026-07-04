@@ -119,8 +119,13 @@ def test_service_does_not_receive_smtp_or_tavily_secrets() -> None:
 def test_job_references_required_secrets_and_nonsecret_smtp_envs() -> None:
   text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
   job_section = text.split("deploy_job() {", 1)[1].split("bootstrap_settings() {", 1)[0]
-  assert "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest" in job_section
-  assert "TAVILY_API_KEY=${TAVILY_API_KEY_SECRET}:latest" in job_section
+  assert 'printf \'SMTP_PASSWORD=%s:%s,TAVILY_API_KEY=%s:%s\'' in job_section or "job_secret_refs" in text
+  assert "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest" not in job_section
+  assert "TAVILY_API_KEY=${TAVILY_API_KEY_SECRET}:latest" not in job_section
+  assert "require_positive_integer_secret_version SMTP_PASSWORD_SECRET_VERSION" in text
+  assert "require_positive_integer_secret_version TAVILY_API_KEY_SECRET_VERSION" in text
+  assert "SMTP_PASSWORD_SECRET_VERSION" in text
+  assert "TAVILY_API_KEY_SECRET_VERSION" in text
   assert "SMTP_HOST=${SMTP_HOST}" in job_section
   assert "SMTP_PORT=${SMTP_PORT}" in job_section
   assert "SMTP_USERNAME=${SMTP_USERNAME}" in job_section

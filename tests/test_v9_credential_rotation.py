@@ -34,9 +34,18 @@ class _FakeSecretManagerClient:
   def list_secret_versions(self, request: dict[str, str]):
     secret_name = request["parent"].rsplit("/", 1)[-1]
     for item in self._versions.get(secret_name, []):
+      state = item["state"]
+      if state == "enabled":
+        state_value = "State.ENABLED"
+      elif state == "disabled":
+        state_value = "State.DISABLED"
+      elif state == "destroyed":
+        state_value = "State.DESTROYED"
+      else:
+        state_value = f"State.{state.upper()}"
       yield SimpleNamespace(
         name=f"{request['parent']}/versions/{item['version']}",
-        state=f"State.{item['state'].upper()}",
+        state=state_value,
         create_time=SimpleNamespace(isoformat=lambda: item["create_time"]),
       )
 
@@ -51,14 +60,15 @@ class _FakeSecretManagerClient:
     return SimpleNamespace(name=f"{parent}/versions/{version_number}")
 
 
-def test_build_rotation_plan_defaults_to_latest_detection() -> None:
+def test_build_rotation_plan_detects_numeric_secret_pin_mode() -> None:
   plan = rotation_script.build_rotation_plan(
     dotenv_path=PROJECT_ROOT / ".env.example",
     deploy_script_path=PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh",
     secret_manager_client=_FakeSecretManagerClient(),
   )
   assert plan["status"] == "plan"
-  assert plan["job_secret_reference_mode"] == "latest"
+  assert plan["job_secret_reference_mode"] == "numeric_version"
+  assert plan["latest_secret_reference_lines"] == []
   assert plan["job_secret_pin_plan"]["SMTP_PASSWORD"].endswith("<NEW_NUMERIC_VERSION>")
   assert plan["secret_versions"]["tech-cartography-smtp-password"]["latest_enabled_version"] == "2"
 
@@ -297,3 +307,77 @@ def test_plan_output_does_not_include_secret_values(capsys) -> None:
   assert "SMTP_PASSWORD" in captured
   assert "secret-one" not in captured
   assert "tvly-" not in captured.lower()
+
+
+@pytest.mark.parametrize(
+  ("state", "expected"),
+  [
+    ("ENABLED", "enabled"),
+    ("1", "enabled"),
+    (1, "enabled"),
+    ("SecretVersion.State.ENABLED", "enabled"),
+    ("State.ENABLED", "enabled"),
+    ("DISABLED", "disabled"),
+    ("2", "disabled"),
+    ("DESTROYED", "destroyed"),
+    ("3", "destroyed"),
+  ],
+)
+def test_normalize_secret_version_state_recognizes_enabled_representations(state, expected) -> None:
+  assert rotation_script.normalize_secret_version_state(state) == expected
+
+
+def test_normalize_secret_version_state_does_not_treat_disabled_or_destroyed_as_enabled() -> None:
+  assert rotation_script.normalize_secret_version_state("DISABLED") == "disabled"
+  assert rotation_script.normalize_secret_version_state(2) == "disabled"
+  assert rotation_script.normalize_secret_version_state("DESTROYED") == "destroyed"
+  assert rotation_script.normalize_secret_version_state(3) == "destroyed"
+
+
+def test_summarize_secret_versions_recognizes_numeric_enum_state_as_enabled() -> None:
+  class _NumericEnumClient:
+    def list_secret_versions(self, request: dict[str, str]):
+      for version in ("4", "3"):
+        yield SimpleNamespace(
+          name=f"{request['parent']}/versions/{version}",
+          state="1",
+          create_time=SimpleNamespace(isoformat=lambda v=version: f"2026-07-04T17:00:{version}4+00:00"),
+        )
+
+  summary = rotation_script._summarize_secret_versions_with_client(
+    project_id="devops-ai-agent-hackathon-2026",
+    secret_names=["tech-cartography-smtp-password"],
+    client=_NumericEnumClient(),
+  )
+  payload = summary["tech-cartography-smtp-password"]
+  assert payload["enabled_versions"] == ["4", "3"]
+  assert payload["latest_enabled_version"] == "4"
+
+
+def test_summarize_secret_versions_treats_disabled_and_destroyed_as_not_enabled() -> None:
+  class _MixedStateClient:
+    def list_secret_versions(self, request: dict[str, str]):
+      yield SimpleNamespace(
+        name=f"{request['parent']}/versions/4",
+        state="1",
+        create_time=SimpleNamespace(isoformat=lambda: "2026-07-04T17:00:14+00:00"),
+      )
+      yield SimpleNamespace(
+        name=f"{request['parent']}/versions/3",
+        state="2",
+        create_time=SimpleNamespace(isoformat=lambda: "2026-06-21T13:58:26+00:00"),
+      )
+      yield SimpleNamespace(
+        name=f"{request['parent']}/versions/2",
+        state="3",
+        create_time=SimpleNamespace(isoformat=lambda: "2026-06-21T13:46:47+00:00"),
+      )
+
+  summary = rotation_script._summarize_secret_versions_with_client(
+    project_id="devops-ai-agent-hackathon-2026",
+    secret_names=["tech-cartography-smtp-password"],
+    client=_MixedStateClient(),
+  )
+  payload = summary["tech-cartography-smtp-password"]
+  assert payload["enabled_versions"] == ["4"]
+  assert payload["latest_enabled_version"] == "4"

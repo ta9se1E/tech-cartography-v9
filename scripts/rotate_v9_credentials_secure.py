@@ -179,12 +179,60 @@ def compare_langchain_langsmith_alias(dotenv_path: Path | str = DEFAULT_DOTENV_P
   return values["LANGCHAIN_API_KEY"] == values["LANGSMITH_API_KEY"]
 
 
+def normalize_secret_version_state(state: Any) -> str:
+  if state is None:
+    return ""
+  if hasattr(state, "name") and hasattr(state, "value"):
+    name = str(getattr(state, "name", "") or "").strip().upper()
+    if name in {"ENABLED", "DISABLED", "DESTROYED", "STATE_UNSPECIFIED"}:
+      return name.lower()
+    try:
+      numeric = int(getattr(state, "value", state))
+    except (TypeError, ValueError):
+      numeric = None
+    if numeric == 1:
+      return "enabled"
+    if numeric == 2:
+      return "disabled"
+    if numeric == 3:
+      return "destroyed"
+    if numeric == 0:
+      return "state_unspecified"
+  text = str(state).strip()
+  if not text:
+    return ""
+  normalized = text.replace("SecretVersion.State.", "").replace("State.", "").strip().upper()
+  if normalized in {"ENABLED", "DISABLED", "DESTROYED", "STATE_UNSPECIFIED"}:
+    return normalized.lower()
+  if normalized.isdigit():
+    mapping = {
+      "1": "enabled",
+      "2": "disabled",
+      "3": "destroyed",
+      "0": "state_unspecified",
+    }
+    if normalized in mapping:
+      return mapping[normalized]
+  return text.lower()
+
+
 def detect_latest_secret_references(deploy_script_text: str) -> list[str]:
   hits: list[str] = []
   for line in deploy_script_text.splitlines():
     if ":latest" in line and ("SMTP_PASSWORD" in line or "TAVILY_API_KEY" in line):
       hits.append(line.strip())
   return hits
+
+
+def detect_job_secret_reference_mode(deploy_script_text: str) -> str:
+  if detect_latest_secret_references(deploy_script_text):
+    return "latest"
+  if (
+    "SMTP_PASSWORD_SECRET_VERSION" in deploy_script_text
+    and "TAVILY_API_KEY_SECRET_VERSION" in deploy_script_text
+  ):
+    return "numeric_version"
+  return "unknown"
 
 
 def _parse_create_time(value: str) -> float | None:
@@ -297,7 +345,7 @@ def _summarize_secret_versions_with_client(
     versions: list[dict[str, str]] = []
     for version in client.list_secret_versions(request={"parent": f"{parent}/secrets/{secret_name}"}):
       version_number = str(version.name).rsplit("/", 1)[-1]
-      state = str(getattr(version, "state", "") or "").replace("State.", "").lower()
+      state = normalize_secret_version_state(getattr(version, "state", None))
       create_time = ""
       if getattr(version, "create_time", None) is not None:
         create_time = version.create_time.isoformat()
@@ -401,7 +449,7 @@ def build_rotation_plan(
     "status": "plan",
     "project_id": project_id,
     "selected_targets": selected,
-    "job_secret_reference_mode": "latest" if latest_refs else "unknown",
+    "job_secret_reference_mode": detect_job_secret_reference_mode(deploy_text),
     "latest_secret_reference_lines": latest_refs,
     "job_secret_pin_plan": {
       "SMTP_PASSWORD": "tech-cartography-smtp-password:<NEW_NUMERIC_VERSION>",

@@ -384,8 +384,10 @@ def main() -> None:
   assert "SMTP_PASSWORD" not in service_section
   assert "TAVILY_API_KEY" not in service_section
   job_section = deploy_script.split("deploy_job() {", 1)[1].split("bootstrap_settings() {", 1)[0]
-  assert "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest" in job_section
-  assert "TAVILY_API_KEY=${TAVILY_API_KEY_SECRET}:latest" in job_section
+  assert "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest" not in job_section
+  assert "TAVILY_API_KEY=${TAVILY_API_KEY_SECRET}:latest" not in job_section
+  assert "job_secret_refs" in deploy_script
+  assert "require_positive_integer_secret_version SMTP_PASSWORD_SECRET_VERSION" in deploy_script
   assert "DISABLE_EMAIL_SEND=true" in job_section
   assert "EMAIL_SEND_MODE=preview" in job_section
   assert "V9_ENABLE_EMAIL_SEND=false" in job_section
@@ -482,7 +484,9 @@ def main() -> None:
   assert "V9_CREDENTIAL_ROTATION_APPROVED" in rotation_module
   assert "--only" in rotation_module
   assert "resolve_selected_targets" in rotation_module
-  assert ":latest" in deploy_script
+  assert "SMTP_PASSWORD_SECRET_VERSION" in deploy_script
+  assert "job_secret_refs" in deploy_script
+  assert "SMTP_PASSWORD=${SMTP_PASSWORD_SECRET}:latest" not in job_section
   assert "<NEW_NUMERIC_VERSION>" in rotation_module
   assert "Scheduler remains PAUSED" in rotation_runbook
   assert "Do not paste secret values" in rotation_runbook
