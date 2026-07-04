@@ -106,3 +106,47 @@ If Stage B verification fails before provider revocation:
 - automatic weekly operations
 - git push
 - final release tag creation
+
+## Stage B Completion Record (2026-07-05)
+
+Stage B credential rotation is complete for v9 Cloud Run Job secrets. Secret values are not recorded here.
+
+### SMTP_PASSWORD
+
+| Item | Status |
+|---|---|
+| Active Secret Manager version | 4 |
+| Superseded versions | 1, 2, 3 disabled |
+| Old provider credential | revoked |
+| Connectivity | validated (self-only SMTP send, 2026-07-05) |
+| Cloud Run Job reference | `tech-cartography-smtp-password:4` |
+
+### TAVILY_API_KEY
+
+| Item | Status |
+|---|---|
+| Active Secret Manager version | 4 |
+| Superseded versions | 1, 2, 3 disabled |
+| Old provider credential | revoked |
+| Connectivity | validated (minimal Tavily discovery, 2026-07-05) |
+| Cloud Run Job reference | `tech-cartography-tavily-api-key:4` |
+
+### Post-rotation Cloud Safety State
+
+| Item | Status |
+|---|---|
+| Scheduler | PAUSED |
+| weekly delivery `enabled` | false |
+| Cloud Run Job dry run | true |
+| Providers | patent=false, paper=false, web=false |
+| Email send | disabled (`EMAIL_SEND_MODE=preview`) |
+| Cloud Run Service | unchanged |
+
+### Remaining Out of Scope After Stage B
+
+- Scheduler resume
+- weekly delivery `enabled=true` permanent enablement
+- automatic weekly operations start
+- Secret Manager version destroy
+- git push
+- final release tag creation
