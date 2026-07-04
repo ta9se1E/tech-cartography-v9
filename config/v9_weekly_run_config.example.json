@@ -1,0 +1,53 @@
+{
+  "schema_version": "v9.6b",
+  "enabled": false,
+  "watch_profile_path": "data/demo/v9_demo_watch_profile.json",
+  "execution": {
+    "dry_run": true,
+    "patent_enabled": false,
+    "paper_enabled": false,
+    "web_company_enabled": false,
+    "stage_retry_limit": 0
+  },
+  "limits": {
+    "patent_max_results": 500,
+    "paper_max_results": 300,
+    "web_max_results": 100,
+    "company_max_results": 100
+  },
+  "patent": {
+    "approved_query_ids": [],
+    "maximum_bytes_billed": 0,
+    "time_range": "12m"
+  },
+  "paper": {
+    "approved_query_ids": [],
+    "time_range": "12m",
+    "per_page": 25,
+    "retry_limit": 2,
+    "polite_email": ""
+  },
+  "web_company": {
+    "approved_query_ids": [],
+    "max_query_count": 30,
+    "verification_limit": 30,
+    "summary_top_n": 10
+  },
+  "email": {
+    "mode": "preview",
+    "self_send_enabled": false
+  },
+  "schedule": {
+    "timezone": "Asia/Tokyo",
+    "day_of_week": "MON",
+    "hour": 8,
+    "minute": 0
+  },
+  "timeouts": {
+    "patent_seconds": 1200,
+    "paper_seconds": 1200,
+    "web_company_seconds": 1200,
+    "email_seconds": 120,
+    "lock_stale_seconds": 21600
+  }
+}

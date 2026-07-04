@@ -24,4 +24,6 @@ data/v9_runs/paper_retrieval_runs/
 data/v9_runs/web_company_retrieval_runs/
 data/v9_runs/retrieval_manifests/
 data/v9_runs/email_delivery_runs/
+data/v9_runs/weekly_runs/
+data/v9_runs/weekly_locks/
 !data/v9_runs/.gitkeep
