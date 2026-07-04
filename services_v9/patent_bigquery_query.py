@@ -63,6 +63,8 @@ SELECTED_COLUMN_NAMES = [
   "is_seed_publication",
   "matched_keyword_count",
 ]
+ERROR_CATEGORY_BLOCKED_COST_GUARD = "blocked_cost_guard"
+ERROR_CATEGORY_BLOCKED_EXECUTION_CAP = "blocked_execution_cap"
 
 ClientFactory = Callable[[str, str], Any]
 JobConfigBuilder = Callable[[dict[str, Any], bool], Any]
@@ -829,6 +831,15 @@ def _categorize_error_text(error_message: str | None) -> str:
   return "runtime"
 
 
+def _resolve_error_category(provider_status: str, error_message: str | None) -> str:
+  normalized_status = str(provider_status or "").strip()
+  if normalized_status == "blocked_cost_guard":
+    return ERROR_CATEGORY_BLOCKED_COST_GUARD
+  if normalized_status == "blocked_execution_cap":
+    return ERROR_CATEGORY_BLOCKED_EXECUTION_CAP
+  return _categorize_error_text(error_message)
+
+
 def _blocked_retrieval_result(
   retrieval_run_id: str,
   request: dict[str, Any],
@@ -839,6 +850,7 @@ def _blocked_retrieval_result(
   provider_status: str,
 ) -> dict[str, Any]:
   timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+  error_category = _resolve_error_category(provider_status, error_message)
   return {
     "retrieval_run_id": retrieval_run_id,
     "query_id": str(request.get("query_id", "") or ""),
@@ -861,7 +873,7 @@ def _blocked_retrieval_result(
     "finished_at": timestamp,
     "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
     "selected_columns": list(request.get("selected_columns", []) or []),
-    "error_category": _categorize_error_text(error_message),
+    "error_category": error_category,
     "query_validation": validation_rows,
     "rows_retrieved": 0,
     "rows": [],
@@ -881,7 +893,7 @@ def _blocked_retrieval_result(
       "result_count": 0,
       "started_at": timestamp,
       "finished_at": timestamp,
-      "error_category": _categorize_error_text(error_message),
+      "error_category": error_category,
       "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
       "selected_columns": list(request.get("selected_columns", []) or []),
       "error": error_message,

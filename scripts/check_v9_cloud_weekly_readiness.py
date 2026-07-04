@@ -406,6 +406,8 @@ def main() -> None:
   assert "total_bytes_billed" in patent_query_module
   assert "cache_hit" in patent_query_module
   assert "sql_fingerprint" in patent_query_module
+  assert "ERROR_CATEGORY_BLOCKED_COST_GUARD" in patent_query_module
+  assert "_resolve_error_category" in patent_query_module
   assert "build_email_preview_artifact" in email_delivery_module
   assert "preview_schema_version" in email_delivery_module
   assert "body_text" in email_delivery_module
@@ -414,6 +416,8 @@ def main() -> None:
   assert "EMAIL_PREVIEW_BODY_TEXT_MAX_BYTES" in email_delivery_module
   assert "blocked_cost_guard" in weekly_scheduler_module
   assert "blocked_execution_cap" in weekly_scheduler_module
+  assert '"error_category": error_category' in weekly_scheduler_module
+  assert '"error_category": error_category' in patent_query_module
   assert "baseline_eligible" in weekly_scheduler_module
   assert "controlled_outcome" in weekly_scheduler_module
   assert "printf '%s\\n' '{\"enabled\": false}'" not in deploy_script

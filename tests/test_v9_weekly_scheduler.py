@@ -469,6 +469,7 @@ def test_patent_provider_runs_dry_run_before_execute_and_blocks_total_cap(tmp_pa
   assert result["candidate_count"] == 1
   blocked_log = result["provider_log"]["query_logs"][1]
   assert blocked_log["provider_status"] == "blocked_cost_guard"
+  assert blocked_log["error_category"] == "blocked_cost_guard"
   assert blocked_log["bigquery_job_id"] == ""
 
 
@@ -536,6 +537,7 @@ def test_patent_provider_respects_query_execution_cap(tmp_path: Path) -> None:
   )
   assert executed == ["patent_q01"]
   assert result["provider_log"]["query_logs"][1]["provider_status"] == "blocked_execution_cap"
+  assert result["provider_log"]["query_logs"][1]["error_category"] == "blocked_execution_cap"
 
 
 def test_patent_provider_zero_results_is_safe_partial_success(tmp_path: Path) -> None:
@@ -621,7 +623,7 @@ def test_run_weekly_watch_treats_blocked_cost_guard_as_controlled_block(tmp_path
             "total_bytes_billed": 0,
             "bigquery_job_id": "",
             "cache_hit": False,
-            "error_category": "cost_guard",
+            "error_category": "blocked_cost_guard",
           }
         ],
       },
@@ -650,7 +652,9 @@ def test_run_weekly_watch_treats_blocked_cost_guard_as_controlled_block(tmp_path
   assert status_payload["block_reason"] == "blocked_cost_guard"
   assert status_payload["baseline_eligible"] is False
   assert manifest_payload["status"] == "blocked"
+  assert manifest_payload["error_category"] == "blocked_cost_guard"
   assert manifest_payload["provider_summary"]["patent"]["provider_status"] == "blocked_cost_guard"
+  assert manifest_payload["provider_summary"]["patent"]["error_category"] == "blocked_cost_guard"
   assert manifest_payload["query_execution_count"] == 0
   assert manifest_payload["total_bytes_billed"] == 0
   assert diff_payload["status"] == "unavailable"

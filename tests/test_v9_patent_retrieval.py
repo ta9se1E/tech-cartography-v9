@@ -236,6 +236,59 @@ def test_partial_success_keeps_retrieved_rows() -> None:
   assert result["rows"][0]["publication_number"] == "US1"
 
 
+def test_execute_blocks_cost_guard_without_calling_bigquery_and_normalizes_error_category() -> None:
+  preview, dry_run_result = _preview_and_dry_run()
+  dry_run_result["would_be_blocked_by_max_bytes"] = True
+  called = {"execute": False}
+
+  def _should_not_call(project_id, location):  # noqa: ANN001
+    del project_id, location
+    called["execute"] = True
+    raise AssertionError("BigQuery execute must not be called when cost guard blocks")
+
+  result = execute_patent_bigquery_retrieval(
+    preview,
+    dry_run_result,
+    approved=True,
+    client_factory=_should_not_call,
+    job_config_builder=lambda payload, dry_run: _FakeJobConfig(
+      dry_run=dry_run,
+      maximum_bytes_billed=int(payload["maximum_bytes_billed"]),
+    ),
+    config=_config(),
+  )
+  assert called["execute"] is False
+  assert result["provider_status"] == "blocked_cost_guard"
+  assert result["error_category"] == "blocked_cost_guard"
+  assert result["total_bytes_billed"] == 0
+  assert result["bigquery_job_id"] == ""
+  assert result["log"]["error_category"] == "blocked_cost_guard"
+
+
+def test_execute_runtime_error_keeps_runtime_category() -> None:
+  preview, dry_run_result = _preview_and_dry_run()
+
+  class _RuntimeClient:
+    def query(self, sql: str, job_config=None, job_id=None):  # noqa: ANN001
+      del sql, job_config, job_id
+      raise RuntimeError("unexpected socket reset")
+
+  result = execute_patent_bigquery_retrieval(
+    preview,
+    dry_run_result,
+    approved=True,
+    client_factory=lambda project_id, location: _RuntimeClient(),
+    job_config_builder=lambda payload, dry_run: _FakeJobConfig(
+      dry_run=dry_run,
+      maximum_bytes_billed=int(payload["maximum_bytes_billed"]),
+    ),
+    config=_config(),
+  )
+  assert result["provider_status"] == "error"
+  assert result["error_category"] == "runtime"
+  assert result["log"]["error_category"] == "runtime"
+
+
 def test_execute_records_bigquery_job_metadata_and_deterministic_job_id() -> None:
   preview, dry_run_result = _preview_and_dry_run()
   preview["request"]["weekly_run_id"] = "cloud_weekly_job_20260704_123000"

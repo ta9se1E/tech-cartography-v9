@@ -1651,6 +1651,7 @@ def _blocked_patent_query_result(
 ) -> dict[str, Any]:
   request = dict(preview.get("request", {}) or {})
   timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+  error_category = "blocked_cost_guard" if provider_status == "blocked_cost_guard" else "blocked_execution_cap"
   return {
     "retrieval_run_id": f"weekly_patent_blocked_{query_id}",
     "query_id": query_id,
@@ -1673,7 +1674,7 @@ def _blocked_patent_query_result(
     "finished_at": timestamp,
     "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
     "selected_columns": list(request.get("selected_columns", []) or []),
-    "error_category": "cost_guard" if provider_status == "blocked_cost_guard" else "execution_cap",
+    "error_category": error_category,
     "query_validation": list(preview.get("validation_rows", []) or []),
     "rows_retrieved": 0,
     "rows": [],
@@ -1693,7 +1694,7 @@ def _blocked_patent_query_result(
       "result_count": 0,
       "started_at": timestamp,
       "finished_at": timestamp,
-      "error_category": "cost_guard" if provider_status == "blocked_cost_guard" else "execution_cap",
+      "error_category": error_category,
       "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
       "selected_columns": list(request.get("selected_columns", []) or []),
       "error": message,
@@ -1718,6 +1719,7 @@ def _build_controlled_block_retrieval_manifest(
   patent_status = ""
   if patent_query_logs:
     patent_status = str(patent_query_logs[-1].get("provider_status", "") or "").strip()
+  error_category = block_reason if block_reason in {"blocked_cost_guard", "blocked_execution_cap"} else ""
   return {
     "schema_version": WEEKLY_SCHEDULER_SCHEMA_VERSION,
     "manifest_id": f"blocked_{weekly_run_id}",
@@ -1726,6 +1728,7 @@ def _build_controlled_block_retrieval_manifest(
     "theme_name": theme_name,
     "status": "blocked",
     "block_reason": block_reason,
+    "error_category": error_category,
     "baseline_eligible": False,
     "query_execution_count": query_execution_count,
     "total_bytes_processed": total_bytes_processed,
@@ -1736,6 +1739,7 @@ def _build_controlled_block_retrieval_manifest(
     "provider_summary": {
       "patent": {
         "provider_status": patent_status or block_reason,
+        "error_category": error_category,
         "query_execution_count": query_execution_count,
         "total_bytes_processed": total_bytes_processed,
         "total_bytes_billed": total_bytes_billed,
