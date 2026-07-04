@@ -476,6 +476,16 @@ def main() -> None:
   for banned in ("tech-cartography-v7-demo", "tech-cartography-v7-live", "tech-cartography-v8-demo"):
     assert banned not in deploy_script
 
+  rotation_module = (PROJECT_ROOT / "scripts" / "rotate_v9_credentials_secure.py").read_text(encoding="utf-8")
+  rotation_runbook = (PROJECT_ROOT / "docs" / "v9_credential_rotation_manual_steps.md").read_text(encoding="utf-8")
+  assert "getpass" in rotation_module
+  assert "V9_CREDENTIAL_ROTATION_APPROVED" in rotation_module
+  assert 'mode = "--apply" if args.apply else "--plan"' in rotation_module or "--plan" in rotation_module
+  assert ":latest" in deploy_script
+  assert "<NEW_NUMERIC_VERSION>" in rotation_module
+  assert "Scheduler remains PAUSED" in rotation_runbook
+  assert "Do not paste secret values" in rotation_runbook
+
   print(json.dumps({
     "status": "ok",
     "runtime_mode": "validated",

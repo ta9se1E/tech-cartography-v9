@@ -173,10 +173,16 @@ def test_save_weekly_delivery_settings_can_preserve_revision(tmp_path: Path) -> 
 
 
 def test_load_weekly_delivery_settings_falls_back_from_broken_json(tmp_path: Path) -> None:
-  path = resolve_weekly_delivery_settings_path(base_dir=tmp_path / "v9_runs", environ={})
+  path = resolve_weekly_delivery_settings_path(
+    base_dir=tmp_path / "v9_runs",
+    environ={"V9_RUNTIME_MODE": "local"},
+  )
   path.parent.mkdir(parents=True, exist_ok=True)
   path.write_text("{broken", encoding="utf-8")
-  loaded = load_weekly_delivery_settings(base_dir=tmp_path / "v9_runs")
+  loaded = load_weekly_delivery_settings(
+    base_dir=tmp_path / "v9_runs",
+    environ={"V9_RUNTIME_MODE": "local"},
+  )
   assert loaded["enabled"] is False
   assert loaded["revision"] == 0
 
