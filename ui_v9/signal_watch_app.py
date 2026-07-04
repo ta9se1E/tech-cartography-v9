@@ -18,6 +18,13 @@ from services_v9.demo_data import (
   load_demo_watch_profile_payload,
 )
 from services_v9.digest_export import build_weekly_digest_markdown, signals_to_csv, signals_to_json
+from services_v9.email_delivery import (
+  build_digest_email_preview,
+  load_email_delivery_config,
+  run_email_delivery_dry_run,
+  save_email_delivery_log,
+  send_digest_email_self_only,
+)
 from services_v9.paper_openalex_retrieval import (
   build_openalex_paper_preview,
   execute_openalex_paper_retrieval,
@@ -107,12 +114,17 @@ UI_PREVIOUS_SNAPSHOT_CHOICE_KEY = "ui_previous_snapshot_choice"
 UI_DATA_SOURCE_MODE_KEY = "ui_data_source_mode"
 UI_CSV_UPLOAD_KEY = "ui_csv_upload"
 UI_JSON_UPLOAD_KEY = "ui_json_upload"
+UI_EMAIL_CONFIRM_SEND_KEY = "ui_email_confirm_send"
 
 STATE_PENDING_PROFILE = "state_pending_watch_profile"
 STATE_PROFILE_MESSAGE = "state_profile_status_message"
 STATE_SNAPSHOT_MESSAGE = "state_snapshot_status_message"
 STATE_COMPARE_MESSAGE = "state_compare_status_message"
 STATE_DIGEST_MESSAGE = "state_digest_status_message"
+STATE_EMAIL_DELIVERY_MESSAGE = "state_email_delivery_message"
+STATE_EMAIL_DRY_RUN_RESULT = "state_email_dry_run_result"
+STATE_EMAIL_SEND_RESULT = "state_email_send_result"
+STATE_EMAIL_LAST_SENT_DIGEST_SHA = "state_email_last_sent_digest_sha"
 STATE_PREVIOUS_SNAPSHOT = "state_previous_snapshot_payload"
 STATE_COMPARE_ENABLED = "state_compare_enabled"
 STATE_LAST_SNAPSHOT_PATH = "state_last_snapshot_path"
@@ -219,6 +231,7 @@ def _apply_pending_data_source_mode_if_any() -> None:
 def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(UI_DEMO_KEY, True)
   st.session_state.setdefault(UI_SNAPSHOT_NOTE_KEY, "")
+  st.session_state.setdefault(UI_EMAIL_CONFIRM_SEND_KEY, False)
   st.session_state.setdefault(STATE_COMPARE_ENABLED, False)
   st.session_state.setdefault(UI_DATA_SOURCE_MODE_KEY, "demo")
   st.session_state.setdefault(STATE_REVIEWS_BY_SIGNAL_ID, {})
@@ -231,6 +244,8 @@ def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(STATE_RETRIEVAL_LOADED_CANDIDATES, {})
   st.session_state.setdefault(STATE_RETRIEVAL_LOADED_MANIFEST, {})
   st.session_state.setdefault(STATE_RETRIEVAL_MANIFEST_SUMMARY, {})
+  st.session_state.setdefault(STATE_EMAIL_DRY_RUN_RESULT, {})
+  st.session_state.setdefault(STATE_EMAIL_SEND_RESULT, {})
   if UI_THEME_NAME_KEY not in st.session_state:
     _set_profile_widgets(profile_dict)
   _ensure_search_plan_widget_defaults(profile_dict)
@@ -531,6 +546,33 @@ def _build_retrieval_reload_ui_state(watch_profile_dict: dict[str, object]) -> d
     "manifest_summary": manifest_summary,
     "loaded_manifest_id": str(loaded_manifest.get("manifest_id", "") or ""),
     "active_source": str(st.session_state.get(STATE_RETRIEVAL_ACTIVE_SOURCE, "session_runs") or "session_runs"),
+  }
+
+
+def _build_email_delivery_ui_state(
+  *,
+  markdown_text: str,
+  source_info: dict[str, object],
+  signals: list[dict[str, object]],
+  watch_profile_dict: dict[str, object],
+) -> dict[str, object]:
+  config = load_email_delivery_config()
+  preview = build_digest_email_preview(
+    markdown_text,
+    theme_name=str(watch_profile_dict.get("theme_name", "") or ""),
+    data_source=str(source_info.get("label", "") or ""),
+    signals=signals,
+    data_source_mode=str(source_info.get("mode", "") or ""),
+    watch_profile=watch_profile_dict,
+  )
+  dry_run_result = run_email_delivery_dry_run(preview, config)
+  return {
+    "config": config,
+    "preview": preview,
+    "dry_run_result": dry_run_result,
+    "last_dry_run_result": dict(st.session_state.get(STATE_EMAIL_DRY_RUN_RESULT, {}) or {}),
+    "last_send_result": dict(st.session_state.get(STATE_EMAIL_SEND_RESULT, {}) or {}),
+    "last_sent_digest_sha": str(st.session_state.get(STATE_EMAIL_LAST_SENT_DIGEST_SHA, "") or ""),
   }
 
 
@@ -1187,6 +1229,12 @@ def run_app() -> None:
     loaded_count=int(source_info["loaded_count"]),
     reviewed_signals=latest_digest_signals,
   )
+  email_delivery_state = _build_email_delivery_ui_state(
+    markdown_text=markdown_text,
+    source_info=source_info,
+    signals=latest_reviewed_signals,
+    watch_profile_dict=watch_profile_dict,
+  )
   json_text = signals_to_json(
     latest_reviewed_signals,
     watch_profile,
@@ -1199,6 +1247,8 @@ def run_app() -> None:
       csv_text,
       json_text,
       source_info,
+      email_delivery_state,
+      st.session_state.get(STATE_EMAIL_DELIVERY_MESSAGE),
       st.session_state.get(STATE_DIGEST_MESSAGE),
     )
 
@@ -1433,5 +1483,40 @@ def run_app() -> None:
     if auto_snapshot_path is not None:
       message += f"（スナップショットも自動保存: {auto_snapshot_path}）"
     st.session_state[STATE_DIGEST_MESSAGE] = message
+    st.rerun()
+
+  if digest_events.get("run_email_delivery_dry_run"):
+    dry_run_result = run_email_delivery_dry_run(
+      dict(email_delivery_state.get("preview", {}) or {}),
+      email_delivery_state["config"],
+    )
+    log_path = save_email_delivery_log(dry_run_result)
+    st.session_state[STATE_EMAIL_DRY_RUN_RESULT] = dry_run_result
+    st.session_state[STATE_EMAIL_DELIVERY_MESSAGE] = (
+      f"メール dry-run を実行しました: status={dry_run_result.get('status', '')} (log: {log_path})"
+    )
+    st.rerun()
+
+  if digest_events.get("send_email_self_only"):
+    if not bool(st.session_state.get(UI_EMAIL_CONFIRM_SEND_KEY, False)):
+      st.session_state[STATE_EMAIL_DELIVERY_MESSAGE] = "確認チェックボックスを選択した場合のみ self-only 送信できます。"
+      st.rerun()
+    preview = dict(email_delivery_state.get("preview", {}) or {})
+    last_send_result = dict(st.session_state.get(STATE_EMAIL_SEND_RESULT, {}) or {})
+    if (
+      str(st.session_state.get(STATE_EMAIL_LAST_SENT_DIGEST_SHA, "") or "") == str(preview.get("digest_sha256", "") or "")
+      and bool(last_send_result.get("send_succeeded", False))
+    ):
+      st.session_state[STATE_EMAIL_DELIVERY_MESSAGE] = "同一Previewの二重送信はブロックしました。内容を更新してから再送してください。"
+      st.rerun()
+    send_result = send_digest_email_self_only(preview, email_delivery_state["config"])
+    log_path = save_email_delivery_log(send_result)
+    st.session_state[STATE_EMAIL_SEND_RESULT] = send_result
+    if bool(send_result.get("send_succeeded", False)):
+      st.session_state[STATE_EMAIL_LAST_SENT_DIGEST_SHA] = str(preview.get("digest_sha256", "") or "")
+      st.session_state[STATE_EMAIL_DELIVERY_MESSAGE] = f"self-only メール送信が完了しました (log: {log_path})"
+    else:
+      error_message = str(send_result.get("safe_error_message", "") or "self-only メール送信に失敗しました。")
+      st.session_state[STATE_EMAIL_DELIVERY_MESSAGE] = f"{error_message} (log: {log_path})"
     st.rerun()
 

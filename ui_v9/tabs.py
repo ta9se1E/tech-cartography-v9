@@ -1423,10 +1423,11 @@ def render_digest_export_tab(
   csv_text: str,
   json_text: str,
   source_info: dict[str, object],
+  email_delivery_state: dict[str, object],
+  email_delivery_status_message: str | None = None,
   digest_status_message: str | None = None,
 ) -> dict[str, bool]:
   st.subheader("ダイジェスト / エクスポート")
-  st.caption("メール配信: プレビューのみ / 停止中")
   st.caption(f"現在のデータソース: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
   st.caption("人間レビューが反映済みのSignalは、その判断を優先してダイジェストへ表示します。未レビューSignalはシステム判断に基づいて補完されます。")
   st.caption("現在の人間レビュー情報は、SnapshotとJSON Exportに含まれます。CSV Exportには含まれません。")
@@ -1460,4 +1461,59 @@ def render_digest_export_tab(
 
   save_digest_clicked = st.button("ダイジェストファイルを保存", key="btn_save_digest_files", width="stretch")
   _show_status_message(digest_status_message)
-  return {"save_digest_files": save_digest_clicked}
+
+  config = email_delivery_state.get("config")
+  preview = dict(email_delivery_state.get("preview", {}) or {})
+  dry_run_result = dict(email_delivery_state.get("dry_run_result", {}) or {})
+  last_dry_run_result = dict(email_delivery_state.get("last_dry_run_result", {}) or {})
+  last_send_result = dict(email_delivery_state.get("last_send_result", {}) or {})
+  validation_errors = list(dry_run_result.get("validation_errors", []) or [])
+  validation_warnings = list(dry_run_result.get("validation_warnings", []) or [])
+
+  st.markdown("### メール配信")
+  _show_status_message(email_delivery_status_message)
+  st.write(f"- 現在の送信モード: `{getattr(config, 'send_mode', '')}`")
+  st.write(f"- 送信停止フラグ: `{'true' if bool(getattr(config, 'disabled', True)) else 'false'}`")
+  st.write(f"- 自分宛て送信先: `{getattr(config, 'self_recipient', '') or '未設定'}`")
+  st.write(f"- データソース: `{preview.get('data_source', '')}`")
+  st.write(f"- 送信可否: `{dry_run_result.get('status', 'blocked')}`")
+  if validation_errors:
+    st.markdown("#### 送信エラー")
+    for message in validation_errors:
+      st.error(str(message))
+  if validation_warnings:
+    st.markdown("#### 送信警告")
+    for message in validation_warnings:
+      st.warning(str(message))
+  st.write(f"- メール件名: `{preview.get('subject', '')}`")
+  st.markdown("#### Plain Text Preview")
+  st.code(str(preview.get("plain_text_body", "") or ""))
+  st.markdown("#### HTML Preview")
+  st.markdown(str(preview.get("html_body", "") or ""), unsafe_allow_html=True)
+  st.checkbox(
+    "現在のPreview内容を自分宛てに送信することを確認しました",
+    key="ui_email_confirm_send",
+  )
+  email_button_left, email_button_right = st.columns(2)
+  run_email_delivery_dry_run = email_button_left.button("メール送信dry-run", key="btn_email_dry_run", width="stretch")
+  send_email_self_only = email_button_right.button(
+    "自分宛てにメール送信",
+    key="btn_email_send_self_only",
+    width="stretch",
+    disabled=not bool(st.session_state.get("ui_email_confirm_send", False)),
+  )
+  if last_dry_run_result:
+    st.caption(
+      f"直近dry-run: status={last_dry_run_result.get('status', '')} / "
+      f"recipient={last_dry_run_result.get('recipient_masked', '')}"
+    )
+  if last_send_result:
+    st.caption(
+      f"直近送信: status={last_send_result.get('status', '')} / "
+      f"recipient={last_send_result.get('recipient_masked', '')}"
+    )
+  return {
+    "save_digest_files": save_digest_clicked,
+    "run_email_delivery_dry_run": run_email_delivery_dry_run,
+    "send_email_self_only": send_email_self_only,
+  }
