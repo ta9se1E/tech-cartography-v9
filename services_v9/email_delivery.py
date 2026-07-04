@@ -301,14 +301,47 @@ def save_email_delivery_log(
     "data_source": str(result.get("data_source", "") or ""),
     "signal_count": int(result.get("signal_count", 0) or 0),
     "digest_sha256": str(result.get("digest_sha256", "") or ""),
-    "send_attempted": bool(result.get("send_attempted", False)),
-    "send_succeeded": bool(result.get("send_succeeded", False)),
+    "send_attempted": _is_true_bool(result.get("send_attempted")),
+    "send_succeeded": _is_true_bool(result.get("send_succeeded")),
     "smtp_host": str(result.get("smtp_host", "") or ""),
     "error_type": str(result.get("error_type", "") or ""),
     "safe_error_message": str(result.get("safe_error_message", "") or ""),
   }
   path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
   return path
+
+
+def is_successful_digest_delivery_record(
+  payload: Mapping[str, Any] | dict[str, Any],
+  digest_sha256: str,
+) -> bool:
+  expected_digest = str(digest_sha256 or "").strip()
+  if not expected_digest:
+    return False
+  record = dict(payload or {})
+  if str(record.get("digest_sha256", "") or "").strip() != expected_digest:
+    return False
+  return _is_true_bool(record.get("send_attempted")) and _is_true_bool(record.get("send_succeeded"))
+
+
+def has_successful_digest_delivery(
+  delivery_log_root: Path | str,
+  digest_sha256: str,
+) -> bool:
+  expected_digest = str(digest_sha256 or "").strip()
+  if not expected_digest:
+    return False
+  runs_dir = _resolve_email_delivery_runs_dir(delivery_log_root)
+  if not runs_dir.exists():
+    return False
+  for log_path in runs_dir.glob("*/email_delivery_log.json"):
+    try:
+      payload = json.loads(log_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+      continue
+    if is_successful_digest_delivery_record(payload, expected_digest):
+      return True
+  return False
 
 
 def _build_plain_text_body(
@@ -511,6 +544,17 @@ def _now_iso() -> str:
   return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+def _resolve_email_delivery_runs_dir(delivery_log_root: Path | str) -> Path:
+  root = Path(delivery_log_root)
+  if root.name == "email_delivery_runs":
+    return root
+  return root / "email_delivery_runs"
+
+
+def _is_true_bool(value: object) -> bool:
+  return value is True
+
+
 def _dedupe_strings(values: list[str]) -> list[str]:
   seen: set[str] = set()
   output: list[str] = []
@@ -530,6 +574,8 @@ __all__ = [
   "EmailDeliveryConfig",
   "build_digest_email_preview",
   "build_digest_email_subject",
+  "has_successful_digest_delivery",
+  "is_successful_digest_delivery_record",
   "load_email_delivery_config",
   "run_email_delivery_dry_run",
   "save_email_delivery_log",

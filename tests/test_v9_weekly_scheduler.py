@@ -843,8 +843,114 @@ def test_email_send_control_and_duplicate_digest_block(tmp_path: Path) -> None:
     provider_adapters={**provider_adapters, "email_send": _mock_send},
   )
   assert len(sent_calls) == 1
+  second_status = json.loads((Path(second["run_dir"]) / "weekly_run_status.json").read_text(encoding="utf-8"))
+  assert second_status["stage_statuses"]["send_email"] == "blocked"
   second_email = json.loads((Path(second["run_dir"]) / "email_preview.json").read_text(encoding="utf-8"))
   assert second_email["message"].startswith("同一 Digest")
+
+
+def _write_previous_weekly_email_status(
+  weekly_root: Path,
+  *,
+  run_id: str,
+  signature: str,
+  overall_status: str,
+  dry_run: bool,
+  email_preview: dict[str, object],
+) -> Path:
+  run_dir = weekly_root / run_id
+  run_dir.mkdir(parents=True, exist_ok=True)
+  (run_dir / "weekly_run_status.json").write_text(
+    json.dumps(
+      {
+        "weekly_run_id": run_id,
+        "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "overall_status": overall_status,
+        "watch_profile_signature": signature,
+        "dry_run": dry_run,
+        "email_preview": email_preview,
+      },
+      ensure_ascii=False,
+      indent=2,
+    )
+    + "\n",
+    encoding="utf-8",
+  )
+  return run_dir
+
+
+def test_email_duplicate_detection_allows_retry_for_unsuccessful_history(tmp_path: Path) -> None:
+  cases = [
+    ("preview_only", {"status": "preview", "send_attempted": False, "send_succeeded": False}, "blocked", False),
+    ("dry_run_only", {"status": "dry_run", "send_attempted": False, "send_succeeded": False}, "partial_success", True),
+    ("send_attempted_false", {"status": "sent", "send_attempted": False, "send_succeeded": True}, "success", False),
+    ("send_failed", {"status": "error", "send_attempted": True, "send_succeeded": False, "safe_error_message": "smtp send failed"}, "failed", False),
+    ("smtp_connect_failure", {"status": "error", "send_attempted": True, "send_succeeded": False, "error_type": "SMTPConnectError"}, "failed", False),
+    ("smtp_auth_failure", {"status": "error", "send_attempted": True, "send_succeeded": False, "error_type": "SMTPAuthenticationError"}, "failed", False),
+    ("allowlist_rejected", {"status": "blocked", "send_attempted": False, "send_succeeded": False, "safe_error_message": "recipient が EMAIL_RECIPIENT_ALLOWLIST に含まれていません。"}, "blocked", False),
+    ("self_only_missing", {"status": "blocked", "send_attempted": False, "send_succeeded": False, "safe_error_message": "EMAIL_SEND_MODE=self_only の場合のみ実送信できます。"}, "blocked", False),
+    ("blocked_only", {"status": "blocked", "send_attempted": False, "send_succeeded": False}, "blocked", False),
+  ]
+
+  for index, (label, email_preview_payload, overall_status, dry_run) in enumerate(cases, start=1):
+    case_root = tmp_path / f"case_{index}"
+    case_root.mkdir(parents=True, exist_ok=True)
+    watch_profile_path = _write_watch_profile(case_root)
+    config = _base_config(watch_profile_path)
+    config["execution"]["dry_run"] = False
+    config["execution"]["patent_enabled"] = True
+    config["execution"]["paper_enabled"] = True
+    config["execution"]["web_company_enabled"] = True
+    config["email"]["mode"] = "self_only"
+    config["email"]["self_send_enabled"] = False
+
+    provider_adapters = {
+      "patent": _stage_adapter("patent", _patent_rows(), case_root),
+      "paper": _stage_adapter("paper", _paper_rows(), case_root),
+      "web_company": _stage_adapter("web_company", _web_company_rows(), case_root),
+    }
+    baseline = run_weekly_watch(config, output_root=case_root, provider_adapters=provider_adapters)
+    baseline_status = json.loads((Path(baseline["run_dir"]) / "weekly_run_status.json").read_text(encoding="utf-8"))
+    digest = json.loads((Path(baseline["run_dir"]) / "email_preview.json").read_text(encoding="utf-8"))["digest_sha256"]
+    _write_previous_weekly_email_status(
+      case_root / "weekly_runs",
+      run_id=f"previous_{label}",
+      signature=str(baseline_status["watch_profile_signature"]),
+      overall_status=overall_status,
+      dry_run=dry_run,
+      email_preview={**email_preview_payload, "digest_sha256": digest},
+    )
+
+    sent_calls: list[str] = []
+
+    def _mock_send(preview, email_config):
+      sent_calls.append(str(preview.get("digest_sha256", "")))
+      return {
+        "status": "sent",
+        "send_attempted": True,
+        "send_succeeded": True,
+        "recipient_masked": "m***@example.com",
+        "subject": preview.get("subject", ""),
+        "digest_sha256": preview.get("digest_sha256", ""),
+        "signal_count": preview.get("signal_count", 0),
+        "data_source": preview.get("data_source", ""),
+        "send_mode": email_config.send_mode,
+        "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "delivery_run_id": f"email_delivery_{label}",
+        "smtp_host": "smtp.example.com",
+        "sender_masked": "s***@example.com",
+        "safe_error_message": "",
+      }
+
+    config["email"]["self_send_enabled"] = True
+    result = run_weekly_watch(
+      config,
+      output_root=case_root,
+      provider_adapters={**provider_adapters, "email_send": _mock_send},
+    )
+    assert len(sent_calls) == 1, label
+    status_payload = json.loads((Path(result["run_dir"]) / "weekly_run_status.json").read_text(encoding="utf-8"))
+    assert status_payload["stage_statuses"]["send_email"] == "success", label
 
 
 def _write_previous_weekly_run(

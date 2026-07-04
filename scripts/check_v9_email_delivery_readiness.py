@@ -19,6 +19,7 @@ from services_v9.email_delivery import (  # noqa: E402
   EmailDeliveryConfig,
   build_digest_email_preview,
   build_digest_email_subject,
+  has_successful_digest_delivery,
   run_email_delivery_dry_run,
   save_email_delivery_log,
   send_digest_email_self_only,
@@ -148,6 +149,35 @@ def main() -> None:
     payload = json.loads(log_path.read_text(encoding="utf-8"))
     assert payload["send_succeeded"] is True
     assert "smtp-password" not in log_path.read_text(encoding="utf-8")
+    assert has_successful_digest_delivery(tmp_dir, str(preview.get("digest_sha256", "") or "")) is True
+
+  with tempfile.TemporaryDirectory() as tmp_dir:
+    digest = str(preview.get("digest_sha256", "") or "")
+    preview_result = {
+      "delivery_run_id": "preview_only",
+      "status": "preview",
+      "digest_sha256": digest,
+      "send_attempted": False,
+      "send_succeeded": False,
+    }
+    dry_run_result = {
+      "delivery_run_id": "dry_run_only",
+      "status": "dry_run",
+      "digest_sha256": digest,
+      "send_attempted": False,
+      "send_succeeded": False,
+    }
+    failed_result = {
+      "delivery_run_id": "smtp_failed",
+      "status": "error",
+      "digest_sha256": digest,
+      "send_attempted": True,
+      "send_succeeded": False,
+      "error_type": "SMTPException",
+    }
+    for result in (preview_result, dry_run_result, failed_result):
+      save_email_delivery_log(result, tmp_dir)
+    assert has_successful_digest_delivery(tmp_dir, digest) is False
 
   env = os.environ.copy()
   env.pop("PYTHONPATH", None)

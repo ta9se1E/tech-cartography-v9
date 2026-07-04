@@ -25,6 +25,8 @@ _MODULE_EXPORTS: dict[str, list[str]] = {
     "EmailDeliveryConfig",
     "build_digest_email_preview",
     "build_digest_email_subject",
+    "has_successful_digest_delivery",
+    "is_successful_digest_delivery_record",
     "load_email_delivery_config",
     "run_email_delivery_dry_run",
     "save_email_delivery_log",

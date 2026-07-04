@@ -15,6 +15,7 @@ from .digest_export import build_weekly_digest_markdown
 from .email_delivery import (
   EmailDeliveryConfig,
   build_digest_email_preview,
+  is_successful_digest_delivery_record,
   load_email_delivery_config,
   run_email_delivery_dry_run,
   save_email_delivery_log,
@@ -677,31 +678,36 @@ def run_weekly_watch(
       _set_stage(stage_log, "send_email", "skipped", message="self_send_enabled=false のためメール送信は実行しません。")
     elif str(normalized_config.get("email", {}).get("mode", "") or "") != "self_only":
       _set_stage(stage_log, "send_email", "blocked", message="email.mode=self_only ではないため送信を停止しました。")
-    elif _find_previous_sent_digest(weekly_runs_root, watch_profile_signature, str(email_preview.get("digest_sha256", "") or "")) is not None:
-      previous_sent = _find_previous_sent_digest(weekly_runs_root, watch_profile_signature, str(email_preview.get("digest_sha256", "") or ""))
-      email_preview_payload["message"] = "同一 Digest はすでに self-only 送信済みです。"
-      email_preview_payload["duplicate_of_weekly_run_id"] = str((previous_sent or {}).get("weekly_run_id", "") or "")
-      _write_json(run_dir / "email_preview.json", email_preview_payload)
-      _set_stage(stage_log, "send_email", "blocked", message=email_preview_payload["message"])
     else:
-      send_fn = provider_adapters.get("email_send") or send_digest_email_self_only
-      send_email_result = send_fn(email_preview, email_config)
-      email_preview_payload["send_attempted"] = bool(dict(send_email_result or {}).get("send_attempted", False))
-      email_preview_payload["send_succeeded"] = bool(dict(send_email_result or {}).get("send_succeeded", False))
-      email_preview_payload["delivery_status"] = str(dict(send_email_result or {}).get("status", "") or "")
-      email_preview_payload["safe_error_message"] = str(dict(send_email_result or {}).get("safe_error_message", "") or "")
-      email_preview_payload["recipient_masked"] = str(dict(send_email_result or {}).get("recipient_masked", email_preview_payload.get("recipient_masked", "")) or "")
-      email_preview_payload["message"] = (
-        "self-only メール送信が完了しました。"
-        if email_preview_payload["send_succeeded"]
-        else "self-only メール送信は完了しませんでした。"
+      previous_sent = _find_previous_sent_digest(
+        weekly_runs_root,
+        watch_profile_signature,
+        str(email_preview.get("digest_sha256", "") or ""),
       )
-      _write_json(run_dir / "email_preview.json", email_preview_payload)
-      if email_preview_payload["send_succeeded"]:
-        save_email_delivery_log(send_email_result, base_root)
-        _set_stage(stage_log, "send_email", "success", message=email_preview_payload["message"])
+      if previous_sent is not None:
+        email_preview_payload["message"] = "同一 Digest はすでに self-only 送信済みです。"
+        email_preview_payload["duplicate_of_weekly_run_id"] = str((previous_sent or {}).get("weekly_run_id", "") or "")
+        _write_json(run_dir / "email_preview.json", email_preview_payload)
+        _set_stage(stage_log, "send_email", "blocked", message=email_preview_payload["message"])
       else:
-        _set_stage(stage_log, "send_email", "blocked", message=email_preview_payload["message"], errors=[email_preview_payload["safe_error_message"]] if email_preview_payload["safe_error_message"] else [])
+        send_fn = provider_adapters.get("email_send") or send_digest_email_self_only
+        send_email_result = send_fn(email_preview, email_config)
+        email_preview_payload["send_attempted"] = dict(send_email_result or {}).get("send_attempted") is True
+        email_preview_payload["send_succeeded"] = dict(send_email_result or {}).get("send_succeeded") is True
+        email_preview_payload["delivery_status"] = str(dict(send_email_result or {}).get("status", "") or "")
+        email_preview_payload["safe_error_message"] = str(dict(send_email_result or {}).get("safe_error_message", "") or "")
+        email_preview_payload["recipient_masked"] = str(dict(send_email_result or {}).get("recipient_masked", email_preview_payload.get("recipient_masked", "")) or "")
+        email_preview_payload["message"] = (
+          "self-only メール送信が完了しました。"
+          if email_preview_payload["send_succeeded"]
+          else "self-only メール送信は完了しませんでした。"
+        )
+        _write_json(run_dir / "email_preview.json", email_preview_payload)
+        if email_preview_payload["send_succeeded"]:
+          save_email_delivery_log(send_email_result, base_root)
+          _set_stage(stage_log, "send_email", "success", message=email_preview_payload["message"])
+        else:
+          _set_stage(stage_log, "send_email", "blocked", message=email_preview_payload["message"], errors=[email_preview_payload["safe_error_message"]] if email_preview_payload["safe_error_message"] else [])
 
     overall_status = _determine_overall_status(
       stage_log=stage_log,
@@ -1480,9 +1486,7 @@ def _find_previous_sent_digest(weekly_root: Path, watch_profile_signature: str, 
     if str(payload.get("watch_profile_signature", "") or "") != str(watch_profile_signature or ""):
       continue
     email_payload = dict(payload.get("email_preview", {}) or {})
-    if not bool(email_payload.get("send_succeeded", False)):
-      continue
-    if str(email_payload.get("digest_sha256", "") or "") != digest_sha256:
+    if not is_successful_digest_delivery_record(email_payload, digest_sha256):
       continue
     return {
       "weekly_run_id": str(payload.get("weekly_run_id", status_path.parent.name) or status_path.parent.name),

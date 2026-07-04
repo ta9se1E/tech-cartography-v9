@@ -207,6 +207,228 @@ def _assert_provider_contracts(root: Path, watch_profile_path: Path) -> None:
   assert external_calls["smtp"] == 0
 
 
+def _write_previous_weekly_email_status(
+  weekly_root: Path,
+  *,
+  run_id: str,
+  signature: str,
+  email_preview: dict[str, object],
+  overall_status: str,
+  dry_run: bool,
+) -> None:
+  run_dir = weekly_root / run_id
+  run_dir.mkdir(parents=True, exist_ok=True)
+  (run_dir / "weekly_run_status.json").write_text(
+    json.dumps(
+      {
+        "weekly_run_id": run_id,
+        "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "overall_status": overall_status,
+        "watch_profile_signature": signature,
+        "dry_run": dry_run,
+        "email_preview": email_preview,
+      },
+      ensure_ascii=False,
+      indent=2,
+    )
+    + "\n",
+    encoding="utf-8",
+  )
+
+
+def _assert_digest_duplicate_detection(root: Path, watch_profile_path: Path) -> None:
+  config = default_weekly_run_config()
+  config["enabled"] = True
+  config["watch_profile_path"] = str(watch_profile_path)
+  config["execution"]["dry_run"] = False
+  config["execution"]["patent_enabled"] = True
+  config["execution"]["paper_enabled"] = True
+  config["execution"]["web_company_enabled"] = True
+  config["patent"]["approved_query_ids"] = ["patent_q01"]
+  config["patent"]["maximum_bytes_billed"] = 1000000
+  config["paper"]["approved_query_ids"] = ["paper_q01"]
+  config["web_company"]["approved_query_ids"] = ["gw_q001"]
+  config["email"]["mode"] = "self_only"
+  config["email"]["self_send_enabled"] = False
+
+  patent_rows = [{
+    "publication_number": "US2024000001A1",
+    "family_id": "FAM1",
+    "title": "Solid state battery patent",
+    "abstract": "electrolyte cathode process",
+    "assignee": "Toyota",
+    "publication_date": "2026-05-12",
+    "country": "US",
+    "cpc_codes": "H01M",
+    "source_url": "https://patents.example.com/p1",
+    "query_id": "patent_q01",
+    "retrieval_run_id": "patent_saved_run",
+    "provider_status": "success",
+    "record_stage": "staged",
+    "retrieval_mode": "real",
+    "data_source": "bigquery_patent",
+  }]
+  paper_rows = [{
+    "work_id": "https://openalex.org/W1",
+    "doi": "10.1000/test1",
+    "title": "Solid state battery paper",
+    "abstract": "electrolyte cathode",
+    "authors": ["Alice"],
+    "institutions": ["Example University"],
+    "publication_date": "2025-12-01",
+    "source_journal": "Battery Journal",
+    "cited_by_count": 12,
+    "topics": ["Solid electrolytes"],
+    "open_access": True,
+    "original_language": "en",
+    "source_url": "https://example.org/paper1",
+    "query_id": "paper_q01",
+    "retrieval_run_id": "paper_saved_run",
+    "provider_status": "success",
+    "record_stage": "staged",
+    "retrieval_mode": "real",
+  }]
+  web_rows = [{
+    "candidate_id": "w1",
+    "query_id": "gw_q001",
+    "country_region": "JP",
+    "web_intent": "research_development",
+    "result_bucket": "web",
+    "original_title": "Toyota 全固体電池 研究開発",
+    "original_snippet": "研究開発の更新",
+    "original_language": "ja",
+    "source_url": "https://example.co.jp/news/a",
+    "canonical_url": "https://example.co.jp/news/a",
+    "event_type": "research_development",
+    "organization": "Toyota",
+    "source_quality": "medium_high",
+    "content_access": "full",
+    "content_hash": "hash1",
+    "same_story_group": "story_A",
+    "summary_ja": "Toyotaの研究開発更新",
+    "retrieval_run_id": "web_saved_run",
+    "provider_status": "partial_success",
+    "record_stage": "staged",
+    "retrieval_mode": "real",
+  }]
+
+  def _patent_ok(**kwargs):
+    return {
+      "status": "success",
+      "message": "patent ok",
+      "rows": patent_rows,
+      "warnings": [],
+      "errors": [],
+      "provider_log": {"provider": "patent"},
+      "source_run": {
+        "run_id": "patent_live_run",
+        "artifact_dir": str(_write_artifact(root, "patent", "patent_live_run", patent_rows)),
+        "status": "success",
+        "candidate_count": len(patent_rows),
+      },
+      "details": {"rows_retrieved": len(patent_rows)},
+    }
+
+  def _paper_ok(**kwargs):
+    return {
+      "status": "success",
+      "message": "paper ok",
+      "rows": paper_rows,
+      "warnings": [],
+      "errors": [],
+      "provider_log": {"provider": "paper"},
+      "source_run": {
+        "run_id": "paper_live_run",
+        "artifact_dir": str(_write_artifact(root, "paper", "paper_live_run", paper_rows)),
+        "status": "success",
+        "candidate_count": len(paper_rows),
+      },
+      "details": {"rows_retrieved": len(paper_rows)},
+    }
+
+  def _web_ok(**kwargs):
+    return {
+      "status": "success",
+      "message": "web ok",
+      "rows": web_rows,
+      "warnings": [],
+      "errors": [],
+      "provider_log": {"provider": "web_company"},
+      "source_run": {
+        "run_id": "web_live_run",
+        "artifact_dir": str(_write_artifact(root, "web_company", "web_live_run", web_rows)),
+        "status": "success",
+        "candidate_count": len(web_rows),
+      },
+      "details": {"rows_retrieved": len(web_rows)},
+    }
+
+  baseline = run_weekly_watch(
+    config,
+    output_root=root / "duplicate_preview_case",
+    provider_adapters={"patent": _patent_ok, "paper": _paper_ok, "web_company": _web_ok},
+  )
+  baseline_status = json.loads((Path(baseline["run_dir"]) / "weekly_run_status.json").read_text(encoding="utf-8"))
+  baseline_email = json.loads((Path(baseline["run_dir"]) / "email_preview.json").read_text(encoding="utf-8"))
+  digest = str(baseline_email["digest_sha256"])
+  signature = str(baseline_status["watch_profile_signature"])
+
+  _write_previous_weekly_email_status(
+    root / "duplicate_preview_case" / "weekly_runs",
+    run_id="smtp_failed_previous",
+    signature=signature,
+    email_preview={
+      "status": "error",
+      "digest_sha256": digest,
+      "send_attempted": True,
+      "send_succeeded": False,
+      "error_type": "SMTPException",
+    },
+    overall_status="failed",
+    dry_run=False,
+  )
+
+  send_calls: list[str] = []
+
+  def _mock_send(preview, email_config):
+    send_calls.append(str(preview.get("digest_sha256", "")))
+    return {
+      "status": "sent",
+      "send_attempted": True,
+      "send_succeeded": True,
+      "recipient_masked": "m***@example.com",
+      "subject": preview.get("subject", ""),
+      "digest_sha256": preview.get("digest_sha256", ""),
+      "signal_count": preview.get("signal_count", 0),
+      "data_source": preview.get("data_source", ""),
+      "send_mode": email_config.send_mode,
+      "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+      "delivery_run_id": "email_delivery_duplicate_case",
+      "smtp_host": "smtp.example.com",
+      "sender_masked": "s***@example.com",
+      "safe_error_message": "",
+    }
+
+  config["email"]["self_send_enabled"] = True
+  successful_retry = run_weekly_watch(
+    config,
+    output_root=root / "duplicate_preview_case",
+    provider_adapters={"patent": _patent_ok, "paper": _paper_ok, "web_company": _web_ok, "email_send": _mock_send},
+  )
+  assert len(send_calls) == 1
+  successful_retry_status = json.loads((Path(successful_retry["run_dir"]) / "weekly_run_status.json").read_text(encoding="utf-8"))
+  assert successful_retry_status["stage_statuses"]["send_email"] == "success"
+
+  blocked_duplicate = run_weekly_watch(
+    config,
+    output_root=root / "duplicate_preview_case",
+    provider_adapters={"patent": _patent_ok, "paper": _paper_ok, "web_company": _web_ok, "email_send": _mock_send},
+  )
+  assert len(send_calls) == 1
+  blocked_status = json.loads((Path(blocked_duplicate["run_dir"]) / "weekly_run_status.json").read_text(encoding="utf-8"))
+  assert blocked_status["stage_statuses"]["send_email"] == "blocked"
+
+
 def main() -> None:
   config = default_weekly_run_config()
   validation = validate_weekly_run_config(config)
@@ -222,6 +444,7 @@ def main() -> None:
     watch_profile = _watch_profile()
     watch_profile_path.write_text(json.dumps(watch_profile, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     _assert_provider_contracts(root, watch_profile_path)
+    _assert_digest_duplicate_detection(root, watch_profile_path)
 
     patent_rows = [{
       "publication_number": "US2024000001A1",

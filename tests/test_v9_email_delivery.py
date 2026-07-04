@@ -15,6 +15,8 @@ from services_v9.email_delivery import (
   EmailDeliveryConfig,
   build_digest_email_preview,
   build_digest_email_subject,
+  has_successful_digest_delivery,
+  is_successful_digest_delivery_record,
   load_email_delivery_config,
   run_email_delivery_dry_run,
   save_email_delivery_log,
@@ -128,6 +130,14 @@ class _MockSMTP:
 class _FailingSMTP(_MockSMTP):
   def send_message(self, message) -> None:
     raise smtplib.SMTPException("boom")
+
+
+def _write_email_delivery_log(root: Path, run_id: str, payload: dict) -> Path:
+  run_dir = root / "email_delivery_runs" / run_id
+  run_dir.mkdir(parents=True, exist_ok=True)
+  path = run_dir / "email_delivery_log.json"
+  path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+  return path
 
 
 def test_build_subject_sanitizes_newlines_and_truncates() -> None:
@@ -288,6 +298,82 @@ def test_save_email_delivery_log_redacts_sensitive_content(tmp_path: Path) -> No
   assert payload["digest_sha256"] == preview["digest_sha256"]
   assert "smtp-password" not in raw_text
   assert _digest_markdown() not in raw_text
+
+
+def test_is_successful_digest_delivery_record_requires_matching_digest_and_true_true_flags() -> None:
+  digest = _preview()["digest_sha256"]
+  assert is_successful_digest_delivery_record(
+    {"digest_sha256": digest, "send_attempted": True, "send_succeeded": True},
+    digest,
+  ) is True
+  assert is_successful_digest_delivery_record(
+    {"digest_sha256": digest, "send_attempted": False, "send_succeeded": True},
+    digest,
+  ) is False
+  assert is_successful_digest_delivery_record(
+    {"digest_sha256": digest, "send_attempted": True, "send_succeeded": False},
+    digest,
+  ) is False
+  assert is_successful_digest_delivery_record(
+    {"digest_sha256": "different", "send_attempted": True, "send_succeeded": True},
+    digest,
+  ) is False
+  assert is_successful_digest_delivery_record(
+    {"digest_sha256": digest, "send_attempted": "true", "send_succeeded": "true"},
+    digest,
+  ) is False
+
+
+def test_has_successful_digest_delivery_ignores_preview_dry_run_blocked_and_failed_logs(tmp_path: Path) -> None:
+  digest = _preview()["digest_sha256"]
+  ignored_payloads = [
+    {"status": "preview", "digest_sha256": digest, "send_attempted": False, "send_succeeded": False},
+    {"status": "dry_run", "digest_sha256": digest, "send_attempted": False, "send_succeeded": False},
+    {"status": "blocked", "digest_sha256": digest, "send_attempted": False, "send_succeeded": False, "safe_error_message": "allowlist rejected"},
+    {"status": "blocked", "digest_sha256": digest, "send_attempted": False, "send_succeeded": False, "safe_error_message": "self-only config missing"},
+    {"status": "failed", "digest_sha256": digest, "send_attempted": False, "send_succeeded": False},
+    {"status": "error", "digest_sha256": digest, "send_attempted": True, "send_succeeded": False, "error_type": "SMTPConnectError"},
+    {"status": "error", "digest_sha256": digest, "send_attempted": True, "send_succeeded": False, "error_type": "SMTPAuthenticationError"},
+    {"status": "error", "digest_sha256": digest, "send_attempted": True, "send_succeeded": False, "error_type": "SMTPException"},
+    {"status": "sent", "digest_sha256": digest, "send_attempted": False, "send_succeeded": True},
+    {"status": "sent", "digest_sha256": digest, "send_attempted": True, "send_succeeded": False},
+    {"status": "sent", "digest_sha256": "different", "send_attempted": True, "send_succeeded": True},
+    {"status": "sent", "digest_sha256": digest},
+  ]
+  for index, payload in enumerate(ignored_payloads, start=1):
+    case_root = tmp_path / f"case_{index}"
+    _write_email_delivery_log(case_root, f"log_{index}", payload)
+    assert has_successful_digest_delivery(case_root, digest) is False
+
+
+def test_has_successful_digest_delivery_ignores_broken_json_and_detects_real_success(tmp_path: Path) -> None:
+  digest = _preview()["digest_sha256"]
+  broken_dir = tmp_path / "email_delivery_runs" / "broken"
+  broken_dir.mkdir(parents=True, exist_ok=True)
+  (broken_dir / "email_delivery_log.json").write_text("{not-json\n", encoding="utf-8")
+  _write_email_delivery_log(
+    tmp_path,
+    "valid_success",
+    {"status": "sent", "digest_sha256": digest, "send_attempted": True, "send_succeeded": True},
+  )
+  assert has_successful_digest_delivery(tmp_path, digest) is True
+
+
+def test_save_email_delivery_log_keeps_send_flags_strict_booleans(tmp_path: Path) -> None:
+  log_path = save_email_delivery_log(
+    {
+      "delivery_run_id": "email_delivery_non_bool_flags",
+      "status": "sent",
+      "digest_sha256": _preview()["digest_sha256"],
+      "send_attempted": "false",
+      "send_succeeded": "false",
+    },
+    tmp_path,
+  )
+  payload = json.loads(log_path.read_text(encoding="utf-8"))
+  assert payload["send_attempted"] is False
+  assert payload["send_succeeded"] is False
+  assert has_successful_digest_delivery(tmp_path, payload["digest_sha256"]) is False
 
 
 def test_page_render_keeps_six_tabs_and_email_buttons_without_sending(monkeypatch) -> None:
