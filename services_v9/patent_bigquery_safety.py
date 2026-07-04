@@ -10,6 +10,7 @@ from typing import Any
 
 BYTES_PER_GB = 1024**3
 BYTES_PER_TB = 1024**4
+BIGQUERY_REQUIRED_JOB_ROLE = "roles/bigquery.jobUser"
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -39,18 +40,27 @@ class BigQuerySafetyConfig:
   bigquery_default_limit: int
   bigquery_dry_run_only: bool
   bigquery_allow_execute: bool
+  bigquery_dry_run_first: bool = True
+  bigquery_total_bytes_cap: int = 0
+  bigquery_max_query_executions: int = 0
 
   @classmethod
   def from_env(cls) -> BigQuerySafetyConfig:
     return cls(
-      enable_bigquery_run=_env_bool("ENABLE_BIGQUERY_RUN", False),
+      enable_bigquery_run=_env_bool("ENABLE_BIGQUERY_RUN", _env_bool("V9_CLOUD_ENABLE_PATENT", False)),
       show_bigquery_admin=_env_bool("SHOW_BIGQUERY_ADMIN", False),
-      bigquery_project_id=str(os.environ.get("BIGQUERY_PROJECT_ID") or "").strip(),
-      bigquery_location=str(os.environ.get("BIGQUERY_LOCATION") or "US").strip() or "US",
-      bigquery_max_bytes_billed=_env_int("BIGQUERY_MAX_BYTES_BILLED", 0),
+      bigquery_project_id=str(os.environ.get("BIGQUERY_PROJECT_ID") or os.environ.get("V9_CLOUD_BIGQUERY_PROJECT") or "").strip(),
+      bigquery_location=str(os.environ.get("BIGQUERY_LOCATION") or os.environ.get("V9_CLOUD_BIGQUERY_LOCATION") or "US").strip() or "US",
+      bigquery_max_bytes_billed=_env_int("BIGQUERY_MAX_BYTES_BILLED", _env_int("V9_CLOUD_BIGQUERY_MAX_BYTES_BILLED", 0)),
       bigquery_default_limit=min(1000, _env_int("BIGQUERY_DEFAULT_LIMIT", 1000)),
-      bigquery_dry_run_only=_env_bool("BIGQUERY_DRY_RUN_ONLY", True),
-      bigquery_allow_execute=_env_bool("BIGQUERY_ALLOW_EXECUTE", False),
+      bigquery_dry_run_only=_env_bool("BIGQUERY_DRY_RUN_ONLY", _env_bool("V9_CLOUD_JOB_DRY_RUN", True)),
+      bigquery_allow_execute=_env_bool(
+        "BIGQUERY_ALLOW_EXECUTE",
+        _env_bool("V9_CLOUD_ENABLE_PATENT", False) and not _env_bool("V9_CLOUD_JOB_DRY_RUN", True),
+      ),
+      bigquery_dry_run_first=_env_bool("BIGQUERY_DRY_RUN_FIRST", _env_bool("V9_CLOUD_BIGQUERY_DRY_RUN_FIRST", True)),
+      bigquery_total_bytes_cap=_env_int("BIGQUERY_TOTAL_BYTES_CAP", _env_int("V9_CLOUD_BIGQUERY_TOTAL_BYTES_CAP", 0)),
+      bigquery_max_query_executions=_env_int("BIGQUERY_MAX_QUERY_EXECUTIONS", _env_int("V9_CLOUD_BIGQUERY_MAX_QUERY_EXECUTIONS", 0)),
     )
 
 
@@ -140,6 +150,7 @@ def _gcloud_config_project() -> str:
 
 
 __all__ = [
+  "BIGQUERY_REQUIRED_JOB_ROLE",
   "BigQuerySafetyConfig",
   "assert_dry_run_allowed",
   "assert_execute_allowed",

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
+import re
 from datetime import date, datetime
 from io import StringIO
 from pathlib import Path
@@ -29,6 +31,38 @@ FORBIDDEN_SQL_TOKENS = (
   "description_localized",
   "full_text",
 )
+FORBIDDEN_SQL_STATEMENTS = (
+  "create ",
+  "drop ",
+  "alter ",
+  "insert ",
+  "update ",
+  "delete ",
+  "merge ",
+  "truncate ",
+  "export ",
+)
+SELECTED_COLUMN_NAMES = [
+  "publication_number",
+  "application_number",
+  "family_id",
+  "country",
+  "kind_code",
+  "publication_date",
+  "priority_date",
+  "title",
+  "abstract",
+  "assignee",
+  "inventor",
+  "cpc_codes",
+  "source_url",
+  "query_id",
+  "query_strategy",
+  "query_language",
+  "related_theme_name",
+  "is_seed_publication",
+  "matched_keyword_count",
+]
 
 ClientFactory = Callable[[str, str], Any]
 JobConfigBuilder = Callable[[dict[str, Any], bool], Any]
@@ -96,14 +130,17 @@ def build_patent_bigquery_preview(
     "maximum_bytes_billed": int(cfg.bigquery_max_bytes_billed or 0),
     "location": str(cfg.bigquery_location or "US").strip() or "US",
     "project_id": str(cfg.bigquery_project_id or "").strip(),
+    "source_table": PUBLICATIONS_TABLE,
     "execute_enabled": False,
     "dry_run_only": True,
     "execution_guard_reason": "Phase v9-5B1 では BigQuery 本実行は禁止です。",
     "allow_query_execute_after_confirmation": False,
     "time_range": str(time_range or "12m"),
+    "selected_columns": list(SELECTED_COLUMN_NAMES),
   }
   parameters = build_patent_query_parameters(request)
   sql = build_patent_bigquery_sql(request)
+  request["sql_fingerprint"] = _build_sql_fingerprint(sql)
   validation_rows = validate_patent_bigquery_request(request, sql)
   return {
     "request": request,
@@ -224,13 +261,28 @@ def validate_patent_bigquery_request(request: dict[str, Any], sql: str) -> list[
     rows.append({"status": "error", "message": "Phase v9-5B1 ではユーザー確認後の本実行も許可しません。"})
   lowered = sql.lower()
   scrubbed = lowered.replace("candidate_information_only", "")
+  if str(request.get("location", "") or "").strip().upper() != "US":
+    rows.append({"status": "error", "message": "BigQuery location は US 固定である必要があります。"})
+  if str(request.get("source_table", "") or "").strip() != PUBLICATIONS_TABLE:
+    rows.append({"status": "error", "message": "参照可能な BigQuery table が固定されていません。"})
+  if "select *" in lowered:
+    rows.append({"status": "error", "message": "SELECT * は許可されていません。"})
+  if PUBLICATIONS_TABLE.lower() not in lowered:
+    rows.append({"status": "error", "message": "Google Patents Public Dataset の固定 table を参照していません。"})
+  referenced_tables = set(re.findall(r"`[^`]+`", sql))
+  unexpected_tables = sorted(table for table in referenced_tables if table != PUBLICATIONS_TABLE)
+  if unexpected_tables:
+    rows.append({"status": "error", "message": f"許可されていない table 参照があります: {', '.join(unexpected_tables)}"})
   for token in FORBIDDEN_SQL_TOKENS:
     if token in scrubbed:
       rows.append({"status": "error", "message": f"禁止フィールドを検出しました: {token}"})
   if "title_localized" not in sql or "abstract_localized" not in sql:
     rows.append({"status": "error", "message": "title / abstract 中心の bibliographic SQL になっていません。"})
-  if "query(" in lowered or "create table" in lowered or "insert " in lowered or "update " in lowered or "delete " in lowered:
+  if "query(" in lowered:
     rows.append({"status": "error", "message": "SQL に禁止操作が含まれています。"})
+  for statement in FORBIDDEN_SQL_STATEMENTS:
+    if statement in lowered:
+      rows.append({"status": "error", "message": f"SQL に禁止操作が含まれています: {statement.strip().upper()}"})
   if not rows:
     rows.append({"status": "ok", "message": "validation passed"})
   return rows
@@ -248,6 +300,7 @@ def run_patent_bigquery_dry_run(
   sql = str(preview.get("sql", "") or "")
   parameters = list(preview.get("parameters", []) or [])
   validation_rows = list(preview.get("validation_rows", []) or [])
+  started_at = datetime.now().astimezone()
 
   if any(str(row.get("status", "")) == "error" for row in validation_rows):
     return {
@@ -260,6 +313,15 @@ def run_patent_bigquery_dry_run(
       "query_validation": validation_rows,
       "execute_enabled": False,
       "execution_allowed": False,
+      "total_bytes_processed": 0,
+      "total_bytes_billed": 0,
+      "cache_hit": False,
+      "started_at": started_at.isoformat(timespec="seconds"),
+      "finished_at": started_at.isoformat(timespec="seconds"),
+      "job_id": "",
+      "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+      "selected_columns": list(request.get("selected_columns", []) or []),
+      "error_category": "validation_error",
       "error": "query validation error",
     }
 
@@ -276,6 +338,15 @@ def run_patent_bigquery_dry_run(
       "query_validation": validation_rows,
       "execute_enabled": False,
       "execution_allowed": False,
+      "total_bytes_processed": 0,
+      "total_bytes_billed": 0,
+      "cache_hit": False,
+      "started_at": started_at.isoformat(timespec="seconds"),
+      "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+      "job_id": "",
+      "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+      "selected_columns": list(request.get("selected_columns", []) or []),
+      "error_category": "permission",
       "error": str(exc),
     }
 
@@ -292,16 +363,31 @@ def run_patent_bigquery_dry_run(
       "query_validation": validation_rows,
       "execute_enabled": False,
       "execution_allowed": False,
+      "total_bytes_processed": 0,
+      "total_bytes_billed": 0,
+      "cache_hit": False,
+      "started_at": started_at.isoformat(timespec="seconds"),
+      "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+      "job_id": "",
+      "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+      "selected_columns": list(request.get("selected_columns", []) or []),
+      "error_category": "project_resolution",
       "error": str(resolved_project.get("error") or "project_id unresolved"),
     }
 
   try:
     client = (client_factory or _default_client_factory)(project_id, str(cfg.bigquery_location or "US"))
     job_config = (job_config_builder or _build_real_job_config)({"parameters": parameters, "maximum_bytes_billed": int(cfg.bigquery_max_bytes_billed or 0)}, True)
-    job = client.query(sql, job_config=job_config)
+    job = _submit_bigquery_query(
+      client,
+      sql,
+      job_config=job_config,
+      job_id=_deterministic_job_id(dict(request or {}), dry_run=True),
+    )
     estimated_bytes = int(getattr(job, "total_bytes_processed", 0) or 0)
     maximum_bytes_billed = int(cfg.bigquery_max_bytes_billed or 0)
     blocked = maximum_bytes_billed > 0 and estimated_bytes > maximum_bytes_billed
+    finished_at = datetime.now().astimezone()
     return {
       "dry_run_status": "ok",
       "estimated_bytes": estimated_bytes,
@@ -315,10 +401,19 @@ def run_patent_bigquery_dry_run(
       "project_id": project_id,
       "location": str(cfg.bigquery_location or "US"),
       "job_id": str(getattr(job, "job_id", "") or ""),
+      "total_bytes_processed": estimated_bytes,
+      "total_bytes_billed": 0,
+      "cache_hit": bool(getattr(job, "cache_hit", False)),
+      "started_at": started_at.isoformat(timespec="seconds"),
+      "finished_at": finished_at.isoformat(timespec="seconds"),
+      "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+      "selected_columns": list(request.get("selected_columns", []) or []),
+      "error_category": "",
       "approved_for_execute": False,
       "error": None,
     }
   except Exception as exc:  # noqa: BLE001
+    finished_at = datetime.now().astimezone()
     return {
       "dry_run_status": "error",
       "estimated_bytes": 0,
@@ -329,6 +424,15 @@ def run_patent_bigquery_dry_run(
       "query_validation": validation_rows,
       "execute_enabled": False,
       "execution_allowed": False,
+      "total_bytes_processed": 0,
+      "total_bytes_billed": 0,
+      "cache_hit": False,
+      "started_at": started_at.isoformat(timespec="seconds"),
+      "finished_at": finished_at.isoformat(timespec="seconds"),
+      "job_id": "",
+      "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+      "selected_columns": list(request.get("selected_columns", []) or []),
+      "error_category": _categorize_bigquery_error(exc),
       "error": str(exc),
     }
 
@@ -417,7 +521,7 @@ def execute_patent_bigquery_retrieval(
       dry_run_result,
       validation_rows,
       "費用上限を超過するため、本実行は拒否されました。",
-      provider_status="blocked_by_max_bytes",
+      provider_status="blocked_cost_guard",
     )
 
   try:
@@ -448,13 +552,23 @@ def execute_patent_bigquery_retrieval(
   provider_status = "success"
   error_message: str | None = None
   job_id = ""
+  total_bytes_processed = 0
+  total_bytes_billed = 0
+  cache_hit = False
+  started_at = datetime.now().astimezone()
+  finished_at = started_at
   try:
     client = (client_factory or _default_client_factory)(project_id, str(cfg.bigquery_location or "US"))
     job_config = (job_config_builder or _build_real_job_config)(
       {"parameters": parameters, "maximum_bytes_billed": int(cfg.bigquery_max_bytes_billed or 0)},
       False,
     )
-    job = client.query(sql, job_config=job_config)
+    job = _submit_bigquery_query(
+      client,
+      sql,
+      job_config=job_config,
+      job_id=_deterministic_job_id(dict(request or {}), dry_run=False),
+    )
     job_id = str(getattr(job, "job_id", "") or "")
     iterator = job.result() if hasattr(job, "result") else []
     for raw_row in iterator:
@@ -465,9 +579,14 @@ def execute_patent_bigquery_retrieval(
         provider_status = "partial_success" if rows else "error"
         error_message = str(exc)
         break
+    total_bytes_processed = int(getattr(job, "total_bytes_processed", 0) or 0)
+    total_bytes_billed = int(getattr(job, "total_bytes_billed", total_bytes_processed) or total_bytes_processed)
+    cache_hit = bool(getattr(job, "cache_hit", False))
+    finished_at = datetime.now().astimezone()
   except Exception as exc:  # noqa: BLE001
     provider_status = "partial_success" if rows else "error"
     error_message = str(exc)
+    finished_at = datetime.now().astimezone()
 
   normalized_rows = _normalize_patent_candidate_rows(
     rows,
@@ -478,6 +597,8 @@ def execute_patent_bigquery_retrieval(
     retrieval_mode="real",
     record_stage="staged",
   )
+  if not normalized_rows and provider_status == "success":
+    provider_status = "no_results"
 
   return {
     "retrieval_run_id": retrieval_run_id,
@@ -485,7 +606,7 @@ def execute_patent_bigquery_retrieval(
     "provider_status": provider_status,
     "retrieval_mode": "real",
     "record_stage": "staged",
-    "execution_allowed": provider_status in {"success", "partial_success"},
+    "execution_allowed": provider_status in {"success", "partial_success", "no_results"},
     "execute_enabled": True,
     "approved": True,
     "project_id": project_id,
@@ -494,6 +615,14 @@ def execute_patent_bigquery_retrieval(
     "maximum_bytes_billed": int(cfg.bigquery_max_bytes_billed or 0),
     "estimated_bytes_from_dry_run": int(dry_run_result.get("estimated_bytes", 0) or 0),
     "estimated_cost_usd_from_dry_run": float(dry_run_result.get("estimated_cost_usd", 0.0) or 0.0),
+    "total_bytes_processed": total_bytes_processed,
+    "total_bytes_billed": total_bytes_billed,
+    "cache_hit": cache_hit,
+    "started_at": started_at.isoformat(timespec="seconds"),
+    "finished_at": finished_at.isoformat(timespec="seconds"),
+    "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+    "selected_columns": list(request.get("selected_columns", []) or []),
+    "error_category": _categorize_error_text(error_message),
     "query_validation": validation_rows,
     "rows_retrieved": len(normalized_rows),
     "rows": normalized_rows,
@@ -503,7 +632,19 @@ def execute_patent_bigquery_retrieval(
       "query_id": str(request.get("query_id", "") or ""),
       "retrieval_run_id": retrieval_run_id,
       "bigquery_job_id": job_id,
+      "location": str(cfg.bigquery_location or "US"),
+      "estimated_bytes": int(dry_run_result.get("estimated_bytes", 0) or 0),
+      "total_bytes_processed": total_bytes_processed,
+      "total_bytes_billed": total_bytes_billed,
+      "cache_hit": cache_hit,
+      "maximum_bytes_billed": int(cfg.bigquery_max_bytes_billed or 0),
       "rows_retrieved": len(normalized_rows),
+      "result_count": len(normalized_rows),
+      "started_at": started_at.isoformat(timespec="seconds"),
+      "finished_at": finished_at.isoformat(timespec="seconds"),
+      "error_category": _categorize_error_text(error_message),
+      "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+      "selected_columns": list(request.get("selected_columns", []) or []),
       "error": error_message,
     },
   }
@@ -639,12 +780,53 @@ def _build_retrieval_run_id(query_id: str) -> str:
   return f"patent_retrieval_{query_id}_{timestamp}"
 
 
+def _build_sql_fingerprint(sql: str) -> str:
+  return hashlib.sha256(str(sql or "").encode("utf-8")).hexdigest()
+
+
+def _deterministic_job_id(request: dict[str, Any], *, dry_run: bool) -> str:
+  query_id = str(request.get("query_id", "") or "unknown")
+  weekly_run_id = str(request.get("weekly_run_id", "") or "")
+  mode = "dry" if dry_run else "run"
+  payload = f"{weekly_run_id}:{query_id}:{mode}"
+  digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+  if not weekly_run_id:
+    return ""
+  return f"v9_pat_{query_id}_{mode}_{digest}"[:128]
+
+
 def _row_to_dict(row: Any) -> dict[str, Any]:
   if isinstance(row, dict):
     return dict(row)
   if hasattr(row, "items"):
     return dict(row.items())
   return dict(row)
+
+
+def _submit_bigquery_query(client: Any, sql: str, *, job_config: Any, job_id: str) -> Any:
+  if job_id:
+    try:
+      return client.query(sql, job_config=job_config, job_id=job_id)
+    except TypeError:
+      pass
+  return client.query(sql, job_config=job_config)
+
+
+def _categorize_bigquery_error(exc: Exception) -> str:
+  return _categorize_error_text(str(exc))
+
+
+def _categorize_error_text(error_message: str | None) -> str:
+  text = str(error_message or "").strip().lower()
+  if not text:
+    return ""
+  if "permission" in text or "access denied" in text or "forbidden" in text:
+    return "permission"
+  if "billing" in text or "bytes billed" in text or "quota" in text:
+    return "cost_guard"
+  if "invalid" in text or "syntax" in text:
+    return "validation"
+  return "runtime"
 
 
 def _blocked_retrieval_result(
@@ -656,6 +838,7 @@ def _blocked_retrieval_result(
   *,
   provider_status: str,
 ) -> dict[str, Any]:
+  timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
   return {
     "retrieval_run_id": retrieval_run_id,
     "query_id": str(request.get("query_id", "") or ""),
@@ -671,6 +854,14 @@ def _blocked_retrieval_result(
     "maximum_bytes_billed": int(request.get("maximum_bytes_billed", 0) or 0),
     "estimated_bytes_from_dry_run": int(dry_run_result.get("estimated_bytes", 0) or 0),
     "estimated_cost_usd_from_dry_run": float(dry_run_result.get("estimated_cost_usd", 0.0) or 0.0),
+    "total_bytes_processed": 0,
+    "total_bytes_billed": 0,
+    "cache_hit": False,
+    "started_at": timestamp,
+    "finished_at": timestamp,
+    "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+    "selected_columns": list(request.get("selected_columns", []) or []),
+    "error_category": _categorize_error_text(error_message),
     "query_validation": validation_rows,
     "rows_retrieved": 0,
     "rows": [],
@@ -680,7 +871,19 @@ def _blocked_retrieval_result(
       "query_id": str(request.get("query_id", "") or ""),
       "retrieval_run_id": retrieval_run_id,
       "bigquery_job_id": "",
+      "location": str(request.get("location", "") or ""),
+      "estimated_bytes": int(dry_run_result.get("estimated_bytes", 0) or 0),
+      "total_bytes_processed": 0,
+      "total_bytes_billed": 0,
+      "cache_hit": False,
+      "maximum_bytes_billed": int(request.get("maximum_bytes_billed", 0) or 0),
       "rows_retrieved": 0,
+      "result_count": 0,
+      "started_at": timestamp,
+      "finished_at": timestamp,
+      "error_category": _categorize_error_text(error_message),
+      "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+      "selected_columns": list(request.get("selected_columns", []) or []),
       "error": error_message,
     },
   }

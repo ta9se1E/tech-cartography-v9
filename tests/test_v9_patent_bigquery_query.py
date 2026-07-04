@@ -144,6 +144,17 @@ def test_validation_passes_for_valid_preview() -> None:
   assert rows == [{"status": "ok", "message": "validation passed"}]
 
 
+def test_validation_rejects_select_star_and_ddl_and_unapproved_table() -> None:
+  plan = build_unified_search_plan(_profile())
+  preview = build_patent_bigquery_preview(plan, _profile(), config=_safety_config())
+  select_star_rows = validate_patent_bigquery_request(preview["request"], "SELECT * FROM `patents-public-data.patents.publications`")
+  ddl_rows = validate_patent_bigquery_request(preview["request"], "CREATE TABLE x AS SELECT 1")
+  wrong_table_rows = validate_patent_bigquery_request(preview["request"], "SELECT publication_number FROM `other.dataset.table`")
+  assert any("SELECT *" in row["message"] for row in select_star_rows)
+  assert any("禁止操作" in row["message"] for row in ddl_rows)
+  assert any("許可されていない table" in row["message"] or "固定 table" in row["message"] for row in wrong_table_rows)
+
+
 def test_validation_warns_without_maximum_bytes_billed() -> None:
   plan = build_unified_search_plan(_profile())
   preview = build_patent_bigquery_preview(plan, _profile(), config=_safety_config(max_bytes=0))

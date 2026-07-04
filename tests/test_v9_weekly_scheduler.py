@@ -400,6 +400,198 @@ def test_patent_provider_contract_adapter_normalizes_success_and_partial(tmp_pat
   assert success_result["retrieval_run_id"] == "patent_real_run_002"
 
 
+def test_patent_provider_runs_dry_run_before_execute_and_blocks_total_cap(tmp_path: Path) -> None:
+  config = _base_config(_write_watch_profile(tmp_path))
+  config["patent"]["approved_query_ids"] = ["patent_q01", "patent_q02"]
+  config["patent"]["project_id"] = "test-project"
+  config["patent"]["location"] = "US"
+  config["patent"]["total_bytes_cap"] = 50
+  config["patent"]["max_query_executions"] = 2
+  call_order: list[str] = []
+
+  def _fake_preview(search_plan, watch_profile, *, selected_query_id=None, time_range="12m", max_results=None, config=None):
+    del search_plan, watch_profile, time_range, max_results, config
+    return {
+      "request": {
+        "query_id": selected_query_id,
+        "location": "US",
+        "maximum_bytes_billed": 1000000,
+        "selected_columns": ["publication_number"],
+        "sql_fingerprint": f"fp-{selected_query_id}",
+      },
+      "validation_rows": [],
+      "parameters": [],
+      "sql": "SELECT publication_number FROM `patents-public-data.patents.publications`",
+    }
+
+  def _fake_dry_run(preview, *, client_factory=None, job_config_builder=None, config=None):
+    del client_factory, job_config_builder, config
+    query_id = dict(preview.get("request", {}) or {}).get("query_id", "")
+    call_order.append(f"dry:{query_id}")
+    return {
+      "dry_run_status": "ok",
+      "estimated_bytes": 40 if query_id == "patent_q01" else 20,
+      "estimated_cost_usd": 0.1,
+      "maximum_bytes_billed": 1000000,
+      "job_id": f"dry-{query_id}",
+    }
+
+  def _fake_execute(preview, dry_run_result, *, approved, client_factory=None, job_config_builder=None, config=None):
+    del dry_run_result, approved, client_factory, job_config_builder, config
+    query_id = dict(preview.get("request", {}) or {}).get("query_id", "")
+    call_order.append(f"exec:{query_id}")
+    return {
+      "provider_status": "success",
+      "retrieval_run_id": f"patent_real_run_{query_id}",
+      "rows_retrieved": 1,
+      "rows": _patent_rows(),
+      "bigquery_job_id": f"job-{query_id}",
+      "location": "US",
+      "total_bytes_processed": 40,
+      "total_bytes_billed": 40,
+      "cache_hit": False,
+      "log": {"provider_status": "success"},
+      "error": None,
+    }
+
+  result = run_patent_provider_for_weekly(
+    search_plan={"plans": {"patent": {"queries": [{"query_id": "patent_q01"}, {"query_id": "patent_q02"}]}}},
+    watch_profile=_watch_profile(),
+    config=config,
+    output_root=tmp_path,
+    weekly_run_id="weekly_test",
+    preview_builder=_fake_preview,
+    dry_run_runner=_fake_dry_run,
+    execute_runner=_fake_execute,
+  )
+  assert call_order == ["dry:patent_q01", "exec:patent_q01", "dry:patent_q02"]
+  assert result["status"] == "partial_success"
+  assert result["candidate_count"] == 1
+  blocked_log = result["provider_log"]["query_logs"][1]
+  assert blocked_log["provider_status"] == "blocked_cost_guard"
+  assert blocked_log["bigquery_job_id"] == ""
+
+
+def test_patent_provider_respects_query_execution_cap(tmp_path: Path) -> None:
+  config = _base_config(_write_watch_profile(tmp_path))
+  config["patent"]["approved_query_ids"] = ["patent_q01", "patent_q02"]
+  config["patent"]["project_id"] = "test-project"
+  config["patent"]["location"] = "US"
+  config["patent"]["total_bytes_cap"] = 1000
+  config["patent"]["max_query_executions"] = 1
+  executed: list[str] = []
+
+  def _fake_preview(search_plan, watch_profile, *, selected_query_id=None, time_range="12m", max_results=None, config=None):
+    del search_plan, watch_profile, time_range, max_results, config
+    return {
+      "request": {
+        "query_id": selected_query_id,
+        "location": "US",
+        "maximum_bytes_billed": 1000000,
+        "selected_columns": ["publication_number"],
+        "sql_fingerprint": f"fp-{selected_query_id}",
+      },
+      "validation_rows": [],
+      "parameters": [],
+      "sql": "SELECT publication_number FROM `patents-public-data.patents.publications`",
+    }
+
+  def _fake_dry_run(preview, *, client_factory=None, job_config_builder=None, config=None):
+    del client_factory, job_config_builder, config
+    return {
+      "dry_run_status": "ok",
+      "estimated_bytes": 10,
+      "estimated_cost_usd": 0.1,
+      "maximum_bytes_billed": 1000000,
+      "job_id": "dry-job",
+    }
+
+  def _fake_execute(preview, dry_run_result, *, approved, client_factory=None, job_config_builder=None, config=None):
+    del dry_run_result, approved, client_factory, job_config_builder, config
+    query_id = dict(preview.get("request", {}) or {}).get("query_id", "")
+    executed.append(query_id)
+    return {
+      "provider_status": "success",
+      "retrieval_run_id": f"patent_real_run_{query_id}",
+      "rows_retrieved": 1,
+      "rows": _patent_rows(),
+      "bigquery_job_id": f"job-{query_id}",
+      "location": "US",
+      "total_bytes_processed": 10,
+      "total_bytes_billed": 10,
+      "cache_hit": False,
+      "log": {"provider_status": "success"},
+      "error": None,
+    }
+
+  result = run_patent_provider_for_weekly(
+    search_plan={"plans": {"patent": {"queries": [{"query_id": "patent_q01"}, {"query_id": "patent_q02"}]}}},
+    watch_profile=_watch_profile(),
+    config=config,
+    output_root=tmp_path,
+    weekly_run_id="weekly_test",
+    preview_builder=_fake_preview,
+    dry_run_runner=_fake_dry_run,
+    execute_runner=_fake_execute,
+  )
+  assert executed == ["patent_q01"]
+  assert result["provider_log"]["query_logs"][1]["provider_status"] == "blocked_execution_cap"
+
+
+def test_patent_provider_zero_results_is_safe_partial_success(tmp_path: Path) -> None:
+  config = _base_config(_write_watch_profile(tmp_path))
+  config["patent"]["project_id"] = "test-project"
+  config["patent"]["location"] = "US"
+
+  def _fake_preview(search_plan, watch_profile, *, selected_query_id=None, time_range="12m", max_results=None, config=None):
+    del search_plan, watch_profile, time_range, max_results, config
+    return {
+      "request": {
+        "query_id": selected_query_id,
+        "location": "US",
+        "maximum_bytes_billed": 1000000,
+        "selected_columns": ["publication_number"],
+        "sql_fingerprint": f"fp-{selected_query_id}",
+      },
+      "validation_rows": [],
+      "parameters": [],
+      "sql": "SELECT publication_number FROM `patents-public-data.patents.publications`",
+    }
+
+  def _fake_dry_run(preview, *, client_factory=None, job_config_builder=None, config=None):
+    del preview, client_factory, job_config_builder, config
+    return {"dry_run_status": "ok", "estimated_bytes": 10, "estimated_cost_usd": 0.1, "maximum_bytes_billed": 1000000}
+
+  def _fake_execute(preview, dry_run_result, *, approved, client_factory=None, job_config_builder=None, config=None):
+    del preview, dry_run_result, approved, client_factory, job_config_builder, config
+    return {
+      "provider_status": "no_results",
+      "retrieval_run_id": "patent_real_run_empty",
+      "rows_retrieved": 0,
+      "rows": [],
+      "bigquery_job_id": "job-empty",
+      "location": "US",
+      "total_bytes_processed": 10,
+      "total_bytes_billed": 10,
+      "cache_hit": False,
+      "log": {"provider_status": "no_results"},
+      "error": None,
+    }
+
+  result = run_patent_provider_for_weekly(
+    search_plan={"plans": {"patent": {"queries": [{"query_id": "patent_q01"}]}}},
+    watch_profile=_watch_profile(),
+    config=config,
+    output_root=tmp_path,
+    weekly_run_id="weekly_test",
+    preview_builder=_fake_preview,
+    dry_run_runner=_fake_dry_run,
+    execute_runner=_fake_execute,
+  )
+  assert result["status"] == "partial_success"
+  assert result["candidate_count"] == 0
+
+
 def test_paper_provider_contract_adapter_passes_query_limit_retry_and_normalizes(tmp_path: Path) -> None:
   config = _base_config(_write_watch_profile(tmp_path))
   config["paper"]["retry_limit"] = 4

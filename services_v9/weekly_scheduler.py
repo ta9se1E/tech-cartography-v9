@@ -1045,17 +1045,22 @@ def run_patent_provider_for_weekly(
     maximum_bytes_billed = int(config.get("patent", {}).get("maximum_bytes_billed", 0) or 0)
     if maximum_bytes_billed <= 0:
       return _blocked_provider_stage("patent", "maximum_bytes_billed が未設定のため特許取得を停止しました。")
+    if config.get("patent", {}).get("dry_run_first", True) is not True:
+      return _blocked_provider_stage("patent", "dry_run_first=false のため特許取得を停止しました。")
     per_query_limit = _per_query_limit(int(config.get("limits", {}).get("patent_max_results", 500) or 500), len(approved_query_ids))
     env_cfg = safety_config_factory()
     bigquery_config = BigQuerySafetyConfig(
       enable_bigquery_run=True,
       show_bigquery_admin=env_cfg.show_bigquery_admin,
-      bigquery_project_id=env_cfg.bigquery_project_id,
-      bigquery_location=env_cfg.bigquery_location,
+      bigquery_project_id=str(config.get("patent", {}).get("project_id", "") or env_cfg.bigquery_project_id),
+      bigquery_location=str(config.get("patent", {}).get("location", "") or env_cfg.bigquery_location or "US"),
       bigquery_max_bytes_billed=maximum_bytes_billed,
       bigquery_default_limit=per_query_limit,
       bigquery_dry_run_only=False,
       bigquery_allow_execute=True,
+      bigquery_dry_run_first=bool(config.get("patent", {}).get("dry_run_first", True)),
+      bigquery_total_bytes_cap=int(config.get("patent", {}).get("total_bytes_cap", 0) or 0),
+      bigquery_max_query_executions=int(config.get("patent", {}).get("max_query_executions", 0) or 0),
     )
     rows: list[dict[str, Any]] = []
     query_logs: list[dict[str, Any]] = []
@@ -1064,6 +1069,8 @@ def run_patent_provider_for_weekly(
     errors: list[str] = []
     warnings: list[str] = []
     provider_run_ids: list[str] = []
+    executed_query_count = 0
+    accumulated_total_bytes_billed = 0
     for query_id in approved_query_ids:
       preview = preview_builder(
         search_plan,
@@ -1073,13 +1080,40 @@ def run_patent_provider_for_weekly(
         max_results=per_query_limit,
         config=bigquery_config,
       )
+      preview_request = dict(preview.get("request", {}) or {})
+      preview_request["weekly_run_id"] = weekly_run_id
+      preview_request["query_id"] = query_id
+      preview_request["max_query_executions"] = int(bigquery_config.bigquery_max_query_executions or 0)
+      preview_request["total_bytes_cap"] = int(bigquery_config.bigquery_total_bytes_cap or 0)
+      preview["request"] = preview_request
       dry_run_result = dry_run_runner(preview, config=bigquery_config)
-      retrieval_result = execute_runner(
-        preview,
-        dry_run_result,
-        approved=True,
-        config=bigquery_config,
-      )
+      retrieval_result: dict[str, Any]
+      estimated_bytes = int(dry_run_result.get("estimated_bytes", 0) or 0)
+      max_query_executions = int(bigquery_config.bigquery_max_query_executions or 0)
+      total_bytes_cap = int(bigquery_config.bigquery_total_bytes_cap or 0)
+      if max_query_executions > 0 and executed_query_count >= max_query_executions:
+        retrieval_result = _blocked_patent_query_result(
+          query_id=query_id,
+          preview=preview,
+          dry_run_result=dry_run_result,
+          provider_status="blocked_execution_cap",
+          message="BigQuery query execution count cap に達したため、本実行を停止しました。",
+        )
+      elif total_bytes_cap > 0 and estimated_bytes > 0 and accumulated_total_bytes_billed + estimated_bytes > total_bytes_cap:
+        retrieval_result = _blocked_patent_query_result(
+          query_id=query_id,
+          preview=preview,
+          dry_run_result=dry_run_result,
+          provider_status="blocked_cost_guard",
+          message="BigQuery total bytes cap を超過するため、本実行を停止しました。",
+        )
+      else:
+        retrieval_result = execute_runner(
+          preview,
+          dry_run_result,
+          approved=True,
+          config=bigquery_config,
+        )
       normalized_result = _normalize_weekly_provider_result(
         provider="patent",
         result=retrieval_result,
@@ -1096,19 +1130,42 @@ def run_patent_provider_for_weekly(
         {
           "query_id": query_id,
           "dry_run_status": str(dry_run_result.get("dry_run_status", "") or ""),
+          "estimated_bytes": int(dry_run_result.get("estimated_bytes", 0) or 0),
+          "maximum_bytes_billed": int(dry_run_result.get("maximum_bytes_billed", 0) or 0),
+          "dry_run_job_id": str(dry_run_result.get("job_id", "") or ""),
+          "dry_run_started_at": str(dry_run_result.get("started_at", "") or ""),
+          "dry_run_finished_at": str(dry_run_result.get("finished_at", "") or ""),
           "provider_status": str(normalized_result.get("provider_status", "") or ""),
+          "bigquery_job_id": str(dict(retrieval_result or {}).get("bigquery_job_id", "") or ""),
+          "location": str(dict(retrieval_result or {}).get("location", "") or str(preview_request.get("location", "") or "")),
+          "total_bytes_processed": int(dict(retrieval_result or {}).get("total_bytes_processed", 0) or 0),
+          "total_bytes_billed": int(dict(retrieval_result or {}).get("total_bytes_billed", 0) or 0),
+          "cache_hit": bool(dict(retrieval_result or {}).get("cache_hit", False)),
+          "result_count": int(dict(retrieval_result or {}).get("rows_retrieved", 0) or 0),
+          "started_at": str(dict(retrieval_result or {}).get("started_at", "") or ""),
+          "finished_at": str(dict(retrieval_result or {}).get("finished_at", "") or ""),
+          "error_category": str(dict(retrieval_result or {}).get("error_category", "") or ""),
+          "sql_fingerprint": str(dict(retrieval_result or {}).get("sql_fingerprint", "") or str(preview_request.get("sql_fingerprint", "") or "")),
+          "selected_columns": list(dict(retrieval_result or {}).get("selected_columns", preview_request.get("selected_columns", [])) or []),
           "rows_retrieved": int(normalized_result.get("candidate_count", 0) or 0),
           "error": normalized_result.get("error"),
           "retrieval_run_id": normalized_result.get("retrieval_run_id", ""),
         }
       )
-      statuses.append(str(normalized_result.get("status", "failed") or "failed"))
+      statuses.append(str(normalized_result.get("provider_status", normalized_result.get("status", "failed")) or "failed"))
       rows.extend(list(normalized_result.get("rows", []) or []))
       warnings.extend(list(normalized_result.get("warnings", []) or []))
       errors.extend(list(normalized_result.get("errors", []) or []))
       if str(normalized_result.get("retrieval_run_id", "") or "").strip():
         provider_run_ids.append(str(normalized_result.get("retrieval_run_id", "") or "").strip())
+      if str(dict(retrieval_result or {}).get("bigquery_job_id", "") or "").strip():
+        executed_query_count += 1
+      accumulated_total_bytes_billed += int(dict(retrieval_result or {}).get("total_bytes_billed", 0) or 0)
+      query_logs[-1]["executed_query_count"] = executed_query_count
+      query_logs[-1]["accumulated_total_bytes_billed"] = accumulated_total_bytes_billed
     stage_status = _combine_provider_stage_status(statuses, len(rows))
+    if not rows and statuses and all(status in {"success", "no_results"} for status in statuses):
+      stage_status = "partial_success"
     resolved_run_id = _resolve_scheduler_run_id(provider_run_ids, fallback=f"weekly_patent_{weekly_run_id}")
     artifact_dir = (artifact_writer or _save_scheduler_retrieval_artifact)(
       "patent",
@@ -1393,7 +1450,9 @@ def _normalize_weekly_provider_status(raw_status: str, *, rows_present: bool) ->
     return "success"
   if text == "partial_success":
     return "partial_success"
-  if text in {"not_approved", "validation_error", "dry_run_required", "blocked_by_max_bytes", "execute_rejected", "rejected", "blocked"}:
+  if text == "no_results":
+    return "partial_success"
+  if text in {"not_approved", "validation_error", "dry_run_required", "blocked_by_max_bytes", "blocked_cost_guard", "blocked_execution_cap", "execute_rejected", "rejected", "blocked"}:
     return "blocked"
   if text == "error" and rows_present:
     return "partial_success"
@@ -1477,12 +1536,72 @@ def _blocked_provider_stage(source_type: str, message: str) -> dict[str, Any]:
 def _combine_provider_stage_status(provider_statuses: list[str], row_count: int) -> str:
   normalized = [str(status or "").strip().lower() for status in provider_statuses if str(status or "").strip()]
   if row_count <= 0:
-    if normalized and all(status in {"validation_error", "not_approved", "dry_run_required", "blocked_by_max_bytes", "execute_rejected"} for status in normalized):
+    if normalized and all(status in {"validation_error", "not_approved", "dry_run_required", "blocked_by_max_bytes", "blocked_cost_guard", "blocked_execution_cap", "execute_rejected"} for status in normalized):
       return "blocked"
     return "failed"
   if normalized and all(status == "success" for status in normalized):
     return "success"
   return "partial_success"
+
+
+def _blocked_patent_query_result(
+  *,
+  query_id: str,
+  preview: dict[str, Any],
+  dry_run_result: dict[str, Any],
+  provider_status: str,
+  message: str,
+) -> dict[str, Any]:
+  request = dict(preview.get("request", {}) or {})
+  timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+  return {
+    "retrieval_run_id": f"weekly_patent_blocked_{query_id}",
+    "query_id": query_id,
+    "provider_status": provider_status,
+    "retrieval_mode": "real",
+    "record_stage": "staged",
+    "execution_allowed": False,
+    "execute_enabled": False,
+    "approved": True,
+    "project_id": str(request.get("project_id", "") or ""),
+    "location": str(request.get("location", "") or ""),
+    "bigquery_job_id": "",
+    "maximum_bytes_billed": int(request.get("maximum_bytes_billed", 0) or 0),
+    "estimated_bytes_from_dry_run": int(dry_run_result.get("estimated_bytes", 0) or 0),
+    "estimated_cost_usd_from_dry_run": float(dry_run_result.get("estimated_cost_usd", 0.0) or 0.0),
+    "total_bytes_processed": 0,
+    "total_bytes_billed": 0,
+    "cache_hit": False,
+    "started_at": timestamp,
+    "finished_at": timestamp,
+    "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+    "selected_columns": list(request.get("selected_columns", []) or []),
+    "error_category": "cost_guard" if provider_status == "blocked_cost_guard" else "execution_cap",
+    "query_validation": list(preview.get("validation_rows", []) or []),
+    "rows_retrieved": 0,
+    "rows": [],
+    "error": message,
+    "log": {
+      "provider_status": provider_status,
+      "query_id": query_id,
+      "retrieval_run_id": f"weekly_patent_blocked_{query_id}",
+      "bigquery_job_id": "",
+      "location": str(request.get("location", "") or ""),
+      "estimated_bytes": int(dry_run_result.get("estimated_bytes", 0) or 0),
+      "total_bytes_processed": 0,
+      "total_bytes_billed": 0,
+      "cache_hit": False,
+      "maximum_bytes_billed": int(request.get("maximum_bytes_billed", 0) or 0),
+      "rows_retrieved": 0,
+      "result_count": 0,
+      "started_at": timestamp,
+      "finished_at": timestamp,
+      "error_category": "cost_guard" if provider_status == "blocked_cost_guard" else "execution_cap",
+      "sql_fingerprint": str(request.get("sql_fingerprint", "") or ""),
+      "selected_columns": list(request.get("selected_columns", []) or []),
+      "error": message,
+    },
+  }
 
 
 def _per_query_limit(total_limit: int, query_count: int) -> int:

@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from services_v9.cloud_runtime import DEFAULT_WEEKLY_CONFIG_OBJECT, get_persist_root, get_runtime_mode
 from services_v9.cloud_scheduler_admin import get_scheduler_job_status
 from services_v9.cloud_lock import acquire_cloud_weekly_lock, release_cloud_weekly_lock
+from services_v9.patent_bigquery_safety import BIGQUERY_REQUIRED_JOB_ROLE
 from services_v9.cloud_watch_profile_sync import (
   MISSING_SIGNATURE,
   apply_cloud_watch_profile_sync,
@@ -113,7 +114,7 @@ def _profile() -> dict[str, object]:
     "candidate_publications": [],
     "target_companies": ["OpenAI"],
     "countries": ["JP"],
-    "source_types": ["paper", "web"],
+    "source_types": ["patent", "paper", "web"],
     "cadence": "weekly",
     "priority_rules": [],
     "notes": "",
@@ -162,7 +163,15 @@ def main() -> None:
     env_with_controls = {
       **_email_env(),
       "V9_CLOUD_JOB_DRY_RUN": "false",
-      "V9_CLOUD_ENABLE_PATENT": "false",
+      "V9_CLOUD_ENABLE_PATENT": "true",
+      "V9_CLOUD_PATENT_APPROVED_QUERY_IDS": "patent_q01,patent_q01",
+      "V9_CLOUD_PATENT_MAX_RESULTS": "300",
+      "V9_CLOUD_BIGQUERY_PROJECT": "devops-ai-agent-hackathon-2026",
+      "V9_CLOUD_BIGQUERY_LOCATION": "US",
+      "V9_CLOUD_BIGQUERY_MAX_BYTES_BILLED": "536870912000",
+      "V9_CLOUD_BIGQUERY_DRY_RUN_FIRST": "true",
+      "V9_CLOUD_BIGQUERY_TOTAL_BYTES_CAP": "1099511627776",
+      "V9_CLOUD_BIGQUERY_MAX_QUERY_EXECUTIONS": "1",
       "V9_CLOUD_ENABLE_PAPER": "true",
       "V9_CLOUD_ENABLE_WEB_COMPANY": "true",
       "V9_CLOUD_PAPER_APPROVED_QUERY_IDS": "paper_q08,paper_q08",
@@ -177,13 +186,29 @@ def main() -> None:
     config = build_cloud_weekly_run_config(saved["settings"], persist_root=root, environ=env_with_controls)
     assert config["watch_profile_path"].endswith("watch_profile_current.json")
     controls = resolve_cloud_job_controls(env_with_controls)
+    assert controls["patent_approved_query_ids"] == ["patent_q01"]
+    assert controls["patent_max_results"] == 300
+    assert controls["bigquery_project_id"] == "devops-ai-agent-hackathon-2026"
+    assert controls["bigquery_location"] == "US"
+    assert controls["bigquery_maximum_bytes_billed"] == 536870912000
+    assert controls["bigquery_dry_run_first"] is True
+    assert controls["bigquery_total_bytes_cap"] == 1099511627776
+    assert controls["bigquery_max_query_executions"] == 1
     assert controls["paper_approved_query_ids"] == ["paper_q08"]
     assert controls["web_approved_query_ids"] == ["gw_q001"]
     summary = summarize_cloud_weekly_job_config(config, controls=controls)
     assert summary["dry_run"] is False
-    assert summary["providers"]["patent_enabled"] is False
+    assert summary["providers"]["patent_enabled"] is True
     assert summary["providers"]["paper_enabled"] is True
     assert summary["providers"]["web_company_enabled"] is True
+    assert summary["patent_approved_query_ids"] == ["patent_q01"]
+    assert summary["patent_max_results"] == 300
+    assert summary["bigquery_project_id"] == "devops-ai-agent-hackathon-2026"
+    assert summary["bigquery_location"] == "US"
+    assert summary["bigquery_maximum_bytes_billed"] == 536870912000
+    assert summary["bigquery_dry_run_first"] is True
+    assert summary["bigquery_total_bytes_cap"] == 1099511627776
+    assert summary["bigquery_max_query_executions"] == 1
     assert summary["paper_max_results"] == 5
     assert summary["web_max_results"] == 2
     assert summary["web_verification_limit"] == 1
@@ -191,6 +216,7 @@ def main() -> None:
     assert summary["web_english_fallback"] is False
     assert summary["google_grounding"] is False
     assert summary["email_send_enabled"] is False
+    assert BIGQUERY_REQUIRED_JOB_ROLE == "roles/bigquery.jobUser"
     skip_result = run_cloud_weekly_job(environ=_email_env(), output_root=root)
     assert skip_result["status"] == "skipped"
 
@@ -290,6 +316,8 @@ def main() -> None:
   sync_script = (PROJECT_ROOT / "scripts" / "sync_v9_cloud_watch_profile.py").read_text(encoding="utf-8")
   cloud_job_script = (PROJECT_ROOT / "scripts" / "run_v9_cloud_weekly_job.py").read_text(encoding="utf-8")
   cloud_job_module = (PROJECT_ROOT / "services_v9" / "cloud_weekly_job.py").read_text(encoding="utf-8")
+  patent_query_module = (PROJECT_ROOT / "services_v9" / "patent_bigquery_query.py").read_text(encoding="utf-8")
+  weekly_scheduler_module = (PROJECT_ROOT / "services_v9" / "weekly_scheduler.py").read_text(encoding="utf-8")
   assert "streamlit" in dockerfile and "app.py" in dockerfile
   assert "Dockerfile.v9" in cloudbuild
   assert "docker" in cloudbuild
@@ -352,6 +380,18 @@ def main() -> None:
   assert "summarize_cloud_weekly_job_config" in cloud_job_module
   assert 'CLOUD_JOB_LOCK_NAMESPACE = "cloud_job_locks"' in cloud_job_module
   assert 'object_prefix=CLOUD_JOB_LOCK_NAMESPACE' in cloud_job_module
+  assert "V9_CLOUD_PATENT_APPROVED_QUERY_IDS" in cloud_job_module
+  assert "V9_CLOUD_BIGQUERY_PROJECT" in cloud_job_module
+  assert "V9_CLOUD_BIGQUERY_LOCATION" in cloud_job_module
+  assert "V9_CLOUD_BIGQUERY_MAX_BYTES_BILLED" in cloud_job_module
+  assert "V9_CLOUD_BIGQUERY_DRY_RUN_FIRST" in cloud_job_module
+  assert "V9_CLOUD_BIGQUERY_TOTAL_BYTES_CAP" in cloud_job_module
+  assert "V9_CLOUD_BIGQUERY_MAX_QUERY_EXECUTIONS" in cloud_job_module
+  assert "total_bytes_billed" in patent_query_module
+  assert "cache_hit" in patent_query_module
+  assert "sql_fingerprint" in patent_query_module
+  assert "blocked_cost_guard" in weekly_scheduler_module
+  assert "blocked_execution_cap" in weekly_scheduler_module
   assert "printf '%s\\n' '{\"enabled\": false}'" not in deploy_script
   assert '"enabled": False' in bootstrap_script
   for banned in ("tech-cartography-v7-demo", "tech-cartography-v7-live", "tech-cartography-v8-demo"):

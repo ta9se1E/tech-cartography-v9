@@ -28,8 +28,12 @@ STRICT_BOOL_VALUES = {
   "no": False,
 }
 QUERY_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{1,63}$")
+PROJECT_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{4,61}[a-z0-9]$")
 ALLOWED_PAPER_TIME_RANGES = {"all", "12m", "6m", "3m"}
 CLOUD_JOB_LOCK_NAMESPACE = "cloud_job_locks"
+MAX_BIGQUERY_BYTES_PER_QUERY = 2 * (1024**4)
+MAX_BIGQUERY_TOTAL_BYTES_CAP = 12 * (1024**4)
+MAX_BIGQUERY_QUERY_EXECUTIONS = 12
 
 
 def build_cloud_weekly_run_config(
@@ -63,8 +67,12 @@ def build_cloud_weekly_run_config(
   config["schedule"]["minute"] = int(settings.get("minute", 0) or 0)
   if controls["paper_approved_query_ids"]:
     config["paper"]["approved_query_ids"] = list(controls["paper_approved_query_ids"])
+  if controls["patent_approved_query_ids"]:
+    config["patent"]["approved_query_ids"] = list(controls["patent_approved_query_ids"])
   if controls["web_approved_query_ids"]:
     config["web_company"]["approved_query_ids"] = list(controls["web_approved_query_ids"])
+  if controls["patent_max_results"] is not None:
+    config["limits"]["patent_max_results"] = int(controls["patent_max_results"])
   if controls["paper_max_results"] is not None:
     config["limits"]["paper_max_results"] = int(controls["paper_max_results"])
   if controls["web_max_results"] is not None:
@@ -73,6 +81,17 @@ def build_cloud_weekly_run_config(
     config["web_company"]["verification_limit"] = int(controls["web_verification_limit"])
   if controls["paper_time_range"] is not None:
     config["paper"]["time_range"] = str(controls["paper_time_range"])
+  if controls["bigquery_maximum_bytes_billed"] is not None:
+    config["patent"]["maximum_bytes_billed"] = int(controls["bigquery_maximum_bytes_billed"])
+  if controls["bigquery_project_id"]:
+    config["patent"]["project_id"] = str(controls["bigquery_project_id"])
+  if controls["bigquery_location"]:
+    config["patent"]["location"] = str(controls["bigquery_location"])
+  config["patent"]["dry_run_first"] = bool(controls["bigquery_dry_run_first"])
+  if controls["bigquery_total_bytes_cap"] is not None:
+    config["patent"]["total_bytes_cap"] = int(controls["bigquery_total_bytes_cap"])
+  if controls["bigquery_max_query_executions"] is not None:
+    config["patent"]["max_query_executions"] = int(controls["bigquery_max_query_executions"])
   polite_email = str(env.get("OPENALEX_POLITE_EMAIL", "") or "").strip()
   if polite_email:
     config["paper"]["polite_email"] = polite_email
@@ -213,15 +232,43 @@ def resolve_cloud_job_controls(environ: Mapping[str, str] | None = None) -> dict
     "patent_enabled": _parse_strict_bool(env, "V9_CLOUD_ENABLE_PATENT", default=False, errors=errors),
     "paper_enabled": _parse_optional_strict_bool(env, "V9_CLOUD_ENABLE_PAPER", errors=errors),
     "web_company_enabled": _parse_optional_strict_bool(env, "V9_CLOUD_ENABLE_WEB_COMPANY", errors=errors),
+    "patent_approved_query_ids": _parse_query_ids(env, "V9_CLOUD_PATENT_APPROVED_QUERY_IDS", errors=errors),
     "paper_approved_query_ids": _parse_query_ids(env, "V9_CLOUD_PAPER_APPROVED_QUERY_IDS", errors=errors),
     "web_approved_query_ids": _parse_query_ids(env, "V9_CLOUD_WEB_APPROVED_QUERY_IDS", errors=errors),
+    "patent_max_results": _parse_limited_int(env, "V9_CLOUD_PATENT_MAX_RESULTS", minimum=1, maximum=300, errors=errors),
     "paper_max_results": _parse_limited_int(env, "V9_CLOUD_PAPER_MAX_RESULTS", minimum=1, maximum=5, errors=errors),
     "web_max_results": _parse_limited_int(env, "V9_CLOUD_WEB_MAX_RESULTS", minimum=1, maximum=2, errors=errors),
     "web_verification_limit": _parse_limited_int(env, "V9_CLOUD_WEB_VERIFICATION_LIMIT", minimum=0, maximum=1, errors=errors),
     "paper_time_range": _parse_time_range(env, "V9_CLOUD_PAPER_TIME_RANGE", errors=errors),
+    "bigquery_project_id": _parse_project_id(env, "V9_CLOUD_BIGQUERY_PROJECT", errors=errors),
+    "bigquery_location": _parse_bigquery_location(env, "V9_CLOUD_BIGQUERY_LOCATION", errors=errors),
+    "bigquery_maximum_bytes_billed": _parse_limited_int(
+      env,
+      "V9_CLOUD_BIGQUERY_MAX_BYTES_BILLED",
+      minimum=1,
+      maximum=MAX_BIGQUERY_BYTES_PER_QUERY,
+      errors=errors,
+    ),
+    "bigquery_dry_run_first": _parse_strict_bool(env, "V9_CLOUD_BIGQUERY_DRY_RUN_FIRST", default=True, errors=errors),
+    "bigquery_total_bytes_cap": _parse_limited_int(
+      env,
+      "V9_CLOUD_BIGQUERY_TOTAL_BYTES_CAP",
+      minimum=1,
+      maximum=MAX_BIGQUERY_TOTAL_BYTES_CAP,
+      errors=errors,
+    ),
+    "bigquery_max_query_executions": _parse_limited_int(
+      env,
+      "V9_CLOUD_BIGQUERY_MAX_QUERY_EXECUTIONS",
+      minimum=1,
+      maximum=MAX_BIGQUERY_QUERY_EXECUTIONS,
+      errors=errors,
+    ),
     "web_english_fallback": _parse_strict_bool(env, "V9_CLOUD_WEB_ENGLISH_FALLBACK", default=False, errors=errors),
     "google_grounding": _parse_strict_bool(env, "V9_CLOUD_GOOGLE_GROUNDING", default=False, errors=errors),
   }
+  if controls["patent_enabled"] and not controls["bigquery_dry_run_first"]:
+    errors.append("V9_CLOUD_BIGQUERY_DRY_RUN_FIRST must be true when V9_CLOUD_ENABLE_PATENT=true")
   if errors:
     raise RuntimeError("cloud job env validation failed: " + "; ".join(errors))
   return controls
@@ -237,6 +284,7 @@ def summarize_cloud_weekly_job_config(
   execution = dict(config.get("execution", {}) or {})
   limits = dict(config.get("limits", {}) or {})
   paper = dict(config.get("paper", {}) or {})
+  patent = dict(config.get("patent", {}) or {})
   web_company = dict(config.get("web_company", {}) or {})
   email = dict(config.get("email", {}) or {})
   return {
@@ -246,11 +294,19 @@ def summarize_cloud_weekly_job_config(
       "paper_enabled": bool(execution.get("paper_enabled", False)),
       "web_company_enabled": bool(execution.get("web_company_enabled", False)),
     },
+    "patent_approved_query_ids": list(patent.get("approved_query_ids", []) or []),
     "paper_approved_query_ids": list(paper.get("approved_query_ids", []) or []),
     "web_approved_query_ids": list(web_company.get("approved_query_ids", []) or []),
+    "patent_max_results": int(limits.get("patent_max_results", 0) or 0),
     "paper_max_results": int(limits.get("paper_max_results", 0) or 0),
     "web_max_results": int(limits.get("web_max_results", 0) or 0),
     "web_verification_limit": int(web_company.get("verification_limit", 0) or 0),
+    "bigquery_project_id": str(patent.get("project_id", "") or ""),
+    "bigquery_location": str(patent.get("location", "") or ""),
+    "bigquery_maximum_bytes_billed": int(patent.get("maximum_bytes_billed", 0) or 0),
+    "bigquery_dry_run_first": bool(patent.get("dry_run_first", True)),
+    "bigquery_total_bytes_cap": int(patent.get("total_bytes_cap", 0) or 0),
+    "bigquery_max_query_executions": int(patent.get("max_query_executions", 0) or 0),
     "paper_time_range": str(paper.get("time_range", "") or ""),
     "web_english_fallback": bool(resolved_controls.get("web_english_fallback", False)),
     "google_grounding": bool(resolved_controls.get("google_grounding", False)),
@@ -364,6 +420,36 @@ def _parse_time_range(
   if raw not in ALLOWED_PAPER_TIME_RANGES:
     errors.append(f"{name} must be one of {', '.join(sorted(ALLOWED_PAPER_TIME_RANGES))}")
     return None
+  return raw
+
+
+def _parse_project_id(
+  env: Mapping[str, str],
+  name: str,
+  *,
+  errors: list[str],
+) -> str:
+  raw = str(env.get(name, "") or "").strip()
+  if not raw:
+    return ""
+  if not PROJECT_ID_PATTERN.fullmatch(raw):
+    errors.append(f"{name} must be a valid GCP project id")
+    return ""
+  return raw
+
+
+def _parse_bigquery_location(
+  env: Mapping[str, str],
+  name: str,
+  *,
+  errors: list[str],
+) -> str:
+  raw = str(env.get(name, "") or "").strip().upper()
+  if not raw:
+    return "US"
+  if raw != "US":
+    errors.append(f"{name} must be US")
+    return ""
   return raw
 
 

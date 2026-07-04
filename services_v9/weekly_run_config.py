@@ -37,6 +37,11 @@ def default_weekly_run_config() -> dict[str, Any]:
       "approved_query_ids": [],
       "maximum_bytes_billed": 0,
       "time_range": "12m",
+      "project_id": "",
+      "location": "US",
+      "dry_run_first": True,
+      "total_bytes_cap": 0,
+      "max_query_executions": 0,
     },
     "paper": {
       "approved_query_ids": [],
@@ -120,6 +125,11 @@ def validate_weekly_run_config(config: dict[str, Any]) -> dict[str, Any]:
   patent["approved_query_ids"] = _normalize_string_list(patent.get("approved_query_ids", []))
   patent["maximum_bytes_billed"] = max(_safe_int(patent.get("maximum_bytes_billed", 0), 0), 0)
   patent["time_range"] = str(patent.get("time_range", "12m") or "12m").strip() or "12m"
+  patent["project_id"] = str(patent.get("project_id", "") or "").strip()
+  patent["location"] = str(patent.get("location", "US") or "US").strip().upper() or "US"
+  patent["dry_run_first"] = bool(patent.get("dry_run_first", True))
+  patent["total_bytes_cap"] = max(_safe_int(patent.get("total_bytes_cap", 0), 0), 0)
+  patent["max_query_executions"] = max(_safe_int(patent.get("max_query_executions", 0), 0), 0)
   merged["patent"] = patent
 
   paper = dict(merged.get("paper", {}) or {})

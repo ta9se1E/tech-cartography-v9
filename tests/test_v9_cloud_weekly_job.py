@@ -302,6 +302,14 @@ def test_build_cloud_weekly_run_config_applies_safe_query_controls(tmp_path: Pat
     **_env(),
     "V9_CLOUD_JOB_DRY_RUN": "false",
     "V9_CLOUD_ENABLE_PATENT": "false",
+    "V9_CLOUD_PATENT_APPROVED_QUERY_IDS": "patent_q01,patent_q01",
+    "V9_CLOUD_PATENT_MAX_RESULTS": "300",
+    "V9_CLOUD_BIGQUERY_PROJECT": "devops-ai-agent-hackathon-2026",
+    "V9_CLOUD_BIGQUERY_LOCATION": "US",
+    "V9_CLOUD_BIGQUERY_MAX_BYTES_BILLED": "536870912000",
+    "V9_CLOUD_BIGQUERY_DRY_RUN_FIRST": "true",
+    "V9_CLOUD_BIGQUERY_TOTAL_BYTES_CAP": "1099511627776",
+    "V9_CLOUD_BIGQUERY_MAX_QUERY_EXECUTIONS": "1",
     "V9_CLOUD_ENABLE_PAPER": "true",
     "V9_CLOUD_ENABLE_WEB_COMPANY": "true",
     "V9_CLOUD_PAPER_APPROVED_QUERY_IDS": "paper_q08,paper_q08",
@@ -323,6 +331,14 @@ def test_build_cloud_weekly_run_config_applies_safe_query_controls(tmp_path: Pat
   assert config["execution"]["patent_enabled"] is False
   assert config["execution"]["paper_enabled"] is True
   assert config["execution"]["web_company_enabled"] is True
+  assert config["patent"]["approved_query_ids"] == ["patent_q01"]
+  assert config["limits"]["patent_max_results"] == 300
+  assert config["patent"]["project_id"] == "devops-ai-agent-hackathon-2026"
+  assert config["patent"]["location"] == "US"
+  assert config["patent"]["maximum_bytes_billed"] == 536870912000
+  assert config["patent"]["dry_run_first"] is True
+  assert config["patent"]["total_bytes_cap"] == 1099511627776
+  assert config["patent"]["max_query_executions"] == 1
   assert config["paper"]["approved_query_ids"] == ["paper_q08"]
   assert config["web_company"]["approved_query_ids"] == ["gw_q001"]
   assert config["limits"]["paper_max_results"] == 5
@@ -330,6 +346,14 @@ def test_build_cloud_weekly_run_config_applies_safe_query_controls(tmp_path: Pat
   assert config["web_company"]["verification_limit"] == 1
   assert config["paper"]["time_range"] == "all"
   summary = cloud_weekly_job_module.summarize_cloud_weekly_job_config(config, environ=env)
+  assert summary["patent_approved_query_ids"] == ["patent_q01"]
+  assert summary["patent_max_results"] == 300
+  assert summary["bigquery_project_id"] == "devops-ai-agent-hackathon-2026"
+  assert summary["bigquery_location"] == "US"
+  assert summary["bigquery_maximum_bytes_billed"] == 536870912000
+  assert summary["bigquery_dry_run_first"] is True
+  assert summary["bigquery_total_bytes_cap"] == 1099511627776
+  assert summary["bigquery_max_query_executions"] == 1
   assert summary["web_english_fallback"] is False
   assert summary["google_grounding"] is False
   assert summary["email_send_enabled"] is False
@@ -357,6 +381,10 @@ def test_resolve_cloud_job_controls_rejects_invalid_limits_and_bool() -> None:
     {"V9_CLOUD_WEB_MAX_RESULTS": "3"},
     {"V9_CLOUD_WEB_VERIFICATION_LIMIT": "2"},
     {"V9_CLOUD_JOB_DRY_RUN": "maybe"},
+    {"V9_CLOUD_BIGQUERY_LOCATION": "asia-northeast1"},
+    {"V9_CLOUD_BIGQUERY_PROJECT": "INVALID_PROJECT"},
+    {"V9_CLOUD_BIGQUERY_MAX_QUERY_EXECUTIONS": "13"},
+    {"V9_CLOUD_BIGQUERY_DRY_RUN_FIRST": "false", "V9_CLOUD_ENABLE_PATENT": "true"},
   ]
   for case in cases:
     env = {**_env(), **case}

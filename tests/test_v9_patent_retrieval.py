@@ -30,6 +30,7 @@ class _FakeDryRunJob:
   def __init__(self, total_bytes_processed: int = 100_000_000) -> None:
     self.total_bytes_processed = total_bytes_processed
     self.job_id = "fake-dry-run-job"
+    self.cache_hit = False
 
 
 class _FakeResult:
@@ -45,10 +46,21 @@ class _FakeResult:
 
 
 class _FakeExecuteJob:
-  def __init__(self, rows: list[dict], fail_after: int | None = None) -> None:
+  def __init__(
+    self,
+    rows: list[dict],
+    fail_after: int | None = None,
+    *,
+    total_bytes_processed: int = 240_000_000,
+    total_bytes_billed: int = 128_000_000,
+    cache_hit: bool = False,
+  ) -> None:
     self.job_id = "fake-execute-job"
     self._rows = rows
     self._fail_after = fail_after
+    self.total_bytes_processed = total_bytes_processed
+    self.total_bytes_billed = total_bytes_billed
+    self.cache_hit = cache_hit
 
   def result(self):
     return _FakeResult(self._rows, fail_after=self._fail_after)
@@ -60,9 +72,11 @@ class _FakeClient:
     self.execute_rows = execute_rows or []
     self.fail_after = fail_after
     self.last_job_config = None
+    self.last_job_id = ""
 
-  def query(self, sql: str, job_config=None):  # noqa: ANN001
+  def query(self, sql: str, job_config=None, job_id=None):  # noqa: ANN001
     self.last_job_config = job_config
+    self.last_job_id = str(job_id or "")
     if getattr(job_config, "dry_run", False):
       return _FakeDryRunJob(self.dry_run_bytes)
     return _FakeExecuteJob(self.execute_rows, fail_after=self.fail_after)
@@ -220,6 +234,34 @@ def test_partial_success_keeps_retrieved_rows() -> None:
   assert result["provider_status"] == "partial_success"
   assert result["rows_retrieved"] == 1
   assert result["rows"][0]["publication_number"] == "US1"
+
+
+def test_execute_records_bigquery_job_metadata_and_deterministic_job_id() -> None:
+  preview, dry_run_result = _preview_and_dry_run()
+  preview["request"]["weekly_run_id"] = "cloud_weekly_job_20260704_123000"
+  fake_rows = [{"publication_number": "US-1", "family_id": "FAM-1", "title": "A", "abstract": "a"}]
+  client = _FakeClient(execute_rows=fake_rows)
+  result = execute_patent_bigquery_retrieval(
+    preview,
+    dry_run_result,
+    approved=True,
+    client_factory=lambda project_id, location: client,
+    job_config_builder=lambda payload, dry_run: _FakeJobConfig(
+      dry_run=dry_run,
+      maximum_bytes_billed=int(payload["maximum_bytes_billed"]),
+    ),
+    config=_config(),
+  )
+  assert client.last_job_id.startswith("v9_pat_")
+  assert result["bigquery_job_id"] == "fake-execute-job"
+  assert result["total_bytes_processed"] == 240_000_000
+  assert result["total_bytes_billed"] == 128_000_000
+  assert result["cache_hit"] is False
+  assert result["sql_fingerprint"]
+  assert result["selected_columns"]
+  assert result["log"]["total_bytes_processed"] == 240_000_000
+  assert result["log"]["total_bytes_billed"] == 128_000_000
+  assert result["log"]["result_count"] == 1
 
 
 def test_artifacts_are_saved_for_retrieval(tmp_path: Path) -> None:
