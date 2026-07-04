@@ -41,6 +41,13 @@ from services_v9.persistence import (
 )
 from services_v9.query_preview import build_query_preview_bundle
 from services_v9.review_state import apply_reviews_to_signals
+from services_v9.retrieval_run_store import (
+  build_retrieval_run_manifest,
+  find_latest_compatible_manifest,
+  load_candidates_from_manifest,
+  save_retrieval_run_manifest,
+  stable_payload_signature,
+)
 from services_v9.global_web_plan_schema import DEFAULT_GLOBAL_WEB_INTENTS, load_global_web_country_profiles
 from services_v9.search_plan import DEFAULT_SOURCE_LIMITS, build_unified_search_plan, summarize_search_plan_ja, validate_search_plan
 from services_v9.score_explainer import attach_score_explanations
@@ -126,6 +133,13 @@ STATE_PAPER_RETRIEVAL_RESULT = "state_paper_retrieval_result"
 STATE_PAPER_RETRIEVAL_MESSAGE = "state_paper_retrieval_message"
 STATE_GLOBAL_WEB_RETRIEVAL_RESULT = "state_global_web_retrieval_result"
 STATE_GLOBAL_WEB_RETRIEVAL_MESSAGE = "state_global_web_retrieval_message"
+STATE_RETRIEVAL_SOURCE_RUNS = "state_retrieval_source_runs"
+STATE_RETRIEVAL_ACTIVE_SOURCE = "state_retrieval_active_source"
+STATE_RETRIEVAL_LOADED_CANDIDATES = "state_retrieval_loaded_candidates"
+STATE_RETRIEVAL_LOADED_MANIFEST = "state_retrieval_loaded_manifest"
+STATE_RETRIEVAL_MANIFEST_SUMMARY = "state_retrieval_manifest_summary"
+STATE_RETRIEVAL_MANIFEST_MESSAGE = "state_retrieval_manifest_message"
+STATE_PENDING_DATA_SOURCE_MODE = "state_pending_data_source_mode"
 
 UI_SEARCH_TOTAL_LIMIT_KEY = "ui_search_total_limit"
 UI_SEARCH_PATENT_LIMIT_KEY = "ui_search_patent_limit"
@@ -196,6 +210,12 @@ def _apply_pending_profile_if_any() -> None:
   _set_profile_widgets(payload)
 
 
+def _apply_pending_data_source_mode_if_any() -> None:
+  pending_mode = str(st.session_state.pop(STATE_PENDING_DATA_SOURCE_MODE, "") or "").strip()
+  if pending_mode:
+    st.session_state[UI_DATA_SOURCE_MODE_KEY] = pending_mode
+
+
 def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(UI_DEMO_KEY, True)
   st.session_state.setdefault(UI_SNAPSHOT_NOTE_KEY, "")
@@ -206,6 +226,11 @@ def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(STATE_PATENT_BIGQUERY_APPROVED_QUERY_IDS, [])
   st.session_state.setdefault(STATE_PAPER_RETRIEVAL_RESULT, {})
   st.session_state.setdefault(STATE_GLOBAL_WEB_RETRIEVAL_RESULT, {})
+  st.session_state.setdefault(STATE_RETRIEVAL_SOURCE_RUNS, {})
+  st.session_state.setdefault(STATE_RETRIEVAL_ACTIVE_SOURCE, "session_runs")
+  st.session_state.setdefault(STATE_RETRIEVAL_LOADED_CANDIDATES, {})
+  st.session_state.setdefault(STATE_RETRIEVAL_LOADED_MANIFEST, {})
+  st.session_state.setdefault(STATE_RETRIEVAL_MANIFEST_SUMMARY, {})
   if UI_THEME_NAME_KEY not in st.session_state:
     _set_profile_widgets(profile_dict)
   _ensure_search_plan_widget_defaults(profile_dict)
@@ -326,6 +351,66 @@ def _resolve_current_signal_source(
         else:
           warnings.append("JSONから有効なシグナルを読み込めなかったため、デモデータを表示します。")
 
+  if mode == "retrieval_saved":
+    active_source = str(st.session_state.get(STATE_RETRIEVAL_ACTIVE_SOURCE, "session_runs") or "session_runs")
+    retrieval_rows = _loaded_retrieval_rows_by_source() if active_source == "saved_manifest" else _session_retrieval_rows_by_source()
+    patent_rows = list(retrieval_rows.get("patent", []) or [])
+    paper_rows = list(retrieval_rows.get("paper", []) or [])
+    web_company_rows = list(retrieval_rows.get("web_company", []) or [])
+    if not patent_rows and not paper_rows and not web_company_rows:
+      warnings.append("取得済みデータモードですが、統合対象の取得済み候補がありません。")
+      return {
+        "requested_mode": mode,
+        "mode": "retrieval_saved",
+        "label": data_source_mode_label_ja("retrieval_saved"),
+        "signals": [],
+        "loaded_count": 0,
+        "warnings": warnings,
+        "provisional_scoring": True,
+        "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
+        "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
+        "integration_summary": {},
+      }
+    integrated = integrate_multi_source_signals(
+      base_signals=[],
+      watch_profile=watch_profile_dict,
+      patent_rows=patent_rows,
+      paper_rows=paper_rows,
+      web_company_rows=web_company_rows,
+      max_items=1000,
+      ranking_limit=100,
+    )
+    integration_mode_parts = []
+    if patent_rows:
+      integration_mode_parts.append("patent")
+    if paper_rows:
+      integration_mode_parts.append("paper")
+    if web_company_rows:
+      integration_mode_parts.append("web/company")
+    source_label = "保存済みmanifest" if active_source == "saved_manifest" else "現セッション取得結果"
+    return {
+      "requested_mode": mode,
+      "mode": "retrieval_saved",
+      "label": data_source_mode_label_ja("retrieval_saved"),
+      "signals": list(integrated.get("signals", []) or []),
+      "loaded_count": int(integrated.get("ranked_count", 0) or 0),
+      "warnings": warnings + [f"{source_label}から既存の統合処理を再実行しました。デモ/CSV/JSONは混在していません。"],
+      "provisional_scoring": True,
+      "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
+      "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
+      "integration_summary": {
+        "integration_run_id": str(integrated.get("integration_run_id", "") or ""),
+        "raw_count": int(integrated.get("raw_count", 0) or 0),
+        "capped_count": int(integrated.get("capped_count", 0) or 0),
+        "deduped_count": int(integrated.get("deduped_count", 0) or 0),
+        "ranked_count": int(integrated.get("ranked_count", 0) or 0),
+        "active_sources": integration_mode_parts,
+        "top_by_source": dict(integrated.get("top_by_source", {}) or {}),
+        "data_origin": "retrieval_artifact",
+        "retrieval_source_kind": active_source,
+      },
+    }
+
   if source_payload is None:
     source_payload = {
       "requested_mode": mode,
@@ -338,56 +423,6 @@ def _resolve_current_signal_source(
       "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
       "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
     }
-
-  patent_rows = list(dict(st.session_state.get(STATE_PATENT_RETRIEVAL_RESULT, {}) or {}).get("rows", []) or [])
-  paper_rows = list(dict(st.session_state.get(STATE_PAPER_RETRIEVAL_RESULT, {}) or {}).get("rows", []) or [])
-  web_company_rows = list(dict(st.session_state.get(STATE_GLOBAL_WEB_RETRIEVAL_RESULT, {}) or {}).get("rows", []) or [])
-  if not patent_rows and not paper_rows and not web_company_rows:
-    return source_payload
-  if str(source_payload.get("mode", "") or "") in {"csv", "json"}:
-    source_payload = dict(source_payload)
-    source_payload["warnings"] = list(source_payload.get("warnings", []) or []) + [
-      "CSV/JSONモードでは staged retrieval 結果を自動統合しません。統合Signalを確認するときはデモモードへ戻してください。"
-    ]
-    return source_payload
-
-  integrated = integrate_multi_source_signals(
-    base_signals=list(source_payload.get("signals", []) or []),
-    watch_profile=watch_profile_dict,
-    patent_rows=patent_rows,
-    paper_rows=paper_rows,
-    web_company_rows=web_company_rows,
-    max_items=1000,
-    ranking_limit=100,
-  )
-  integration_mode_parts = []
-  if patent_rows:
-    integration_mode_parts.append("patent")
-  if paper_rows:
-    integration_mode_parts.append("paper")
-  if web_company_rows:
-    integration_mode_parts.append("web/company")
-  integration_label = f"{source_payload['label']} + staged retrieval"
-  source_payload = {
-    **source_payload,
-    "mode": "integrated",
-    "label": integration_label,
-    "signals": list(integrated.get("signals", []) or []),
-    "loaded_count": int(integrated.get("ranked_count", 0) or 0),
-    "provisional_scoring": True,
-    "integration_summary": {
-      "integration_run_id": str(integrated.get("integration_run_id", "") or ""),
-      "raw_count": int(integrated.get("raw_count", 0) or 0),
-      "capped_count": int(integrated.get("capped_count", 0) or 0),
-      "deduped_count": int(integrated.get("deduped_count", 0) or 0),
-      "ranked_count": int(integrated.get("ranked_count", 0) or 0),
-      "active_sources": integration_mode_parts,
-      "top_by_source": dict(integrated.get("top_by_source", {}) or {}),
-    },
-  }
-  source_payload["warnings"] = list(source_payload.get("warnings", []) or []) + [
-    "staged retrieval 結果を既存Signalへ統合しました。Top100候補のみをランキング表示します。"
-  ]
   return source_payload
 
 
@@ -447,8 +482,56 @@ def _prepare_reviewed_signal_dicts(
 
 
 def _stable_payload_signature(payload: object) -> str:
-  serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-  return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+  return stable_payload_signature(payload)
+
+
+def _set_current_retrieval_source_run(source_type: str, result: dict[str, object], artifact_dir: Path) -> None:
+  source_runs = dict(st.session_state.get(STATE_RETRIEVAL_SOURCE_RUNS, {}) or {})
+  rows = list(dict(result or {}).get("rows", []) or [])
+  source_runs[source_type] = {
+    "run_id": str(dict(result or {}).get("retrieval_run_id", "") or "").strip(),
+    "artifact_dir": str(Path(artifact_dir).resolve().relative_to(Path(__file__).resolve().parents[1])),
+    "status": str(dict(result or {}).get("provider_status", "failed") or "failed"),
+    "candidate_count": len(rows),
+    "data_origin": "retrieval_artifact",
+  }
+  st.session_state[STATE_RETRIEVAL_SOURCE_RUNS] = source_runs
+  st.session_state[STATE_RETRIEVAL_ACTIVE_SOURCE] = "session_runs"
+
+
+def _session_retrieval_rows_by_source() -> dict[str, list[dict[str, object]]]:
+  return {
+    "patent": list(dict(st.session_state.get(STATE_PATENT_RETRIEVAL_RESULT, {}) or {}).get("rows", []) or []),
+    "paper": list(dict(st.session_state.get(STATE_PAPER_RETRIEVAL_RESULT, {}) or {}).get("rows", []) or []),
+    "web_company": list(dict(st.session_state.get(STATE_GLOBAL_WEB_RETRIEVAL_RESULT, {}) or {}).get("rows", []) or []),
+  }
+
+
+def _loaded_retrieval_rows_by_source() -> dict[str, list[dict[str, object]]]:
+  payload = dict(st.session_state.get(STATE_RETRIEVAL_LOADED_CANDIDATES, {}) or {})
+  return {
+    "patent": list(payload.get("patent", []) or []),
+    "paper": list(payload.get("paper", []) or []),
+    "web_company": list(payload.get("web_company", []) or []),
+  }
+
+
+def _build_retrieval_reload_ui_state(watch_profile_dict: dict[str, object]) -> dict[str, object]:
+  current_signature = _stable_payload_signature(watch_profile_dict)
+  current_runs = dict(st.session_state.get(STATE_RETRIEVAL_SOURCE_RUNS, {}) or {})
+  manifest_summary = dict(st.session_state.get(STATE_RETRIEVAL_MANIFEST_SUMMARY, {}) or {})
+  loaded_manifest = dict(st.session_state.get(STATE_RETRIEVAL_LOADED_MANIFEST, {}) or {})
+  return {
+    "watch_profile_signature": current_signature,
+    "current_run_ids": {
+      "patent": str(dict(current_runs.get("patent", {}) or {}).get("run_id", "") or ""),
+      "paper": str(dict(current_runs.get("paper", {}) or {}).get("run_id", "") or ""),
+      "web_company": str(dict(current_runs.get("web_company", {}) or {}).get("run_id", "") or ""),
+    },
+    "manifest_summary": manifest_summary,
+    "loaded_manifest_id": str(loaded_manifest.get("manifest_id", "") or ""),
+    "active_source": str(st.session_state.get(STATE_RETRIEVAL_ACTIVE_SOURCE, "session_runs") or "session_runs"),
+  }
 
 
 def _country_enabled_key(country_code: str) -> str:
@@ -889,9 +972,16 @@ def _build_snapshot_history() -> tuple[list[str], dict[str, Path], list[dict[str
 
 
 def _build_operation_rows() -> list[dict[str, str]]:
-  patent_mode = "live" if bool(dict(st.session_state.get(STATE_PATENT_RETRIEVAL_RESULT, {}) or {}).get("rows")) else "off"
-  paper_mode = "live" if bool(dict(st.session_state.get(STATE_PAPER_RETRIEVAL_RESULT, {}) or {}).get("rows")) else "off"
-  web_mode = "live" if bool(dict(st.session_state.get(STATE_GLOBAL_WEB_RETRIEVAL_RESULT, {}) or {}).get("rows")) else "off"
+  active_source = str(st.session_state.get(STATE_RETRIEVAL_ACTIVE_SOURCE, "session_runs") or "session_runs")
+  if active_source == "saved_manifest":
+    loaded_rows = _loaded_retrieval_rows_by_source()
+    patent_mode = "loaded" if loaded_rows["patent"] else "off"
+    paper_mode = "loaded" if loaded_rows["paper"] else "off"
+    web_mode = "loaded" if loaded_rows["web_company"] else "off"
+  else:
+    patent_mode = "live" if bool(dict(st.session_state.get(STATE_PATENT_RETRIEVAL_RESULT, {}) or {}).get("rows")) else "off"
+    paper_mode = "live" if bool(dict(st.session_state.get(STATE_PAPER_RETRIEVAL_RESULT, {}) or {}).get("rows")) else "off"
+    web_mode = "live" if bool(dict(st.session_state.get(STATE_GLOBAL_WEB_RETRIEVAL_RESULT, {}) or {}).get("rows")) else "off"
   return build_operation_status_rows(
     bigquery_mode=patent_mode,
     openalex_mode=paper_mode,
@@ -941,6 +1031,7 @@ def run_app() -> None:
   ensure_v9_run_dirs()
   raw_signals, raw_profile = load_demo_bundle()
   _apply_pending_profile_if_any()
+  _apply_pending_data_source_mode_if_any()
   _init_session_state(raw_profile)
   watch_profile_dict = _build_ui_watch_profile_dict()
   watch_profile = WatchProfile.from_dict(watch_profile_dict)
@@ -972,6 +1063,7 @@ def run_app() -> None:
   patent_bigquery_state = _build_patent_bigquery_ui_state(search_plan_state, watch_profile_dict)
   paper_openalex_state = _build_paper_openalex_ui_state(search_plan_state, watch_profile_dict)
   global_web_retrieval_state = _build_global_web_retrieval_ui_state(search_plan_state)
+  retrieval_reload_state = _build_retrieval_reload_ui_state(watch_profile_dict)
   profile_summary = watch_profile_summary(watch_profile_dict)
   query_previews = build_query_preview_bundle(watch_profile_dict)
   csv_template_text = build_csv_template()
@@ -1010,7 +1102,7 @@ def run_app() -> None:
   )
   suggestions = suggest_watch_profile_updates(signals, watch_profile)
   drift = compute_theme_drift_alert(signals, watch_profile)
-  source_rows = build_source_rows(signals)
+  source_rows = build_source_rows(signals, data_source_mode=str(source_info.get("mode", "demo") or "demo"))
   operation_rows = _build_operation_rows()
   csv_text = signals_to_csv(signals)
 
@@ -1018,7 +1110,7 @@ def run_app() -> None:
   st.caption("軽量R&Dシグナル監視エージェント")
   render_notice()
   st.caption(
-    "ローカルのデモデータまたはアップロードされたCSV/JSONのみで動作します。"
+    "ローカルのデモデータ、アップロードされたCSV/JSON、または明示的に読込んだ取得済みartifactで動作します。"
     "BigQuery、OpenAlex、Web検索、OCR、PDFスキャン、"
     "スケジューラ、外部APIは起動時に実行しません。"
   )
@@ -1039,6 +1131,8 @@ def run_app() -> None:
       csv_template_text,
       json_template_text,
       search_plan_state,
+      retrieval_reload_state,
+      st.session_state.get(STATE_RETRIEVAL_MANIFEST_MESSAGE),
       st.session_state.get(STATE_SEARCH_PLAN_STATUS_MESSAGE),
       patent_bigquery_state,
       st.session_state.get(STATE_PATENT_BIGQUERY_MESSAGE),
@@ -1152,6 +1246,65 @@ def run_app() -> None:
     )
     st.rerun()
 
+  if source_events.get("save_retrieval_manifest"):
+    source_runs = dict(st.session_state.get(STATE_RETRIEVAL_SOURCE_RUNS, {}) or {})
+    try:
+      manifest = build_retrieval_run_manifest(watch_profile_dict, source_runs)
+      manifest_path = save_retrieval_run_manifest(manifest)
+    except ValueError as exc:
+      st.session_state[STATE_RETRIEVAL_MANIFEST_MESSAGE] = f"保存できる取得済みrunがありません: {exc}"
+    else:
+      st.session_state[STATE_RETRIEVAL_MANIFEST_SUMMARY] = {
+        "checked": True,
+        "available": True,
+        "manifest_id": str(manifest.get("manifest_id", "") or ""),
+        "status": str(manifest.get("status", "") or ""),
+        "candidate_count": int(manifest.get("total_candidate_count", 0) or 0),
+      }
+      st.session_state[STATE_RETRIEVAL_MANIFEST_MESSAGE] = (
+        f"取得済みrun manifest を保存しました: `{manifest.get('manifest_id', '')}` ({manifest_path})"
+      )
+    st.rerun()
+
+  if source_events.get("load_saved_retrieval_manifest"):
+    manifest = find_latest_compatible_manifest(None, _stable_payload_signature(watch_profile_dict))
+    if manifest is None:
+      st.session_state[STATE_RETRIEVAL_MANIFEST_SUMMARY] = {
+        "checked": True,
+        "available": False,
+        "manifest_id": "",
+        "status": "none",
+        "candidate_count": 0,
+      }
+      st.session_state[STATE_RETRIEVAL_MANIFEST_MESSAGE] = "現在のWatch Profileに一致する保存済み取得結果はありません。"
+      st.rerun()
+    loaded_bundle = load_candidates_from_manifest(manifest)
+    st.session_state[STATE_RETRIEVAL_MANIFEST_SUMMARY] = {
+      "checked": True,
+      "available": True,
+      "manifest_id": str(manifest.get("manifest_id", "") or ""),
+      "status": str(loaded_bundle.get("status", manifest.get("status", "partial_success")) or "partial_success"),
+      "candidate_count": int(loaded_bundle.get("total_candidate_count", 0) or 0),
+    }
+    if int(loaded_bundle.get("total_candidate_count", 0) or 0) <= 0:
+      warning_text = " / ".join(str(item) for item in list(loaded_bundle.get("warnings", []) or []))
+      st.session_state[STATE_RETRIEVAL_MANIFEST_MESSAGE] = (
+        "一致manifestは見つかりましたが、読込可能な候補がありませんでした。"
+        + (f" 警告: {warning_text}" if warning_text else "")
+      )
+      st.rerun()
+    st.session_state[STATE_RETRIEVAL_LOADED_MANIFEST] = manifest
+    st.session_state[STATE_RETRIEVAL_LOADED_CANDIDATES] = dict(loaded_bundle.get("candidates_by_source", {}) or {})
+    st.session_state[STATE_RETRIEVAL_SOURCE_RUNS] = dict(loaded_bundle.get("source_runs", {}) or {})
+    st.session_state[STATE_RETRIEVAL_ACTIVE_SOURCE] = "saved_manifest"
+    st.session_state[STATE_PENDING_DATA_SOURCE_MODE] = "retrieval_saved"
+    warning_text = " / ".join(str(item) for item in list(loaded_bundle.get("warnings", []) or []))
+    st.session_state[STATE_RETRIEVAL_MANIFEST_MESSAGE] = (
+      f"保存済み取得結果を読込みました: `{manifest.get('manifest_id', '')}`"
+      + (f" (警告: {warning_text})" if warning_text else "")
+    )
+    st.rerun()
+
   if source_events.get("run_patent_dry_run"):
     dry_run_result = run_patent_bigquery_dry_run(dict(patent_bigquery_state.get("preview", {}) or {}))
     current_dry_run_map = dict(st.session_state.get(STATE_PATENT_BIGQUERY_DRY_RUN, {}) or {})
@@ -1197,6 +1350,7 @@ def run_app() -> None:
       f"特許候補 staging を保存しました: {artifact_paths['staged_json']} / {artifact_paths['staged_csv']} "
       f"(log: {artifact_paths['retrieval_log_json']})"
     )
+    _set_current_retrieval_source_run("patent", retrieval_result, artifact_paths["run_dir"])
     st.rerun()
 
   if source_events.get("run_paper_retrieval"):
@@ -1212,6 +1366,7 @@ def run_app() -> None:
       f"OpenAlex論文候補 staging を保存しました: {artifact_paths['staged_json']} / {artifact_paths['staged_csv']} "
       f"(log: {artifact_paths['provider_log_json']})"
     )
+    _set_current_retrieval_source_run("paper", paper_retrieval_result, artifact_paths["run_dir"])
     st.rerun()
 
   if source_events.get("run_global_web_retrieval"):
@@ -1228,6 +1383,7 @@ def run_app() -> None:
       f"{artifact_paths['staged_csv']} (discovery: {artifact_paths['discovery_json']}, "
       f"verification: {artifact_paths['verification_json']})"
     )
+    _set_current_retrieval_source_run("web_company", global_web_result, artifact_paths["run_dir"])
     st.rerun()
 
   if signal_events["save_snapshot"]:

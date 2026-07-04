@@ -746,6 +746,8 @@ def render_sources_tab(
   csv_template_text: str,
   json_template_text: str,
   search_plan_state: dict[str, Any],
+  retrieval_reload_state: dict[str, object],
+  retrieval_manifest_status_message: str | None = None,
   search_plan_status_message: str | None = None,
   patent_bigquery_state: dict[str, Any] | None = None,
   patent_bigquery_status_message: str | None = None,
@@ -759,16 +761,37 @@ def render_sources_tab(
   st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
   st.radio(
     "データ投入モード",
-    options=["demo", "csv", "json"],
+    options=["demo", "csv", "json", "retrieval_saved"],
     format_func=data_source_mode_label_ja,
     key="ui_data_source_mode",
     horizontal=True,
   )
   st.caption(f"現在のデータ投入モード: {data_source_mode_label_ja(str(source_info['requested_mode']))}")
   st.info(
-    "ページ表示だけでは外部検索を実行しません。アップロードされたCSV/JSONの仮スコア表示に加えて、"
-    "特許 / 論文 / Global Web は明示ボタン時のみ取得します。"
+    "ページ表示だけでは外部検索や保存済みmanifest読込を実行しません。アップロードされたCSV/JSONの仮スコア表示に加えて、"
+    "特許 / 論文 / Global Web の取得と保存済み結果の読込は明示ボタン時のみ実行します。"
   )
+
+  st.markdown("### 保存済み取得結果")
+  _show_status_message(retrieval_manifest_status_message)
+  manifest_summary = dict(retrieval_reload_state.get("manifest_summary", {}) or {})
+  current_run_ids = dict(retrieval_reload_state.get("current_run_ids", {}) or {})
+  st.write(f"- Watch Profile signature: `{str(retrieval_reload_state.get('watch_profile_signature', '') or '')[:8]}`")
+  st.write(f"- 現在session内の特許run ID: `{current_run_ids.get('patent', '') or 'なし'}`")
+  st.write(f"- 現在session内の論文run ID: `{current_run_ids.get('paper', '') or 'なし'}`")
+  st.write(f"- 現在session内のWeb/企業run ID: `{current_run_ids.get('web_company', '') or 'なし'}`")
+  if manifest_summary.get("checked"):
+    availability_label = "あり" if bool(manifest_summary.get("available")) else "なし"
+    st.write(f"- 保存済みmanifestの有無: `{availability_label}`")
+    st.write(f"- manifest status: `{manifest_summary.get('status', 'none')}`")
+    st.write(f"- 候補件数: `{int(manifest_summary.get('candidate_count', 0) or 0)}`")
+  else:
+    st.write("- 保存済みmanifestの有無: `未確認`")
+    st.write("- manifest status: `未確認`")
+    st.write("- 候補件数: `未確認`")
+  retrieval_cols = st.columns(2)
+  save_retrieval_manifest = retrieval_cols[0].button("現在の取得runを保存", use_container_width=True)
+  load_saved_retrieval_manifest = retrieval_cols[1].button("最新の保存済み取得結果を読み込む", use_container_width=True)
 
   upload_left, upload_right = st.columns(2)
   with upload_left:
@@ -795,7 +818,10 @@ def render_sources_tab(
   st.write(f"- 現在のデータソース: {source_info['label']}")
   st.write(f"- 読み込み件数: {source_info['loaded_count']}件")
   if source_info.get("provisional_scoring"):
-    st.caption("アップロードデータは Watch Profile に基づく仮スコアリング済みです。既存スコアがある場合はその値を尊重します。")
+    if str(source_info.get("mode", "") or "") == "retrieval_saved":
+      st.caption("取得済み候補は既存の統合・重複除去・ランキング処理を再実行した結果です。デモ/CSV/JSONは混在していません。")
+    else:
+      st.caption("アップロードデータは Watch Profile に基づく仮スコアリング済みです。既存スコアがある場合はその値を尊重します。")
   integration_summary = dict(source_info.get("integration_summary", {}) or {})
   if integration_summary:
     st.markdown("### 統合・重複除去サマリー")
@@ -1022,6 +1048,8 @@ def render_sources_tab(
     )
 
   return {
+    "save_retrieval_manifest": save_retrieval_manifest,
+    "load_saved_retrieval_manifest": load_saved_retrieval_manifest,
     "regenerate_search_plan": regenerate_from_sources,
     "add_manual_query": add_manual_query_clicked,
     "delete_manual_query_ids": delete_manual_query_ids,

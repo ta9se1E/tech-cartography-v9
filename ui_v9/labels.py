@@ -25,6 +25,8 @@ ACTION_LABELS_JA = {
 SOURCE_MODE_LABELS_JA = {
   "demo": "デモ",
   "staged": "準備中",
+  "live": "現セッション取得済み",
+  "loaded": "保存済み再読込",
   "off": "停止中",
 }
 
@@ -32,6 +34,7 @@ DATA_SOURCE_MODE_LABELS_JA = {
   "demo": "デモデータ",
   "csv": "CSVアップロード",
   "json": "JSONアップロード",
+  "retrieval_saved": "取得済みデータ",
 }
 
 SCORE_LEVEL_LABELS_JA = {

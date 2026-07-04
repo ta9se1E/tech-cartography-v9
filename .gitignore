@@ -22,4 +22,5 @@ data/v9_runs/patent_query_runs/
 data/v9_runs/patent_retrieval_runs/
 data/v9_runs/paper_retrieval_runs/
 data/v9_runs/web_company_retrieval_runs/
+data/v9_runs/retrieval_manifests/
 !data/v9_runs/.gitkeep
