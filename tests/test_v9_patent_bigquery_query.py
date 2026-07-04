@@ -111,6 +111,13 @@ def test_sql_uses_parameter_placeholders() -> None:
   assert "LIMIT @max_results" in sql
 
 
+def test_sql_avoids_contains_substr_with_dynamic_terms() -> None:
+  plan = build_unified_search_plan(_profile())
+  sql = build_patent_bigquery_preview(plan, _profile(), config=_safety_config())["sql"]
+  assert "CONTAINS_SUBSTR" not in sql
+  assert "STRPOS(" in sql
+
+
 def test_sql_does_not_inline_malicious_keyword() -> None:
   profile = _profile()
   profile["keywords"]["core_en"] = ["PAN'; DROP TABLE x; --"]

@@ -164,7 +164,7 @@ SELECT
       AND term != ''
       AND (
         (LOWER(term) = 'pan' AND REGEXP_CONTAINS({search_text_expr}, r'\\bpan\\b'))
-        OR (LOWER(term) != 'pan' AND CONTAINS_SUBSTR({search_text_expr}, LOWER(term)))
+        OR (LOWER(term) != 'pan' AND STRPOS({search_text_expr}, LOWER(term)) > 0)
       )
   ) AS matched_keyword_count
 FROM {PUBLICATIONS_TABLE}
@@ -181,7 +181,7 @@ WHERE
         AND term != ''
         AND (
           (LOWER(term) = 'pan' AND REGEXP_CONTAINS({search_text_expr}, r'\\bpan\\b'))
-          OR (LOWER(term) != 'pan' AND CONTAINS_SUBSTR({search_text_expr}, LOWER(term)))
+          OR (LOWER(term) != 'pan' AND STRPOS({search_text_expr}, LOWER(term)) > 0)
         )
     )
     OR EXISTS (
@@ -199,7 +199,7 @@ WHERE
     FROM UNNEST(@exclude_terms) AS term
     WHERE term IS NOT NULL
       AND term != ''
-      AND CONTAINS_SUBSTR({search_text_expr}, LOWER(term))
+      AND STRPOS({search_text_expr}, LOWER(term)) > 0
   )
 ORDER BY
   is_seed_publication DESC,
@@ -755,9 +755,9 @@ def _assignees_expr() -> str:
 
 def _inventors_expr() -> str:
   return (
-    "(SELECT STRING_AGG(DISTINCT inv.name, '; ' ORDER BY inv.name) "
+    "(SELECT STRING_AGG(DISTINCT inv, '; ' ORDER BY inv) "
     "FROM UNNEST(IFNULL(inventor, [])) AS inv "
-    "WHERE inv.name IS NOT NULL AND inv.name != '')"
+    "WHERE inv IS NOT NULL AND inv != '')"
   )
 
 
