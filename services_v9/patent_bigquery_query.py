@@ -9,11 +9,13 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Callable
 
-from tech_cartography.retrieval.bigquery_env import bytes_to_gb, estimate_usd_from_bytes, resolve_project_id
-from tech_cartography.services.v8_bigquery_safety import (
+from .patent_bigquery_safety import (
   BigQuerySafetyConfig,
   assert_dry_run_allowed,
   assert_execute_allowed,
+  bytes_to_gb,
+  estimate_usd_from_bytes,
+  resolve_project_id,
 )
 
 from .persistence import ensure_v9_run_dirs

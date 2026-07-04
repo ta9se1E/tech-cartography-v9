@@ -13,8 +13,6 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Callable
 
-from tech_cartography.domain.paper_record import PaperRecord
-
 from .persistence import ensure_v9_run_dirs
 from .watch_profile_schema import migrate_watch_profile, normalize_terms
 
@@ -413,26 +411,35 @@ def _normalize_openalex_work(
   record_stage: str,
   retrieval_mode: str,
 ) -> dict[str, Any]:
-  record = PaperRecord.from_openalex_work(work)
+  doi = _extract_doi(work)
+  openalex_id = _extract_openalex_id(work)
+  landing_page_url = _extract_landing_page(work)
+  pdf_url = _extract_pdf_url(work)
+  title = str(work.get("display_name") or work.get("title") or "").strip()
+  abstract = str(work.get("abstract") or _reconstruct_abstract_from_inverted_index(work.get("abstract_inverted_index")) or "").strip()
+  authors = _extract_authors(work)
+  source_name = _extract_source_name(work)
+  display_url = _build_display_url_from_parts(landing_page_url, doi, pdf_url, openalex_id)
+  publication_year = work.get("publication_year")
   institutions = _extract_institutions(work)
   topics = _extract_topics(work)
   publication_date = str(work.get("publication_date") or "") or (
-    f"{int(record.publication_year):04d}-01-01" if record.publication_year else ""
+    f"{int(publication_year):04d}-01-01" if publication_year else ""
   )
   return {
-    "work_id": str(record.openalex_id or record.paper_id or work.get("id") or "").strip(),
-    "doi": str(record.doi or "").strip(),
-    "title": str(record.title or "").strip(),
-    "abstract": str(record.abstract or "").strip(),
-    "authors": list(record.authors),
+    "work_id": str(openalex_id or work.get("id") or doi or title or "unknown").strip(),
+    "doi": str(doi or "").strip(),
+    "title": title,
+    "abstract": abstract,
+    "authors": authors,
     "institutions": institutions,
     "publication_date": publication_date,
-    "source_journal": str(record.source_name or "").strip(),
-    "cited_by_count": int(record.cited_by_count or 0),
+    "source_journal": source_name,
+    "cited_by_count": int(work.get("cited_by_count") or 0),
     "topics": topics,
-    "open_access": bool(record.is_open_access),
+    "open_access": bool((work.get("open_access") or {}).get("is_oa")),
     "original_language": str(work.get("language") or "").strip(),
-    "source_url": str(record.display_url or "").strip(),
+    "source_url": str(display_url or "").strip(),
     "query_id": query_id,
     "retrieval_run_id": retrieval_run_id,
     "provider_status": "success",
@@ -456,6 +463,97 @@ def _extract_institutions(work: dict[str, Any]) -> list[str]:
       seen.add(key)
       names.append(name)
   return names
+
+
+def _reconstruct_abstract_from_inverted_index(inverted_index: dict[str, list[int]] | None) -> str | None:
+  if not inverted_index:
+    return None
+  positions: list[tuple[int, str]] = []
+  for word, indices in inverted_index.items():
+    for index in indices:
+      positions.append((index, word))
+  if not positions:
+    return None
+  positions.sort(key=lambda item: item[0])
+  return " ".join(word for _, word in positions)
+
+
+def _extract_doi(work: dict[str, Any]) -> str | None:
+  doi = work.get("doi")
+  if doi:
+    return str(doi).replace("https://doi.org/", "")
+  ids = work.get("ids") or {}
+  raw = ids.get("doi")
+  if raw:
+    return str(raw).replace("https://doi.org/", "")
+  return None
+
+
+def _extract_openalex_id(work: dict[str, Any]) -> str | None:
+  openalex_id = work.get("id")
+  if openalex_id:
+    return str(openalex_id)
+  ids = work.get("ids") or {}
+  return str(ids.get("openalex") or "") or None
+
+
+def _extract_landing_page(work: dict[str, Any]) -> str | None:
+  primary = work.get("primary_location") or {}
+  landing = primary.get("landing_page_url")
+  if landing:
+    return str(landing)
+  for location in work.get("locations") or []:
+    if location.get("landing_page_url"):
+      return str(location["landing_page_url"])
+  return None
+
+
+def _extract_pdf_url(work: dict[str, Any]) -> str | None:
+  primary = work.get("primary_location") or {}
+  pdf = primary.get("pdf_url")
+  if pdf:
+    return str(pdf)
+  open_access = work.get("open_access") or {}
+  if open_access.get("oa_url"):
+    return str(open_access["oa_url"])
+  for location in work.get("locations") or []:
+    if location.get("pdf_url"):
+      return str(location["pdf_url"])
+  return None
+
+
+def _build_display_url_from_parts(
+  landing_page_url: str | None,
+  doi: str | None,
+  pdf_url: str | None,
+  openalex_id: str | None,
+) -> str | None:
+  if landing_page_url:
+    return landing_page_url
+  if doi:
+    clean = doi.replace("https://doi.org/", "")
+    return f"https://doi.org/{clean}"
+  if pdf_url:
+    return pdf_url
+  if openalex_id:
+    if openalex_id.startswith("http"):
+      return openalex_id
+    return f"https://openalex.org/{openalex_id.split('/')[-1]}"
+  return None
+
+
+def _extract_authors(work: dict[str, Any]) -> list[str]:
+  authors = [
+    str((author.get("author") or {}).get("display_name") or author.get("display_name") or "")
+    for author in (work.get("authorships") or [])
+  ]
+  return [name for name in authors if name]
+
+
+def _extract_source_name(work: dict[str, Any]) -> str:
+  primary = work.get("primary_location") or {}
+  source = primary.get("source") or {}
+  return str(source.get("display_name") or "").strip()
 
 
 def _extract_topics(work: dict[str, Any]) -> list[str]:

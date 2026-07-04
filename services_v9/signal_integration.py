@@ -8,8 +8,6 @@ from datetime import date, datetime
 from typing import Any, Iterable, Sequence
 from urllib.parse import urlparse
 
-from tech_cartography.web_signals.schema import extract_source_domain
-
 from .signal_scoring import classify_action, classify_status
 from .watch_profile_schema import normalize_publication_number, normalize_terms
 
@@ -28,6 +26,17 @@ _SOURCE_QUALITY_SCORES = {
   "low": 0.35,
   "unknown": 0.45,
 }
+
+
+def extract_source_domain(source_url: str) -> str:
+  text = str(source_url or "").strip()
+  if not text:
+    return ""
+  parsed = urlparse(text if "://" in text else f"https://{text}")
+  host = (parsed.netloc or parsed.path or "").lower().strip()
+  if host.startswith("www."):
+    host = host[4:]
+  return host
 
 
 def integrate_multi_source_signals(

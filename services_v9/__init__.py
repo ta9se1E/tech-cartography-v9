@@ -1,168 +1,200 @@
-"""Lightweight services for Tech Cartography v9."""
+"""Lightweight services for Tech Cartography v9.
 
-from .demo_data import load_demo_signals, load_demo_watch_profile
-from .digest_export import build_weekly_digest_markdown, signals_to_csv, signals_to_json
-from .persistence import (
-  ensure_v9_run_dirs,
-  get_v9_runs_dir,
-  list_snapshots,
-  load_snapshot,
-  load_watch_profile,
-  save_digest_files,
-  save_snapshot,
-  save_watch_profile,
-)
-from .patent_bigquery_query import (
-  FORBIDDEN_SQL_TOKENS,
-  PUBLICATIONS_TABLE,
-  build_patent_candidates_csv,
-  build_patent_bigquery_preview,
-  build_patent_bigquery_sql,
-  build_patent_query_parameters,
-  build_patent_validation_csv,
-  execute_patent_bigquery_retrieval,
-  run_patent_bigquery_dry_run,
-  save_patent_dry_run_artifacts,
-  save_patent_retrieval_artifacts,
-  validate_patent_bigquery_request,
-)
-from .paper_openalex_retrieval import (
-  OPENALEX_WORKS_API,
-  SEMANTIC_SCHOLAR_FALLBACK_INTERFACE,
-  build_openalex_paper_candidates_csv,
-  build_openalex_paper_preview,
-  build_openalex_search_url,
-  build_openalex_validation_csv,
-  execute_openalex_paper_retrieval,
-  save_openalex_paper_retrieval_artifacts,
-  validate_openalex_request,
-)
-from .web_company_retrieval import (
-  CONTENT_ACCESS_VALUES,
-  DEFAULT_SUMMARY_TOP_N,
-  DEFAULT_VERIFICATION_LIMIT,
-  DISCOVERY_SHORTAGE_THRESHOLD,
-  PROVIDER_GOOGLE_GROUNDING,
-  PROVIDER_TAVILY,
-  build_global_web_retrieval_preview,
-  build_web_company_candidates_csv,
-  execute_global_web_retrieval,
-  save_global_web_retrieval_artifacts,
-  validate_global_web_retrieval_request,
-)
-from .query_preview import (
-  build_company_query_preview,
-  build_paper_query_preview,
-  build_patent_query_preview,
-  build_query_preview_bundle,
-  build_web_query_preview,
-)
-from .global_web_plan import (
-  build_global_web_country_coverage,
-  build_global_web_plan_validation_rows,
-  build_global_web_search_plan,
-  summarize_global_web_search_plan_ja,
-  validate_global_web_search_plan,
-)
-from .global_web_plan_export import (
-  build_global_web_country_coverage_csv,
-  build_global_web_search_plan_csv,
-  build_global_web_search_plan_markdown,
-  build_global_web_validation_csv,
-  export_global_web_search_plan,
-)
-from .global_web_plan_schema import (
-  COUNTRY_PROFILES_PATH,
-  DEFAULT_GLOBAL_WEB_COUNTRY_CODES,
-  DEFAULT_GLOBAL_WEB_INTENTS,
-  GLOBAL_WEB_PLAN_SCHEMA_VERSION,
-  build_country_profile_map,
-  load_global_web_country_profiles,
-  validate_country_profiles,
-)
-from .review_state import (
-  REVIEW_DECISIONS,
-  REVIEW_PRIORITIES,
-  apply_review_to_signal,
-  apply_reviews_to_signals,
-  default_review_state,
-  normalize_review_decision,
-  normalize_review_priority,
-  normalize_review_state,
-  sort_signals_by_review,
-  summarize_reviews,
-)
-from .retrieval_run_store import (
-  RETRIEVAL_MANIFEST_SCHEMA_VERSION,
-  build_retrieval_run_manifest,
-  build_theme_id,
-  discover_retrieval_runs,
-  find_latest_compatible_manifest,
-  load_candidates_from_manifest,
-  load_paper_retrieval_artifact,
-  load_patent_retrieval_artifact,
-  load_retrieval_run_manifest,
-  load_web_company_retrieval_artifact,
-  save_retrieval_run_manifest,
-  stable_payload_signature,
-)
-from .search_plan import (
-  DEFAULT_SOURCE_LIMITS,
-  DEFAULT_TOTAL_LIMIT,
-  batch_terms,
-  build_company_search_plan,
-  build_paper_search_plan,
-  build_patent_search_plan,
-  build_unified_search_plan,
-  build_web_search_plan,
-  normalize_source_limits,
-  normalize_total_limit,
-  summarize_search_plan_ja,
-  validate_search_plan,
-)
-from .signal_loader import (
-  enrich_signals_with_profile,
-  load_signals_from_csv_text,
-  load_signals_from_json_text,
-  normalize_signal_record,
-  normalize_signal_records,
-  prepare_uploaded_signals,
-  score_signal_with_profile,
-)
-from .signal_integration import (
-  apply_signal_change_tracking,
-  build_source_top_signals,
-  deduplicate_signal_candidates,
-  integrate_multi_source_signals,
-  rank_integrated_signals,
-)
-from .score_explainer import (
-  attach_score_explanations,
-  build_signal_text_blob,
-  explain_action,
-  explain_signal_score,
-  find_keyword_hits,
-)
-from .signal_template import build_csv_template, build_json_template
-from .signal_models import Signal, WatchProfile
-from .signal_scoring import (
-  apply_watch_profile_suggestions,
-  classify_action,
-  classify_status,
-  select_diverse_top_signals,
-)
-from .snapshot_diff import apply_snapshot_status, compare_snapshots
-from .watch_profile_schema import (
-  build_profile_from_form,
-  default_bilingual_watch_profile,
-  migrate_watch_profile,
-  normalize_publication_number,
-  normalize_terms,
-  parse_publication_numbers,
-  parse_terms,
-  split_terms,
-  watch_profile_summary,
-)
+This package intentionally avoids eager provider imports so plain
+`streamlit run app.py` works without requiring `PYTHONPATH=.:src`.
+"""
+
+from __future__ import annotations
+
+from importlib import import_module
+
+_MODULE_EXPORTS: dict[str, list[str]] = {
+  ".demo_data": [
+    "load_demo_signals",
+    "load_demo_watch_profile",
+  ],
+  ".digest_export": [
+    "build_weekly_digest_markdown",
+    "signals_to_csv",
+    "signals_to_json",
+  ],
+  ".persistence": [
+    "ensure_v9_run_dirs",
+    "get_v9_runs_dir",
+    "list_snapshots",
+    "load_snapshot",
+    "load_watch_profile",
+    "save_digest_files",
+    "save_snapshot",
+    "save_watch_profile",
+  ],
+  ".patent_bigquery_query": [
+    "FORBIDDEN_SQL_TOKENS",
+    "PUBLICATIONS_TABLE",
+    "build_patent_candidates_csv",
+    "build_patent_bigquery_preview",
+    "build_patent_bigquery_sql",
+    "build_patent_query_parameters",
+    "build_patent_validation_csv",
+    "execute_patent_bigquery_retrieval",
+    "run_patent_bigquery_dry_run",
+    "save_patent_dry_run_artifacts",
+    "save_patent_retrieval_artifacts",
+    "validate_patent_bigquery_request",
+  ],
+  ".paper_openalex_retrieval": [
+    "OPENALEX_WORKS_API",
+    "SEMANTIC_SCHOLAR_FALLBACK_INTERFACE",
+    "build_openalex_paper_candidates_csv",
+    "build_openalex_paper_preview",
+    "build_openalex_search_url",
+    "build_openalex_validation_csv",
+    "execute_openalex_paper_retrieval",
+    "save_openalex_paper_retrieval_artifacts",
+    "validate_openalex_request",
+  ],
+  ".web_company_retrieval": [
+    "CONTENT_ACCESS_VALUES",
+    "DEFAULT_SUMMARY_TOP_N",
+    "DEFAULT_VERIFICATION_LIMIT",
+    "DISCOVERY_SHORTAGE_THRESHOLD",
+    "PROVIDER_GOOGLE_GROUNDING",
+    "PROVIDER_TAVILY",
+    "build_global_web_retrieval_preview",
+    "build_web_company_candidates_csv",
+    "execute_global_web_retrieval",
+    "save_global_web_retrieval_artifacts",
+    "validate_global_web_retrieval_request",
+  ],
+  ".query_preview": [
+    "build_company_query_preview",
+    "build_paper_query_preview",
+    "build_patent_query_preview",
+    "build_query_preview_bundle",
+    "build_web_query_preview",
+  ],
+  ".global_web_plan": [
+    "build_global_web_country_coverage",
+    "build_global_web_plan_validation_rows",
+    "build_global_web_search_plan",
+    "summarize_global_web_search_plan_ja",
+    "validate_global_web_search_plan",
+  ],
+  ".global_web_plan_export": [
+    "build_global_web_country_coverage_csv",
+    "build_global_web_search_plan_csv",
+    "build_global_web_search_plan_markdown",
+    "build_global_web_validation_csv",
+    "export_global_web_search_plan",
+  ],
+  ".global_web_plan_schema": [
+    "COUNTRY_PROFILES_PATH",
+    "DEFAULT_GLOBAL_WEB_COUNTRY_CODES",
+    "DEFAULT_GLOBAL_WEB_INTENTS",
+    "GLOBAL_WEB_PLAN_SCHEMA_VERSION",
+    "build_country_profile_map",
+    "load_global_web_country_profiles",
+    "validate_country_profiles",
+  ],
+  ".review_state": [
+    "REVIEW_DECISIONS",
+    "REVIEW_PRIORITIES",
+    "apply_review_to_signal",
+    "apply_reviews_to_signals",
+    "default_review_state",
+    "normalize_review_decision",
+    "normalize_review_priority",
+    "normalize_review_state",
+    "sort_signals_by_review",
+    "summarize_reviews",
+  ],
+  ".retrieval_run_store": [
+    "RETRIEVAL_MANIFEST_SCHEMA_VERSION",
+    "build_retrieval_run_manifest",
+    "build_theme_id",
+    "discover_retrieval_runs",
+    "find_latest_compatible_manifest",
+    "load_candidates_from_manifest",
+    "load_paper_retrieval_artifact",
+    "load_patent_retrieval_artifact",
+    "load_retrieval_run_manifest",
+    "load_web_company_retrieval_artifact",
+    "save_retrieval_run_manifest",
+    "stable_payload_signature",
+  ],
+  ".search_plan": [
+    "DEFAULT_SOURCE_LIMITS",
+    "DEFAULT_TOTAL_LIMIT",
+    "batch_terms",
+    "build_company_search_plan",
+    "build_paper_search_plan",
+    "build_patent_search_plan",
+    "build_unified_search_plan",
+    "build_web_search_plan",
+    "normalize_source_limits",
+    "normalize_total_limit",
+    "summarize_search_plan_ja",
+    "validate_search_plan",
+  ],
+  ".signal_loader": [
+    "enrich_signals_with_profile",
+    "load_signals_from_csv_text",
+    "load_signals_from_json_text",
+    "normalize_signal_record",
+    "normalize_signal_records",
+    "prepare_uploaded_signals",
+    "score_signal_with_profile",
+  ],
+  ".signal_integration": [
+    "apply_signal_change_tracking",
+    "build_source_top_signals",
+    "deduplicate_signal_candidates",
+    "integrate_multi_source_signals",
+    "rank_integrated_signals",
+  ],
+  ".score_explainer": [
+    "attach_score_explanations",
+    "build_signal_text_blob",
+    "explain_action",
+    "explain_signal_score",
+    "find_keyword_hits",
+  ],
+  ".signal_template": [
+    "build_csv_template",
+    "build_json_template",
+  ],
+  ".signal_models": [
+    "Signal",
+    "WatchProfile",
+  ],
+  ".signal_scoring": [
+    "apply_watch_profile_suggestions",
+    "classify_action",
+    "classify_status",
+    "select_diverse_top_signals",
+  ],
+  ".snapshot_diff": [
+    "apply_snapshot_status",
+    "compare_snapshots",
+  ],
+  ".watch_profile_schema": [
+    "build_profile_from_form",
+    "default_bilingual_watch_profile",
+    "migrate_watch_profile",
+    "normalize_publication_number",
+    "normalize_terms",
+    "parse_publication_numbers",
+    "parse_terms",
+    "split_terms",
+    "watch_profile_summary",
+  ],
+}
+
+_EXPORTS = {
+  name: module_path
+  for module_path, names in _MODULE_EXPORTS.items()
+  for name in names
+}
 
 __all__ = [
   "Signal",
@@ -303,3 +335,17 @@ __all__ = [
   "validate_search_plan",
   "watch_profile_summary",
 ]
+
+
+def __getattr__(name: str):
+  module_path = _EXPORTS.get(name)
+  if module_path is None:
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+  module = import_module(module_path, __name__)
+  value = getattr(module, name)
+  globals()[name] = value
+  return value
+
+
+def __dir__() -> list[str]:
+  return sorted(set(list(globals()) + __all__))
