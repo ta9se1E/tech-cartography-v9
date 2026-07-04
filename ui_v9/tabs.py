@@ -78,6 +78,206 @@ def _render_profile_summary(summary: dict[str, object]) -> None:
   st.write(f"- 追加候補公報: {counts.get('candidate_publications', 0)}件")
 
 
+def _search_country_enabled_key(country_code: str) -> str:
+  return f"ui_search_country_enabled_{country_code}"
+
+
+def _search_country_priority_key(country_code: str) -> str:
+  return f"ui_search_country_priority_{country_code}"
+
+
+def _search_country_official_key(country_code: str) -> str:
+  return f"ui_search_country_official_{country_code}"
+
+
+def _search_country_fallback_key(country_code: str) -> str:
+  return f"ui_search_country_fallback_{country_code}"
+
+
+def _search_intent_enabled_key(intent: str) -> str:
+  return f"ui_search_intent_enabled_{intent}"
+
+
+def _render_search_plan_validation(errors: list[str]) -> None:
+  st.markdown("### validation結果")
+  if not errors:
+    st.success("validation passed")
+    return
+  for error in errors:
+    st.warning(str(error))
+
+
+def _render_search_plan_provider_routing(rows: list[dict[str, object]]) -> None:
+  st.markdown("### Provider routing")
+  for row in rows:
+    st.write(
+      f"- {row.get('country_region_code', 'n/a')}: "
+      f"primary=`{row.get('provider_primary', '')}` / "
+      f"fallback=`{row.get('provider_fallback', '') or 'なし'}` / "
+      f"verification=`{row.get('verification_provider', '')}`"
+    )
+
+
+def _render_country_coverage(coverage_rows: list[dict[str, object]]) -> None:
+  st.markdown("### 国・地域coverage")
+  for row in coverage_rows:
+    st.write(
+      f"- {row.get('country_region_code', 'n/a')} {row.get('country_region_name_ja', '')} | "
+      f"enabled: {bool_label_ja(bool(row.get('enabled', True)))} | "
+      f"priority: {row.get('priority', 0)} | "
+      f"query: {row.get('query_count', 0)}件 | "
+      f"enabled query: {row.get('enabled_query_count', 0)}件"
+    )
+
+
+def _render_generated_queries(source_key: str, queries: list[dict[str, object]]) -> None:
+  st.write("**自動生成query**")
+  if not queries:
+    st.caption("自動生成queryはありません。")
+    return
+  for query in queries:
+    if source_key == "global_web":
+      st.write(
+        f"- `{query.get('query_id', '')}` | origin=`{query.get('origin', 'generated')}` | "
+        f"{query.get('country_region_code', '')} / {query.get('web_intent', '')} / "
+        f"{query.get('result_bucket', '')} / {query.get('priority', '')} / {query.get('query_local', '')}"
+      )
+    else:
+      st.write(
+        f"- `{query.get('query_id', '')}` | origin=`{query.get('origin', 'generated')}` | "
+        f"{query.get('strategy', '')} / {query.get('language', '')} / {query.get('query_text', '')}"
+      )
+
+
+def _render_manual_queries(source_key: str, queries: list[dict[str, object]]) -> list[str]:
+  delete_query_ids: list[str] = []
+  st.write("**手動query**")
+  if not queries:
+    st.caption("手動queryはまだありません。")
+    return delete_query_ids
+  for query in queries:
+    query_id = str(query.get("query_id", "") or "")
+    columns = st.columns([6, 1])
+    with columns[0]:
+      if source_key == "global_web":
+        st.write(
+          f"- `{query_id}` | origin=`manual` | {query.get('country_region_code', '')} / "
+          f"{query.get('web_intent', '')} / {query.get('result_bucket', '')} / {query.get('query_local', '')}"
+        )
+      else:
+        st.write(
+          f"- `{query_id}` | origin=`manual` | {query.get('strategy', '')} / "
+          f"{query.get('language', '')} / {query.get('query_text', '')}"
+        )
+    with columns[1]:
+      if st.button("削除", key=f"delete_manual_query_{query_id}", width="stretch"):
+        delete_query_ids.append(query_id)
+  return delete_query_ids
+
+
+def _render_source_plan_expander(
+  label: str,
+  source_key: str,
+  source_plan: dict[str, Any],
+  manual_queries: list[dict[str, object]],
+) -> list[str]:
+  delete_query_ids: list[str] = []
+  with st.expander(label, expanded=False):
+    st.caption(f"最大件数: {source_plan.get('limit', 0)}件")
+    notes = list(source_plan.get("notes", []) or [])
+    for note in notes:
+      st.write(f"- {note}")
+    _render_generated_queries(source_key, list(source_plan.get("queries", []) or []))
+    delete_query_ids.extend(_render_manual_queries(source_key, manual_queries))
+  return delete_query_ids
+
+
+def _render_patent_bigquery_preview(
+  patent_bigquery_state: dict[str, Any],
+  patent_bigquery_status_message: str | None = None,
+  patent_retrieval_status_message: str | None = None,
+) -> dict[str, bool]:
+  preview = dict(patent_bigquery_state.get("preview", {}) or {})
+  request = dict(preview.get("request", {}) or {})
+  parameters = list(preview.get("parameters", []) or [])
+  validation_rows = list(preview.get("validation_rows", []) or [])
+  dry_run_result = dict(patent_bigquery_state.get("dry_run_result", {}) or {})
+  retrieval_result = dict(patent_bigquery_state.get("retrieval_result", {}) or {})
+  approved = bool(patent_bigquery_state.get("approved", False))
+
+  st.markdown("### Patent BigQuery SQL Preview")
+  _show_status_message(patent_bigquery_status_message)
+  _show_status_message(patent_retrieval_status_message)
+  st.caption("dry-run は明示ボタン時だけ実行します。ページ表示や Streamlit rerun だけでは BigQuery は呼びません。")
+  if not request:
+    st.warning("特許検索計画が未生成のため、SQL Preview を作成できません。")
+    return {"run_patent_dry_run": False, "approve_patent_query": False, "run_patent_retrieval": False}
+
+  query_options = list(preview.get("query_options", []) or [])
+  if query_options:
+    st.selectbox("特許query_id", options=query_options, key="ui_patent_bigquery_query_id")
+  st.number_input("特許dry-run max results", min_value=1, max_value=1000, step=10, key="ui_patent_bigquery_max_results")
+
+  st.write(f"- query_id: `{request.get('query_id', '')}`")
+  st.write(f"- strategy: `{request.get('strategy', '')}` / language: `{request.get('language', '')}`")
+  st.write(f"- publication window: `{request.get('publication_date_from', 0)}` - `{request.get('publication_date_to', 0)}`")
+  st.write(f"- maximum_bytes_billed: `{request.get('maximum_bytes_billed', 0)}`")
+  st.write(f"- 実行禁止フラグ: `{bool_label_ja(not bool(request.get('execute_enabled', False)))}`")
+  st.write(f"- 承認状態: `{'承認済み' if approved else '未承認'}`")
+
+  with st.expander("parameter preview", expanded=False):
+    st.json(parameters)
+  with st.expander("SQL Preview", expanded=False):
+    st.code(str(preview.get("sql", "") or ""), language="sql")
+
+  st.write("**query validation**")
+  for row in validation_rows:
+    status = str(row.get("status", "") or "")
+    message = str(row.get("message", "") or "")
+    if status == "error":
+      st.error(message)
+    elif status == "warning":
+      st.warning(message)
+    else:
+      st.success(message)
+
+  if dry_run_result:
+    st.write("**最新 dry-run 結果**")
+    dry_cols = st.columns(4)
+    dry_cols[0].metric("estimated bytes", f"{int(dry_run_result.get('estimated_bytes', 0) or 0)}")
+    dry_cols[1].metric("estimated GB", f"{float(dry_run_result.get('estimated_gb', 0.0) or 0.0):.4f}")
+    dry_cols[2].metric("estimated cost", f"${float(dry_run_result.get('estimated_cost_usd', 0.0) or 0.0):.6f}")
+    dry_cols[3].metric(
+      "max bytes exceeded",
+      bool_label_ja(bool(dry_run_result.get("would_be_blocked_by_max_bytes", False))),
+    )
+    if dry_run_result.get("error"):
+      st.warning(str(dry_run_result.get("error")))
+
+  if retrieval_result:
+    st.write("**最新取得結果**")
+    st.write(f"- provider status: `{retrieval_result.get('provider_status', '')}`")
+    st.write(f"- retrieval_run_id: `{retrieval_result.get('retrieval_run_id', '')}`")
+    st.write(f"- BigQuery job ID: `{retrieval_result.get('bigquery_job_id', '') or 'なし'}`")
+    st.write(f"- staged rows: `{retrieval_result.get('rows_retrieved', 0)}`")
+    if retrieval_result.get("error"):
+      st.warning(str(retrieval_result.get("error")))
+
+  button_left, button_mid, button_right = st.columns(3)
+  with button_left:
+    run_patent_dry_run = st.button("特許BigQuery dry-runを実行", key="btn_patent_bigquery_dry_run", width="stretch")
+  with button_mid:
+    approve_patent_query = st.button("このqueryを承認", key="btn_patent_bigquery_approve", width="stretch")
+  with button_right:
+    run_patent_retrieval = st.button("承認済み特許取得を実行", key="btn_patent_bigquery_execute", width="stretch")
+
+  return {
+    "run_patent_dry_run": run_patent_dry_run,
+    "approve_patent_query": approve_patent_query,
+    "run_patent_retrieval": run_patent_retrieval,
+  }
+
+
 def _signal_lookup_key(signal: Signal | dict[str, Any]) -> str:
   if isinstance(signal, Signal):
     signal_id = str(signal.id or "").strip()
@@ -312,7 +512,12 @@ def _select_unreviewed_signals(
   return unreviewed[:max(limit, 0)]
 
 
-def render_theme_setup_tab(profile_summary: dict[str, object], profile_status_message: str | None = None) -> dict[str, bool]:
+def render_theme_setup_tab(
+  profile_summary: dict[str, object],
+  search_plan_state: dict[str, Any],
+  profile_status_message: str | None = None,
+  search_plan_status_message: str | None = None,
+) -> dict[str, bool]:
   st.subheader("Tech Cartography v9")
   st.caption("軽量R&Dシグナル監視エージェント")
 
@@ -347,6 +552,7 @@ def render_theme_setup_tab(profile_summary: dict[str, object], profile_status_me
   with upper_right:
     st.checkbox("デモモード", key="ui_demo_mode_input")
     st.markdown("**外部API:** 停止中")
+    st.markdown("**外部検索:** OFF")
     st.markdown("**実行モード:** ローカルのデモデータ / アップロードCSV/JSONのみ")
     st.markdown("**メール / スケジューラ:** プレビューのみ / 停止中")
     st.caption("現在はローカル実行のみです。BigQuery、OpenAlex、Web検索、Gemini APIは実行しません。")
@@ -391,17 +597,35 @@ def render_theme_setup_tab(profile_summary: dict[str, object], profile_status_me
       help="カンマ区切り・改行区切りのどちらでも入力できます。",
     )
 
-  button_left, button_right = st.columns(2)
+  button_left, button_mid, button_right = st.columns(3)
   with button_left:
     save_clicked = st.button("監視プロファイルを保存", key="btn_theme_save_profile", width="stretch")
-  with button_right:
+  with button_mid:
     load_clicked = st.button("保存済み監視プロファイルを読み込む", key="btn_theme_load_profile", width="stretch")
+  with button_right:
+    regenerate_clicked = st.button("検索計画を再生成", key="btn_theme_regenerate_search_plan", width="stretch")
 
   _show_status_message(profile_status_message)
+  _show_status_message(search_plan_status_message)
+  st.markdown("### 検索計画状態")
+  st.write(f"- 最終生成: {search_plan_state.get('generated_at', '未生成')}")
+  st.write(
+    f"- Watch Profile signature一致: "
+    f"{bool_label_ja(not bool(search_plan_state.get('profile_signature_changed', False)))}"
+  )
+  st.write(
+    f"- 設定変更の未反映: "
+    f"{bool_label_ja(bool(search_plan_state.get('settings_signature_changed', False)))}"
+  )
+  if search_plan_state.get("stale"):
+    st.warning("現在の検索計画は最新のWatch Profileまたは設定をまだ反映していません。")
+  else:
+    st.success("現在の検索計画は最新の入力と一致しています。")
   _render_profile_summary(profile_summary)
   return {
     "save_profile": save_clicked,
     "load_profile": load_clicked,
+    "regenerate_search_plan": regenerate_clicked,
   }
 
 
@@ -411,7 +635,12 @@ def render_sources_tab(
   source_info: dict[str, object],
   csv_template_text: str,
   json_template_text: str,
-) -> None:
+  search_plan_state: dict[str, Any],
+  search_plan_status_message: str | None = None,
+  patent_bigquery_state: dict[str, Any] | None = None,
+  patent_bigquery_status_message: str | None = None,
+  patent_retrieval_status_message: str | None = None,
+) -> dict[str, object]:
   st.subheader("情報源")
   st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
   st.radio(
@@ -471,6 +700,179 @@ def render_sources_tab(
   for item in operation_rows:
     label = type_label_ja(item["label"]) if item["label"] in {"patent", "paper", "web", "company"} else item["label"]
     st.write(f"- {label}: {source_mode_label_ja(item['mode'])}")
+
+  plan = dict(search_plan_state.get("plan", {}) or {})
+  plan_summary = dict(search_plan_state.get("summary", {}) or {})
+  source_plans = dict(plan.get("plans", {}) or {})
+  global_web_plan = dict(plan.get("global_web_plan", {}) or {})
+  manual_queries = list(search_plan_state.get("manual_queries", []) or [])
+  manual_queries_by_source: dict[str, list[dict[str, object]]] = {
+    "patent": [query for query in manual_queries if str(query.get("source", "") or "") == "patent"],
+    "paper": [query for query in manual_queries if str(query.get("source", "") or "") == "paper"],
+    "web": [query for query in manual_queries if str(query.get("source", "") or "") == "web"],
+    "company": [query for query in manual_queries if str(query.get("source", "") or "") == "company"],
+    "global_web": [query for query in manual_queries if str(query.get("source", "") or "") == "global_web"],
+  }
+
+  st.markdown("### 統合検索計画サマリー")
+  _show_status_message(search_plan_status_message)
+  st.info("ここで表示するのは検索実行前のPreviewです。ページを開くだけでは外部APIは実行しません。")
+  st.code(str(plan_summary.get("plan_summary_text", "検索計画はまだ生成されていません。")))
+  summary_metrics = st.columns(4)
+  summary_metrics[0].metric("Discovery query数", f"{int(plan_summary.get('discovery_query_count', 0) or 0)}件")
+  summary_metrics[1].metric("Verification予定件数", f"{int(plan_summary.get('verification_planned_count', 0) or 0)}件")
+  summary_metrics[2].metric("翻訳予定件数", f"{int(plan_summary.get('translation_planned_count', 0) or 0)}件")
+  summary_metrics[3].metric(
+    "Global Web enabled",
+    f"{int(global_web_plan.get('enabled_query_count', 0) or 0)}件",
+  )
+
+  with st.expander("検索計画設定", expanded=False):
+    limits_left, limits_right = st.columns(2)
+    with limits_left:
+      st.number_input("最大取得件数", min_value=100, max_value=5000, step=100, key="ui_search_total_limit")
+      st.selectbox("time range", options=["1m", "3m", "6m", "12m", "24m"], key="ui_search_time_range")
+    with limits_right:
+      st.caption("情報源別件数")
+      st.number_input("特許件数", min_value=0, max_value=5000, step=10, key="ui_search_patent_limit")
+      st.number_input("論文件数", min_value=0, max_value=5000, step=10, key="ui_search_paper_limit")
+      st.number_input("Web件数", min_value=0, max_value=5000, step=10, key="ui_search_web_limit")
+      st.number_input("企業件数", min_value=0, max_value=5000, step=10, key="ui_search_company_limit")
+
+    st.caption("Global Web max results")
+    max_cols = st.columns(3)
+    with max_cols[0]:
+      st.number_input("web high max results", min_value=1, max_value=100, step=1, key="ui_search_web_high_max_results")
+      st.number_input("web medium max results", min_value=1, max_value=100, step=1, key="ui_search_web_medium_max_results")
+    with max_cols[1]:
+      st.number_input("web low max results", min_value=1, max_value=100, step=1, key="ui_search_web_low_max_results")
+      st.number_input("company high max results", min_value=1, max_value=100, step=1, key="ui_search_company_high_max_results")
+    with max_cols[2]:
+      st.number_input("company medium max results", min_value=1, max_value=100, step=1, key="ui_search_company_medium_max_results")
+      st.number_input("company low max results", min_value=1, max_value=100, step=1, key="ui_search_company_low_max_results")
+
+    st.markdown("#### Web intent ON/OFF")
+    intent_labels = {
+      "research_development": "research_development",
+      "investment_production": "investment_production",
+      "partnership_project": "partnership_project",
+      "product_commercialization": "product_commercialization",
+      "organization_recruitment": "organization_recruitment",
+      "regulation_standard": "regulation_standard",
+    }
+    intent_columns = st.columns(3)
+    for index, (intent, label) in enumerate(intent_labels.items()):
+      with intent_columns[index % 3]:
+        st.checkbox(label, key=_search_intent_enabled_key(intent))
+
+    st.markdown("#### 国・地域ON/OFF / priority / 公式情報優先 / English fallback")
+    for country in list(global_web_plan.get("countries", []) or []):
+      country_code = str(country.get("country_region_code", "") or "")
+      country_name = str(country.get("country_region_name_ja", "") or "")
+      country_cols = st.columns([2, 1, 1, 1])
+      with country_cols[0]:
+        st.checkbox(f"{country_code} {country_name}", key=_search_country_enabled_key(country_code))
+      with country_cols[1]:
+        st.number_input(
+          f"{country_code} priority",
+          min_value=1,
+          max_value=20,
+          step=1,
+          key=_search_country_priority_key(country_code),
+        )
+      with country_cols[2]:
+        st.checkbox(f"{country_code} 公式情報優先", key=_search_country_official_key(country_code))
+      with country_cols[3]:
+        st.checkbox(f"{country_code} English fallback", key=_search_country_fallback_key(country_code))
+
+    regenerate_from_sources = st.button("情報源設定で検索計画を再生成", key="btn_sources_regenerate_search_plan", width="stretch")
+
+  _render_country_coverage(list(plan_summary.get("country_coverage", [])))
+  _render_search_plan_provider_routing(list(plan_summary.get("provider_routing", [])))
+  _render_search_plan_validation(list(plan_summary.get("validation_errors", [])))
+
+  st.markdown("### 手動query追加")
+  manual_source = st.selectbox(
+    "手動queryの対象",
+    options=["patent", "paper", "web", "company", "global_web"],
+    format_func=lambda value: "Global Web" if value == "global_web" else type_label_ja(value),
+    key="ui_manual_query_source",
+  )
+  st.text_input("手動query strategy", key="ui_manual_query_strategy")
+  add_manual_query_clicked = False
+  if manual_source == "global_web":
+    manual_cols = st.columns(3)
+    with manual_cols[0]:
+      st.selectbox("country_region_code", options=[str(item.get("country_region_code", "")) for item in list(global_web_plan.get("countries", [])) or []], key="ui_manual_query_country")
+      st.selectbox(
+        "web_intent",
+        options=[
+          "research_development",
+          "investment_production",
+          "partnership_project",
+          "product_commercialization",
+          "organization_recruitment",
+          "regulation_standard",
+        ],
+        key="ui_manual_query_intent",
+      )
+    with manual_cols[1]:
+      st.selectbox("result_bucket", options=["web", "company"], key="ui_manual_query_bucket")
+      st.selectbox("priority", options=["high", "medium", "low"], key="ui_manual_query_priority")
+    with manual_cols[2]:
+      st.number_input("manual max results", min_value=1, max_value=100, step=1, key="ui_manual_query_max_results")
+    st.text_input("query_local", key="ui_manual_query_local")
+    st.text_input("query_english_fallback", key="ui_manual_query_fallback")
+    add_manual_query_clicked = st.button("Global Web手動queryを追加", key="btn_add_manual_global_web_query", width="stretch")
+  else:
+    st.selectbox("手動query language", options=["ja", "en", "mixed"], key="ui_manual_query_language")
+    st.text_input("query_text", key="ui_manual_query_text")
+    add_manual_query_clicked = st.button("手動queryを追加", key="btn_add_manual_query", width="stretch")
+
+  delete_manual_query_ids: list[str] = []
+  run_patent_dry_run = False
+  approve_patent_query = False
+  run_patent_retrieval = False
+  with st.expander("特許計画", expanded=False):
+    patent_plan = dict(source_plans.get("patent", {}) or {})
+    st.caption(f"最大件数: {patent_plan.get('limit', 0)}件")
+    for note in list(patent_plan.get("notes", []) or []):
+      st.write(f"- {note}")
+    _render_generated_queries("patent", list(patent_plan.get("queries", []) or []))
+    delete_manual_query_ids.extend(_render_manual_queries("patent", manual_queries_by_source["patent"]))
+    patent_bigquery_events = _render_patent_bigquery_preview(
+      dict(patent_bigquery_state or {}),
+      patent_bigquery_status_message,
+      patent_retrieval_status_message,
+    )
+    run_patent_dry_run = bool(patent_bigquery_events.get("run_patent_dry_run"))
+    approve_patent_query = bool(patent_bigquery_events.get("approve_patent_query"))
+    run_patent_retrieval = bool(patent_bigquery_events.get("run_patent_retrieval"))
+  delete_manual_query_ids.extend(
+    _render_source_plan_expander("論文計画", "paper", dict(source_plans.get("paper", {}) or {}), manual_queries_by_source["paper"])
+  )
+  delete_manual_query_ids.extend(
+    _render_source_plan_expander("Web計画", "web", dict(source_plans.get("web", {}) or {}), manual_queries_by_source["web"])
+  )
+  delete_manual_query_ids.extend(
+    _render_source_plan_expander("企業計画", "company", dict(source_plans.get("company", {}) or {}), manual_queries_by_source["company"])
+  )
+  with st.expander("Global Web計画", expanded=False):
+    st.caption(
+      f"time range: {global_web_plan.get('time_range', 'n/a')} | "
+      f"Web budget: {global_web_plan.get('web_limit', 0)} | Company budget: {global_web_plan.get('company_limit', 0)}"
+    )
+    _render_generated_queries("global_web", list(global_web_plan.get("queries", []) or []))
+    delete_manual_query_ids.extend(_render_manual_queries("global_web", manual_queries_by_source["global_web"]))
+
+  return {
+    "regenerate_search_plan": regenerate_from_sources,
+    "add_manual_query": add_manual_query_clicked,
+    "delete_manual_query_ids": delete_manual_query_ids,
+    "run_patent_dry_run": run_patent_dry_run,
+    "approve_patent_query": approve_patent_query,
+    "run_patent_retrieval": run_patent_retrieval,
+  }
 
 
 def render_top_signals_tab(

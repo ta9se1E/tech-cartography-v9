@@ -266,7 +266,10 @@ def build_unified_search_plan(
   profile: dict[str, Any],
   total_limit: int = DEFAULT_TOTAL_LIMIT,
   source_limits: dict[str, Any] | None = None,
+  global_web_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+  from .global_web_plan import build_global_web_search_plan
+
   migrated = _migrated_profile(profile)
   normalized_total = normalize_total_limit(total_limit)
   normalized_limits = normalize_source_limits(normalized_total, source_limits)
@@ -284,6 +287,12 @@ def build_unified_search_plan(
       "web": build_web_search_plan(migrated, normalized_limits["web"]),
       "company": build_company_search_plan(migrated, normalized_limits["company"]),
     },
+    "global_web_plan": build_global_web_search_plan(
+      migrated,
+      web_limit=normalized_limits["web"],
+      company_limit=normalized_limits["company"],
+      options=global_web_options,
+    ),
   }
   return plan
 
@@ -357,6 +366,12 @@ def validate_search_plan(plan: dict[str, Any]) -> list[str]:
       if not query_text:
         errors.append(f"{query_id or source} の検索文字列が空です。")
 
+  global_web_plan = plan.get("global_web_plan")
+  if isinstance(global_web_plan, dict):
+    from .global_web_plan import validate_global_web_search_plan
+
+    errors.extend(validate_global_web_search_plan(global_web_plan))
+
   return errors
 
 
@@ -366,7 +381,9 @@ def summarize_search_plan_ja(plan: dict[str, Any]) -> str:
   paper_plan = plans.get("paper", {}) if isinstance(plans, dict) else {}
   web_plan = plans.get("web", {}) if isinstance(plans, dict) else {}
   company_plan = plans.get("company", {}) if isinstance(plans, dict) else {}
+  global_web_plan = plan.get("global_web_plan", {}) if isinstance(plan, dict) else {}
   seed_count = len(patent_plan.get("seed_publications", []) or [])
+  global_web_query_count = len(global_web_plan.get("queries", []) or []) if isinstance(global_web_plan, dict) else 0
 
   lines = [
     "統合検索計画",
@@ -376,6 +393,7 @@ def summarize_search_plan_ja(plan: dict[str, Any]) -> str:
     f"- 論文: 最大{int(paper_plan.get('limit', 0) or 0)}件 / {len(paper_plan.get('queries', []) or [])}クエリ",
     f"- Web情報: 最大{int(web_plan.get('limit', 0) or 0)}件 / {len(web_plan.get('queries', []) or [])}クエリ",
     f"- 企業情報: 最大{int(company_plan.get('limit', 0) or 0)}件 / {len(company_plan.get('queries', []) or [])}クエリ",
+    f"- Global Web: {global_web_query_count}計画",
     f"- Seed公報: {seed_count}件",
     f"- 外部検索実行: {'ON' if plan.get('execution_enabled') else 'OFF'}",
     "",
@@ -524,6 +542,7 @@ def _finalize_queries(
     finalized.append(
       {
         "query_id": f"{source}_q{index:02d}",
+        "origin": "generated",
         **query,
       }
     )
