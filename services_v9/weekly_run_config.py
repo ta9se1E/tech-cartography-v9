@@ -164,7 +164,15 @@ def validate_weekly_run_config(config: dict[str, Any]) -> dict[str, Any]:
   timeouts["paper_seconds"] = max(_safe_int(timeouts.get("paper_seconds", 1200), 1200), 1)
   timeouts["web_company_seconds"] = max(_safe_int(timeouts.get("web_company_seconds", 1200), 1200), 1)
   timeouts["email_seconds"] = max(_safe_int(timeouts.get("email_seconds", 120), 120), 1)
-  timeouts["lock_stale_seconds"] = max(_safe_int(timeouts.get("lock_stale_seconds", 21600), 21600), 60)
+  raw_lock_stale_seconds = _safe_int(timeouts.get("lock_stale_seconds", 21600), 21600)
+  if raw_lock_stale_seconds <= 0:
+    errors.append("timeouts.lock_stale_seconds は 1 以上の整数である必要があります。")
+    timeouts["lock_stale_seconds"] = 21600
+  elif raw_lock_stale_seconds < 60:
+    errors.append("timeouts.lock_stale_seconds は 60 秒以上である必要があります。")
+    timeouts["lock_stale_seconds"] = raw_lock_stale_seconds
+  else:
+    timeouts["lock_stale_seconds"] = raw_lock_stale_seconds
   merged["timeouts"] = timeouts
 
   if not execution["dry_run"] and execution["patent_enabled"]:

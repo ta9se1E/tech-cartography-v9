@@ -31,6 +31,7 @@ from services_v9.weekly_scheduler import (
 )
 from services_v9 import paper_openalex_retrieval
 from services_v9 import patent_bigquery_query
+from services_v9 import weekly_scheduler as weekly_scheduler_module
 from services_v9 import web_company_retrieval
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -214,6 +215,30 @@ def _stage_adapter(source_type: str, rows: list[dict[str, object]], tmp_path: Pa
     }
 
   return _adapter
+
+
+def _lock_path(lock_root: Path, signature: str) -> Path:
+  return lock_root / f"{signature}.lock"
+
+
+def _write_lock_file(
+  lock_root: Path,
+  signature: str,
+  payload: dict[str, object] | None = None,
+  *,
+  raw_text: str | None = None,
+  age_seconds: int | None = None,
+) -> Path:
+  lock_root.mkdir(parents=True, exist_ok=True)
+  path = _lock_path(lock_root, signature)
+  if raw_text is not None:
+    path.write_text(raw_text, encoding="utf-8")
+  else:
+    path.write_text(json.dumps(payload or {}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+  if age_seconds is not None:
+    ts = (datetime.now().astimezone() - timedelta(seconds=age_seconds)).timestamp()
+    os.utime(path, (ts, ts))
+  return path
 
 
 def test_load_and_validate_weekly_run_config_defaults() -> None:
@@ -568,25 +593,231 @@ def test_load_weekly_run_config_from_file(tmp_path: Path) -> None:
   assert loaded["_config_path"] == str(config_path.resolve())
 
 
-def test_lock_acquire_release_and_stale_handling(tmp_path: Path) -> None:
+def test_lock_acquire_blocks_duplicate_and_release_respects_owner(tmp_path: Path) -> None:
   signature = stable_payload_signature(_watch_profile())
   lock_root = tmp_path / "weekly_locks"
   first = acquire_weekly_run_lock(signature, "run_a", lock_root, stale_timeout_seconds=3600)
   assert first["acquired"] is True
+  assert first["payload"]["weekly_run_id"] == "run_a"
+  assert datetime.fromisoformat(str(first["payload"]["started_at"])).tzinfo is not None
+  assert first["payload"]["stale_timeout_seconds"] == 3600
 
   second = acquire_weekly_run_lock(signature, "run_b", lock_root, stale_timeout_seconds=3600)
   assert second["acquired"] is False
   assert second["status"] == "blocked"
+  assert _lock_path(lock_root, signature).exists()
 
-  lock_path = Path(first["path"])
-  stale_payload = json.loads(lock_path.read_text(encoding="utf-8"))
+  other_signature = stable_payload_signature({**_watch_profile(), "theme_name": "別テーマ"})
+  other = acquire_weekly_run_lock(other_signature, "run_other", lock_root, stale_timeout_seconds=3600)
+  assert other["acquired"] is True
+
+  mismatch_release = release_weekly_run_lock({**first, "payload": {**first["payload"], "weekly_run_id": "run_x"}})
+  assert mismatch_release["released"] is False
+  assert _lock_path(lock_root, signature).exists()
+
+  released = release_weekly_run_lock(first)
+  assert released["released"] is True
+  assert not _lock_path(lock_root, signature).exists()
+  release_weekly_run_lock(other)
+
+
+def test_lock_stale_within_timeout_is_not_replaced(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  lock_root = tmp_path / "weekly_locks"
+  _write_lock_file(
+    lock_root,
+    signature,
+    {
+      "schema_version": "v9.6b",
+      "watch_profile_signature": signature,
+      "weekly_run_id": "run_a",
+      "started_at": (datetime.now().astimezone() - timedelta(seconds=30)).isoformat(timespec="seconds"),
+      "stale_timeout_seconds": 3600,
+    },
+  )
+  blocked = acquire_weekly_run_lock(signature, "run_b", lock_root, stale_timeout_seconds=3600)
+  assert blocked["acquired"] is False
+  assert blocked["status"] == "blocked"
+  assert json.loads(_lock_path(lock_root, signature).read_text(encoding="utf-8"))["weekly_run_id"] == "run_a"
+
+
+def test_stale_lock_can_be_replaced_and_old_run_cannot_release_new_lock(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  lock_root = tmp_path / "weekly_locks"
+  first = acquire_weekly_run_lock(signature, "run_a", lock_root, stale_timeout_seconds=60)
+  assert first["acquired"] is True
+  stale_payload = json.loads(_lock_path(lock_root, signature).read_text(encoding="utf-8"))
   stale_payload["started_at"] = (datetime.now().astimezone() - timedelta(hours=3)).isoformat(timespec="seconds")
-  lock_path.write_text(json.dumps(stale_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+  _lock_path(lock_root, signature).write_text(json.dumps(stale_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+  second = acquire_weekly_run_lock(signature, "run_b", lock_root, stale_timeout_seconds=60)
+  assert second["acquired"] is True
+  current_payload = json.loads(_lock_path(lock_root, signature).read_text(encoding="utf-8"))
+  assert current_payload["weekly_run_id"] == "run_b"
+  release_a = release_weekly_run_lock(first)
+  assert release_a["released"] is False
+  assert _lock_path(lock_root, signature).exists()
+  release_b = release_weekly_run_lock(second)
+  assert release_b["released"] is True
+  assert not _lock_path(lock_root, signature).exists()
 
-  third = acquire_weekly_run_lock(signature, "run_c", lock_root, stale_timeout_seconds=60)
-  assert third["acquired"] is True
-  release_weekly_run_lock(third)
-  assert not Path(third["path"]).exists()
+
+def test_validate_weekly_run_config_rejects_non_positive_lock_stale_timeout_and_keeps_valid_value() -> None:
+  config = default_weekly_run_config()
+  config["timeouts"]["lock_stale_seconds"] = 7200
+  valid = validate_weekly_run_config(config)
+  assert valid["status"] == "ok"
+  assert valid["normalized_config"]["timeouts"]["lock_stale_seconds"] == 7200
+
+  invalid = default_weekly_run_config()
+  invalid["timeouts"]["lock_stale_seconds"] = 0
+  invalid_result = validate_weekly_run_config(invalid)
+  assert invalid_result["status"] == "blocked"
+  assert any("lock_stale_seconds" in message for message in invalid_result["errors"])
+
+
+def test_broken_and_missing_started_at_locks_are_only_replaced_when_old(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  lock_root = tmp_path / "weekly_locks"
+
+  fresh_broken = _write_lock_file(lock_root, signature, raw_text="{not-json\n", age_seconds=30)
+  blocked_broken = acquire_weekly_run_lock(signature, "run_b", lock_root, stale_timeout_seconds=60)
+  assert blocked_broken["acquired"] is False
+  assert fresh_broken.exists()
+  assert blocked_broken["warnings"]
+
+  old_broken = _write_lock_file(lock_root, signature, raw_text="{not-json\n", age_seconds=7200)
+  replaced_broken = acquire_weekly_run_lock(signature, "run_c", lock_root, stale_timeout_seconds=60)
+  assert replaced_broken["acquired"] is True
+  assert json.loads(old_broken.read_text(encoding="utf-8"))["weekly_run_id"] == "run_c"
+  release_weekly_run_lock(replaced_broken)
+
+  fresh_missing_started = _write_lock_file(
+    lock_root,
+    signature,
+    {
+      "schema_version": "v9.6b",
+      "watch_profile_signature": signature,
+      "weekly_run_id": "run_missing",
+      "stale_timeout_seconds": 3600,
+    },
+    age_seconds=30,
+  )
+  blocked_missing = acquire_weekly_run_lock(signature, "run_d", lock_root, stale_timeout_seconds=3600)
+  assert blocked_missing["acquired"] is False
+  assert fresh_missing_started.exists()
+  assert blocked_missing["warnings"]
+
+
+def test_stale_check_does_not_delete_lock_if_file_changed(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  lock_root = tmp_path / "weekly_locks"
+  lock_path = _write_lock_file(
+    lock_root,
+    signature,
+    {
+      "schema_version": "v9.6b",
+      "watch_profile_signature": signature,
+      "weekly_run_id": "run_old",
+      "started_at": (datetime.now().astimezone() - timedelta(hours=3)).isoformat(timespec="seconds"),
+      "stale_timeout_seconds": 60,
+    },
+  )
+  inspection = weekly_scheduler_module._inspect_lock_file(lock_path, stale_timeout_seconds=60, now=datetime.now().astimezone())
+  lock_path.write_text(
+    json.dumps(
+      {
+        "schema_version": "v9.6b",
+        "watch_profile_signature": signature,
+        "weekly_run_id": "run_new",
+        "started_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "stale_timeout_seconds": 60,
+      },
+      ensure_ascii=False,
+      indent=2,
+    )
+    + "\n",
+    encoding="utf-8",
+  )
+  removal = weekly_scheduler_module._remove_stale_lock_if_unchanged(lock_path, inspection=inspection, now=datetime.now().astimezone())
+  assert removal["removed"] is False
+  assert json.loads(lock_path.read_text(encoding="utf-8"))["weekly_run_id"] == "run_new"
+
+
+def test_acquire_lock_rejects_invalid_stale_timeout_and_lock_contains_no_secrets(tmp_path: Path) -> None:
+  signature = stable_payload_signature(_watch_profile())
+  lock_root = tmp_path / "weekly_locks"
+  rejected = acquire_weekly_run_lock(signature, "run_a", lock_root, stale_timeout_seconds=0)
+  assert rejected["acquired"] is False
+  assert rejected["status"] == "blocked"
+
+  acquired = acquire_weekly_run_lock(signature, "run_secret_check", lock_root, stale_timeout_seconds=3600)
+  assert acquired["acquired"] is True
+  raw_text = Path(acquired["path"]).read_text(encoding="utf-8")
+  assert "smtp" not in raw_text.lower()
+  assert "password" not in raw_text.lower()
+  release_weekly_run_lock(acquired)
+
+
+def test_scheduler_releases_own_lock_on_success_failure_and_provider_exception(tmp_path: Path) -> None:
+  watch_profile_path = _write_watch_profile(tmp_path)
+
+  success_config = _base_config(watch_profile_path)
+  success_config["execution"]["dry_run"] = False
+  success_config["execution"]["patent_enabled"] = True
+  success_config["execution"]["paper_enabled"] = True
+  success_config["execution"]["web_company_enabled"] = True
+  success_config["email"]["self_send_enabled"] = False
+  success_result = run_weekly_watch(
+    success_config,
+    output_root=tmp_path / "success_case",
+    provider_adapters={
+      "patent": _stage_adapter("patent", _patent_rows(), tmp_path / "success_case"),
+      "paper": _stage_adapter("paper", _paper_rows(), tmp_path / "success_case"),
+      "web_company": _stage_adapter("web_company", _web_company_rows(), tmp_path / "success_case"),
+    },
+  )
+  assert success_result["status"] == "success"
+  assert not list((tmp_path / "success_case" / "weekly_locks").glob("*.lock"))
+
+  failed_config = _base_config(watch_profile_path)
+  failed_config["execution"]["dry_run"] = False
+  failed_config["execution"]["patent_enabled"] = True
+  failed_config["execution"]["paper_enabled"] = True
+  failed_config["execution"]["web_company_enabled"] = True
+  failed_config["email"]["self_send_enabled"] = False
+  failed_result = run_weekly_watch(
+    failed_config,
+    output_root=tmp_path / "failed_case",
+    provider_adapters={
+      "patent": _stage_adapter("patent", _patent_rows(), tmp_path / "failed_case", status="failed", message="patent failed"),
+      "paper": _stage_adapter("paper", _paper_rows(), tmp_path / "failed_case"),
+      "web_company": _stage_adapter("web_company", _web_company_rows(), tmp_path / "failed_case"),
+    },
+  )
+  assert failed_result["status"] == "partial_success"
+  assert not list((tmp_path / "failed_case" / "weekly_locks").glob("*.lock"))
+
+  exception_config = _base_config(watch_profile_path)
+  exception_config["execution"]["dry_run"] = False
+  exception_config["execution"]["patent_enabled"] = True
+  exception_config["execution"]["paper_enabled"] = True
+  exception_config["execution"]["web_company_enabled"] = True
+  exception_config["email"]["self_send_enabled"] = False
+
+  def _boom(**kwargs):
+    raise RuntimeError("provider boom")
+
+  exception_result = run_weekly_watch(
+    exception_config,
+    output_root=tmp_path / "exception_case",
+    provider_adapters={
+      "patent": _boom,
+      "paper": _stage_adapter("paper", _paper_rows(), tmp_path / "exception_case"),
+      "web_company": _stage_adapter("web_company", _web_company_rows(), tmp_path / "exception_case"),
+    },
+  )
+  assert exception_result["status"] == "partial_success"
+  assert not list((tmp_path / "exception_case" / "weekly_locks").glob("*.lock"))
 
 
 def test_run_weekly_watch_blocks_invalid_config(tmp_path: Path) -> None:

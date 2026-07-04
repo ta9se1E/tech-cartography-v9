@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -429,6 +429,91 @@ def _assert_digest_duplicate_detection(root: Path, watch_profile_path: Path) -> 
   assert blocked_status["stage_statuses"]["send_email"] == "blocked"
 
 
+def _assert_lock_safety(root: Path, watch_profile_path: Path) -> None:
+  signature = "a" * 64
+  lock_root = root / "weekly_locks_safety"
+  first = acquire_weekly_run_lock(signature, "run_a", lock_root, stale_timeout_seconds=60)
+  assert first["acquired"] is True
+
+  second = acquire_weekly_run_lock(signature, "run_b", lock_root, stale_timeout_seconds=60)
+  assert second["acquired"] is False
+  assert second["status"] == "blocked"
+
+  other = acquire_weekly_run_lock("b" * 64, "run_other", lock_root, stale_timeout_seconds=60)
+  assert other["acquired"] is True
+  release_weekly_run_lock(other)
+
+  first_path = Path(first["path"])
+  first_payload = json.loads(first_path.read_text(encoding="utf-8"))
+  first_payload["started_at"] = (datetime.now().astimezone() - timedelta(hours=3)).isoformat(timespec="seconds")
+  first_path.write_text(json.dumps(first_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+  replaced = acquire_weekly_run_lock(signature, "run_b", lock_root, stale_timeout_seconds=60)
+  assert replaced["acquired"] is True
+  assert json.loads(first_path.read_text(encoding="utf-8"))["weekly_run_id"] == "run_b"
+
+  mismatch_release = release_weekly_run_lock(first)
+  assert mismatch_release["released"] is False
+  assert first_path.exists()
+  assert release_weekly_run_lock(replaced)["released"] is True
+
+  broken_path = lock_root / f"{signature}.lock"
+  broken_path.write_text("{not-json\n", encoding="utf-8")
+  fresh_blocked = acquire_weekly_run_lock(signature, "run_c", lock_root, stale_timeout_seconds=60)
+  assert fresh_blocked["acquired"] is False
+  assert broken_path.exists()
+  ts = (datetime.now().astimezone() - timedelta(hours=3)).timestamp()
+  os.utime(broken_path, (ts, ts))
+  stale_broken = acquire_weekly_run_lock(signature, "run_d", lock_root, stale_timeout_seconds=60)
+  assert stale_broken["acquired"] is True
+  assert release_weekly_run_lock(stale_broken)["released"] is True
+
+  config = default_weekly_run_config()
+  config["enabled"] = True
+  config["watch_profile_path"] = str(watch_profile_path)
+  config["execution"]["dry_run"] = False
+  config["execution"]["patent_enabled"] = True
+  config["execution"]["paper_enabled"] = True
+  config["execution"]["web_company_enabled"] = True
+  config["patent"]["approved_query_ids"] = ["patent_q01"]
+  config["patent"]["maximum_bytes_billed"] = 1000000
+  config["paper"]["approved_query_ids"] = ["paper_q01"]
+  config["web_company"]["approved_query_ids"] = ["gw_q001"]
+
+  def _boom(**kwargs):
+    raise RuntimeError("provider boom")
+
+  exception_result = run_weekly_watch(
+    config,
+    output_root=root / "lock_exception_case",
+    provider_adapters={
+      "patent": _boom,
+      "paper": lambda **kwargs: {
+        "status": "success",
+        "message": "paper ok",
+        "rows": [],
+        "warnings": [],
+        "errors": [],
+        "provider_log": {"provider": "paper"},
+        "source_run": {},
+        "details": {},
+      },
+      "web_company": lambda **kwargs: {
+        "status": "success",
+        "message": "web ok",
+        "rows": [],
+        "warnings": [],
+        "errors": [],
+        "provider_log": {"provider": "web_company"},
+        "source_run": {},
+        "details": {},
+      },
+    },
+  )
+  assert exception_result["status"] in {"failed", "partial_success", "blocked"}
+  assert not list((root / "lock_exception_case" / "weekly_locks").glob("*.lock"))
+
+
 def main() -> None:
   config = default_weekly_run_config()
   validation = validate_weekly_run_config(config)
@@ -445,6 +530,7 @@ def main() -> None:
     watch_profile_path.write_text(json.dumps(watch_profile, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     _assert_provider_contracts(root, watch_profile_path)
     _assert_digest_duplicate_detection(root, watch_profile_path)
+    _assert_lock_safety(root, watch_profile_path)
 
     patent_rows = [{
       "publication_number": "US2024000001A1",

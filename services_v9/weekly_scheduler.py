@@ -115,51 +115,79 @@ def acquire_weekly_run_lock(
 ) -> dict:
   signature = str(watch_profile_signature or "").strip().lower()
   if len(signature) != 64 or any(char not in _LOCK_SIGNATURE_PATTERN for char in signature):
-    raise ValueError("watch_profile_signature が不正です。")
+    return {
+      "acquired": False,
+      "status": "blocked",
+      "message": "watch_profile_signature が不正です。",
+      "path": "",
+      "payload": {},
+      "warnings": [],
+    }
+  normalized_timeout = _normalize_lock_stale_timeout(stale_timeout_seconds)
+  if normalized_timeout is None:
+    return {
+      "acquired": False,
+      "status": "blocked",
+      "message": "stale_timeout_seconds は 1 以上の整数である必要があります。",
+      "path": "",
+      "payload": {},
+      "warnings": [],
+    }
   root = Path(lock_root)
   root.mkdir(parents=True, exist_ok=True)
-  lock_path = (root / f"{signature}.lock").resolve()
-  if root.resolve() not in {lock_path, *lock_path.parents}:
-    raise ValueError("lock path が許可範囲外です。")
+  resolved_root = root.resolve()
+  lock_path = (resolved_root / f"{signature}.lock").resolve()
+  if resolved_root not in {lock_path.parent, *lock_path.parents}:
+    return {
+      "acquired": False,
+      "status": "blocked",
+      "message": "lock path が許可範囲外です。",
+      "path": str(lock_path),
+      "payload": {},
+      "warnings": [],
+    }
   now = datetime.now().astimezone()
+  weekly_run_id = str(run_id or "").strip()
   payload = {
     "schema_version": WEEKLY_SCHEDULER_SCHEMA_VERSION,
     "watch_profile_signature": signature,
-    "run_id": str(run_id or "").strip(),
+    "weekly_run_id": weekly_run_id,
     "started_at": now.isoformat(timespec="seconds"),
-    "stale_timeout_seconds": int(max(stale_timeout_seconds, 60)),
+    "stale_timeout_seconds": normalized_timeout,
   }
   if lock_path.exists():
-    existing = _read_lock_payload(lock_path)
-    if _is_stale_lock(existing, stale_timeout_seconds=int(max(stale_timeout_seconds, 60)), now=now):
-      try:
-        lock_path.unlink()
-      except OSError as exc:
-        return {
-          "acquired": False,
-          "status": "blocked",
-          "message": f"stale lock を削除できませんでした: {type(exc).__name__}",
-          "path": str(lock_path),
-          "payload": existing,
-        }
-    else:
+    inspection = _inspect_lock_file(lock_path, stale_timeout_seconds=normalized_timeout, now=now)
+    if not inspection["stale"]:
       return {
         "acquired": False,
         "status": "blocked",
-        "message": "同じ Watch Profile の実行中 lock が存在します。",
+        "message": str(inspection["message"] or "同じ Watch Profile の実行中 lock が存在します。"),
         "path": str(lock_path),
-        "payload": existing,
+        "payload": dict(inspection.get("payload", {}) or {}),
+        "warnings": list(inspection.get("warnings", []) or []),
+      }
+    removal = _remove_stale_lock_if_unchanged(lock_path, inspection=inspection, now=now)
+    if not removal["removed"]:
+      return {
+        "acquired": False,
+        "status": "blocked",
+        "message": str(removal["message"] or "stale lock を置換できませんでした。"),
+        "path": str(lock_path),
+        "payload": dict(inspection.get("payload", {}) or {}),
+        "warnings": list(removal.get("warnings", []) or []),
       }
   flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
   try:
     fd = os.open(str(lock_path), flags)
   except FileExistsError:
+    inspection = _inspect_lock_file(lock_path, stale_timeout_seconds=normalized_timeout, now=now)
     return {
       "acquired": False,
       "status": "blocked",
-      "message": "同じ Watch Profile の実行中 lock が存在します。",
+      "message": str(inspection["message"] or "同じ Watch Profile の実行中 lock が存在します。"),
       "path": str(lock_path),
-      "payload": _read_lock_payload(lock_path),
+      "payload": dict(inspection.get("payload", {}) or {}),
+      "warnings": list(inspection.get("warnings", []) or []),
     }
   try:
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -177,19 +205,38 @@ def acquire_weekly_run_lock(
     "message": "lock acquired",
     "path": str(lock_path),
     "payload": payload,
+    "weekly_run_id": weekly_run_id,
+    "warnings": [],
   }
 
 
-def release_weekly_run_lock(lock_info: dict) -> None:
+def release_weekly_run_lock(lock_info: dict) -> dict[str, Any]:
   path_text = str(dict(lock_info or {}).get("path", "") or "").strip()
   if not path_text:
-    return
+    return {"released": False, "status": "ignored", "message": "lock path がありません。", "warnings": []}
   path = Path(path_text)
+  requested_run_id = _lock_weekly_run_id(dict(lock_info.get("payload", {}) or {})) or str(dict(lock_info or {}).get("weekly_run_id", "") or "").strip()
   try:
-    if path.exists():
-      path.unlink()
-  except OSError:
-    return
+    if not path.exists():
+      return {"released": False, "status": "ignored", "message": "lock はすでに存在しません。", "warnings": []}
+    inspection = _inspect_lock_file(path, stale_timeout_seconds=21600, now=datetime.now().astimezone())
+    current_run_id = _lock_weekly_run_id(dict(inspection.get("payload", {}) or {}))
+    if not requested_run_id or current_run_id != requested_run_id:
+      return {
+        "released": False,
+        "status": "ignored",
+        "message": "他 run の lock は削除しません。",
+        "warnings": ["lock ownership mismatch"],
+      }
+    path.unlink()
+    return {"released": True, "status": "success", "message": "lock released", "warnings": list(inspection.get("warnings", []) or [])}
+  except OSError as exc:
+    return {
+      "released": False,
+      "status": "warning",
+      "message": f"lock 解放に失敗しました: {type(exc).__name__}",
+      "warnings": [],
+    }
 
 
 def find_previous_successful_weekly_run(
@@ -1684,14 +1731,129 @@ def _read_lock_payload(lock_path: Path) -> dict[str, Any]:
 
 
 def _is_stale_lock(existing: dict[str, Any], *, stale_timeout_seconds: int, now: datetime) -> bool:
-  started_at = str(existing.get("started_at", "") or "").strip()
-  if not started_at:
-    return True
+  started = _parse_lock_started_at(existing.get("started_at"))
+  if started is None:
+    return False
+  effective_timeout = _lock_timeout_from_payload(existing, stale_timeout_seconds)
+  return now - started > timedelta(seconds=effective_timeout)
+
+
+def _inspect_lock_file(lock_path: Path, *, stale_timeout_seconds: int, now: datetime) -> dict[str, Any]:
+  warnings: list[str] = []
+  payload = _read_lock_payload(lock_path)
   try:
-    started = datetime.fromisoformat(started_at)
+    stat_result = lock_path.stat()
+    mtime = datetime.fromtimestamp(stat_result.st_mtime, tz=now.tzinfo)
+    mtime_ns = int(getattr(stat_result, "st_mtime_ns", int(stat_result.st_mtime * 1_000_000_000)))
+  except OSError:
+    return {
+      "stale": False,
+      "message": "lock metadata を確認できませんでした。",
+      "payload": payload,
+      "warnings": warnings,
+      "mtime_ns": None,
+      "raw_text": None,
+    }
+  try:
+    raw_text = lock_path.read_text(encoding="utf-8")
+  except Exception:  # noqa: BLE001
+    raw_text = None
+  effective_timeout = _lock_timeout_from_payload(payload, stale_timeout_seconds)
+  started = _parse_lock_started_at(payload.get("started_at"))
+  if started is not None:
+    stale = now - started > timedelta(seconds=effective_timeout)
+    return {
+      "stale": stale,
+      "message": "stale lock が見つかりました。" if stale else "同じ Watch Profile の実行中 lock が存在します。",
+      "payload": payload,
+      "warnings": warnings,
+      "mtime_ns": mtime_ns,
+      "raw_text": raw_text,
+      "effective_timeout": effective_timeout,
+    }
+  if raw_text is None or not payload:
+    warnings.append("lock JSON が破損しているため、mtime ベースで stale 判定します。")
+  else:
+    warnings.append("lock started_at が欠損または timezone なしのため、mtime ベースで stale 判定します。")
+  stale = now - mtime > timedelta(seconds=effective_timeout)
+  return {
+    "stale": stale,
+    "message": "stale lock 候補が見つかりました。" if stale else "新しいが破損した lock が存在するため実行を停止しました。",
+    "payload": payload,
+    "warnings": warnings,
+    "mtime_ns": mtime_ns,
+    "raw_text": raw_text,
+    "effective_timeout": effective_timeout,
+  }
+
+
+def _remove_stale_lock_if_unchanged(lock_path: Path, *, inspection: dict[str, Any], now: datetime) -> dict[str, Any]:
+  warnings = list(inspection.get("warnings", []) or [])
+  try:
+    current_stat = lock_path.stat()
+  except FileNotFoundError:
+    return {"removed": False, "message": "lock が別 run により更新されました。", "warnings": warnings}
+  except OSError as exc:
+    return {"removed": False, "message": f"lock metadata を確認できませんでした: {type(exc).__name__}", "warnings": warnings}
+  current_mtime_ns = int(getattr(current_stat, "st_mtime_ns", int(current_stat.st_mtime * 1_000_000_000)))
+  if inspection.get("mtime_ns") != current_mtime_ns:
+    return {"removed": False, "message": "stale 確認中に lock が更新されたため置換しません。", "warnings": warnings}
+  try:
+    current_text = lock_path.read_text(encoding="utf-8")
+  except Exception:  # noqa: BLE001
+    current_text = None
+  if inspection.get("raw_text") != current_text:
+    return {"removed": False, "message": "stale 確認中に lock 内容が変更されたため置換しません。", "warnings": warnings}
+  current_payload = _read_lock_payload(lock_path)
+  if _lock_weekly_run_id(current_payload) != _lock_weekly_run_id(dict(inspection.get("payload", {}) or {})):
+    return {"removed": False, "message": "別 run の lock に置き換わったため削除しません。", "warnings": warnings}
+  current_inspection = _inspect_lock_file(
+    lock_path,
+    stale_timeout_seconds=int(inspection.get("effective_timeout", 21600) or 21600),
+    now=now,
+  )
+  if not current_inspection["stale"]:
+    return {"removed": False, "message": "lock は stale ではなくなったため削除しません。", "warnings": warnings}
+  try:
+    lock_path.unlink()
+  except OSError as exc:
+    return {"removed": False, "message": f"stale lock を削除できませんでした: {type(exc).__name__}", "warnings": warnings}
+  return {"removed": True, "message": "stale lock を置換しました。", "warnings": warnings}
+
+
+def _lock_weekly_run_id(payload: dict[str, Any]) -> str:
+  return str(payload.get("weekly_run_id", payload.get("run_id", "")) or "").strip()
+
+
+def _lock_timeout_from_payload(payload: dict[str, Any], fallback: int) -> int:
+  try:
+    candidate = int(payload.get("stale_timeout_seconds", fallback))
+  except (TypeError, ValueError):
+    candidate = fallback
+  return max(candidate, 1)
+
+
+def _parse_lock_started_at(value: Any) -> datetime | None:
+  text = str(value or "").strip()
+  if not text:
+    return None
+  try:
+    parsed = datetime.fromisoformat(text)
   except ValueError:
-    return True
-  return now - started > timedelta(seconds=max(stale_timeout_seconds, 60))
+    return None
+  if parsed.tzinfo is None or parsed.utcoffset() is None:
+    return None
+  return parsed
+
+
+def _normalize_lock_stale_timeout(value: Any) -> int | None:
+  try:
+    parsed = int(value)
+  except (TypeError, ValueError):
+    return None
+  if parsed <= 0:
+    return None
+  return parsed
 
 
 def _write_json(path: Path, payload: Any) -> None:
