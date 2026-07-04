@@ -3,40 +3,45 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .cloud_runtime import get_persist_root
 from .watch_profile_schema import default_bilingual_watch_profile, migrate_watch_profile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def get_v9_runs_dir() -> Path:
-  return PROJECT_ROOT / "data" / "v9_runs"
+  return get_persist_root()
 
 
 def ensure_v9_run_dirs(base_dir: Path | None = None) -> dict[str, Path]:
   root = Path(base_dir) if base_dir is not None else get_v9_runs_dir()
   snapshots_dir = root / "snapshots"
   digests_dir = root / "digests"
+  config_dir = root / "v9_config"
   try:
     root.mkdir(parents=True, exist_ok=True)
     snapshots_dir.mkdir(parents=True, exist_ok=True)
     digests_dir.mkdir(parents=True, exist_ok=True)
+    config_dir.mkdir(parents=True, exist_ok=True)
   except OSError as exc:
     raise RuntimeError(f"v9保存先ディレクトリを作成できませんでした: {exc}") from exc
   return {
     "root": root,
     "snapshots": snapshots_dir,
     "digests": digests_dir,
+    "config": config_dir,
     "watch_profile": root / "watch_profile_current.json",
   }
 
 
 def _json_dump(path: Path, payload: dict[str, Any]) -> None:
   try:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json_atomic(path, payload)
   except OSError as exc:
     raise RuntimeError(f"ファイルを保存できませんでした: {path} ({exc})") from exc
 
@@ -128,9 +133,9 @@ def save_digest_files(
   csv_path = dirs["digests"] / f"{digest_id}_signals.csv"
   json_path = dirs["digests"] / f"{digest_id}_payload.json"
   try:
-    markdown_path.write_text(markdown, encoding="utf-8")
-    csv_path.write_text(csv_text, encoding="utf-8")
-    json_path.write_text(json_text, encoding="utf-8")
+    write_text_atomic(markdown_path, markdown)
+    write_text_atomic(csv_path, csv_text)
+    write_text_atomic(json_path, json_text)
   except OSError as exc:
     raise RuntimeError(f"ダイジェストファイルを保存できませんでした: {exc}") from exc
   return {
@@ -138,3 +143,15 @@ def save_digest_files(
     "csv": csv_path,
     "json": json_path,
   }
+
+
+def write_text_atomic(path: Path, text: str, *, encoding: str = "utf-8") -> None:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  temp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+  temp_path.write_text(text, encoding=encoding)
+  temp_path.replace(path)
+
+
+def write_json_atomic(path: Path, payload: Any) -> None:
+  text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+  write_text_atomic(path, text)

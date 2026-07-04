@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8080 \
+    V9_RUNTIME_MODE=local \
+    V9_PERSIST_ROOT=/app/data/v9_runs \
+    V9_ENABLE_CLOUD_SCHEDULER_ADMIN=false \
+    DISABLE_EMAIL_SEND=true \
+    EMAIL_SEND_MODE=preview
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+COPY services_v9/ services_v9/
+COPY ui_v9/ ui_v9/
+COPY scripts/ scripts/
+COPY src/ src/
+COPY config/ config/
+COPY data/ data/
+
+EXPOSE 8080
+
+CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8080", "--server.headless=true", "--server.fileWatcherType=none", "--browser.gatherUsageStats=false"]

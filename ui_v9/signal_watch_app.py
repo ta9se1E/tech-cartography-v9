@@ -9,6 +9,15 @@ from pathlib import Path
 
 import streamlit as st
 
+from services_v9.cloud_runtime import is_cloud_scheduler_admin_enabled
+from services_v9.cloud_scheduler_admin import apply_scheduler_settings, get_scheduler_job_status
+from services_v9.cloud_weekly_settings import (
+  load_weekly_delivery_settings,
+  mask_email_address,
+  resolve_allowed_recipients,
+  save_weekly_delivery_settings,
+  validate_weekly_delivery_settings,
+)
 from services_v9.demo_data import (
   SAMPLE_UPLOAD_CSV_PATH,
   SAMPLE_UPLOAD_JSON_PATH,
@@ -115,6 +124,12 @@ UI_DATA_SOURCE_MODE_KEY = "ui_data_source_mode"
 UI_CSV_UPLOAD_KEY = "ui_csv_upload"
 UI_JSON_UPLOAD_KEY = "ui_json_upload"
 UI_EMAIL_CONFIRM_SEND_KEY = "ui_email_confirm_send"
+UI_WEEKLY_DELIVERY_ENABLED_KEY = "ui_weekly_delivery_enabled"
+UI_WEEKLY_DELIVERY_RECIPIENT_KEY = "ui_weekly_delivery_recipient"
+UI_WEEKLY_DELIVERY_WEEKDAY_KEY = "ui_weekly_delivery_weekday"
+UI_WEEKLY_DELIVERY_HOUR_KEY = "ui_weekly_delivery_hour"
+UI_WEEKLY_DELIVERY_MINUTE_KEY = "ui_weekly_delivery_minute"
+UI_WEEKLY_DELIVERY_TIMEZONE_KEY = "ui_weekly_delivery_timezone"
 
 STATE_PENDING_PROFILE = "state_pending_watch_profile"
 STATE_PROFILE_MESSAGE = "state_profile_status_message"
@@ -152,6 +167,9 @@ STATE_RETRIEVAL_LOADED_MANIFEST = "state_retrieval_loaded_manifest"
 STATE_RETRIEVAL_MANIFEST_SUMMARY = "state_retrieval_manifest_summary"
 STATE_RETRIEVAL_MANIFEST_MESSAGE = "state_retrieval_manifest_message"
 STATE_PENDING_DATA_SOURCE_MODE = "state_pending_data_source_mode"
+STATE_WEEKLY_DELIVERY_SETTINGS = "state_weekly_delivery_settings"
+STATE_WEEKLY_DELIVERY_MESSAGE = "state_weekly_delivery_message"
+STATE_WEEKLY_SCHEDULER_STATUS = "state_weekly_scheduler_status"
 
 UI_SEARCH_TOTAL_LIMIT_KEY = "ui_search_total_limit"
 UI_SEARCH_PATENT_LIMIT_KEY = "ui_search_patent_limit"
@@ -228,6 +246,18 @@ def _apply_pending_data_source_mode_if_any() -> None:
     st.session_state[UI_DATA_SOURCE_MODE_KEY] = pending_mode
 
 
+def _set_weekly_delivery_widgets(settings: dict[str, object]) -> None:
+  st.session_state.setdefault(STATE_WEEKLY_DELIVERY_SETTINGS, dict(settings or {}))
+  st.session_state.setdefault(STATE_WEEKLY_SCHEDULER_STATUS, {})
+  st.session_state.setdefault(STATE_WEEKLY_DELIVERY_MESSAGE, "")
+  st.session_state.setdefault(UI_WEEKLY_DELIVERY_ENABLED_KEY, bool(settings.get("enabled", False)))
+  st.session_state.setdefault(UI_WEEKLY_DELIVERY_RECIPIENT_KEY, str(settings.get("recipient_email", "") or ""))
+  st.session_state.setdefault(UI_WEEKLY_DELIVERY_WEEKDAY_KEY, str(settings.get("weekday", "MON") or "MON"))
+  st.session_state.setdefault(UI_WEEKLY_DELIVERY_HOUR_KEY, int(settings.get("hour", 9) or 9))
+  st.session_state.setdefault(UI_WEEKLY_DELIVERY_MINUTE_KEY, int(settings.get("minute", 0) or 0))
+  st.session_state.setdefault(UI_WEEKLY_DELIVERY_TIMEZONE_KEY, str(settings.get("timezone", "Asia/Tokyo") or "Asia/Tokyo"))
+
+
 def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(UI_DEMO_KEY, True)
   st.session_state.setdefault(UI_SNAPSHOT_NOTE_KEY, "")
@@ -248,7 +278,39 @@ def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(STATE_EMAIL_SEND_RESULT, {})
   if UI_THEME_NAME_KEY not in st.session_state:
     _set_profile_widgets(profile_dict)
+  if STATE_WEEKLY_DELIVERY_SETTINGS not in st.session_state:
+    _set_weekly_delivery_widgets(load_weekly_delivery_settings())
   _ensure_search_plan_widget_defaults(profile_dict)
+
+
+def _build_weekly_delivery_settings_from_session() -> dict[str, object]:
+  return {
+    "enabled": bool(st.session_state.get(UI_WEEKLY_DELIVERY_ENABLED_KEY, False)),
+    "recipient_email": str(st.session_state.get(UI_WEEKLY_DELIVERY_RECIPIENT_KEY, "") or "").strip(),
+    "weekday": str(st.session_state.get(UI_WEEKLY_DELIVERY_WEEKDAY_KEY, "MON") or "MON").strip().upper(),
+    "hour": int(st.session_state.get(UI_WEEKLY_DELIVERY_HOUR_KEY, 9) or 9),
+    "minute": int(st.session_state.get(UI_WEEKLY_DELIVERY_MINUTE_KEY, 0) or 0),
+    "timezone": str(st.session_state.get(UI_WEEKLY_DELIVERY_TIMEZONE_KEY, "Asia/Tokyo") or "Asia/Tokyo").strip(),
+  }
+
+
+def _build_weekly_delivery_ui_state() -> dict[str, object]:
+  persisted_settings = dict(st.session_state.get(STATE_WEEKLY_DELIVERY_SETTINGS, {}) or load_weekly_delivery_settings())
+  current_settings = dict(persisted_settings)
+  current_settings.update(_build_weekly_delivery_settings_from_session())
+  validation = validate_weekly_delivery_settings(current_settings)
+  normalized = dict(validation.get("normalized_settings", {}) or current_settings)
+  scheduler_admin_enabled = is_cloud_scheduler_admin_enabled()
+  allowed_recipients = list(resolve_allowed_recipients())
+  allowed_recipient_label = ", ".join(mask_email_address(item) for item in allowed_recipients if item)
+  return {
+    "settings": normalized,
+    "validation": validation,
+    "scheduler_admin_enabled": scheduler_admin_enabled,
+    "scheduler_status": dict(st.session_state.get(STATE_WEEKLY_SCHEDULER_STATUS, {}) or {}),
+    "masked_recipient": mask_email_address(str(normalized.get("recipient_email", "") or "")),
+    "allowed_recipient_label": allowed_recipient_label,
+  }
 
 
 def _build_ui_watch_profile_dict() -> dict[str, object]:
@@ -1203,13 +1265,16 @@ def run_app() -> None:
       previous_snapshot_payload,
       st.session_state.get(STATE_COMPARE_MESSAGE),
     )
+  weekly_delivery_state = _build_weekly_delivery_ui_state()
   with tabs[4]:
     profile_events = render_watch_profile_tab(
       watch_profile,
       profile_summary,
       query_previews,
       suggestions,
+      weekly_delivery_state,
       st.session_state.get(STATE_PROFILE_MESSAGE),
+      st.session_state.get(STATE_WEEKLY_DELIVERY_MESSAGE),
     )
   latest_reviews_by_signal_id = dict(st.session_state.get(STATE_REVIEWS_BY_SIGNAL_ID, {}) or {})
   latest_reviewed_signals = _prepare_reviewed_signal_dicts(
@@ -1260,6 +1325,56 @@ def run_app() -> None:
 
   if profile_events["apply_suggestions"]:
     _apply_suggestions_and_rerun(watch_profile_dict, suggestions)
+
+  if profile_events.get("save_weekly_delivery_settings"):
+    try:
+      save_result = save_weekly_delivery_settings(_build_weekly_delivery_settings_from_session(), updated_by="streamlit")
+    except RuntimeError as exc:
+      st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = str(exc)
+    else:
+      saved_settings = dict(save_result.get("settings", {}) or {})
+      st.session_state[STATE_WEEKLY_DELIVERY_SETTINGS] = saved_settings
+      for key, value in (
+        (UI_WEEKLY_DELIVERY_ENABLED_KEY, bool(saved_settings.get("enabled", False))),
+        (UI_WEEKLY_DELIVERY_RECIPIENT_KEY, str(saved_settings.get("recipient_email", "") or "")),
+        (UI_WEEKLY_DELIVERY_WEEKDAY_KEY, str(saved_settings.get("weekday", "MON") or "MON")),
+        (UI_WEEKLY_DELIVERY_HOUR_KEY, int(saved_settings.get("hour", 9) or 9)),
+        (UI_WEEKLY_DELIVERY_MINUTE_KEY, int(saved_settings.get("minute", 0) or 0)),
+        (UI_WEEKLY_DELIVERY_TIMEZONE_KEY, str(saved_settings.get("timezone", "Asia/Tokyo") or "Asia/Tokyo")),
+      ):
+        st.session_state[key] = value
+      st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = (
+        f"週次自動配信設定を保存しました: {save_result.get('location', '')}"
+      )
+    st.rerun()
+
+  if profile_events.get("inspect_scheduler"):
+    if not is_cloud_scheduler_admin_enabled():
+      st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = "クラウド管理機能が無効です。"
+      st.session_state[STATE_WEEKLY_SCHEDULER_STATUS] = {"status": "blocked", "message": "cloud scheduler admin disabled"}
+    else:
+      scheduler_status = get_scheduler_job_status()
+      st.session_state[STATE_WEEKLY_SCHEDULER_STATUS] = scheduler_status
+      st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = str(scheduler_status.get("message", "") or "Cloud Scheduler設定を確認しました。")
+    st.rerun()
+
+  if profile_events.get("apply_scheduler"):
+    if not is_cloud_scheduler_admin_enabled():
+      st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = "クラウド管理機能が無効です。"
+      st.session_state[STATE_WEEKLY_SCHEDULER_STATUS] = {"status": "blocked", "message": "cloud scheduler admin disabled"}
+    else:
+      current_result = save_weekly_delivery_settings(_build_weekly_delivery_settings_from_session(), updated_by="streamlit")
+      current_settings = dict(current_result.get("settings", {}) or {})
+      scheduler_result = apply_scheduler_settings(current_settings)
+      current_settings["scheduler_applied_revision"] = int(current_settings.get("revision", 0) or 0)
+      current_settings["last_scheduler_apply_status"] = str(scheduler_result.get("status", "") or "")
+      current_settings["last_scheduler_apply_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+      current_settings["last_scheduler_known_state"] = str(scheduler_result.get("state", "") or "")
+      saved_result = save_weekly_delivery_settings(current_settings, updated_by="streamlit", increment_revision=False)
+      st.session_state[STATE_WEEKLY_DELIVERY_SETTINGS] = dict(saved_result.get("settings", {}) or {})
+      st.session_state[STATE_WEEKLY_SCHEDULER_STATUS] = scheduler_result
+      st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = "Cloud Schedulerへ設定を反映しました。"
+    st.rerun()
 
   if theme_events.get("regenerate_search_plan") or source_events.get("regenerate_search_plan"):
     _refresh_search_plan_state(

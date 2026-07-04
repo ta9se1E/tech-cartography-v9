@@ -127,6 +127,8 @@ def test_ui_code_contains_search_plan_state_management() -> None:
     "STATE_SEARCH_PLAN_DATA",
     "STATE_SEARCH_PLAN_STATUS_MESSAGE",
     "STATE_SEARCH_PLAN_FORCE_REGENERATE",
+    "STATE_WEEKLY_DELIVERY_SETTINGS",
+    "STATE_WEEKLY_DELIVERY_MESSAGE",
     "_refresh_search_plan_state(",
   ]
   assert all(token in APP_SOURCE for token in required_tokens)
@@ -171,6 +173,32 @@ def test_streamlit_testing_finds_regenerate_and_manual_query_widgets() -> None:
   assert any(button.label == "情報源設定で検索計画を再生成" for button in at.button)
   assert any(button.label in {"手動queryを追加", "Global Web手動queryを追加"} for button in at.button)
   assert any(select.label == "手動queryの対象" for select in at.selectbox)
+
+
+def test_ui_code_contains_weekly_delivery_controls() -> None:
+  required_labels = [
+    "週次自動配信設定",
+    "自動配信を有効にする",
+    "送信先メールアドレス",
+    "実行曜日",
+    "タイムゾーン",
+    "設定を保存",
+    "現在のCloud Scheduler設定を確認",
+    "Cloud Schedulerへ反映",
+    "クラウド管理機能が無効です。設定保存のみ可能です。",
+  ]
+  assert all(label in TABS_SOURCE for label in required_labels)
+
+
+def test_streamlit_testing_finds_weekly_delivery_widgets() -> None:
+  at = AppTest.from_file(str(PROJECT_ROOT / "app.py"))
+  at.run()
+  assert any(button.label == "設定を保存" for button in at.button)
+  assert any(button.label == "現在のCloud Scheduler設定を確認" for button in at.button)
+  assert any(button.label == "Cloud Schedulerへ反映" for button in at.button)
+  assert any(select.label == "実行曜日" for select in at.selectbox)
+  assert any(select.label == "タイムゾーン" for select in at.selectbox)
+  assert any(text_input.label == "送信先メールアドレス" for text_input in at.text_input)
 
 
 def test_streamlit_testing_keeps_upload_widgets() -> None:

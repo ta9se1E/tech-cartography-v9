@@ -98,6 +98,19 @@ def _search_intent_enabled_key(intent: str) -> str:
   return f"ui_search_intent_enabled_{intent}"
 
 
+def _weekday_label_ja(value: str) -> str:
+  labels = {
+    "MON": "月曜日",
+    "TUE": "火曜日",
+    "WED": "水曜日",
+    "THU": "木曜日",
+    "FRI": "金曜日",
+    "SAT": "土曜日",
+    "SUN": "日曜日",
+  }
+  return labels.get(str(value or "").strip().upper(), str(value or "").strip().upper())
+
+
 def _render_search_plan_validation(errors: list[str]) -> None:
   st.markdown("### validation結果")
   if not errors:
@@ -1332,7 +1345,9 @@ def render_watch_profile_tab(
   profile_summary: dict[str, object],
   query_previews: dict[str, str],
   suggestions: Sequence[str],
+  weekly_delivery_state: dict[str, object],
   profile_status_message: str | None = None,
+  weekly_delivery_status_message: str | None = None,
 ) -> dict[str, bool]:
   st.subheader("監視プロファイル")
 
@@ -1403,6 +1418,58 @@ def render_watch_profile_tab(
     with st.expander(label):
       st.code(query_previews.get(key, "Previewを生成できませんでした。"))
 
+  settings = dict(weekly_delivery_state.get("settings", {}) or {})
+  validation = dict(weekly_delivery_state.get("validation", {}) or {})
+  scheduler_status = dict(weekly_delivery_state.get("scheduler_status", {}) or {})
+  scheduler_admin_enabled = bool(weekly_delivery_state.get("scheduler_admin_enabled", False))
+  masked_recipient = str(weekly_delivery_state.get("masked_recipient", "") or "")
+  allowed_recipient_label = str(weekly_delivery_state.get("allowed_recipient_label", "") or "")
+  state_text = str(scheduler_status.get("state", settings.get("last_scheduler_known_state", "")) or "unknown")
+
+  with st.expander("週次自動配信設定", expanded=True):
+    st.caption("保存時だけ設定を書き込みます。Cloud Scheduler API は明示ボタン時だけ呼びます。")
+    _show_status_message(weekly_delivery_status_message)
+    if scheduler_admin_enabled:
+      st.success("クラウド管理機能は有効です。")
+    else:
+      st.info("クラウド管理機能が無効です。設定保存のみ可能です。")
+    st.checkbox("自動配信を有効にする", key="ui_weekly_delivery_enabled")
+    st.text_input("送信先メールアドレス", key="ui_weekly_delivery_recipient")
+    st.selectbox(
+      "実行曜日",
+      options=["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+      format_func=_weekday_label_ja,
+      key="ui_weekly_delivery_weekday",
+    )
+    time_col1, time_col2 = st.columns(2)
+    time_col1.selectbox("実行時刻（時）", options=list(range(24)), key="ui_weekly_delivery_hour")
+    time_col2.selectbox("実行時刻（分）", options=list(range(60)), key="ui_weekly_delivery_minute")
+    st.selectbox(
+      "タイムゾーン",
+      options=["Asia/Tokyo", "UTC", "America/New_York", "Europe/London"],
+      key="ui_weekly_delivery_timezone",
+    )
+    st.write(f"- recipient: `{masked_recipient or '未設定'}`")
+    st.write(f"- allowlist: `{allowed_recipient_label or '未設定'}`")
+    st.write(f"- cron: `{settings.get('cron_expression', '') or '未計算'}`")
+    st.write(f"- revision: `{settings.get('revision', 0)}`")
+    st.write(f"- scheduler applied revision: `{settings.get('scheduler_applied_revision', 0)}`")
+    st.write(f"- 最終更新: `{settings.get('updated_at', '') or '未保存'}`")
+    st.write(f"- Scheduler state: `{state_text}`")
+    st.write(f"- Scheduler反映結果: `{settings.get('last_scheduler_apply_status', '') or '未反映'}`")
+    if int(settings.get("revision", 0) or 0) != int(settings.get("scheduler_applied_revision", 0) or 0):
+      st.warning("設定revisionとScheduler反映revisionが一致していません。")
+    errors = list(validation.get("errors", []) or [])
+    warnings = list(validation.get("warnings", []) or [])
+    for message in errors:
+      st.error(str(message))
+    for message in warnings:
+      st.warning(str(message))
+    scheduler_button_left, scheduler_button_mid, scheduler_button_right = st.columns(3)
+    save_weekly_delivery_settings = scheduler_button_left.button("設定を保存", key="btn_weekly_delivery_save", width="stretch")
+    inspect_scheduler = scheduler_button_mid.button("現在のCloud Scheduler設定を確認", key="btn_weekly_delivery_inspect", width="stretch")
+    apply_scheduler = scheduler_button_right.button("Cloud Schedulerへ反映", key="btn_weekly_delivery_apply", width="stretch")
+
   button_left, button_mid, button_right = st.columns(3)
   with button_left:
     load_clicked = st.button("保存済み監視プロファイルを読み込む", key="btn_profile_load", width="stretch")
@@ -1415,6 +1482,9 @@ def render_watch_profile_tab(
     "save_profile": save_clicked,
     "load_profile": load_clicked,
     "apply_suggestions": apply_clicked,
+    "save_weekly_delivery_settings": save_weekly_delivery_settings,
+    "inspect_scheduler": inspect_scheduler,
+    "apply_scheduler": apply_scheduler,
   }
 
 
