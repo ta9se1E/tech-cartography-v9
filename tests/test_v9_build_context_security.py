@@ -66,6 +66,17 @@ def test_scan_image_context_rejects_secret_env_key_without_logging_value() -> No
   assert "super-secret-value" not in json.dumps(result, ensure_ascii=False)
 
 
+def test_scan_image_context_allows_system_pem_but_rejects_app_credential_pem() -> None:
+  system_paths = [
+    "etc/ssl/certs/Amazon_Root_CA_1.pem",
+    "usr/lib/ssl/cert.pem",
+    "usr/local/lib/python3.11/site-packages/certifi/cacert.pem",
+  ]
+  assert scan_image_context(system_paths, [])["status"] == "ok"
+  assert scan_image_context(["app/credentials/client-key.pem"], [])["status"] == "failed"
+  assert scan_image_context(["credentials/private.p12"], [])["status"] == "failed"
+
+
 def test_summarize_archive_presence_flags_forbidden_inputs() -> None:
   summary = summarize_archive_presence([
     ".env",

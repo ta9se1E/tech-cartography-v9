@@ -29,6 +29,15 @@ steps:
         docker image inspect "${image_uri}" --format='{{range .Config.Env}}{{println .}}{{end}}' > "${env_list}"
 
         forbidden_file_count=0
+        is_excluded_image_pem() {
+          local candidate="$1"
+          case "${candidate}" in
+            /etc/ssl/*|/usr/lib/ssl/*|/usr/local/lib/python*/site-packages/certifi/cacert.pem|/usr/local/lib/python*/site-packages/grpc/_cython/_credentials/roots.pem|/usr/local/lib/python*/site-packages/pip/_vendor/certifi/cacert.pem)
+              return 0
+              ;;
+          esac
+          return 1
+        }
         while IFS= read -r entry; do
           normalized="/${entry#./}"
           normalized="${normalized%/}"
@@ -42,10 +51,16 @@ steps:
             "${normalized}" == */data/v9_runs/* || \
             "${normalized}" == */.streamlit/secrets.toml || \
             "${normalized}" == */application_default_credentials.json || \
-            "${normalized}" == */service-account*.json || \
-            "${normalized}" == *.pem || \
-            "${normalized}" == *.p12 \
+            "${normalized}" == */service-account*.json \
           ]]; then
+            printf 'FORBIDDEN_FILE %s\n' "${normalized}" >&2
+            forbidden_file_count=$((forbidden_file_count + 1))
+            continue
+          fi
+          if [[ "${normalized}" == *.pem || "${normalized}" == *.p12 ]]; then
+            if is_excluded_image_pem "${normalized}"; then
+              continue
+            fi
             printf 'FORBIDDEN_FILE %s\n' "${normalized}" >&2
             forbidden_file_count=$((forbidden_file_count + 1))
           fi

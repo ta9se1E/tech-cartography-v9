@@ -34,8 +34,17 @@ FORBIDDEN_IMAGE_PATTERNS = (
   "**/.streamlit/secrets.toml",
   "**/application_default_credentials.json",
   "**/service-account*.json",
-  "**/*.pem",
-  "**/*.p12",
+)
+IMAGE_PEM_SUFFIXES = (".pem", ".p12")
+IMAGE_PEM_EXCLUDE_PREFIXES = (
+  "etc/ssl/",
+  "usr/lib/ssl/",
+  "usr/local/lib/python",
+)
+IMAGE_PEM_EXCLUDE_SUFFIXES = (
+  "/site-packages/certifi/cacert.pem",
+  "/site-packages/grpc/_cython/_credentials/roots.pem",
+  "/site-packages/pip/_vendor/certifi/cacert.pem",
 )
 FORBIDDEN_IMAGE_ENV_KEYS = {
   "SMTP_PASSWORD",
@@ -88,6 +97,28 @@ def _match_path(path: str, pattern: str) -> bool:
     return True
   pure = PurePosixPath(normalized)
   return pure.match(normalized_pattern) or fnmatch.fnmatch(normalized, normalized_pattern)
+
+
+def is_excluded_image_pem_path(path: str) -> bool:
+  normalized = normalize_posix_path(path)
+  if not normalized:
+    return False
+  lowered = normalized.lower()
+  if not any(lowered.endswith(suffix) for suffix in IMAGE_PEM_SUFFIXES):
+    return False
+  if any(lowered.startswith(prefix) for prefix in IMAGE_PEM_EXCLUDE_PREFIXES):
+    return True
+  return any(lowered.endswith(suffix) for suffix in IMAGE_PEM_EXCLUDE_SUFFIXES)
+
+
+def is_forbidden_image_pem_path(path: str) -> bool:
+  normalized = normalize_posix_path(path)
+  if not normalized:
+    return False
+  lowered = normalized.lower()
+  if not any(lowered.endswith(suffix) for suffix in IMAGE_PEM_SUFFIXES):
+    return False
+  return not is_excluded_image_pem_path(normalized)
 
 
 def find_matching_paths(paths: Iterable[str], patterns: Iterable[str]) -> list[str]:
@@ -158,6 +189,11 @@ def scan_image_context(file_paths: Iterable[str], env_entries: Iterable[str]) ->
   normalized_files = sorted({normalize_posix_path(path) for path in file_paths if normalize_posix_path(path)})
   env_keys = extract_env_key_names(env_entries)
   forbidden_file_paths = find_matching_paths(normalized_files, FORBIDDEN_IMAGE_PATTERNS)
+  forbidden_file_paths.extend(
+    path for path in normalized_files
+    if is_forbidden_image_pem_path(path) and path not in forbidden_file_paths
+  )
+  forbidden_file_paths = sorted(set(forbidden_file_paths))
   forbidden_env_keys = sorted(key for key in env_keys if key in FORBIDDEN_IMAGE_ENV_KEYS)
   return {
     "status": "ok" if not forbidden_file_paths and not forbidden_env_keys else "failed",
@@ -269,6 +305,11 @@ __all__ = [
   "FORBIDDEN_IMAGE_ENV_KEYS",
   "FORBIDDEN_IMAGE_PATTERNS",
   "FORBIDDEN_UPLOAD_PATTERNS",
+  "IMAGE_PEM_EXCLUDE_PREFIXES",
+  "IMAGE_PEM_EXCLUDE_SUFFIXES",
+  "IMAGE_PEM_SUFFIXES",
+  "is_excluded_image_pem_path",
+  "is_forbidden_image_pem_path",
   "REQUIRED_UPLOAD_EXACT",
   "REQUIRED_UPLOAD_PREFIXES",
   "V9_IMAGE_MARKER",
