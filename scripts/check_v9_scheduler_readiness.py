@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import subprocess
@@ -17,11 +18,17 @@ if str(PROJECT_ROOT) not in sys.path:
 from services_v9.retrieval_run_store import build_retrieval_run_manifest, save_retrieval_run_manifest  # noqa: E402
 from services_v9.watch_profile_schema import migrate_watch_profile  # noqa: E402
 from services_v9.weekly_run_config import default_weekly_run_config, validate_weekly_run_config  # noqa: E402
+from services_v9 import paper_openalex_retrieval  # noqa: E402
+from services_v9 import patent_bigquery_query  # noqa: E402
+from services_v9 import web_company_retrieval  # noqa: E402
 from services_v9.weekly_scheduler import (  # noqa: E402
   acquire_weekly_run_lock,
   build_cron_preview,
   build_launchd_preview,
   release_weekly_run_lock,
+  run_paper_provider_for_weekly,
+  run_patent_provider_for_weekly,
+  run_web_company_provider_for_weekly,
   run_weekly_watch,
   validate_approved_query_ids,
 )
@@ -62,6 +69,144 @@ def _write_artifact(root: Path, source_type: str, run_id: str, rows: list[dict])
   return target
 
 
+def _assert_provider_contracts(root: Path, watch_profile_path: Path) -> None:
+  config = default_weekly_run_config()
+  config["enabled"] = True
+  config["watch_profile_path"] = str(watch_profile_path)
+  config["patent"]["approved_query_ids"] = ["patent_q01"]
+  config["patent"]["maximum_bytes_billed"] = 1000000
+  config["paper"]["approved_query_ids"] = ["paper_q01"]
+  config["web_company"]["approved_query_ids"] = ["gw_q001"]
+
+  patent_preview_sig = inspect.signature(patent_bigquery_query.build_patent_bigquery_preview)
+  assert "selected_query_id" in patent_preview_sig.parameters
+  assert "config" in patent_preview_sig.parameters
+  patent_execute_sig = inspect.signature(patent_bigquery_query.execute_patent_bigquery_retrieval)
+  assert "dry_run_result" in patent_execute_sig.parameters
+  assert "approved" in patent_execute_sig.parameters
+
+  paper_preview_sig = inspect.signature(paper_openalex_retrieval.build_openalex_paper_preview)
+  assert "retry_limit" in paper_preview_sig.parameters
+  paper_execute_sig = inspect.signature(paper_openalex_retrieval.execute_openalex_paper_retrieval)
+  assert "timeout_sec" in paper_execute_sig.parameters
+
+  web_preview_sig = inspect.signature(web_company_retrieval.build_global_web_retrieval_preview)
+  assert "verification_limit" in web_preview_sig.parameters
+  web_execute_sig = inspect.signature(web_company_retrieval.execute_global_web_retrieval)
+  assert "discovery_timeout_sec" in web_execute_sig.parameters
+
+  external_calls = {"network": 0, "smtp": 0}
+
+  def _patent_preview(search_plan, watch_profile, *, selected_query_id=None, time_range="12m", max_results=None, config=None):
+    return {"request": {"query_id": selected_query_id}, "validation_rows": [], "parameters": [], "sql": "SELECT 1"}
+
+  def _patent_dry_run(preview, *, client_factory=None, job_config_builder=None, config=None):
+    external_calls["network"] += 0
+    return {"dry_run_status": "ok", "estimated_bytes": 1, "estimated_cost_usd": 0.0}
+
+  def _patent_execute(preview, dry_run_result, *, approved, client_factory=None, job_config_builder=None, config=None):
+    external_calls["network"] += 0
+    return {
+      "provider_status": "success",
+      "retrieval_run_id": "patent_contract_run",
+      "rows_retrieved": 1,
+      "rows": [{"publication_number": "US1"}],
+      "log": {"approved": approved},
+      "error": None,
+    }
+
+  patent_result = run_patent_provider_for_weekly(
+    search_plan={"plans": {"patent": {"queries": [{"query_id": "patent_q01"}]}}},
+    watch_profile=_watch_profile(),
+    config=config,
+    output_root=root,
+    weekly_run_id="contract",
+    preview_builder=_patent_preview,
+    dry_run_runner=_patent_dry_run,
+    execute_runner=_patent_execute,
+  )
+  assert patent_result["status"] == "success"
+  assert patent_result["retrieval_run_id"] == "patent_contract_run"
+  assert patent_result["artifact_dir"]
+
+  def _paper_preview(search_plan, watch_profile, *, selected_query_id=None, time_range="12m", max_results=None, per_page=25, retry_limit=2, polite_email=None):
+    return {"request": {"query_id": selected_query_id, "retry_limit": retry_limit}, "validation_rows": []}
+
+  def _paper_execute(preview, *, opener=None, sleeper=None, timeout_sec=30, rate_limit_sleep_sec=0.2):
+    external_calls["network"] += 0
+    return {
+      "status": "partial_success",
+      "run_id": "paper_contract_run",
+      "rows_retrieved": 1,
+      "rows": [{"work_id": "W1"}],
+      "provider_log": [],
+      "error": "partial",
+    }
+
+  paper_result = run_paper_provider_for_weekly(
+    search_plan={"plans": {"paper": {"queries": [{"query_id": "paper_q01"}]}}},
+    watch_profile=_watch_profile(),
+    config=config,
+    output_root=root,
+    weekly_run_id="contract",
+    preview_builder=_paper_preview,
+    execute_runner=_paper_execute,
+  )
+  assert paper_result["status"] == "partial_success"
+  assert paper_result["retrieval_run_id"] == "paper_contract_run"
+
+  def _web_preview(search_plan, *, max_query_count=None, verification_limit=30, summary_top_n=10):
+    return {"request": {"queries": list(search_plan["global_web_plan"]["queries"])}, "validation_rows": []}
+
+  def _web_execute(preview, *, tavily_search_post_fn=None, tavily_extract_post_fn=None, google_grounding_fn=None, sleeper=None, discovery_timeout_sec=30, extract_timeout_sec=60, rate_limit_sleep_sec=0.2):
+    external_calls["network"] += 0
+    return {
+      "provider_status": "success",
+      "retrieval_run_id": "web_contract_run",
+      "rows_retrieved": 1,
+      "rows": [{"candidate_id": "W1"}],
+      "provider_log": [],
+      "error": None,
+      "query_count": len(preview["request"]["queries"]),
+    }
+
+  web_result = run_web_company_provider_for_weekly(
+    search_plan={
+      "global_web_plan": {
+        "queries": [
+          {"query_id": "gw_q001", "enabled": True, "duplicate_of": "", "query_local": "a", "max_results": 5},
+          {"query_id": "gw_q999", "enabled": True, "duplicate_of": "", "query_local": "b", "max_results": 5},
+        ]
+      }
+    },
+    watch_profile=_watch_profile(),
+    config=config,
+    output_root=root,
+    weekly_run_id="contract",
+    preview_builder=_web_preview,
+    execute_runner=_web_execute,
+  )
+  assert web_result["status"] == "success"
+  assert web_result["retrieval_run_id"] == "web_contract_run"
+
+  def _paper_execute_raises(preview, *, opener=None, sleeper=None, timeout_sec=30, rate_limit_sleep_sec=0.2):
+    raise RuntimeError("contract failure")
+
+  failure = run_paper_provider_for_weekly(
+    search_plan={"plans": {"paper": {"queries": [{"query_id": "paper_q01"}]}}},
+    watch_profile=_watch_profile(),
+    config=config,
+    output_root=root,
+    weekly_run_id="contract",
+    preview_builder=_paper_preview,
+    execute_runner=_paper_execute_raises,
+  )
+  assert failure["status"] == "failed"
+  assert failure["rows"] == []
+  assert external_calls["network"] == 0
+  assert external_calls["smtp"] == 0
+
+
 def main() -> None:
   config = default_weekly_run_config()
   validation = validate_weekly_run_config(config)
@@ -76,6 +221,7 @@ def main() -> None:
     watch_profile_path = root / "watch_profile.json"
     watch_profile = _watch_profile()
     watch_profile_path.write_text(json.dumps(watch_profile, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _assert_provider_contracts(root, watch_profile_path)
 
     patent_rows = [{
       "publication_number": "US2024000001A1",

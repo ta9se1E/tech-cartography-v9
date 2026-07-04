@@ -944,90 +944,131 @@ def _default_patent_stage_adapter(
   output_root: Path,
   weekly_run_id: str,
 ) -> dict[str, Any]:
-  approved_query_ids = list(config.get("patent", {}).get("approved_query_ids", []) or [])
-  if not approved_query_ids:
-    return _blocked_provider_stage("patent", "approved query が未設定のため特許取得を停止しました。")
-  maximum_bytes_billed = int(config.get("patent", {}).get("maximum_bytes_billed", 0) or 0)
-  if maximum_bytes_billed <= 0:
-    return _blocked_provider_stage("patent", "maximum_bytes_billed が未設定のため特許取得を停止しました。")
-  per_query_limit = _per_query_limit(int(config.get("limits", {}).get("patent_max_results", 500) or 500), len(approved_query_ids))
-  env_cfg = BigQuerySafetyConfig.from_env()
-  bigquery_config = BigQuerySafetyConfig(
-    enable_bigquery_run=True,
-    show_bigquery_admin=env_cfg.show_bigquery_admin,
-    bigquery_project_id=env_cfg.bigquery_project_id,
-    bigquery_location=env_cfg.bigquery_location,
-    bigquery_max_bytes_billed=maximum_bytes_billed,
-    bigquery_default_limit=per_query_limit,
-    bigquery_dry_run_only=False,
-    bigquery_allow_execute=True,
+  return run_patent_provider_for_weekly(
+    search_plan=search_plan,
+    watch_profile=watch_profile,
+    config=config,
+    output_root=output_root,
+    weekly_run_id=weekly_run_id,
   )
-  rows: list[dict[str, Any]] = []
-  query_logs: list[dict[str, Any]] = []
-  query_plans: list[dict[str, Any]] = []
-  statuses: list[str] = []
-  errors: list[str] = []
-  for query_id in approved_query_ids:
-    preview = build_patent_bigquery_preview(
-      search_plan,
-      watch_profile,
-      selected_query_id=query_id,
-      time_range=str(config.get("patent", {}).get("time_range", "12m") or "12m"),
-      max_results=per_query_limit,
-      config=bigquery_config,
+
+
+def run_patent_provider_for_weekly(
+  *,
+  search_plan: dict[str, Any],
+  watch_profile: dict[str, Any],
+  config: dict[str, Any],
+  output_root: Path,
+  weekly_run_id: str,
+  preview_builder: Callable[..., dict[str, Any]] = build_patent_bigquery_preview,
+  dry_run_runner: Callable[..., dict[str, Any]] = run_patent_bigquery_dry_run,
+  execute_runner: Callable[..., dict[str, Any]] = execute_patent_bigquery_retrieval,
+  artifact_writer: Callable[..., Path] | None = None,
+  safety_config_factory: Callable[[], BigQuerySafetyConfig] = BigQuerySafetyConfig.from_env,
+) -> dict[str, Any]:
+  try:
+    approved_query_ids = list(config.get("patent", {}).get("approved_query_ids", []) or [])
+    if not approved_query_ids:
+      return _blocked_provider_stage("patent", "approved query が未設定のため特許取得を停止しました。")
+    maximum_bytes_billed = int(config.get("patent", {}).get("maximum_bytes_billed", 0) or 0)
+    if maximum_bytes_billed <= 0:
+      return _blocked_provider_stage("patent", "maximum_bytes_billed が未設定のため特許取得を停止しました。")
+    per_query_limit = _per_query_limit(int(config.get("limits", {}).get("patent_max_results", 500) or 500), len(approved_query_ids))
+    env_cfg = safety_config_factory()
+    bigquery_config = BigQuerySafetyConfig(
+      enable_bigquery_run=True,
+      show_bigquery_admin=env_cfg.show_bigquery_admin,
+      bigquery_project_id=env_cfg.bigquery_project_id,
+      bigquery_location=env_cfg.bigquery_location,
+      bigquery_max_bytes_billed=maximum_bytes_billed,
+      bigquery_default_limit=per_query_limit,
+      bigquery_dry_run_only=False,
+      bigquery_allow_execute=True,
     )
-    dry_run_result = run_patent_bigquery_dry_run(preview, config=bigquery_config)
-    retrieval_result = execute_patent_bigquery_retrieval(
-      preview,
-      dry_run_result,
-      approved=True,
-      config=bigquery_config,
+    rows: list[dict[str, Any]] = []
+    query_logs: list[dict[str, Any]] = []
+    query_plans: list[dict[str, Any]] = []
+    statuses: list[str] = []
+    errors: list[str] = []
+    warnings: list[str] = []
+    provider_run_ids: list[str] = []
+    for query_id in approved_query_ids:
+      preview = preview_builder(
+        search_plan,
+        watch_profile,
+        selected_query_id=query_id,
+        time_range=str(config.get("patent", {}).get("time_range", "12m") or "12m"),
+        max_results=per_query_limit,
+        config=bigquery_config,
+      )
+      dry_run_result = dry_run_runner(preview, config=bigquery_config)
+      retrieval_result = execute_runner(
+        preview,
+        dry_run_result,
+        approved=True,
+        config=bigquery_config,
+      )
+      normalized_result = _normalize_weekly_provider_result(
+        provider="patent",
+        result=retrieval_result,
+        default_retrieval_run_id=f"weekly_patent_{weekly_run_id}",
+      )
+      query_plans.append(
+        {
+          "query_id": query_id,
+          "preview_request": dict(preview.get("request", {}) or {}),
+          "dry_run_result": dry_run_result,
+        }
+      )
+      query_logs.append(
+        {
+          "query_id": query_id,
+          "dry_run_status": str(dry_run_result.get("dry_run_status", "") or ""),
+          "provider_status": str(normalized_result.get("provider_status", "") or ""),
+          "rows_retrieved": int(normalized_result.get("candidate_count", 0) or 0),
+          "error": normalized_result.get("error"),
+          "retrieval_run_id": normalized_result.get("retrieval_run_id", ""),
+        }
+      )
+      statuses.append(str(normalized_result.get("status", "failed") or "failed"))
+      rows.extend(list(normalized_result.get("rows", []) or []))
+      warnings.extend(list(normalized_result.get("warnings", []) or []))
+      errors.extend(list(normalized_result.get("errors", []) or []))
+      if str(normalized_result.get("retrieval_run_id", "") or "").strip():
+        provider_run_ids.append(str(normalized_result.get("retrieval_run_id", "") or "").strip())
+    stage_status = _combine_provider_stage_status(statuses, len(rows))
+    resolved_run_id = _resolve_scheduler_run_id(provider_run_ids, fallback=f"weekly_patent_{weekly_run_id}")
+    artifact_dir = (artifact_writer or _save_scheduler_retrieval_artifact)(
+      "patent",
+      output_root,
+      retrieval_run_id=resolved_run_id,
+      provider_status="success" if stage_status == "success" else "partial_success" if stage_status == "partial_success" else "error",
+      rows=rows,
+      plan_payload={"queries": query_plans},
+      provider_log={"query_logs": query_logs, "provider_retrieval_run_ids": provider_run_ids},
     )
-    query_plans.append(
-      {
-        "query_id": query_id,
-        "preview_request": dict(preview.get("request", {}) or {}),
-        "dry_run_result": dry_run_result,
-      }
-    )
-    query_logs.append(
-      {
-        "query_id": query_id,
-        "dry_run_status": str(dry_run_result.get("dry_run_status", "") or ""),
-        "provider_status": str(retrieval_result.get("provider_status", "") or ""),
-        "rows_retrieved": int(retrieval_result.get("rows_retrieved", 0) or 0),
-        "error": retrieval_result.get("error"),
-      }
-    )
-    statuses.append(str(retrieval_result.get("provider_status", "") or "error"))
-    rows.extend(list(retrieval_result.get("rows", []) or []))
-    if retrieval_result.get("error"):
-      errors.append(str(retrieval_result.get("error")))
-  stage_status = _combine_provider_stage_status(statuses, len(rows))
-  artifact_dir = _save_scheduler_retrieval_artifact(
-    "patent",
-    output_root,
-    retrieval_run_id=f"weekly_patent_{weekly_run_id}",
-    provider_status="success" if stage_status == "success" else "partial_success" if stage_status == "partial_success" else "error",
-    rows=rows,
-    plan_payload={"queries": query_plans},
-    provider_log={"query_logs": query_logs},
-  )
-  return {
-    "status": stage_status,
-    "message": "特許取得を実行しました。" if rows else "特許取得は候補 0 件でした。",
-    "rows": rows,
-    "warnings": [],
-    "errors": errors if stage_status in {"partial_success", "failed"} else [],
-    "provider_log": {"provider": "patent", "query_logs": query_logs},
-    "source_run": {
-      "run_id": f"weekly_patent_{weekly_run_id}",
-      "artifact_dir": str(artifact_dir),
-      "status": "success" if stage_status == "success" else "partial_success" if rows else "failed",
+    return {
+      "provider": "patent",
+      "status": stage_status,
+      "provider_status": "success" if stage_status == "success" else "partial_success" if stage_status == "partial_success" else "failed",
+      "message": "特許取得を実行しました。" if rows else "特許取得は候補 0 件でした。",
+      "retrieval_run_id": resolved_run_id,
       "candidate_count": len(rows),
-    } if rows else {},
-    "details": {"approved_query_count": len(approved_query_ids), "rows_retrieved": len(rows)},
-  }
+      "rows": rows,
+      "artifact_dir": str(artifact_dir),
+      "warnings": warnings,
+      "errors": errors if stage_status in {"partial_success", "failed"} else errors,
+      "provider_log": {"provider": "patent", "query_logs": query_logs, "provider_retrieval_run_ids": provider_run_ids},
+      "source_run": {
+        "run_id": resolved_run_id,
+        "artifact_dir": str(artifact_dir),
+        "status": "success" if stage_status == "success" else "partial_success" if rows else "failed",
+        "candidate_count": len(rows),
+      } if rows else {},
+      "details": {"approved_query_count": len(approved_query_ids), "rows_retrieved": len(rows), "provider_retrieval_run_ids": provider_run_ids},
+    }
+  except Exception as exc:  # noqa: BLE001
+    return _failed_provider_contract_result("patent", exc)
 
 
 def _default_paper_stage_adapter(
@@ -1038,66 +1079,105 @@ def _default_paper_stage_adapter(
   output_root: Path,
   weekly_run_id: str,
 ) -> dict[str, Any]:
-  approved_query_ids = list(config.get("paper", {}).get("approved_query_ids", []) or [])
-  if not approved_query_ids:
-    return _blocked_provider_stage("paper", "approved query が未設定のため論文取得を停止しました。")
-  per_query_limit = _per_query_limit(int(config.get("limits", {}).get("paper_max_results", 300) or 300), len(approved_query_ids))
-  rows: list[dict[str, Any]] = []
-  query_logs: list[dict[str, Any]] = []
-  query_plans: list[dict[str, Any]] = []
-  statuses: list[str] = []
-  errors: list[str] = []
-  for query_id in approved_query_ids:
-    preview = build_openalex_paper_preview(
-      search_plan,
-      watch_profile,
-      selected_query_id=query_id,
-      time_range=str(config.get("paper", {}).get("time_range", "12m") or "12m"),
-      max_results=per_query_limit,
-      per_page=int(config.get("paper", {}).get("per_page", 25) or 25),
-      retry_limit=int(config.get("paper", {}).get("retry_limit", 2) or 2),
-      polite_email=str(config.get("paper", {}).get("polite_email", "") or "").strip() or None,
-    )
-    retrieval_result = execute_openalex_paper_retrieval(preview)
-    query_plans.append({"query_id": query_id, "preview_request": dict(preview.get("request", {}) or {})})
-    query_logs.append(
-      {
-        "query_id": query_id,
-        "provider_status": str(retrieval_result.get("provider_status", "") or ""),
-        "rows_retrieved": int(retrieval_result.get("rows_retrieved", 0) or 0),
-        "pages_fetched": int(retrieval_result.get("pages_fetched", 0) or 0),
-        "error": retrieval_result.get("error"),
-      }
-    )
-    statuses.append(str(retrieval_result.get("provider_status", "") or "error"))
-    rows.extend(list(retrieval_result.get("rows", []) or []))
-    if retrieval_result.get("error"):
-      errors.append(str(retrieval_result.get("error")))
-  stage_status = _combine_provider_stage_status(statuses, len(rows))
-  artifact_dir = _save_scheduler_retrieval_artifact(
-    "paper",
-    output_root,
-    retrieval_run_id=f"weekly_paper_{weekly_run_id}",
-    provider_status="success" if stage_status == "success" else "partial_success" if stage_status == "partial_success" else "error",
-    rows=rows,
-    plan_payload={"queries": query_plans},
-    provider_log={"query_logs": query_logs},
+  return run_paper_provider_for_weekly(
+    search_plan=search_plan,
+    watch_profile=watch_profile,
+    config=config,
+    output_root=output_root,
+    weekly_run_id=weekly_run_id,
   )
-  return {
-    "status": stage_status,
-    "message": "論文取得を実行しました。" if rows else "論文取得は候補 0 件でした。",
-    "rows": rows,
-    "warnings": [],
-    "errors": errors if stage_status in {"partial_success", "failed"} else [],
-    "provider_log": {"provider": "paper", "query_logs": query_logs},
-    "source_run": {
-      "run_id": f"weekly_paper_{weekly_run_id}",
-      "artifact_dir": str(artifact_dir),
-      "status": "success" if stage_status == "success" else "partial_success" if rows else "failed",
+
+
+def run_paper_provider_for_weekly(
+  *,
+  search_plan: dict[str, Any],
+  watch_profile: dict[str, Any],
+  config: dict[str, Any],
+  output_root: Path,
+  weekly_run_id: str,
+  preview_builder: Callable[..., dict[str, Any]] = build_openalex_paper_preview,
+  execute_runner: Callable[..., dict[str, Any]] = execute_openalex_paper_retrieval,
+  artifact_writer: Callable[..., Path] | None = None,
+) -> dict[str, Any]:
+  try:
+    approved_query_ids = list(config.get("paper", {}).get("approved_query_ids", []) or [])
+    if not approved_query_ids:
+      return _blocked_provider_stage("paper", "approved query が未設定のため論文取得を停止しました。")
+    per_query_limit = _per_query_limit(int(config.get("limits", {}).get("paper_max_results", 300) or 300), len(approved_query_ids))
+    rows: list[dict[str, Any]] = []
+    query_logs: list[dict[str, Any]] = []
+    query_plans: list[dict[str, Any]] = []
+    statuses: list[str] = []
+    errors: list[str] = []
+    warnings: list[str] = []
+    provider_run_ids: list[str] = []
+    for query_id in approved_query_ids:
+      preview = preview_builder(
+        search_plan,
+        watch_profile,
+        selected_query_id=query_id,
+        time_range=str(config.get("paper", {}).get("time_range", "12m") or "12m"),
+        max_results=per_query_limit,
+        per_page=int(config.get("paper", {}).get("per_page", 25) or 25),
+        retry_limit=int(config.get("paper", {}).get("retry_limit", 2) or 2),
+        polite_email=str(config.get("paper", {}).get("polite_email", "") or "").strip() or None,
+      )
+      retrieval_result = execute_runner(preview)
+      normalized_result = _normalize_weekly_provider_result(
+        provider="paper",
+        result=retrieval_result,
+        default_retrieval_run_id=f"weekly_paper_{weekly_run_id}",
+      )
+      query_plans.append({"query_id": query_id, "preview_request": dict(preview.get("request", {}) or {})})
+      query_logs.append(
+        {
+          "query_id": query_id,
+          "provider_status": str(normalized_result.get("provider_status", "") or ""),
+          "rows_retrieved": int(normalized_result.get("candidate_count", 0) or 0),
+          "pages_fetched": int(dict(retrieval_result or {}).get("pages_fetched", 0) or 0),
+          "error": normalized_result.get("error"),
+          "retrieval_run_id": normalized_result.get("retrieval_run_id", ""),
+        }
+      )
+      statuses.append(str(normalized_result.get("status", "failed") or "failed"))
+      rows.extend(list(normalized_result.get("rows", []) or []))
+      warnings.extend(list(normalized_result.get("warnings", []) or []))
+      errors.extend(list(normalized_result.get("errors", []) or []))
+      if str(normalized_result.get("retrieval_run_id", "") or "").strip():
+        provider_run_ids.append(str(normalized_result.get("retrieval_run_id", "") or "").strip())
+    stage_status = _combine_provider_stage_status(statuses, len(rows))
+    resolved_run_id = _resolve_scheduler_run_id(provider_run_ids, fallback=f"weekly_paper_{weekly_run_id}")
+    artifact_dir = (artifact_writer or _save_scheduler_retrieval_artifact)(
+      "paper",
+      output_root,
+      retrieval_run_id=resolved_run_id,
+      provider_status="success" if stage_status == "success" else "partial_success" if stage_status == "partial_success" else "error",
+      rows=rows,
+      plan_payload={"queries": query_plans},
+      provider_log={"query_logs": query_logs, "provider_retrieval_run_ids": provider_run_ids},
+    )
+    return {
+      "provider": "paper",
+      "status": stage_status,
+      "provider_status": "success" if stage_status == "success" else "partial_success" if stage_status == "partial_success" else "failed",
+      "message": "論文取得を実行しました。" if rows else "論文取得は候補 0 件でした。",
+      "retrieval_run_id": resolved_run_id,
       "candidate_count": len(rows),
-    } if rows else {},
-    "details": {"approved_query_count": len(approved_query_ids), "rows_retrieved": len(rows)},
-  }
+      "rows": rows,
+      "artifact_dir": str(artifact_dir),
+      "warnings": warnings,
+      "errors": errors if stage_status in {"partial_success", "failed"} else errors,
+      "provider_log": {"provider": "paper", "query_logs": query_logs, "provider_retrieval_run_ids": provider_run_ids},
+      "source_run": {
+        "run_id": resolved_run_id,
+        "artifact_dir": str(artifact_dir),
+        "status": "success" if stage_status == "success" else "partial_success" if rows else "failed",
+        "candidate_count": len(rows),
+      } if rows else {},
+      "details": {"approved_query_count": len(approved_query_ids), "rows_retrieved": len(rows), "provider_retrieval_run_ids": provider_run_ids},
+    }
+  except Exception as exc:  # noqa: BLE001
+    return _failed_provider_contract_result("paper", exc)
 
 
 def _default_web_company_stage_adapter(
@@ -1108,54 +1188,163 @@ def _default_web_company_stage_adapter(
   output_root: Path,
   weekly_run_id: str,
 ) -> dict[str, Any]:
-  del watch_profile
-  approved_query_ids = set(str(item or "").strip() for item in list(config.get("web_company", {}).get("approved_query_ids", []) or []) if str(item or "").strip())
-  if not approved_query_ids:
-    return _blocked_provider_stage("web_company", "approved query が未設定のため Web/企業取得を停止しました。")
-  filtered_plan = deepcopy(search_plan)
-  filtered_queries = [
-    dict(query)
-    for query in list(filtered_plan.get("global_web_plan", {}).get("queries", []) or [])
-    if str(dict(query or {}).get("query_id", "") or "").strip() in approved_query_ids
-  ]
-  filtered_plan.setdefault("global_web_plan", {})["queries"] = filtered_queries
-  if not filtered_queries:
-    return _blocked_provider_stage("web_company", "approved query と一致する Global Web query がありません。")
-  preview = build_global_web_retrieval_preview(
-    filtered_plan,
-    max_query_count=min(int(config.get("web_company", {}).get("max_query_count", len(filtered_queries)) or len(filtered_queries)), len(filtered_queries)),
-    verification_limit=int(config.get("web_company", {}).get("verification_limit", 30) or 30),
-    summary_top_n=int(config.get("web_company", {}).get("summary_top_n", 10) or 10),
+  return run_web_company_provider_for_weekly(
+    search_plan=search_plan,
+    watch_profile=watch_profile,
+    config=config,
+    output_root=output_root,
+    weekly_run_id=weekly_run_id,
   )
-  retrieval_result = execute_global_web_retrieval(preview)
-  stage_status = _combine_provider_stage_status([str(retrieval_result.get("provider_status", "") or "error")], len(list(retrieval_result.get("rows", []) or [])))
-  artifact_dir = _save_scheduler_retrieval_artifact(
-    "web_company",
-    output_root,
-    retrieval_run_id=f"weekly_web_company_{weekly_run_id}",
-    provider_status="success" if stage_status == "success" else "partial_success" if stage_status == "partial_success" else "error",
-    rows=list(retrieval_result.get("rows", []) or []),
-    plan_payload={"request": dict(preview.get("request", {}) or {})},
-    provider_log={"provider_log": list(retrieval_result.get("provider_log", []) or [])},
-  )
-  return {
-    "status": stage_status,
-    "message": "Web/企業情報取得を実行しました。" if retrieval_result.get("rows") else "Web/企業情報取得は候補 0 件でした。",
-    "rows": list(retrieval_result.get("rows", []) or []),
-    "warnings": [],
-    "errors": [str(retrieval_result.get("error"))] if retrieval_result.get("error") and stage_status in {"partial_success", "failed"} else [],
-    "provider_log": {
+
+
+def run_web_company_provider_for_weekly(
+  *,
+  search_plan: dict[str, Any],
+  watch_profile: dict[str, Any],
+  config: dict[str, Any],
+  output_root: Path,
+  weekly_run_id: str,
+  preview_builder: Callable[..., dict[str, Any]] = build_global_web_retrieval_preview,
+  execute_runner: Callable[..., dict[str, Any]] = execute_global_web_retrieval,
+  artifact_writer: Callable[..., Path] | None = None,
+) -> dict[str, Any]:
+  try:
+    del watch_profile
+    approved_query_ids = set(str(item or "").strip() for item in list(config.get("web_company", {}).get("approved_query_ids", []) or []) if str(item or "").strip())
+    if not approved_query_ids:
+      return _blocked_provider_stage("web_company", "approved query が未設定のため Web/企業取得を停止しました。")
+    filtered_plan = deepcopy(search_plan)
+    filtered_queries = [
+      dict(query)
+      for query in list(filtered_plan.get("global_web_plan", {}).get("queries", []) or [])
+      if str(dict(query or {}).get("query_id", "") or "").strip() in approved_query_ids
+    ]
+    filtered_plan.setdefault("global_web_plan", {})["queries"] = filtered_queries
+    if not filtered_queries:
+      return _blocked_provider_stage("web_company", "approved query と一致する Global Web query がありません。")
+    preview = preview_builder(
+      filtered_plan,
+      max_query_count=min(int(config.get("web_company", {}).get("max_query_count", len(filtered_queries)) or len(filtered_queries)), len(filtered_queries)),
+      verification_limit=int(config.get("web_company", {}).get("verification_limit", 30) or 30),
+      summary_top_n=int(config.get("web_company", {}).get("summary_top_n", 10) or 10),
+    )
+    retrieval_result = execute_runner(preview)
+    normalized_result = _normalize_weekly_provider_result(
+      provider="web_company",
+      result=retrieval_result,
+      default_retrieval_run_id=f"weekly_web_company_{weekly_run_id}",
+    )
+    stage_status = _combine_provider_stage_status([str(normalized_result.get("status", "failed") or "failed")], len(list(normalized_result.get("rows", []) or [])))
+    resolved_run_id = _resolve_scheduler_run_id([str(normalized_result.get("retrieval_run_id", "") or "").strip()], fallback=f"weekly_web_company_{weekly_run_id}")
+    artifact_dir = (artifact_writer or _save_scheduler_retrieval_artifact)(
+      "web_company",
+      output_root,
+      retrieval_run_id=resolved_run_id,
+      provider_status="success" if stage_status == "success" else "partial_success" if stage_status == "partial_success" else "error",
+      rows=list(normalized_result.get("rows", []) or []),
+      plan_payload={"request": dict(preview.get("request", {}) or {})},
+      provider_log={"provider_log": deepcopy(normalized_result.get("provider_log", {}))},
+    )
+    return {
       "provider": "web_company",
-      "query_count": int(retrieval_result.get("query_count", 0) or 0),
-      "provider_log": list(retrieval_result.get("provider_log", []) or []),
-    },
-    "source_run": {
-      "run_id": f"weekly_web_company_{weekly_run_id}",
+      "status": stage_status,
+      "provider_status": "success" if stage_status == "success" else "partial_success" if stage_status == "partial_success" else "failed",
+      "message": "Web/企業情報取得を実行しました。" if normalized_result.get("rows") else "Web/企業情報取得は候補 0 件でした。",
+      "retrieval_run_id": resolved_run_id,
+      "candidate_count": int(normalized_result.get("candidate_count", 0) or 0),
+      "rows": list(normalized_result.get("rows", []) or []),
       "artifact_dir": str(artifact_dir),
-      "status": "success" if stage_status == "success" else "partial_success" if retrieval_result.get("rows") else "failed",
-      "candidate_count": len(list(retrieval_result.get("rows", []) or [])),
-    } if retrieval_result.get("rows") else {},
-    "details": {"approved_query_count": len(approved_query_ids), "rows_retrieved": len(list(retrieval_result.get("rows", []) or []))},
+      "warnings": list(normalized_result.get("warnings", []) or []),
+      "errors": list(normalized_result.get("errors", []) or []),
+      "provider_log": {
+        "provider": "web_company",
+        "query_count": int(dict(retrieval_result or {}).get("query_count", 0) or 0),
+        "provider_log": deepcopy(normalized_result.get("provider_log", {})),
+      },
+      "source_run": {
+        "run_id": resolved_run_id,
+        "artifact_dir": str(artifact_dir),
+        "status": "success" if stage_status == "success" else "partial_success" if normalized_result.get("rows") else "failed",
+        "candidate_count": len(list(normalized_result.get("rows", []) or [])),
+      } if normalized_result.get("rows") else {},
+      "details": {"approved_query_count": len(approved_query_ids), "rows_retrieved": len(list(normalized_result.get("rows", []) or []))},
+    }
+  except Exception as exc:  # noqa: BLE001
+    return _failed_provider_contract_result("web_company", exc)
+
+
+def _normalize_weekly_provider_result(
+  *,
+  provider: str,
+  result: dict[str, Any] | None,
+  default_retrieval_run_id: str,
+) -> dict[str, Any]:
+  payload = deepcopy(dict(result or {}))
+  rows = list(payload.get("rows", payload.get("candidates", [])) or [])
+  raw_status = str(payload.get("provider_status", payload.get("status", "")) or "").strip().lower()
+  status = _normalize_weekly_provider_status(raw_status, rows_present=bool(rows))
+  retrieval_run_id = str(payload.get("retrieval_run_id", payload.get("run_id", default_retrieval_run_id)) or default_retrieval_run_id).strip()
+  provider_log = payload.get("provider_log", payload.get("log", {}))
+  if not isinstance(provider_log, (dict, list)):
+    provider_log = {"raw_provider_log": provider_log}
+  warnings: list[str] = []
+  errors: list[str] = []
+  if not rows:
+    warnings.append(f"{provider}: rows が空です。")
+  if payload.get("error"):
+    errors.append(str(payload.get("error")))
+  candidate_count = int(payload.get("rows_retrieved", payload.get("candidate_count", len(rows))) or len(rows))
+  return {
+    "provider": provider,
+    "status": status,
+    "provider_status": raw_status or status,
+    "retrieval_run_id": retrieval_run_id,
+    "candidate_count": candidate_count,
+    "rows": rows,
+    "provider_log": deepcopy(provider_log),
+    "warnings": warnings,
+    "errors": errors,
+    "error": str(payload.get("error", "") or ""),
+    "raw_result": payload,
+  }
+
+
+def _normalize_weekly_provider_status(raw_status: str, *, rows_present: bool) -> str:
+  text = str(raw_status or "").strip().lower()
+  if text == "success":
+    return "success"
+  if text == "partial_success":
+    return "partial_success"
+  if text in {"not_approved", "validation_error", "dry_run_required", "blocked_by_max_bytes", "execute_rejected", "rejected", "blocked"}:
+    return "blocked"
+  if text == "error" and rows_present:
+    return "partial_success"
+  return "failed"
+
+
+def _resolve_scheduler_run_id(provider_run_ids: list[str], *, fallback: str) -> str:
+  cleaned = [str(item or "").strip() for item in provider_run_ids if str(item or "").strip()]
+  unique = sorted(set(cleaned))
+  if len(unique) == 1:
+    return unique[0]
+  return fallback
+
+
+def _failed_provider_contract_result(provider: str, exc: Exception) -> dict[str, Any]:
+  return {
+    "provider": provider,
+    "status": "failed",
+    "provider_status": "failed",
+    "message": f"{provider} provider contract failed: {type(exc).__name__}",
+    "retrieval_run_id": "",
+    "candidate_count": 0,
+    "rows": [],
+    "artifact_dir": "",
+    "provider_log": {"exception_type": type(exc).__name__},
+    "warnings": [],
+    "errors": [str(exc)],
+    "source_run": {},
+    "details": {},
   }
 
 
