@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from pathlib import Path
 
+from services_v9.cloud_weekly_job import CLOUD_JOB_LOCK_NAMESPACE
 from services_v9.cloud_lock import acquire_cloud_weekly_lock, release_cloud_weekly_lock
+from services_v9.weekly_scheduler import acquire_weekly_run_lock, release_weekly_run_lock
 
 
 class _FakeBlob:
@@ -61,6 +64,10 @@ def _signature() -> str:
   return "a" * 64
 
 
+def _signature_b() -> str:
+  return "b" * 64
+
+
 def test_acquire_and_release_cloud_lock() -> None:
   client = _FakeStorageClient()
   acquired = acquire_cloud_weekly_lock(_signature(), "run-1", bucket_name="bucket", storage_client=client)
@@ -110,3 +117,78 @@ def test_release_cloud_lock_keeps_other_owner_lock() -> None:
   )
   assert result["status"] == "ignored"
   assert client.bucket("bucket").blob(first["lock_name"]).exists() is True
+
+
+def test_cloud_job_namespace_is_used_for_outer_lock() -> None:
+  client = _FakeStorageClient()
+  acquired = acquire_cloud_weekly_lock(
+    _signature(),
+    "run-1",
+    bucket_name="bucket",
+    object_prefix=CLOUD_JOB_LOCK_NAMESPACE,
+    storage_client=client,
+  )
+  assert acquired["acquired"] is True
+  assert acquired["lock_name"] == f"{CLOUD_JOB_LOCK_NAMESPACE}/{_signature()}.lock"
+
+
+def test_different_signatures_can_acquire_cloud_locks() -> None:
+  client = _FakeStorageClient()
+  first = acquire_cloud_weekly_lock(
+    _signature(),
+    "run-1",
+    bucket_name="bucket",
+    object_prefix=CLOUD_JOB_LOCK_NAMESPACE,
+    storage_client=client,
+  )
+  second = acquire_cloud_weekly_lock(
+    _signature_b(),
+    "run-2",
+    bucket_name="bucket",
+    object_prefix=CLOUD_JOB_LOCK_NAMESPACE,
+    storage_client=client,
+  )
+  assert first["acquired"] is True
+  assert second["acquired"] is True
+
+
+def test_cloud_job_and_weekly_scheduler_locks_do_not_conflict(tmp_path: Path) -> None:
+  client = _FakeStorageClient()
+  outer = acquire_cloud_weekly_lock(
+    _signature(),
+    "cloud-job-run",
+    bucket_name="bucket",
+    object_prefix=CLOUD_JOB_LOCK_NAMESPACE,
+    storage_client=client,
+  )
+  inner_root = tmp_path / "v9_runs" / "weekly_locks"
+  inner = acquire_weekly_run_lock(_signature(), "weekly-run", inner_root)
+  assert outer["acquired"] is True
+  assert inner["acquired"] is True
+  assert outer["lock_name"] == f"{CLOUD_JOB_LOCK_NAMESPACE}/{_signature()}.lock"
+  assert Path(inner["path"]).name == f"{_signature()}.lock"
+  assert "weekly_locks" in Path(inner["path"]).parts
+
+  outer_release = release_cloud_weekly_lock(outer, storage_client=client)
+  assert outer_release["released"] is True
+  assert Path(inner["path"]).exists() is True
+
+  inner_release = release_weekly_run_lock(inner)
+  assert inner_release["released"] is True
+  assert client.bucket("bucket").blob(outer["lock_name"]).exists() is False
+
+
+def test_weekly_lock_release_does_not_delete_cloud_job_lock(tmp_path: Path) -> None:
+  client = _FakeStorageClient()
+  outer = acquire_cloud_weekly_lock(
+    _signature(),
+    "cloud-job-run",
+    bucket_name="bucket",
+    object_prefix=CLOUD_JOB_LOCK_NAMESPACE,
+    storage_client=client,
+  )
+  inner_root = tmp_path / "v9_runs" / "weekly_locks"
+  inner = acquire_weekly_run_lock(_signature(), "weekly-run", inner_root)
+  inner_release = release_weekly_run_lock(inner)
+  assert inner_release["released"] is True
+  assert client.bucket("bucket").blob(outer["lock_name"]).exists() is True

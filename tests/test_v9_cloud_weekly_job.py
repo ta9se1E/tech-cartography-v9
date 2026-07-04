@@ -3,11 +3,65 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import services_v9.cloud_weekly_job as cloud_weekly_job_module
 from services_v9.cloud_weekly_settings import resolve_weekly_delivery_settings_path
 from services_v9.persistence import save_watch_profile
+from services_v9.search_plan import build_unified_search_plan
+
+
+class _FakeBlob:
+  def __init__(self, bucket: "_FakeBucket", name: str) -> None:
+    self.bucket = bucket
+    self.name = name
+    self.generation = None
+
+  def exists(self) -> bool:
+    return self.name in self.bucket.objects
+
+  def upload_from_string(self, payload: str, content_type: str | None = None, if_generation_match=None) -> None:
+    del content_type
+    existing = self.bucket.objects.get(self.name)
+    if if_generation_match == 0 and existing is not None:
+      raise RuntimeError("exists")
+    generation = int(existing["generation"] if existing else 0) + 1
+    self.bucket.objects[self.name] = {"payload": payload, "generation": generation}
+    self.generation = generation
+
+  def download_as_text(self, encoding: str = "utf-8") -> str:
+    del encoding
+    return str(self.bucket.objects[self.name]["payload"])
+
+  def reload(self) -> None:
+    if self.exists():
+      self.generation = int(self.bucket.objects[self.name]["generation"])
+
+  def delete(self, if_generation_match=None) -> None:
+    existing = self.bucket.objects.get(self.name)
+    if existing is None:
+      return
+    if if_generation_match is not None and int(existing["generation"]) != int(if_generation_match):
+      raise RuntimeError("generation mismatch")
+    self.bucket.objects.pop(self.name, None)
+
+
+class _FakeBucket:
+  def __init__(self) -> None:
+    self.objects: dict[str, dict[str, object]] = {}
+
+  def blob(self, name: str) -> _FakeBlob:
+    return _FakeBlob(self, name)
+
+
+class _FakeStorageClient:
+  def __init__(self) -> None:
+    self.buckets: dict[str, _FakeBucket] = {}
+
+  def bucket(self, name: str) -> _FakeBucket:
+    self.buckets.setdefault(name, _FakeBucket())
+    return self.buckets[name]
 
 
 def _env() -> dict[str, str]:
@@ -58,6 +112,83 @@ def _enabled_settings() -> dict[str, object]:
     "minute": 0,
     "timezone": "Asia/Tokyo",
   }
+
+
+def _paper_rows(query_id: str) -> list[dict[str, object]]:
+  return [
+    {
+      "work_id": "https://openalex.org/W1",
+      "doi": "10.1000/test1",
+      "title": "Signal watch paper",
+      "abstract": "abstract",
+      "authors": ["Alice"],
+      "institutions": ["Example University"],
+      "publication_date": "2025-12-01",
+      "source_journal": "Battery Journal",
+      "cited_by_count": 12,
+      "topics": ["Topic"],
+      "open_access": True,
+      "original_language": "en",
+      "source_url": "https://example.org/paper1",
+      "query_id": query_id,
+      "retrieval_run_id": "paper_retrieval_test",
+      "provider_status": "success",
+      "record_stage": "staged",
+      "retrieval_mode": "real",
+    }
+  ]
+
+
+def _web_company_rows(query_id: str) -> list[dict[str, object]]:
+  return [
+    {
+      "candidate_id": "w1",
+      "query_id": query_id,
+      "country_region": "JP",
+      "web_intent": "research_development",
+      "result_bucket": "web",
+      "original_title": "OpenAI research development",
+      "original_snippet": "research development update",
+      "original_language": "en",
+      "source_url": "https://example.co.jp/news/a",
+      "canonical_url": "https://example.co.jp/news/a",
+      "event_type": "research_development",
+      "organization": "OpenAI",
+      "source_quality": "medium_high",
+      "content_access": "full",
+      "content_hash": "hash1",
+      "same_story_group": "story_A",
+      "summary_ja": "OpenAI の研究開発更新",
+      "retrieval_run_id": "web_company_retrieval_test",
+      "provider_status": "success",
+      "record_stage": "staged",
+      "retrieval_mode": "real",
+    }
+  ]
+
+
+def _stage_adapter(source_type: str, rows: list[dict[str, object]], root: Path):
+  def _adapter(**kwargs):
+    del kwargs
+    artifact_dir = root / f"{source_type}_adapter_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    return {
+      "status": "success",
+      "message": f"{source_type} ok",
+      "rows": deepcopy(rows),
+      "warnings": [],
+      "errors": [],
+      "provider_log": {"provider": source_type, "rows": len(rows)},
+      "source_run": {
+        "run_id": f"{source_type}_test_run",
+        "artifact_dir": str(artifact_dir),
+        "status": "success",
+        "candidate_count": len(rows),
+      },
+      "details": {"rows_retrieved": len(rows)},
+    }
+
+  return _adapter
 
 
 def test_cloud_weekly_job_skips_when_settings_disabled(tmp_path: Path) -> None:
@@ -272,3 +403,96 @@ def test_cloud_job_print_summary_and_runner_do_not_require_external_calls(tmp_pa
   result = cloud_weekly_job_module.run_cloud_weekly_job(environ=env, output_root=root)
   assert result["status"] == "success"
   assert called == ["run"]
+
+
+def test_cloud_job_uses_separate_outer_lock_namespace(tmp_path: Path, monkeypatch) -> None:
+  from services_v9.cloud_weekly_settings import save_weekly_delivery_settings
+
+  env = {
+    **_env(),
+    "V9_ALLOWED_RECIPIENTS": "owner@example.com",
+  }
+  root = tmp_path / "v9_runs"
+  save_watch_profile(_profile(), base_dir=root)
+  save_weekly_delivery_settings(_enabled_settings(), base_dir=root, environ=env)
+  captured: dict[str, object] = {}
+
+  def fake_acquire(signature, run_id, *, bucket_name="", object_prefix="", storage_client=None, stale_timeout_seconds=21600):
+    del signature, run_id, bucket_name, storage_client, stale_timeout_seconds
+    captured["object_prefix"] = object_prefix
+    return {"acquired": True, "bucket": "bucket", "lock_name": f"{object_prefix}/x.lock", "payload": {"weekly_run_id": "cloud"}}
+
+  def fake_release(lock_info, *, storage_client=None):
+    del lock_info, storage_client
+    captured["released"] = True
+    return {"released": True}
+
+  def fake_run_weekly_watch(config, output_root, provider_adapters):
+    del config, output_root, provider_adapters
+    return {"status": "success", "weekly_run_id": "weekly_watch_fake"}
+
+  monkeypatch.setattr(cloud_weekly_job_module, "is_cloud_runtime", lambda env: True)
+  monkeypatch.setattr(cloud_weekly_job_module, "get_persist_bucket_name", lambda env: "bucket")
+  monkeypatch.setattr(cloud_weekly_job_module, "acquire_cloud_weekly_lock", fake_acquire)
+  monkeypatch.setattr(cloud_weekly_job_module, "release_cloud_weekly_lock", fake_release)
+  monkeypatch.setattr(cloud_weekly_job_module, "run_weekly_watch", fake_run_weekly_watch)
+  result = cloud_weekly_job_module.run_cloud_weekly_job(environ=env, output_root=root)
+  assert result["status"] == "success"
+  assert captured["object_prefix"] == cloud_weekly_job_module.CLOUD_JOB_LOCK_NAMESPACE
+  assert captured["released"] is True
+
+
+def test_cloud_job_real_run_can_pass_build_search_plan_with_separate_locks(tmp_path: Path, monkeypatch) -> None:
+  from services_v9.cloud_weekly_settings import save_weekly_delivery_settings
+
+  root = tmp_path / "v9_runs"
+  save_watch_profile(_profile(), base_dir=root)
+  save_weekly_delivery_settings(
+    _enabled_settings(),
+    base_dir=root,
+    environ={**_env(), "V9_ALLOWED_RECIPIENTS": "owner@example.com"},
+  )
+  search_plan = build_unified_search_plan(_profile())
+  paper_query_id = str(search_plan["plans"]["paper"]["queries"][0]["query_id"])
+  web_query = next(
+    query
+    for query in list(search_plan["global_web_plan"]["queries"])
+    if query.get("enabled") and not str(query.get("duplicate_of", "") or "").strip()
+  )
+  web_query_id = str(web_query["query_id"])
+  env = {
+    **_env(),
+    "V9_ALLOWED_RECIPIENTS": "owner@example.com",
+    "V9_CLOUD_JOB_DRY_RUN": "false",
+    "V9_CLOUD_ENABLE_PATENT": "false",
+    "V9_CLOUD_ENABLE_PAPER": "true",
+    "V9_CLOUD_ENABLE_WEB_COMPANY": "true",
+    "V9_CLOUD_PAPER_APPROVED_QUERY_IDS": paper_query_id,
+    "V9_CLOUD_WEB_APPROVED_QUERY_IDS": web_query_id,
+    "V9_CLOUD_PAPER_MAX_RESULTS": "5",
+    "V9_CLOUD_WEB_MAX_RESULTS": "2",
+    "V9_CLOUD_WEB_VERIFICATION_LIMIT": "1",
+    "V9_CLOUD_PAPER_TIME_RANGE": "all",
+    "V9_CLOUD_WEB_ENGLISH_FALLBACK": "false",
+    "V9_CLOUD_GOOGLE_GROUNDING": "false",
+  }
+  storage_client = _FakeStorageClient()
+  monkeypatch.setattr(cloud_weekly_job_module, "is_cloud_runtime", lambda env: True)
+  monkeypatch.setattr(cloud_weekly_job_module, "get_persist_bucket_name", lambda env: "bucket")
+  result = cloud_weekly_job_module.run_cloud_weekly_job(
+    environ=env,
+    output_root=root,
+    storage_client=storage_client,
+    provider_adapters={
+      "paper": _stage_adapter("paper", _paper_rows(paper_query_id), tmp_path),
+      "web_company": _stage_adapter("web_company", _web_company_rows(web_query_id), tmp_path),
+    },
+  )
+  assert result["status"] == "success"
+  run_dir = Path(result["run_dir"])
+  status_payload = json.loads((run_dir / "weekly_run_status.json").read_text(encoding="utf-8"))
+  assert status_payload["stage_statuses"]["build_search_plan"] == "success"
+  assert status_payload["stage_statuses"]["retrieve_paper"] == "success"
+  assert status_payload["stage_statuses"]["retrieve_web_company"] == "success"
+  assert not list((root / "weekly_locks").glob("*.lock"))
+  assert not storage_client.bucket("bucket").objects

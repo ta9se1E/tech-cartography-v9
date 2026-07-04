@@ -29,6 +29,7 @@ STRICT_BOOL_VALUES = {
 }
 QUERY_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{1,63}$")
 ALLOWED_PAPER_TIME_RANGES = {"all", "12m", "6m", "3m"}
+CLOUD_JOB_LOCK_NAMESPACE = "cloud_job_locks"
 
 
 def build_cloud_weekly_run_config(
@@ -171,7 +172,7 @@ def run_cloud_weekly_job(
         watch_profile_signature,
         run_id=str(config.get("_run_id", "") or ""),
         bucket_name=get_persist_bucket_name(env),
-        object_prefix="weekly_locks",
+        object_prefix=CLOUD_JOB_LOCK_NAMESPACE,
         storage_client=storage_client,
         stale_timeout_seconds=int(config.get("timeouts", {}).get("lock_stale_seconds", 21600) or 21600),
       )
@@ -411,6 +412,7 @@ def _build_web_company_adapter(controls: Mapping[str, Any]):
 
 
 __all__ = [
+  "CLOUD_JOB_LOCK_NAMESPACE",
   "build_cloud_weekly_run_config",
   "resolve_cloud_job_controls",
   "run_cloud_weekly_job",

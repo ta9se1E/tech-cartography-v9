@@ -13,12 +13,14 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from services_v9.cloud_runtime import DEFAULT_WEEKLY_CONFIG_OBJECT, get_persist_root, get_runtime_mode
 from services_v9.cloud_scheduler_admin import get_scheduler_job_status
+from services_v9.cloud_lock import acquire_cloud_weekly_lock, release_cloud_weekly_lock
 from services_v9.cloud_watch_profile_sync import (
   MISSING_SIGNATURE,
   apply_cloud_watch_profile_sync,
   plan_cloud_watch_profile_sync,
 )
 from services_v9.cloud_weekly_job import (
+  CLOUD_JOB_LOCK_NAMESPACE,
   build_cloud_weekly_run_config,
   resolve_cloud_job_controls,
   run_cloud_weekly_job,
@@ -31,6 +33,7 @@ from services_v9.cloud_weekly_settings import (
   validate_weekly_delivery_settings,
 )
 from services_v9.persistence import save_watch_profile
+from services_v9.weekly_scheduler import acquire_weekly_run_lock, release_weekly_run_lock
 
 class _FakeBlob:
   def __init__(self, bucket: "_FakeBucket", name: str) -> None:
@@ -247,6 +250,39 @@ def main() -> None:
   assert sync_storage.bucket("bucket-a").upload_events[1] == "watch_profile_current.json"
   assert applied["current_signature_after"] == sync_plan["source_signature"]
 
+  lock_storage = _FakeStorageClient()
+  outer_lock = acquire_cloud_weekly_lock(
+    "a" * 64,
+    "cloud-run-1",
+    bucket_name="bucket-a",
+    object_prefix=CLOUD_JOB_LOCK_NAMESPACE,
+    storage_client=lock_storage,
+  )
+  inner_lock_root = Path(tempfile.mkdtemp()) / "v9_runs" / "weekly_locks"
+  inner_lock = acquire_weekly_run_lock("a" * 64, "weekly-run-1", inner_lock_root)
+  assert outer_lock["acquired"] is True
+  assert inner_lock["acquired"] is True
+  assert outer_lock["lock_name"] == f"{CLOUD_JOB_LOCK_NAMESPACE}/{'a' * 64}.lock"
+  assert "weekly_locks" in Path(inner_lock["path"]).parts
+  second_outer = acquire_cloud_weekly_lock(
+    "a" * 64,
+    "cloud-run-2",
+    bucket_name="bucket-a",
+    object_prefix=CLOUD_JOB_LOCK_NAMESPACE,
+    storage_client=lock_storage,
+  )
+  assert second_outer["status"] == "blocked"
+  mismatch_release = release_cloud_weekly_lock(
+    {**outer_lock, "payload": {**dict(outer_lock["payload"]), "weekly_run_id": "other-run"}},
+    storage_client=lock_storage,
+  )
+  assert mismatch_release["status"] == "ignored"
+  outer_release = release_cloud_weekly_lock(outer_lock, storage_client=lock_storage)
+  assert outer_release["released"] is True
+  assert Path(inner_lock["path"]).exists()
+  inner_release = release_weekly_run_lock(inner_lock)
+  assert inner_release["released"] is True
+
   dockerfile = (PROJECT_ROOT / "Dockerfile.v9").read_text(encoding="utf-8")
   cloudbuild = (PROJECT_ROOT / "cloudbuild.v9.yaml").read_text(encoding="utf-8")
   deploy_script = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
@@ -314,6 +350,8 @@ def main() -> None:
   assert "run_weekly_watch(" in cloud_job_module
   assert "resolve_cloud_job_controls" in cloud_job_module
   assert "summarize_cloud_weekly_job_config" in cloud_job_module
+  assert 'CLOUD_JOB_LOCK_NAMESPACE = "cloud_job_locks"' in cloud_job_module
+  assert 'object_prefix=CLOUD_JOB_LOCK_NAMESPACE' in cloud_job_module
   assert "printf '%s\\n' '{\"enabled\": false}'" not in deploy_script
   assert '"enabled": False' in bootstrap_script
   for banned in ("tech-cartography-v7-demo", "tech-cartography-v7-live", "tech-cartography-v8-demo"):
