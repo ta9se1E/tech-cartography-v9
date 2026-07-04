@@ -259,7 +259,14 @@ deploy_job() {
 }
 
 bootstrap_settings() {
-  "${PY[@]}" scripts/bootstrap_v9_cloud_weekly_settings.py
+  GOOGLE_CLOUD_PROJECT="${PROJECT_ID}" \
+  V9_RUNTIME_MODE="cloud" \
+  V9_CLOUD_REGION="${REGION}" \
+  V9_PERSIST_BUCKET="${BUCKET}" \
+  V9_PERSIST_ROOT="${V9_PERSIST_ROOT}" \
+  V9_WEEKLY_CONFIG_OBJECT="${V9_WEEKLY_CONFIG_OBJECT}" \
+  V9_ALLOWED_RECIPIENTS="${V9_ALLOWED_RECIPIENTS}" \
+    "${PY[@]}" scripts/bootstrap_v9_cloud_weekly_settings.py
 }
 
 manual_skip_test() {

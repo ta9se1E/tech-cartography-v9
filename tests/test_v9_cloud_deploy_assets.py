@@ -125,6 +125,15 @@ def test_deploy_script_adds_required_bucket_secret_and_iap_steps() -> None:
   assert "roles/iap.httpsResourceAccessor" in text
 
 
+def test_bootstrap_settings_runs_in_cloud_mode() -> None:
+  text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
+  bootstrap_section = text.split("bootstrap_settings() {", 1)[1].split("manual_skip_test() {", 1)[0]
+  assert 'V9_RUNTIME_MODE="cloud"' in bootstrap_section
+  assert 'V9_PERSIST_BUCKET="${BUCKET}"' in bootstrap_section
+  assert 'V9_WEEKLY_CONFIG_OBJECT="${V9_WEEKLY_CONFIG_OBJECT}"' in bootstrap_section
+  assert "scripts/bootstrap_v9_cloud_weekly_settings.py" in bootstrap_section
+
+
 def test_apply_requires_approval_guard_and_plan_is_default() -> None:
   text = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
   assert 'MODE="${1:---plan}"' in text

@@ -214,6 +214,10 @@ def main() -> None:
   assert "gcloud run jobs add-iam-policy-binding" in deploy_script
   assert "gcloud iap web add-iam-policy-binding" in deploy_script
   assert "roles/iap.httpsResourceAccessor" in deploy_script
+  bootstrap_section = deploy_script.split("bootstrap_settings() {", 1)[1].split("manual_skip_test() {", 1)[0]
+  assert 'V9_RUNTIME_MODE="cloud"' in bootstrap_section
+  assert 'V9_PERSIST_BUCKET="${BUCKET}"' in bootstrap_section
+  assert 'V9_WEEKLY_CONFIG_OBJECT="${V9_WEEKLY_CONFIG_OBJECT}"' in bootstrap_section
   assert deploy_script.index("bootstrap_settings") < deploy_script.index("deploy_scheduler")
   assert deploy_script.index("deploy_scheduler") < deploy_script.index("pause_scheduler")
   assert "save_weekly_delivery_settings" in bootstrap_script
