@@ -91,6 +91,12 @@ def test_job_references_required_secrets_and_nonsecret_smtp_envs() -> None:
   assert "V9_ENABLE_EMAIL_SEND=false" in job_section
   assert "DISABLE_EMAIL_SEND=true" in job_section
   assert "EMAIL_SEND_MODE=preview" in job_section
+  assert "V9_CLOUD_JOB_DRY_RUN=true" in job_section
+  assert "V9_CLOUD_ENABLE_PATENT=false" in job_section
+  assert "V9_CLOUD_ENABLE_PAPER=false" in job_section
+  assert "V9_CLOUD_ENABLE_WEB_COMPANY=false" in job_section
+  assert "V9_CLOUD_WEB_ENGLISH_FALLBACK=false" in job_section
+  assert "V9_CLOUD_GOOGLE_GROUNDING=false" in job_section
 
 
 def test_scheduler_is_created_after_enabled_false_bootstrap_and_paused() -> None:

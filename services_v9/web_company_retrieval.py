@@ -408,6 +408,7 @@ def execute_global_web_retrieval(
   tavily_search_post_fn: JsonPostFn | None = None,
   tavily_extract_post_fn: JsonPostFn | None = None,
   google_grounding_fn: GoogleGroundingFn | None = None,
+  allow_google_grounding: bool = True,
   sleeper: SleepFn | None = None,
   discovery_timeout_sec: int = 30,
   extract_timeout_sec: int = 60,
@@ -457,6 +458,7 @@ def execute_global_web_retrieval(
       dict(candidate),
       extract_post=extract_post,
       grounding_post=grounding_post,
+      allow_google_grounding=allow_google_grounding,
       timeout_sec=extract_timeout_sec,
       provider_log=provider_log,
     )
@@ -764,6 +766,7 @@ def _verify_candidate(
   *,
   extract_post: JsonPostFn,
   grounding_post: GoogleGroundingFn,
+  allow_google_grounding: bool,
   timeout_sec: int,
   provider_log: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -817,7 +820,7 @@ def _verify_candidate(
   grounding_summary = ""
   verification_provider = PROVIDER_TAVILY
   final_error = extract_error
-  if content_access in {"partial", "unavailable"}:
+  if allow_google_grounding and content_access in {"partial", "unavailable"}:
     grounding_result = grounding_post({
       "source_url": url,
       "title": candidate.get("original_title", ""),

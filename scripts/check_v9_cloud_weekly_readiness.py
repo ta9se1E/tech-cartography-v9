@@ -13,7 +13,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from services_v9.cloud_runtime import DEFAULT_WEEKLY_CONFIG_OBJECT, get_persist_root, get_runtime_mode
 from services_v9.cloud_scheduler_admin import get_scheduler_job_status
-from services_v9.cloud_weekly_job import build_cloud_weekly_run_config, run_cloud_weekly_job
+from services_v9.cloud_watch_profile_sync import (
+  MISSING_SIGNATURE,
+  apply_cloud_watch_profile_sync,
+  plan_cloud_watch_profile_sync,
+)
+from services_v9.cloud_weekly_job import (
+  build_cloud_weekly_run_config,
+  resolve_cloud_job_controls,
+  run_cloud_weekly_job,
+  summarize_cloud_weekly_job_config,
+)
 from services_v9.cloud_weekly_settings import (
   build_cron_expression,
   load_weekly_delivery_settings,
@@ -38,6 +48,7 @@ class _FakeBlob:
     generation = (existing["generation"] if existing else 0) + 1
     self.bucket.objects[self.name] = {"payload": payload, "generation": generation}
     self.generation = generation
+    self.bucket.upload_events.append(self.name)
 
   def download_as_text(self, encoding: str = "utf-8") -> str:
     return str(self.bucket.objects[self.name]["payload"])
@@ -53,6 +64,7 @@ class _FakeBlob:
 class _FakeBucket:
   def __init__(self) -> None:
     self.objects: dict[str, dict[str, object]] = {}
+    self.upload_events: list[str] = []
 
   def blob(self, name: str) -> _FakeBlob:
     return _FakeBlob(self, name)
@@ -144,8 +156,38 @@ def main() -> None:
     loaded = load_weekly_delivery_settings(base_dir=root, environ=_email_env())
     assert loaded["revision"] == 1
     assert loaded["cron_expression"] == "30 7 * * 3"
-    config = build_cloud_weekly_run_config(saved["settings"], persist_root=root, environ=_email_env())
+    env_with_controls = {
+      **_email_env(),
+      "V9_CLOUD_JOB_DRY_RUN": "false",
+      "V9_CLOUD_ENABLE_PATENT": "false",
+      "V9_CLOUD_ENABLE_PAPER": "true",
+      "V9_CLOUD_ENABLE_WEB_COMPANY": "true",
+      "V9_CLOUD_PAPER_APPROVED_QUERY_IDS": "paper_q08,paper_q08",
+      "V9_CLOUD_WEB_APPROVED_QUERY_IDS": "gw_q001,,gw_q001",
+      "V9_CLOUD_PAPER_MAX_RESULTS": "5",
+      "V9_CLOUD_WEB_MAX_RESULTS": "2",
+      "V9_CLOUD_WEB_VERIFICATION_LIMIT": "1",
+      "V9_CLOUD_PAPER_TIME_RANGE": "all",
+      "V9_CLOUD_WEB_ENGLISH_FALLBACK": "false",
+      "V9_CLOUD_GOOGLE_GROUNDING": "false",
+    }
+    config = build_cloud_weekly_run_config(saved["settings"], persist_root=root, environ=env_with_controls)
     assert config["watch_profile_path"].endswith("watch_profile_current.json")
+    controls = resolve_cloud_job_controls(env_with_controls)
+    assert controls["paper_approved_query_ids"] == ["paper_q08"]
+    assert controls["web_approved_query_ids"] == ["gw_q001"]
+    summary = summarize_cloud_weekly_job_config(config, controls=controls)
+    assert summary["dry_run"] is False
+    assert summary["providers"]["patent_enabled"] is False
+    assert summary["providers"]["paper_enabled"] is True
+    assert summary["providers"]["web_company_enabled"] is True
+    assert summary["paper_max_results"] == 5
+    assert summary["web_max_results"] == 2
+    assert summary["web_verification_limit"] == 1
+    assert summary["paper_time_range"] == "all"
+    assert summary["web_english_fallback"] is False
+    assert summary["google_grounding"] is False
+    assert summary["email_send_enabled"] is False
     skip_result = run_cloud_weekly_job(environ=_email_env(), output_root=root)
     assert skip_result["status"] == "skipped"
 
@@ -172,10 +214,46 @@ def main() -> None:
   stored_payload = fake_storage.bucket("bucket-a").objects[DEFAULT_WEEKLY_CONFIG_OBJECT]["payload"]
   assert "SMTP_PASSWORD" not in str(stored_payload)
 
+  sync_storage = _FakeStorageClient()
+  sync_plan = plan_cloud_watch_profile_sync(
+    environ={"V9_PERSIST_BUCKET": "bucket-a"},
+    storage_client=sync_storage,
+  )
+  assert sync_plan["status"] == "ok"
+  assert sync_plan["mode"] == "plan"
+  assert sync_plan["current_signature"] == MISSING_SIGNATURE
+  blocked_apply = apply_cloud_watch_profile_sync(
+    expected_current_signature=MISSING_SIGNATURE,
+    expected_source_signature=sync_plan["source_signature"],
+    environ={"V9_PERSIST_BUCKET": "bucket-a"},
+    storage_client=sync_storage,
+  )
+  assert blocked_apply["status"] == "blocked"
+  mismatched_apply = apply_cloud_watch_profile_sync(
+    expected_current_signature="wrong-signature",
+    expected_source_signature=sync_plan["source_signature"],
+    environ={"V9_CLOUD_CHANGE_APPROVED": "true", "V9_PERSIST_BUCKET": "bucket-a"},
+    storage_client=sync_storage,
+  )
+  assert mismatched_apply["status"] == "blocked"
+  applied = apply_cloud_watch_profile_sync(
+    expected_current_signature=MISSING_SIGNATURE,
+    expected_source_signature=sync_plan["source_signature"],
+    environ={"V9_CLOUD_CHANGE_APPROVED": "true", "V9_PERSIST_BUCKET": "bucket-a"},
+    storage_client=sync_storage,
+  )
+  assert applied["status"] == "success"
+  assert sync_storage.bucket("bucket-a").upload_events[0].startswith("watch_profile_backups/")
+  assert sync_storage.bucket("bucket-a").upload_events[1] == "watch_profile_current.json"
+  assert applied["current_signature_after"] == sync_plan["source_signature"]
+
   dockerfile = (PROJECT_ROOT / "Dockerfile.v9").read_text(encoding="utf-8")
   cloudbuild = (PROJECT_ROOT / "cloudbuild.v9.yaml").read_text(encoding="utf-8")
   deploy_script = (PROJECT_ROOT / "scripts" / "deploy_v9_cloud_run_weekly.sh").read_text(encoding="utf-8")
   bootstrap_script = (PROJECT_ROOT / "scripts" / "bootstrap_v9_cloud_weekly_settings.py").read_text(encoding="utf-8")
+  sync_script = (PROJECT_ROOT / "scripts" / "sync_v9_cloud_watch_profile.py").read_text(encoding="utf-8")
+  cloud_job_script = (PROJECT_ROOT / "scripts" / "run_v9_cloud_weekly_job.py").read_text(encoding="utf-8")
+  cloud_job_module = (PROJECT_ROOT / "services_v9" / "cloud_weekly_job.py").read_text(encoding="utf-8")
   assert "streamlit" in dockerfile and "app.py" in dockerfile
   assert "Dockerfile.v9" in cloudbuild
   assert "docker" in cloudbuild
@@ -218,10 +296,24 @@ def main() -> None:
   assert 'V9_RUNTIME_MODE="cloud"' in bootstrap_section
   assert 'V9_PERSIST_BUCKET="${BUCKET}"' in bootstrap_section
   assert 'V9_WEEKLY_CONFIG_OBJECT="${V9_WEEKLY_CONFIG_OBJECT}"' in bootstrap_section
+  assert "V9_CLOUD_JOB_DRY_RUN=true" in deploy_script
+  assert "V9_CLOUD_ENABLE_PATENT=false" in deploy_script
+  assert "V9_CLOUD_ENABLE_PAPER=false" in deploy_script
+  assert "V9_CLOUD_ENABLE_WEB_COMPANY=false" in deploy_script
+  assert "V9_CLOUD_WEB_ENGLISH_FALLBACK=false" in deploy_script
+  assert "V9_CLOUD_GOOGLE_GROUNDING=false" in deploy_script
   assert deploy_script.index("bootstrap_settings") < deploy_script.index("deploy_scheduler")
   assert deploy_script.index("deploy_scheduler") < deploy_script.index("pause_scheduler")
   assert "save_weekly_delivery_settings" in bootstrap_script
   assert "load_weekly_delivery_settings" in bootstrap_script
+  assert "plan_cloud_watch_profile_sync" in sync_script
+  assert "apply_cloud_watch_profile_sync" in sync_script
+  assert "--expected-current-signature" in sync_script
+  assert "--expected-source-signature" in sync_script
+  assert "--print-config-summary" in cloud_job_script
+  assert "run_weekly_watch(" in cloud_job_module
+  assert "resolve_cloud_job_controls" in cloud_job_module
+  assert "summarize_cloud_weekly_job_config" in cloud_job_module
   assert "printf '%s\\n' '{\"enabled\": false}'" not in deploy_script
   assert '"enabled": False' in bootstrap_script
   for banned in ("tech-cartography-v7-demo", "tech-cartography-v7-live", "tech-cartography-v8-demo"):
