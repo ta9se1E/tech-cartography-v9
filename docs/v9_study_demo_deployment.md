@@ -356,3 +356,54 @@ Stage C4B deployment connecting saved temporary search runs to downstream tabs v
 ### Browser validation pending
 
 User should log in, select saved run `study_demo_search_20260705_061319_e973e4c2`, set as active analysis target, and confirm downstream tabs show consistent 100-item context. Final tag `v9-study-demo-active-run-connection-live-validated` awaits browser acceptance.
+
+## Active Run Selector Visibility Redeployment
+
+Redeploy of the Active Run Selector UI fix: selector card moved immediately after search history dropdown (before execution summary). Production resources were not modified. No external API execution or active_context Cloud write during deploy.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T08:41:15Z |
+| Deployed at (JST) | 2026-07-05 17:41:15 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00008-gd7` |
+| Previous revision | `tech-cartography-v9-study-demo-00007-6bw` |
+| Rollback revision | `tech-cartography-v9-study-demo-00007-6bw` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:86ba8d1` |
+| Image digest | `sha256:16b6b0fb15e3f7a6c3430a52aa4833a280ac6f70c56fe4fff35dc7220652d21e` |
+| Cloud Build ID | `3b02f1ef-de6d-459c-bf73-be112bcf21be` |
+| Build source cleanup | deleted |
+| Image pre-push scan | PASS |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Git commit | `86ba8d1` |
+| Tag (code) | `v9-study-demo-active-run-selector-ready` |
+| Tag (live candidate) | `v9-study-demo-active-run-selector-live-candidate` |
+
+### Selector visibility fix
+
+- Active run selector rendered immediately after search history dropdown
+- Independent of legacy「データ投入モード」; other data sources collapsed under expander
+- **active_context initial write pending user action** (browser: checkbox + 「この検索runを分析対象に設定」)
+
+### External API execution
+
+- Deploy stage: 0 external API calls (BigQuery / OpenAlex / Tavily)
+- Demo bucket only; no production bucket reference
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled, anonymous invoker denied
+- Job config unchanged, no new execution
+- Scheduler `ENABLED` (`0 9 * * 1`, `Asia/Tokyo`)
+- Weekly delivery `enabled=true`
+- Production bucket, secrets, and IAM unchanged
+
+### Browser validation pending
+
+User should confirm selector card appears above execution summary after selecting saved run `study_demo_search_20260705_061319_e973e4c2`. Final validated tag not yet created.
