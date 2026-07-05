@@ -8,7 +8,7 @@ import getpass
 import json
 import os
 import sys
-from typing import Any
+from typing import Any, Callable
 
 from services_v9.study_demo_config import (
   PRODUCTION_SECRET_DENYLIST,
@@ -62,14 +62,154 @@ def _assert_secret_allowed(name: str) -> None:
     raise SystemExit("ERROR: production secret names are forbidden")
 
 
-def apply_password_rotation() -> dict[str, Any]:
-  _assert_stage_c(dict(os.environ))
-  if os.environ.get(PASSWORD_ROTATION_ENV, "").lower() != "true":
-    raise SystemExit(f"ERROR: requires {PASSWORD_ROTATION_ENV}=true")
-  password = password_helper.prompt_password_twice()
+def _version_map(metadata: password_helper.SecretMetadataReport) -> dict[str, password_helper.SecretVersionMetadata]:
+  return {item.version: item for item in metadata.versions}
+
+
+def _assert_password_rotation_can_proceed(
+  metadata: password_helper.SecretMetadataReport,
+) -> dict[str, Any] | None:
+  if metadata.project_id != PROJECT_ID:
+    raise SystemExit(f"ERROR: project_id must be fixed to {PROJECT_ID}")
+  if metadata.secret_name != STUDY_DEMO_PASSWORD_SECRET:
+    raise SystemExit(f"ERROR: secret_name must be fixed to {STUDY_DEMO_PASSWORD_SECRET}")
+
+  if not metadata.container_exists:
+    return {
+      "status": "blocked_missing_previous_version",
+      "project_id": metadata.project_id,
+      "secret_name": metadata.secret_name,
+      "message": "password secret container does not exist",
+    }
+
+  versions = _version_map(metadata)
+  version_one = versions.get("1")
+  if version_one is None:
+    return {
+      "status": "blocked_missing_previous_version",
+      "project_id": metadata.project_id,
+      "secret_name": metadata.secret_name,
+      "message": "version 1 does not exist",
+    }
+  if version_one.state != "enabled":
+    return {
+      "status": "blocked_previous_version_not_enabled",
+      "project_id": metadata.project_id,
+      "secret_name": metadata.secret_name,
+      "previous_version": "1",
+      "previous_version_state": version_one.state,
+      "message": "version 1 must be enabled before rotation",
+    }
+  if "2" in versions:
+    return {
+      "status": "blocked_rotation_target_exists",
+      "project_id": metadata.project_id,
+      "secret_name": metadata.secret_name,
+      "existing_version": "2",
+      "existing_version_state": versions["2"].state,
+      "message": "version 2 already exists; refusing to add another version",
+    }
+
+  unexpected = sorted(
+    version_id
+    for version_id in versions
+    if version_id.isdigit() and int(version_id) >= 3
+  )
+  if unexpected:
+    return {
+      "status": "blocked_unexpected_versions",
+      "project_id": metadata.project_id,
+      "secret_name": metadata.secret_name,
+      "unexpected_versions": unexpected,
+      "message": "unexpected secret versions >= 3 exist",
+    }
+  return None
+
+
+def _assert_new_secret_can_be_created(
+  client: Any,
+  *,
+  secret_name: str,
+) -> dict[str, Any] | None:
+  _assert_secret_allowed(secret_name)
+  parent = f"projects/{PROJECT_ID}/secrets/{secret_name}"
   try:
-    client = password_helper.default_secret_manager_client()
-    return password_helper.apply_study_demo_password_secret(password, client=client)
+    client.get_secret(request={"name": parent})
+    versions = list(client.list_secret_versions(request={"parent": parent}))
+    if versions:
+      return {
+        "status": "blocked_existing_version",
+        "secret_name": secret_name,
+        "version_count": len(versions),
+      }
+  except Exception:
+    pass
+  return None
+
+
+def apply_password_rotation(
+  *,
+  client: password_helper.SecretManagerClientProtocol | None = None,
+  getpass_fn: Callable[[str], str] | None = None,
+  environ: dict[str, str] | None = None,
+) -> dict[str, Any]:
+  env = environ if environ is not None else dict(os.environ)
+  _assert_stage_c(env)
+  if env.get(PASSWORD_ROTATION_ENV, "").lower() != "true":
+    raise SystemExit(f"ERROR: requires {PASSWORD_ROTATION_ENV}=true")
+  _assert_secret_allowed(STUDY_DEMO_PASSWORD_SECRET)
+
+  active_client = client or password_helper.default_secret_manager_client()
+  metadata = password_helper.inspect_secret_metadata(active_client)
+  blocked = _assert_password_rotation_can_proceed(metadata)
+  if blocked is not None:
+    return blocked
+
+  password = password_helper.prompt_password_twice(getpass_fn=getpass_fn)
+  try:
+    refreshed = password_helper.inspect_secret_metadata(active_client)
+    blocked = _assert_password_rotation_can_proceed(refreshed)
+    if blocked is not None:
+      return blocked
+
+    parent = password_helper.secret_parent()
+    added = active_client.add_secret_version(
+      request={
+        "parent": parent,
+        "payload": {"data": password.encode("utf-8")},
+      }
+    )
+    new_version = str(getattr(added, "name", "") or "").rsplit("/", 1)[-1]
+    if new_version != "2":
+      return {
+        "status": "blocked_unexpected_new_version",
+        "project_id": PROJECT_ID,
+        "secret_name": STUDY_DEMO_PASSWORD_SECRET,
+        "new_version": new_version,
+        "message": "add_secret_version returned an unexpected version number",
+      }
+
+    after = password_helper.inspect_secret_metadata(active_client)
+    version_one = _version_map(after).get("1")
+    if version_one is None or version_one.state != "enabled":
+      return {
+        "status": "blocked_previous_version_changed",
+        "project_id": PROJECT_ID,
+        "secret_name": STUDY_DEMO_PASSWORD_SECRET,
+        "message": "version 1 must remain enabled after rotation",
+      }
+
+    new_state = _version_map(after).get("2")
+    return {
+      "status": "rotation_version_created",
+      "project_id": PROJECT_ID,
+      "secret_name": STUDY_DEMO_PASSWORD_SECRET,
+      "previous_version": "1",
+      "previous_version_state": "enabled",
+      "new_version": "2",
+      "new_version_state": new_state.state if new_state is not None else "enabled",
+      "secret_value_displayed": False,
+    }
   finally:
     del password
 
@@ -89,32 +229,31 @@ def _ensure_secret_container(client: Any, *, secret_name: str) -> None:
     )
 
 
-def apply_api_key_secret(secret_name: str, *, approved_env: str) -> dict[str, Any]:
+def apply_api_key_secret(
+  secret_name: str,
+  *,
+  approved_env: str,
+  client: Any | None = None,
+  getpass_fn: Callable[[str], str] | None = None,
+) -> dict[str, Any]:
   _assert_stage_c(dict(os.environ))
   _assert_secret_allowed(secret_name)
   if os.environ.get(approved_env, "").lower() != "true":
     raise SystemExit(f"ERROR: requires {approved_env}=true")
-  first = getpass.getpass("API key: ")
-  second = getpass.getpass("Confirm API key: ")
+  reader = getpass.getpass if getpass_fn is None else getpass_fn
+  first = reader("API key: ")
+  second = reader("Confirm API key: ")
   if first != second:
     raise SystemExit("ERROR: confirmation mismatch")
   if len(first.strip()) < 8:
     raise SystemExit("ERROR: API key too short")
-  client = password_helper.default_secret_manager_client()
-  parent = f"projects/{PROJECT_ID}/secrets/{secret_name}"
-  try:
-    client.get_secret(request={"name": parent})
-    versions = list(client.list_secret_versions(request={"parent": parent}))
-    if versions:
-      return {
-        "status": "blocked_existing_version",
-        "secret_name": secret_name,
-        "version_count": len(versions),
-      }
-  except Exception:
-    pass
-  _ensure_secret_container(client, secret_name=secret_name)
-  added = client.add_secret_version(
+  active_client = client or password_helper.default_secret_manager_client()
+  blocked = _assert_new_secret_can_be_created(active_client, secret_name=secret_name)
+  if blocked is not None:
+    del first, second
+    return blocked
+  _ensure_secret_container(active_client, secret_name=secret_name)
+  added = active_client.add_secret_version(
     request={
       "parent": f"projects/{PROJECT_ID}/secrets/{secret_name}",
       "payload": {"data": first.encode("utf-8")},
