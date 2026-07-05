@@ -33,8 +33,17 @@ def load_active_analysis_context(
     if not errors:
       return {"status": "ok", "context": dict(session_context), "source": "session"}
   loaded = load_active_context_from_storage(environ=environ, storage_client=storage_client)
-  if loaded.get("status") == "ok":
-    return {"status": "ok", "context": dict(loaded.get("context", {}) or {}), "generation": loaded.get("generation"), "source": "gcs"}
+  if loaded.get("status") in {"ok", "invalid"} and loaded.get("context"):
+    ctx = dict(loaded.get("context", {}) or {})
+    recoverable = set(loaded.get("errors", []) or []) <= {"context_type_run_origin_mismatch"}
+    if loaded.get("status") == "ok" or recoverable:
+      return {
+        "status": "ok",
+        "context": ctx,
+        "generation": loaded.get("generation"),
+        "source": "gcs",
+        "recovered_from_invalid": loaded.get("status") == "invalid",
+      }
   return {"status": loaded.get("status", "missing"), "context": None, "generation": loaded.get("generation"), "source": "gcs"}
 
 

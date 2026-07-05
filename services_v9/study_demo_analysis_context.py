@@ -199,10 +199,11 @@ def load_active_context_from_storage(
     return {"status": "missing", "context": None, "generation": None}
   blob.reload()
   payload = json.loads(blob.download_as_bytes().decode("utf-8"))
-  errors = validate_active_context(payload)
+  normalized = sanitize_active_context(normalize_active_context_types(payload))
+  errors = validate_active_context(normalized)
   if errors:
-    return {"status": "invalid", "context": payload, "generation": blob.generation, "errors": errors}
-  return {"status": "ok", "context": sanitize_active_context(payload), "generation": blob.generation}
+    return {"status": "invalid", "context": normalized, "generation": blob.generation, "errors": errors}
+  return {"status": "ok", "context": normalized, "generation": blob.generation}
 
 
 def save_active_context_to_storage(

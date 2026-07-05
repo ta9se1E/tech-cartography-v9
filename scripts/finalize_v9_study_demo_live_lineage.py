@@ -44,7 +44,7 @@ def build_normalized_context(
   env = dict(environ or os.environ)
   client = storage_client if storage_client is not None else _build_client()
   loaded = load_active_context_from_storage(environ=env, storage_client=client)
-  if loaded.get("status") != "ok":
+  if loaded.get("status") not in {"ok", "invalid"} or not loaded.get("context"):
     return {"status": "blocked", "message": "active context missing or invalid", "loaded": loaded}
 
   current = sanitize_active_context(normalize_active_context_types(dict(loaded.get("context", {}) or {})))
