@@ -27,6 +27,10 @@ from services_v9.study_demo_search.relevance_ranking import (
 from services_v9.study_demo_search.request import request_fingerprint
 from services_v9.study_demo_search.storage import build_search_result_from_artifacts
 
+STATE_ACTIVE_CONTEXT = "v9_study_demo_active_context"
+STATE_ACTIVE_CONTEXT_GENERATION = "v9_study_demo_active_context_generation"
+STATE_ACTIVE_CONTEXT_MESSAGE = "v9_study_demo_active_context_message"
+
 STATE_SEARCH_FORM = "v9_study_demo_search_form"
 STATE_SEARCH_PLAN = "v9_study_demo_search_plan"
 STATE_SEARCH_RESULT = "v9_study_demo_search_result"
@@ -214,10 +218,94 @@ def render_study_demo_keyword_search_section(*, authenticated: bool = True) -> d
     history_result = build_search_result_from_artifacts(loaded)
     st.session_state[STATE_SEARCH_RESULT] = history_result
     events["history_loaded"] = history_result
+    events["history_loaded_artifacts"] = loaded
     st.caption("履歴は保存済みartifactのみ再表示します（API呼び出しなし）。関連度はローカル再計算されます。")
     _render_search_result(history_result)
 
+  _render_active_run_controls(events)
   return events
+
+
+def _render_active_run_controls(events: dict[str, Any]) -> None:
+  from services_v9.study_demo_analysis_context import build_active_context_from_run, save_active_context_to_storage
+  from services_v9.study_demo_config import get_study_demo_bucket
+
+  st.markdown("#### 分析対象runの設定")
+  active = dict(st.session_state.get(STATE_ACTIVE_CONTEXT, {}) or {})
+  if active:
+    st.success(f"現在の分析対象: `{active.get('active_search_run_id', '')}`")
+  else:
+    st.info("分析対象が選択されていません。")
+
+  candidate_result = dict(st.session_state.get(STATE_SEARCH_RESULT, {}) or {})
+  candidate_run_id = str(candidate_result.get("search_run_id", "") or "")
+
+  if candidate_run_id:
+    integrated = dict(candidate_result.get("integrated_signals", {}) or {})
+    summary = dict(integrated.get("relevance_summary", {}) or {})
+    st.write(f"- 選択run ID: `{candidate_run_id}`")
+    theme = ""
+    artifacts_wrap = dict(events.get("history_loaded_artifacts", {}) or {})
+    artifacts = dict(artifacts_wrap.get("artifacts", {}) or {})
+    if artifacts.get("search_request.json"):
+      theme = str(dict(artifacts.get("search_request.json", {})).get("theme", "") or "")
+    if theme:
+      st.write(f"- テーマ: {theme[:120]}")
+    st.write(
+      f"- provider件数: patent `{integrated.get('patent_count', 0)}` / paper `{integrated.get('paper_count', 0)}` / web `{integrated.get('web_count', 0)}`"
+    )
+    st.write(
+      f"- Tier件数: A `{summary.get('tier_a', 0)}` / B `{summary.get('tier_b', 0)}` / C `{summary.get('tier_c', 0)}` / D `{summary.get('tier_d', 0)}`"
+    )
+    st.caption("参加者全員の分析対象が切り替わります。外部検索は実行しません。")
+    confirm = st.checkbox("このrunを参加者共通の分析対象に設定します", key="v9_study_demo_set_active_confirm")
+    if st.button("この検索runを分析対象に設定", key="v9_study_demo_set_active_button"):
+      if not confirm:
+        st.error("確認チェックが必要です。")
+      else:
+        artifacts_wrap = dict(events.get("history_loaded_artifacts", {}) or {})
+        artifacts = dict(artifacts_wrap.get("artifacts", {}) or {})
+        if not artifacts and candidate_run_id:
+          artifacts = dict(load_search_run(candidate_run_id).get("artifacts", {}) or {})
+        preview = build_active_context_from_run(
+          search_run_id=candidate_run_id,
+          artifacts=artifacts,
+          bucket_name=get_study_demo_bucket(),
+        )
+        if active and str(active.get("active_search_run_id", "")) == candidate_run_id:
+          st.session_state[STATE_ACTIVE_CONTEXT_MESSAGE] = "同じrunは既に分析対象です。"
+        else:
+          save_result = save_active_context_to_storage(
+            preview,
+            expected_generation=st.session_state.get(STATE_ACTIVE_CONTEXT_GENERATION),
+          )
+          if save_result.get("status") == "conflict":
+            st.error("他の参加者が先に更新しました。再読み込みしてください。")
+          elif save_result.get("status") in {"saved", "unchanged"}:
+            st.session_state[STATE_ACTIVE_CONTEXT] = dict(save_result.get("context", preview))
+            st.session_state[STATE_ACTIVE_CONTEXT_GENERATION] = save_result.get("generation")
+            st.session_state[STATE_ACTIVE_CONTEXT_MESSAGE] = "分析対象を更新しました。"
+            st.session_state["ui_data_source_mode"] = "temporary_search"
+            events["active_context_set"] = dict(save_result.get("context", preview))
+          else:
+            st.error(str(save_result.get("errors", save_result.get("message", "保存に失敗しました"))))
+  if st.button("現在の分析対象を再読み込み", key="v9_study_demo_reload_active_context"):
+    from services_v9.study_demo_active_loader import load_active_analysis_context
+
+    loaded = load_active_analysis_context(reload_from_storage=True)
+    if loaded.get("status") == "ok":
+      st.session_state[STATE_ACTIVE_CONTEXT] = dict(loaded.get("context", {}) or {})
+      st.session_state[STATE_ACTIVE_CONTEXT_GENERATION] = loaded.get("generation")
+      st.session_state[STATE_ACTIVE_CONTEXT_MESSAGE] = "分析対象を再読み込みしました。"
+      st.session_state["ui_data_source_mode"] = "temporary_search"
+      events["active_context_reloaded"] = dict(loaded.get("context", {}) or {})
+    else:
+      st.session_state.pop(STATE_ACTIVE_CONTEXT, None)
+      st.session_state.pop(STATE_ACTIVE_CONTEXT_GENERATION, None)
+      st.session_state[STATE_ACTIVE_CONTEXT_MESSAGE] = "共有分析対象は未設定です。"
+  message = str(st.session_state.get(STATE_ACTIVE_CONTEXT_MESSAGE, "") or "")
+  if message:
+    st.caption(message)
 
 
 def _render_filter_controls() -> dict[str, Any]:

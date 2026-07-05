@@ -90,8 +90,15 @@ from services_v9.web_company_retrieval import (
 from services_v9.watch_profile_schema import build_profile_from_form, watch_profile_summary
 from services_v9.study_demo_config import is_study_demo_mode
 from services_v9.study_demo_auth import is_authenticated as is_study_demo_authenticated
+from services_v9.study_demo_active_loader import build_temporary_search_source_payload, load_active_analysis_context
+from services_v9.study_demo_downstream import build_downstream_bundle, save_baseline_snapshot
 from ui_v9.labels import data_source_mode_label_ja
 from ui_v9.study_demo_gate import render_study_demo_banner, render_study_demo_login_screen
+from ui_v9.study_demo_search_ui import (
+  STATE_ACTIVE_CONTEXT,
+  STATE_ACTIVE_CONTEXT_GENERATION,
+)
+from ui_v9.study_demo_active_banner import render_study_demo_mode_legend
 from ui_v9.tabs import (
   V9_TAB_LABELS,
   render_digest_export_tab,
@@ -266,7 +273,8 @@ def _init_session_state(profile_dict: dict[str, object]) -> None:
   st.session_state.setdefault(UI_SNAPSHOT_NOTE_KEY, "")
   st.session_state.setdefault(UI_EMAIL_CONFIRM_SEND_KEY, False)
   st.session_state.setdefault(STATE_COMPARE_ENABLED, False)
-  st.session_state.setdefault(UI_DATA_SOURCE_MODE_KEY, "demo")
+  default_mode = "unselected" if is_study_demo_mode() else "demo"
+  st.session_state.setdefault(UI_DATA_SOURCE_MODE_KEY, default_mode)
   st.session_state.setdefault(STATE_REVIEWS_BY_SIGNAL_ID, {})
   st.session_state.setdefault(STATE_PATENT_BIGQUERY_DRY_RUN, {})
   st.session_state.setdefault(STATE_PATENT_BIGQUERY_APPROVED_QUERY_IDS, [])
@@ -352,6 +360,20 @@ def _decode_uploaded_text(uploaded_file) -> tuple[str | None, list[str]]:
   return None, ["アップロードファイルの文字コードを判定できませんでした。UTF-8 のCSV/JSONを使用してください。"]
 
 
+def _sync_study_demo_active_context() -> None:
+  if not is_study_demo_mode():
+    return
+  loaded = load_active_analysis_context(reload_from_storage=True)
+  if loaded.get("status") == "ok":
+    st.session_state[STATE_ACTIVE_CONTEXT] = dict(loaded.get("context", {}) or {})
+    st.session_state[STATE_ACTIVE_CONTEXT_GENERATION] = loaded.get("generation")
+    if str(st.session_state.get(UI_DATA_SOURCE_MODE_KEY, "unselected") or "") == "unselected":
+      st.session_state[UI_DATA_SOURCE_MODE_KEY] = "temporary_search"
+  elif loaded.get("status") == "missing":
+    st.session_state.pop(STATE_ACTIVE_CONTEXT, None)
+    st.session_state.pop(STATE_ACTIVE_CONTEXT_GENERATION, None)
+
+
 def _resolve_current_signal_source(
   raw_demo_signals: list[dict[str, object]],
   watch_profile_dict: dict[str, object],
@@ -364,6 +386,51 @@ def _resolve_current_signal_source(
   warnings: list[str] = []
 
   source_payload: dict[str, object] | None = None
+
+  if mode == "unselected":
+    return {
+      "requested_mode": mode,
+      "mode": "unselected",
+      "label": data_source_mode_label_ja("unselected"),
+      "signals": [],
+      "loaded_count": 0,
+      "warnings": ["分析対象が未選択です。情報源タブで検索runを設定してください。"],
+      "provisional_scoring": False,
+      "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
+      "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
+    }
+
+  if mode == "legacy_demo":
+    return {
+      "requested_mode": mode,
+      "mode": "legacy_demo",
+      "label": data_source_mode_label_ja("legacy_demo"),
+      "signals": demo_signals,
+      "loaded_count": len(demo_signals),
+      "warnings": ["明示的に選択した架空デモ12件です。一時検索runとは混在しません。"],
+      "provisional_scoring": False,
+      "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
+      "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
+    }
+
+  if mode == "temporary_search":
+    active_context = dict(st.session_state.get(STATE_ACTIVE_CONTEXT, {}) or {})
+    if not active_context:
+      return {
+        "requested_mode": mode,
+        "mode": "unselected",
+        "label": data_source_mode_label_ja("unselected"),
+        "signals": [],
+        "loaded_count": 0,
+        "warnings": ["共有分析対象が未設定です。情報源タブで検索runを設定してください。"],
+        "provisional_scoring": False,
+        "template_csv_path": str(SAMPLE_UPLOAD_CSV_PATH),
+        "template_json_path": str(SAMPLE_UPLOAD_JSON_PATH),
+      }
+    payload = build_temporary_search_source_payload(active_context)
+    payload["study_demo_downstream"] = build_downstream_bundle(active_context)
+    payload["active_context"] = active_context
+    return payload
 
   if mode == "csv":
     if csv_file is None:
@@ -1139,6 +1206,7 @@ def run_app() -> None:
     if not render_study_demo_login_screen():
       return
     render_study_demo_banner()
+    _sync_study_demo_active_context()
 
   ensure_v9_run_dirs()
   raw_signals, raw_profile = load_demo_bundle()
@@ -1221,11 +1289,14 @@ def run_app() -> None:
   st.title("Tech Cartography v9")
   st.caption("軽量R&Dシグナル監視エージェント")
   render_notice()
-  st.caption(
-    "ローカルのデモデータ、アップロードされたCSV/JSON、または明示的に読込んだ取得済みartifactで動作します。"
-    "BigQuery、OpenAlex、Web検索、OCR、PDFスキャン、"
-    "スケジューラ、外部APIは起動時に実行しません。"
-  )
+  if is_study_demo_mode():
+    render_study_demo_mode_legend()
+  else:
+    st.caption(
+      "ローカルのデモデータ、アップロードされたCSV/JSON、または明示的に読込んだ取得済みartifactで動作します。"
+      "BigQuery、OpenAlex、Web検索、OCR、PDFスキャン、"
+      "スケジューラ、外部APIは起動時に実行しません。"
+    )
 
   tabs = st.tabs(V9_TAB_LABELS)
   with tabs[0]:
@@ -1284,6 +1355,7 @@ def run_app() -> None:
       weekly_delivery_state,
       st.session_state.get(STATE_PROFILE_MESSAGE),
       st.session_state.get(STATE_WEEKLY_DELIVERY_MESSAGE),
+      source_info=source_info,
     )
   latest_reviews_by_signal_id = dict(st.session_state.get(STATE_REVIEWS_BY_SIGNAL_ID, {}) or {})
   latest_reviewed_signals = _prepare_reviewed_signal_dicts(
@@ -1325,6 +1397,27 @@ def run_app() -> None:
       st.session_state.get(STATE_EMAIL_DELIVERY_MESSAGE),
       st.session_state.get(STATE_DIGEST_MESSAGE),
     )
+
+  if source_events.get("legacy_demo_selected"):
+    st.session_state[UI_DATA_SOURCE_MODE_KEY] = "legacy_demo"
+    st.rerun()
+
+  if source_events.get("active_context_set") or source_events.get("active_context_reloaded"):
+    _sync_study_demo_active_context()
+    st.session_state[UI_DATA_SOURCE_MODE_KEY] = "temporary_search"
+    st.rerun()
+
+  if weekly_events.get("save_study_demo_baseline"):
+    active_context = dict(st.session_state.get(STATE_ACTIVE_CONTEXT, {}) or {})
+    bundle = dict(source_info.get("study_demo_downstream", {}) or {})
+    if active_context and bundle:
+      save_baseline_snapshot(
+        context=active_context,
+        integrated=dict(bundle.get("integrated", {}) or {}),
+        profile_signature=str(bundle.get("profile_signature", "")),
+      )
+      st.session_state[STATE_SNAPSHOT_MESSAGE] = "初回スナップショットを保存しました。"
+    st.rerun()
 
   if theme_events["save_profile"] or profile_events["save_profile"]:
     _save_profile_and_rerun(watch_profile_dict)

@@ -74,7 +74,11 @@ def render_study_demo_banner(*, environ: dict[str, str] | None = None) -> None:
         "",
         "・保存済み実データを使用しています",
         "・変更内容は参加者全員に共有されます" if is_study_demo_shared_state(environ) else "・共有状態設定を確認してください",
-        "・外部検索、メール送信、自動週次実行は停止しています",
+        "・一時キーワード検索: Patent / Paper / Web 有効",
+        "・ページ表示・履歴表示: 外部APIを実行しない",
+        "・自動週次実行: 停止中",
+        "・メール送信: 停止中",
+        "・本番環境: 変更しない",
         f"・公開終了日時: {expiry_text}",
       ]
     )

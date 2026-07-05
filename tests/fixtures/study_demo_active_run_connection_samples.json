@@ -1,0 +1,80 @@
+{
+  "_fixture_note": "Synthetic minimal artifacts for active run connection tests. Not live Cloud artifacts.",
+  "search_run_id": "study_demo_search_20260705_061319_e973e4c2",
+  "artifacts": {
+    "search_request.json": {
+      "theme": "PAN系炭素繊維のサイジング剤について、組成・付与量・乾燥条件が特性へ与える影響",
+      "keywords_en": "carbon fiber sizing agent aqueous polyurethane",
+      "keywords_ja": "炭素繊維 サイジング剤 PAN",
+      "exact_phrase": "carbon fiber sizing agent",
+      "exclude_keywords": "textile",
+      "seed_patent": "",
+      "enable_patent": true,
+      "enable_paper": true,
+      "enable_web": true
+    },
+    "provider_status.json": {
+      "patent": {"status": "success"},
+      "paper": {"status": "success"},
+      "web": {"status": "success"}
+    },
+    "integrated_signals.json": {
+      "ranked_count": 4,
+      "patent_count": 2,
+      "paper_count": 1,
+      "web_count": 1,
+      "signals": [
+        {
+          "signal_id": "patent:p1",
+          "source_type": "patent",
+          "source_id": "JP-1",
+          "title": "Bio-based aqueous polyurethane sizing agent for PAN-based carbon fiber",
+          "summary": "aqueous sizing interfacial adhesion drying",
+          "url": "https://example.com/p1",
+          "organization": "Toray Industries",
+          "country": "JP",
+          "family_id": "F1",
+          "metadata": {"cpc_codes": ["D01F"]}
+        },
+        {
+          "signal_id": "patent:p2",
+          "source_type": "patent",
+          "source_id": "JP-2",
+          "title": "Asphalt-based carbon fiber sizing agent and preparation method thereof",
+          "summary": "pitch-based sizing",
+          "url": "https://example.com/p2",
+          "organization": "Example Corp",
+          "country": "US",
+          "family_id": "F2",
+          "metadata": {}
+        },
+        {
+          "signal_id": "paper:w1",
+          "source_type": "paper",
+          "source_id": "W123",
+          "title": "Effects of Styrene-Acrylic Sizing on the Mechanical Properties of Carbon Fiber Thermoplastic Towpregs",
+          "summary": "interfacial adhesion tensile modulus",
+          "url": "https://example.com/w1",
+          "organization": "University Lab",
+          "metadata": {"doi": "10.1000/example", "cited_by_count": 10}
+        },
+        {
+          "signal_id": "web:u1",
+          "source_type": "web_company",
+          "source_id": "web1",
+          "title": "Antibacterial polyester fiber fabric",
+          "summary": "textile",
+          "url": "https://example.com/fabric",
+          "organization": "Textile Co",
+          "metadata": {"score": 0.9}
+        }
+      ]
+    },
+    "usage_metrics.json": {
+      "patent": {"estimated_bytes": null, "reference_cost_usd": null},
+      "paper": {"request_count": 1},
+      "web": {"request_count": 1, "credits": null}
+    },
+    "search_report.md": "# report"
+  }
+}

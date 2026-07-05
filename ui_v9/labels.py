@@ -32,6 +32,9 @@ SOURCE_MODE_LABELS_JA = {
 
 DATA_SOURCE_MODE_LABELS_JA = {
   "demo": "デモデータ",
+  "legacy_demo": "架空デモ12件",
+  "unselected": "分析対象未選択",
+  "temporary_search": "一時検索run",
   "csv": "CSVアップロード",
   "json": "JSONアップロード",
   "retrieval_saved": "取得済みデータ",

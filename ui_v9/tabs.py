@@ -774,23 +774,37 @@ def render_sources_tab(
 ) -> dict[str, object]:
   st.subheader("情報源")
   study_events: dict[str, object] = {}
+  study_demo_mode = False
   try:
     from services_v9.study_demo_config import is_study_demo_mode
     from ui_v9.study_demo_search_ui import render_study_demo_keyword_search_section
 
-    if is_study_demo_mode():
+    study_demo_mode = is_study_demo_mode()
+    if study_demo_mode:
       study_events = render_study_demo_keyword_search_section(authenticated=study_demo_authenticated)
       st.divider()
   except Exception:
     study_events = {}
   st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
-  st.radio(
-    "データ投入モード",
-    options=["demo", "csv", "json", "retrieval_saved"],
-    format_func=data_source_mode_label_ja,
-    key="ui_data_source_mode",
-    horizontal=True,
-  )
+  if study_demo_mode:
+    st.radio(
+      "データ投入モード",
+      options=["unselected", "temporary_search", "legacy_demo", "csv", "json", "retrieval_saved"],
+      format_func=data_source_mode_label_ja,
+      key="ui_data_source_mode",
+      horizontal=True,
+    )
+    if st.button("架空デモ12件を表示", key="btn_show_legacy_demo_12"):
+      st.session_state["ui_data_source_mode"] = "legacy_demo"
+      study_events["legacy_demo_selected"] = True
+  else:
+    st.radio(
+      "データ投入モード",
+      options=["demo", "csv", "json", "retrieval_saved"],
+      format_func=data_source_mode_label_ja,
+      key="ui_data_source_mode",
+      horizontal=True,
+    )
   st.caption(f"現在のデータ投入モード: {data_source_mode_label_ja(str(source_info['requested_mode']))}")
   st.info(
     "ページ表示だけでは外部検索や保存済みmanifest読込を実行しません。アップロードされたCSV/JSONの仮スコア表示に加えて、"
@@ -842,6 +856,10 @@ def render_sources_tab(
 
   st.write(f"- 現在のデータソース: {source_info['label']}")
   st.write(f"- 読み込み件数: {source_info['loaded_count']}件")
+  if str(source_info.get("mode", "")) == "temporary_search":
+    active_context = dict(source_info.get("active_context", {}) or {})
+    if active_context.get("active_search_run_id"):
+      st.write(f"- run ID: `{active_context.get('active_search_run_id', '')}`")
   if source_info.get("provisional_scoring"):
     if str(source_info.get("mode", "") or "") == "retrieval_saved":
       st.caption("取得済み候補は既存の統合・重複除去・ランキング処理を再実行した結果です。デモ/CSV/JSONは混在していません。")
@@ -1093,9 +1111,25 @@ def render_top_signals_tab(
   source_info: dict[str, object],
   snapshot_status_message: str | None = None,
 ) -> dict[str, bool]:
+  from ui_v9.study_demo_active_banner import render_active_analysis_banner
+
   st.subheader("注目シグナル")
-  top_signals = select_diverse_top_signals(signals, top_n=10, max_per_type=4)
-  top_reads = select_top_reads(top_signals, limit=3)
+  render_active_analysis_banner(
+    active_context=dict(source_info.get("active_context", {}) or {}) or None,
+    downstream_bundle=dict(source_info.get("study_demo_downstream", {}) or {}) or None,
+  )
+  bundle = dict(source_info.get("study_demo_downstream", {}) or {})
+  if str(source_info.get("mode", "")) == "temporary_search" and bundle:
+    from services_v9.study_demo_active_loader import adapt_study_demo_signal_to_display
+
+    top_reads = [
+      Signal.from_dict(adapt_study_demo_signal_to_display(item, index=index))
+      for index, item in enumerate(list(bundle.get("top_reads_raw", []) or []))
+    ]
+    top_signals = [Signal.from_dict(item) for item in list(bundle.get("display_signals", []) or [])[:10]]
+  else:
+    top_signals = select_diverse_top_signals(signals, top_n=10, max_per_type=4)
+    top_reads = select_top_reads(top_signals, limit=3)
   diversity_counts = build_diversity_counts(signals)
   display_signal_lookup = _build_display_signal_lookup(display_signals)
   score_explanation_lookup = _build_score_explanation_lookup(display_signals)
@@ -1212,7 +1246,47 @@ def render_weekly_updates_tab(
   previous_snapshot_info: dict | None,
   compare_status_message: str | None = None,
 ) -> dict[str, bool]:
+  from ui_v9.study_demo_active_banner import render_active_analysis_banner
+
   st.subheader("週次更新")
+  render_active_analysis_banner(
+    active_context=dict(source_info.get("active_context", {}) or {}) or None,
+    downstream_bundle=dict(source_info.get("study_demo_downstream", {}) or {}) or None,
+  )
+  bundle = dict(source_info.get("study_demo_downstream", {}) or {})
+  if str(source_info.get("mode", "")) == "temporary_search" and bundle:
+    weekly_state = dict(bundle.get("weekly_state", {}) or {})
+    st.caption(f"現在の比較対象データ: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
+    if weekly_state.get("state") == "initial_baseline":
+      st.info("初回ベースライン: 前回比較対象なし。次回runから差分比較できます。")
+      confirm = st.checkbox("このrunを初回スナップショットとして保存します", key="ui_study_demo_baseline_confirm")
+      save_baseline = st.button("このrunを初回スナップショットとして保存", key="btn_study_demo_save_baseline")
+      if save_baseline and not confirm:
+        st.error("確認チェックが必要です。")
+        save_baseline = False
+      diff_result = None
+      return {"load_previous_snapshot": False, "compare_snapshot": False, "save_study_demo_baseline": bool(save_baseline and confirm)}
+    diff_payload = dict(weekly_state.get("diff", {}) or {})
+    counts = dict(diff_payload.get("counts", {}) or {})
+    st.markdown("### run間差分")
+    for key, label in (
+      ("new", "新規"),
+      ("disappeared", "消失"),
+      ("score_up", "スコア上昇"),
+      ("score_down", "スコア低下"),
+      ("tier_up", "Tier上昇"),
+      ("tier_down", "Tier低下"),
+      ("unchanged", "変更なし"),
+    ):
+      st.write(f"- {label}: {counts.get(key, 0)}件")
+    review_summary = dict(bundle.get("review_summary", {}) or {})
+    st.markdown("### レビュー状況（active run）")
+    st.write(
+      f"- accepted: {review_summary.get('accepted', 0)} | pending: {review_summary.get('pending', 0)} | "
+      f"rejected: {review_summary.get('rejected', 0)} | unreviewed: {review_summary.get('unreviewed', 0)}"
+    )
+    return {"load_previous_snapshot": False, "compare_snapshot": False, "save_study_demo_baseline": False}
+
   st.caption(f"現在の比較対象データ: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
   st.selectbox(
     "前回スナップショット選択",
@@ -1361,8 +1435,57 @@ def render_watch_profile_tab(
   weekly_delivery_state: dict[str, object],
   profile_status_message: str | None = None,
   weekly_delivery_status_message: str | None = None,
+  *,
+  source_info: dict[str, object] | None = None,
 ) -> dict[str, bool]:
+  from ui_v9.study_demo_active_banner import render_active_analysis_banner
+
   st.subheader("監視プロファイル")
+  render_active_analysis_banner(
+    active_context=dict((source_info or {}).get("active_context", {}) or {}) or None,
+    downstream_bundle=dict((source_info or {}).get("study_demo_downstream", {}) or {}) or None,
+  )
+  bundle = dict((source_info or {}).get("study_demo_downstream", {}) or {})
+  try:
+    from services_v9.study_demo_config import is_study_demo_mode
+
+    study_demo = is_study_demo_mode()
+  except Exception:
+    study_demo = False
+  if study_demo and str((source_info or {}).get("mode", "")) != "temporary_search":
+    st.warning("分析対象の一時検索runが未選択です。情報源タブで設定してください。")
+    return {
+      "save_profile": False,
+      "load_profile": False,
+      "apply_suggestions": False,
+      "save_weekly_delivery_settings": False,
+      "inspect_scheduler": False,
+      "apply_scheduler": False,
+    }
+  if str((source_info or {}).get("mode", "")) == "temporary_search" and bundle:
+    draft = dict(bundle.get("profile_draft", {}) or {})
+    st.markdown("### この検索runから作成した監視プロファイル案")
+    st.caption("本番未適用 / 自動監視停止中 / Scheduler未接続")
+    st.write(f"**status:** `{draft.get('status', '')}`")
+    st.write(f"**theme_name:** {draft.get('theme_name', '')}")
+    st.write(f"**theme_description:** {draft.get('theme_description', '')}")
+    st.write(f"**keywords_ja:** {draft.get('keywords_ja', '')}")
+    st.write(f"**keywords_en:** {draft.get('keywords_en', '')}")
+    st.write(f"**exact_phrase:** {draft.get('exact_phrase', '')}")
+    st.write(f"**exclude_keywords:** {draft.get('exclude_keywords', '')}")
+    st.write(f"**seed_patents:** {', '.join(draft.get('seed_patents', []) or []) or 'なし'}")
+    st.write(f"**候補企業（自動採用不可）:** {', '.join(draft.get('suggested_companies', []) or []) or 'なし'}")
+    st.write(f"**候補国:** {', '.join(draft.get('suggested_countries', []) or []) or 'なし'}")
+    st.write(f"**候補CPC/IPC:** {', '.join(draft.get('suggested_cpc_ipc', []) or []) or 'なし'}")
+    st.info("勉強会環境では監視プロファイル案の保存のみ可能です。自動週次実行とメール配信は停止しています。")
+    return {
+      "save_profile": False,
+      "load_profile": False,
+      "apply_suggestions": False,
+      "save_weekly_delivery_settings": False,
+      "inspect_scheduler": False,
+      "apply_scheduler": False,
+    }
 
   st.text_area(
     "注目企業",
@@ -1510,8 +1633,30 @@ def render_digest_export_tab(
   email_delivery_status_message: str | None = None,
   digest_status_message: str | None = None,
 ) -> dict[str, bool]:
+  from ui_v9.study_demo_active_banner import render_active_analysis_banner
+
   st.subheader("ダイジェスト / エクスポート")
+  render_active_analysis_banner(
+    active_context=dict(source_info.get("active_context", {}) or {}) or None,
+    downstream_bundle=dict(source_info.get("study_demo_downstream", {}) or {}) or None,
+  )
   st.caption(f"現在のデータソース: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
+  bundle = dict(source_info.get("study_demo_downstream", {}) or {})
+  if str(source_info.get("mode", "")) == "temporary_search" and bundle:
+    exports = dict(bundle.get("digest_exports", {}) or {})
+    markdown_text = str(exports.get("digest_markdown", markdown_text) or markdown_text)
+    st.caption("active run artifact再利用 / メール未送信 / 自動週次停止中")
+    st.markdown(markdown_text)
+    st.download_button("Active Context JSON", data=exports.get("active_context_json", "{}"), file_name="active_context.json")
+    st.download_button("Digest Markdown", data=exports.get("digest_markdown", ""), file_name="study_demo_digest.md")
+    st.download_button("Digest JSON", data=exports.get("digest_json", "{}"), file_name="study_demo_digest.json")
+    st.download_button("Integrated CSV (all tiers)", data=exports.get("integrated_csv_all_tiers", ""), file_name="integrated_all.csv")
+    st.download_button("Weekly Diff CSV", data=exports.get("weekly_diff_csv", ""), file_name="weekly_diff.csv")
+    st.download_button("Profile Draft JSON", data=exports.get("profile_draft_json", "{}"), file_name="profile_draft.json")
+    st.download_button("Full Provenance JSON", data=exports.get("full_provenance_json", "{}"), file_name="provenance.json")
+    st.caption("Study Demoではメール送信は無効です。")
+    return {"save_digest": False, "email_dry_run": False, "email_send": False}
+
   st.caption("人間レビューが反映済みのSignalは、その判断を優先してダイジェストへ表示します。未レビューSignalはシステム判断に基づいて補完されます。")
   st.caption("現在の人間レビュー情報は、SnapshotとJSON Exportに含まれます。CSV Exportには含まれません。")
   st.markdown(markdown_text)

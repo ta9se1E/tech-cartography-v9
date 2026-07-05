@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,12 +22,15 @@ def _check_module(name: str) -> None:
 
 
 def _check_script_plan(script: str) -> None:
+  env = os.environ.copy()
+  env["PYTHONPATH"] = f"{ROOT}:{ROOT / 'src'}"
   result = subprocess.run(
     [sys.executable, str(ROOT / "scripts" / script), "--plan"],
     cwd=ROOT,
     check=True,
     capture_output=True,
     text=True,
+    env=env,
   )
   payload = json.loads(result.stdout)
   if payload.get("status") not in {"plan", "ok"}:
@@ -58,6 +62,7 @@ def main() -> int:
     _check_script_plan("reset_v9_study_demo_data.py")
     _check_script_plan("run_v9_study_demo_three_source_acceptance.py")
     _check_script_plan("check_v9_study_demo_relevance_ranking.py")
+    _check_script_plan("check_v9_study_demo_active_run_connection.py")
     checks["helper_plans"] = "ok"
     checks["patent_search_code"] = "ready"
     checks["openalex_search_code"] = "ready"
@@ -67,10 +72,19 @@ def main() -> int:
     checks["history"] = "ready"
     checks["export"] = "ready"
     checks["relevance_ranking"] = "ready"
+    checks["active_analysis_context"] = "ready"
+    checks["active_run_selector"] = "ready"
+    checks["downstream_common_loader"] = "ready"
+    checks["attention_signals_connection"] = "ready"
+    checks["weekly_baseline_connection"] = "ready"
+    checks["profile_draft_connection"] = "ready"
+    checks["digest_connection"] = "ready"
+    checks["legacy_demo_fallback"] = "explicit_only"
     checks["disable_script"] = "ready"
     checks["acceptance_script"] = "ready"
     checks["code_ready"] = "true"
     checks["live_provider_validated"] = "false"
+    checks["live_cloud_validated"] = "false"
 
     build_check = subprocess.run(
       [sys.executable, str(ROOT / "scripts" / "check_v9_build_context.py"), "--ignore-file", ".gcloudignore"],
