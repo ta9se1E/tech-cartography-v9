@@ -249,3 +249,49 @@ User should confirm search plan preview shows consistent execution flags and ~1.
 - Scheduler `ENABLED`
 - Weekly delivery `enabled=true`
 - Production bucket, secrets, and IAM unchanged
+
+## Relevance Ranking Redeployment
+
+Redeploy of Tier A/B/C/D relevance ranking, PAN/pitch material matching, relevance reason, score breakdown, Tier UI, Filter UI, and Export enhancements. Production resources were not modified. No live search or external provider execution was run.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T06:35:23Z |
+| Deployed at (JST) | 2026-07-05 15:35:23 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-utejl5os5a-uc.a.run.app |
+| Revision | `tech-cartography-v9-study-demo-00006-6zf` |
+| Previous revision | `tech-cartography-v9-study-demo-00005-cwc` |
+| Rollback revision | `tech-cartography-v9-study-demo-00001-b48` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:938fb05` |
+| Image digest | `sha256:0d2a3addf8cd60a0b7e4a2d9c96a809c4a214757c152c2b338528c078ed148d8` |
+| Cloud Build ID | `ce72bcdc-6622-4061-b80d-1e64d29aa9b2` |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Git commit | `938fb05` |
+| Tag (code) | `v9-study-demo-relevance-ranking-ready` |
+| Tag (live candidate) | `v9-study-demo-relevance-ranking-live-candidate` |
+
+### Changes in this revision
+
+- Relevance tiering (A/B/C/D) with source-normalized scoring
+- PAN priority and pitch/asphalt target-material mismatch display
+- Tier-separated UI, filter controls, and enriched CSV/JSON/Markdown export
+- Saved search history reload recomputes ranking locally from artifacts (no provider calls)
+
+### Saved run for browser validation
+
+- `study_demo_search_20260705_061319_e973e4c2`
+- Load from history dropdown; ranking is recomputed in-memory without overwriting original artifacts
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled, anonymous invoker denied
+- Job config unchanged, no new execution
+- Scheduler `ENABLED` (`0 9 * * 1`)
+- Weekly delivery `enabled=true`
+- Production bucket, secrets, and IAM unchanged
