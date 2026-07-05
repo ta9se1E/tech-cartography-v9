@@ -20,6 +20,7 @@ from .lock import acquire_search_lock, release_search_lock
 from .patent_provider import run_study_demo_patent_execute
 from .paper_provider import run_study_demo_paper_execute
 from .plan import build_search_plan_preview, plan_fingerprint
+from .relevance_ranking import TIER_A, TIER_B, filter_ranked_signals
 from .request import StudyDemoSearchRequest, request_fingerprint, validate_search_request
 from .similar import build_similar_patents
 from .storage import save_search_run
@@ -146,6 +147,14 @@ def execute_three_source_search(
       search_run_id=search_run_id,
     )
 
+    all_signals = list(integrated.get("signals", []) or [])
+    default_filtered = filter_ranked_signals(
+      all_signals,
+      tiers=[TIER_A, TIER_B],
+      min_score=35,
+      include_background=False,
+    )
+
     successes = [name for name, item in provider_status.items() if item.get("status") == "success"]
     failures = [name for name, item in provider_status.items() if item.get("status") == "failed"]
     if successes and failures:
@@ -170,7 +179,7 @@ def execute_three_source_search(
       "keyword_suggestions": keywords,
       "similar_patents": similar,
       "usage_metrics": usage,
-      "export": build_export_bundle(integrated.get("signals", []), keywords, similar, usage),
+      "export": build_export_bundle(all_signals, keywords, similar, usage, filtered_signals=default_filtered),
     }
     save_search_run(bundle, environ=environ, storage_client=storage_client)
     return bundle

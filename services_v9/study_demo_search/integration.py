@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from services_v9.signal_integration import integrate_multi_source_signals
 
+from .relevance_ranking import apply_relevance_ranking, group_signals_by_tier
 from .signals import normalize_patent_row, normalize_paper_row, normalize_web_row
 from .web_classify import classify_web_activity
 
@@ -41,12 +42,21 @@ def integrate_search_results(
     web_company_rows=[_signal_to_staged(item, "web_company") for item in web_signals],
   )
   signals = [_normalize_scores(item) for item in list(integrated.get("signals", []) or [])]
+  signals = apply_relevance_ranking(signals, query_provenance=query_provenance)
+  grouped = group_signals_by_tier(signals)
   return {
     **integrated,
     "signals": signals,
     "patent_count": len(patent_signals),
     "paper_count": len(paper_signals),
     "web_count": len(web_signals),
+    "ranked_count": len(signals),
+    "relevance_summary": {
+      "tier_a": len(grouped["A"]),
+      "tier_b": len(grouped["B"]),
+      "tier_c": len(grouped["C"]),
+      "tier_d": len(grouped["D"]),
+    },
   }
 
 

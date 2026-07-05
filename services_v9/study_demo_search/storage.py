@@ -10,6 +10,8 @@ from services_v9.study_demo_config import get_study_demo_bucket
 from services_v9.study_demo_storage import validate_study_demo_write_target
 
 from .constants import SEARCH_RUN_PREFIX, SEARCH_USAGE_OBJECT
+from .export import build_export_bundle
+from .relevance_ranking import enrich_integrated_signals, filter_ranked_signals, TIER_A, TIER_B
 
 
 def _object_path(search_run_id: str, name: str) -> str:
@@ -97,6 +99,36 @@ def load_search_run(
     else:
       result["artifacts"][name] = json.loads(text)
   return result
+
+
+def build_search_result_from_artifacts(loaded: Mapping[str, Any]) -> dict[str, Any]:
+  """Rebuild display/export bundle from saved artifacts without external API calls."""
+  artifacts = dict(loaded.get("artifacts", {}) or {})
+  integrated = dict(artifacts.get("integrated_signals.json", {}) or {})
+  summary = dict(artifacts.get("search_request.json", {}) or {})
+  enriched = enrich_integrated_signals(integrated, query_provenance=summary)
+  keywords = dict(artifacts.get("keyword_suggestions.json", {}) or {})
+  similar = dict(artifacts.get("similar_patents.json", {}) or {})
+  usage = dict(artifacts.get("usage_metrics.json", {}) or {})
+  status = dict(artifacts.get("search_status.json", {}) or {})
+  signals = list(enriched.get("signals", []) or [])
+  default_filtered = filter_ranked_signals(
+    signals,
+    tiers=[TIER_A, TIER_B],
+    min_score=35,
+    include_background=False,
+  )
+  return {
+    "search_run_id": loaded.get("search_run_id", ""),
+    "status": status.get("status", "loaded"),
+    "provider_status": dict(artifacts.get("provider_status.json", {}) or {}),
+    "integrated_signals": enriched,
+    "keyword_suggestions": keywords,
+    "similar_patents": similar,
+    "usage_metrics": usage,
+    "export": build_export_bundle(signals, keywords, similar, usage, filtered_signals=default_filtered),
+    "loaded_from_artifacts": True,
+  }
 
 
 def list_search_history(

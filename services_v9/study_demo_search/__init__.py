@@ -9,7 +9,7 @@ from .lock import acquire_search_lock, release_search_lock
 from .plan import build_search_plan_preview, plan_fingerprint
 from .request import StudyDemoSearchRequest, parse_search_request, validate_search_request
 from .similar import build_similar_patents
-from .storage import load_search_run, list_search_history, save_search_run
+from .storage import build_search_result_from_artifacts, load_search_run, list_search_history, save_search_run
 
 __all__ = [
   "COMMON_SIGNAL_FIELDS",
@@ -18,6 +18,7 @@ __all__ = [
   "acquire_search_lock",
   "build_export_bundle",
   "build_keyword_suggestions",
+  "build_search_result_from_artifacts",
   "build_search_plan_preview",
   "build_similar_patents",
   "execute_three_source_search",

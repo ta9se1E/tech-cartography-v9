@@ -57,6 +57,7 @@ def main() -> int:
     _check_script_plan("prepare_v9_study_demo_seed.py")
     _check_script_plan("reset_v9_study_demo_data.py")
     _check_script_plan("run_v9_study_demo_three_source_acceptance.py")
+    _check_script_plan("check_v9_study_demo_relevance_ranking.py")
     checks["helper_plans"] = "ok"
     checks["patent_search_code"] = "ready"
     checks["openalex_search_code"] = "ready"
@@ -65,6 +66,7 @@ def main() -> int:
     checks["common_schema"] = "ready"
     checks["history"] = "ready"
     checks["export"] = "ready"
+    checks["relevance_ranking"] = "ready"
     checks["disable_script"] = "ready"
     checks["acceptance_script"] = "ready"
     checks["code_ready"] = "true"

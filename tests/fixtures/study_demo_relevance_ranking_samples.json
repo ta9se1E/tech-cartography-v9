@@ -1,0 +1,84 @@
+{
+  "_fixture_note": "Synthetic minimal records for relevance ranking unit tests. Not live search artifacts.",
+  "query_provenance": {
+    "theme": "PAN系炭素繊維のサイジング剤について、組成・付与量・乾燥条件が特性へ与える影響",
+    "keywords_en": "carbon fiber sizing agent aqueous polyurethane interfacial adhesion",
+    "keywords_ja": "炭素繊維 サイジング剤 PAN",
+    "exact_phrase": "carbon fiber sizing agent",
+    "exclude_keywords": "textile,bamboo,battery"
+  },
+  "signals": [
+    {
+      "signal_id": "patent:amphiphilic",
+      "source_type": "patent",
+      "source_id": "P1",
+      "title": "Amphiphilic water-based polyamide acid sizing agent and preparation method thereof",
+      "summary": "aqueous sizing for carbon fiber tow with interfacial adhesion",
+      "url": "https://example.com/p1",
+      "metadata": {}
+    },
+    {
+      "signal_id": "patent:asphalt",
+      "source_type": "patent",
+      "source_id": "P2",
+      "title": "Asphalt-based carbon fiber sizing agent and preparation method thereof",
+      "summary": "pitch-based carbon fiber sizing composition",
+      "url": "https://example.com/p2",
+      "metadata": {}
+    },
+    {
+      "signal_id": "paper:review",
+      "source_type": "paper",
+      "source_id": "W1",
+      "title": "Carbon Fibers and Their Composite Materials",
+      "summary": "general review of composite materials and manufacturing overview",
+      "url": "https://example.com/w1",
+      "metadata": {"cited_by_count": 5000}
+    },
+    {
+      "signal_id": "paper:interface",
+      "source_type": "paper",
+      "source_id": "W2",
+      "title": "Carbon fiber interfacial adhesion in epoxy composites",
+      "summary": "surface treatment improves resin impregnation",
+      "url": "https://example.com/w2",
+      "metadata": {"cited_by_count": 120}
+    },
+    {
+      "signal_id": "paper:styrene",
+      "source_type": "paper",
+      "source_id": "W3",
+      "title": "Effects of Styrene-Acrylic Sizing on the Mechanical Properties of Carbon Fiber Thermoplastic Towpregs and Their Composites",
+      "summary": "sizing amount and abrasion resistance",
+      "url": "https://example.com/w3",
+      "metadata": {"cited_by_count": 40}
+    },
+    {
+      "signal_id": "paper:recycle",
+      "source_type": "paper",
+      "source_id": "W4",
+      "title": "Carbon fiber reinforced polymers: matrix modifications and reuse of carbon fibers recovered by pyrolysis",
+      "summary": "recycling overview",
+      "url": "https://example.com/w4",
+      "metadata": {"cited_by_count": 800}
+    },
+    {
+      "signal_id": "web:textile",
+      "source_type": "web_company",
+      "source_id": "WEB1",
+      "title": "Antibacterial polyester fiber fabric with ultraviolet-resistant coating",
+      "summary": "textile fabric manufacturing",
+      "url": "https://example.com/web1",
+      "metadata": {"score": 0.95}
+    },
+    {
+      "signal_id": "patent:pan",
+      "source_type": "patent",
+      "source_id": "P3",
+      "title": "Bio-based aqueous polyurethane sizing agent for PAN-based carbon fiber",
+      "summary": "polyurethane sizing amount and drying conditions",
+      "url": "https://example.com/p3",
+      "metadata": {}
+    }
+  ]
+}
