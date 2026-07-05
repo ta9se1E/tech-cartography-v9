@@ -407,3 +407,60 @@ Redeploy of the Active Run Selector UI fix: selector card moved immediately afte
 ### Browser validation pending
 
 User should confirm selector card appears above execution summary after selecting saved run `study_demo_search_20260705_061319_e973e4c2`. Final validated tag not yet created.
+
+## Active Context Counts and Download Keys Redeployment
+
+Redeploy of Active Context UI fixes: banner tier counts resolved from enriched artifacts at display time (not stale cached 0/0/0/0); unique Streamlit download button keys per tab to prevent `StreamlitDuplicateElementId`. Production resources were not modified. No external API execution, active_context Cloud update, or snapshot write during deploy.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T09:32:20Z |
+| Deployed at (JST) | 2026-07-05 18:32:20 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00009-pbn` |
+| Previous revision | `tech-cartography-v9-study-demo-00008-gd7` |
+| Rollback revision | `tech-cartography-v9-study-demo-00008-gd7` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:a35070a` |
+| Image digest | `sha256:a828d316f14663022a345db45ca5e3f96847d5e8a521e37e5f8a60a88895375e` |
+| Cloud Build ID | `599736d0-9112-4a16-87a9-289837f38860` |
+| Build source cleanup | deleted |
+| Image pre-push scan | PASS |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Git commit | `a35070a` |
+| Tag (code) | `v9-study-demo-active-context-ui-fix-ready` |
+| Tag (live candidate) | `v9-study-demo-active-context-ui-fix-live-candidate` |
+
+### Fixes deployed
+
+- **Resolved context count fix**: banner and downstream loader recompute tier counts from enriched artifacts; cached `active_context.json` tier_counts may remain 0/0/0/0 until browser reload
+- **Download button unique key fix**: all Study Demo download buttons use tab-scoped keys via `build_study_demo_download_key()`
+- **Existing active_context preserved**: object `analysis_context/active_context.json` unchanged in demo bucket
+- **Cache refresh pending browser action**: user may click「現在の分析対象を再読み込み」to refresh GCS cache metadata
+
+### Active context (read-only verification)
+
+- `active_search_run_id`: `study_demo_search_20260705_061319_e973e4c2`
+- Object exists in demo bucket; content not modified during deploy
+
+### External API execution
+
+- Deploy stage: 0 external API calls (BigQuery / OpenAlex / Tavily)
+- Demo bucket only; no production bucket reference
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled, anonymous invoker denied
+- Job config unchanged, no new execution
+- Scheduler `ENABLED` (`0 9 * * 1`, `Asia/Tokyo`)
+- Weekly delivery `enabled=true`
+- Production bucket, secrets, and IAM unchanged
+
+### Browser validation pending
+
+User should confirm banner shows Tier A33/B13/C24/D30 (not 0/0/0/0), weekly/profile/digest tabs open without duplicate element errors, and optionally reload active context via browser. Final validated tag not yet created.
