@@ -464,3 +464,66 @@ Redeploy of Active Context UI fixes: banner tier counts resolved from enriched a
 ### Browser validation pending
 
 User should confirm banner shows Tier A33/B13/C24/D30 (not 0/0/0/0), weekly/profile/digest tabs open without duplicate element errors, and optionally reload active context via browser. Final validated tag not yet created.
+
+## Digest Event Contract Fix Redeployment
+
+Redeploy of digest tab event contract fix: standardized `default_digest_events()` schema across all render paths; `normalize_digest_events()` on consumer; fixes `KeyError: 'save_digest_files'` when active temporary search run is used (weekly tab selection triggers digest render). Production resources were not modified. No external API execution, active_context update, snapshot write, or digest save during deploy.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T10:12:19Z |
+| Deployed at (JST) | 2026-07-05 19:12:19 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00010-ncr` |
+| Previous revision | `tech-cartography-v9-study-demo-00009-pbn` |
+| Rollback revision | `tech-cartography-v9-study-demo-00009-pbn` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:0229ecd` |
+| Image digest | `sha256:bb13081f4e7befc7af1bc5a017c83c7e50e54e8094b4f3d791819f851550085f` |
+| Cloud Build ID | `80d36c8a-8640-47e4-b009-bb2bfd3adee0` |
+| Build source cleanup | deleted |
+| Image pre-push scan | PASS |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Git commit | `0229ecd` |
+| Tag (code) | `v9-study-demo-digest-event-contract-ready` |
+| Tag (live candidate) | `v9-study-demo-digest-event-contract-live-candidate` |
+
+### Fixes deployed
+
+- **Digest event contract**: `ui_v9/study_demo_event_contracts.py` with `default_digest_events()` and `normalize_digest_events()`
+- **save_digest_files KeyError fix**: temporary_search render path no longer returns wrong key names (`save_digest`, `email_dry_run`, `email_send`)
+- **Consumer defense**: `signal_watch_app.py` wraps digest events with normalize and uses `.get()` for save action
+- **Existing active_context preserved**: `analysis_context/active_context.json` unchanged in demo bucket
+
+### Active context (read-only verification)
+
+- `active_search_run_id`: `study_demo_search_20260705_061319_e973e4c2`
+- Object exists in demo bucket; content not modified during deploy
+
+### Unauthenticated smoke test
+
+- HTTP 200, Streamlit SPA shell returned
+- No Secret patterns or tab data exposed in initial HTML
+- Password gate maintained (login required for app content)
+
+### External API execution
+
+- Deploy stage: 0 external API calls (BigQuery / OpenAlex / Tavily)
+- Demo bucket only; no production bucket reference
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled, anonymous invoker denied
+- Job config unchanged, no new execution
+- Scheduler `ENABLED` (`0 9 * * 1`, `Asia/Tokyo`)
+- Weekly delivery `enabled=true`
+- Production bucket, secrets, and IAM unchanged
+
+### Browser validation pending
+
+User should confirm weekly tab opens without crash, digest tab renders without `KeyError`, and active run context displays correctly. Final validated tag not yet created.
