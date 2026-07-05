@@ -17,22 +17,25 @@ from .request import StudyDemoSearchRequest
 
 
 def _search_plan_from_request(request: StudyDemoSearchRequest) -> dict[str, Any]:
-  terms = []
-  for chunk in (request.keywords_en, request.keywords_ja, request.exact_phrase, request.theme):
-    for part in str(chunk or "").replace(",", " ").split():
-      token = part.strip()
-      if token:
-        terms.append(token)
+  terms: list[str] = []
+  for part in str(request.keywords_en or "").split(","):
+    token = part.strip()
+    if token:
+      terms.append(token)
+    if len(terms) >= 8:
+      break
+  if request.exact_phrase.strip():
+    terms.append(request.exact_phrase.strip())
   return {
     "plans": {
       "paper": {
         "limit": request.paper_display_limit,
-        "exclude_terms": [p.strip() for p in request.exclude_keywords.replace(",", " ").split() if p.strip()],
+        "exclude_terms": [p.strip() for p in str(request.exclude_keywords or "").split(",") if p.strip()],
         "queries": [
           {
             "query_id": "study_demo_paper_q01",
             "strategy": "keyword",
-            "language": "mixed",
+            "language": "en",
             "terms": terms,
           }
         ],
@@ -42,7 +45,7 @@ def _search_plan_from_request(request: StudyDemoSearchRequest) -> dict[str, Any]
 
 
 def _watch_profile_from_request(request: StudyDemoSearchRequest) -> dict[str, Any]:
-  return {"theme_name": request.theme or "study-demo-search", "countries": [], "target_companies": []}
+  return {"theme_name": "", "countries": [], "target_companies": []}
 
 
 def _query_fingerprint(request: StudyDemoSearchRequest) -> str:
@@ -114,4 +117,7 @@ def run_study_demo_paper_execute(
     req["api_key"] = api_key
   preview["request"] = req
   req["retry_limit"] = 0
-  return execute_openalex_paper_retrieval(preview, opener=open_url, sleeper=sleep_fn)
+  result = execute_openalex_paper_retrieval(preview, opener=open_url, sleeper=sleep_fn)
+  result["request_count"] = int(result.get("pages_fetched", 0) or 0)
+  result["pagination_count"] = max(int(result.get("pages_fetched", 0) or 0) - 1, 0)
+  return result

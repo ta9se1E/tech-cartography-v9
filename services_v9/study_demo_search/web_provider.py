@@ -13,15 +13,31 @@ from .request import StudyDemoSearchRequest
 
 
 def _search_plan_from_request(request: StudyDemoSearchRequest) -> dict[str, Any]:
-  query_parts = [request.theme, request.keywords_ja, request.keywords_en, request.exact_phrase]
-  query_text = " ".join(part.strip() for part in query_parts if str(part or "").strip())
+  query_parts: list[str] = []
+  if str(request.keywords_en or "").strip():
+    query_parts.append(str(request.keywords_en).replace(",", " "))
+  if str(request.keywords_ja or "").strip():
+    query_parts.append(str(request.keywords_ja).replace(",", " "))
+  query_text = " ".join(part.strip() for part in query_parts if part.strip())
+  time_range = str(request.web_time_range or "none").strip().lower()
+  if time_range in {"", "none"}:
+    time_range = "12m"
   return {
-    "plans": {
-      "web_company": {
-        "limit": request.web_max_results,
-        "query_text": query_text,
-        "exclude_terms": [p.strip() for p in request.exclude_keywords.replace(",", " ").split() if p.strip()],
-      }
+    "global_web_plan": {
+      "queries": [
+        {
+          "query_id": "study_demo_web_q01",
+          "enabled": True,
+          "priority": "1",
+          "query_local": query_text,
+          "query_en": query_text,
+          "max_results": request.web_max_results,
+          "country_region_code": "",
+        }
+      ],
+      "countries": [],
+      "time_range": time_range,
+      "target_companies": [],
     }
   }
 
@@ -91,9 +107,18 @@ def run_study_demo_web_execute(
     }
   )
   preview["request"] = req
-  return execute_global_web_retrieval(
+  result = execute_global_web_retrieval(
     preview,
     tavily_search_post_fn=json_post_fn,
     allow_google_grounding=False,
     sleeper=sleep_fn,
   )
+  if isinstance(result, dict):
+    logs = list(result.get("provider_log", []) or [])
+    result["request_count"] = int(result.get("query_count", 0) or len(logs) or 0)
+    credits = 0
+    for entry in logs:
+      if isinstance(entry, dict):
+        credits += int(entry.get("usage_credits", 0) or entry.get("credits", 0) or 0)
+    result["usage_credits"] = credits
+  return result

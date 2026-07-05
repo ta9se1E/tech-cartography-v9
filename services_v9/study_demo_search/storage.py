@@ -130,7 +130,28 @@ def _sanitize_provider_payload(payload: Any) -> dict[str, Any]:
     lowered = str(key).lower()
     if any(token in lowered for token in ("api_key", "authorization", "password", "secret", "smtp")):
       cleaned.pop(key, None)
+  if isinstance(cleaned.get("provider_log"), list):
+    sanitized_log = []
+    for row in cleaned["provider_log"]:
+      if not isinstance(row, dict):
+        continue
+      item = dict(row)
+      if "url" in item:
+        item["url"] = _redact_url(str(item.get("url", "") or ""))
+      sanitized_log.append(item)
+    cleaned["provider_log"] = sanitized_log
   return cleaned
+
+
+def _redact_url(url: str) -> str:
+  if "api_key=" not in url and "key=" not in url:
+    return url
+  from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+  parsed = urlsplit(url)
+  pairs = parse_qsl(parsed.query, keep_blank_values=True)
+  redacted = [(key, "REDACTED") if str(key).lower() in {"api_key", "key"} else (key, value) for key, value in pairs]
+  return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(redacted), parsed.fragment))
 
 
 def _build_report_markdown(bundle: Mapping[str, Any]) -> str:

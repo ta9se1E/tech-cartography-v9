@@ -27,6 +27,17 @@ from .usage import accumulate_usage_metrics, init_usage_metrics
 from .web_provider import run_study_demo_web_execute
 
 
+def _provider_result_status(payload: Mapping[str, Any]) -> str:
+  raw = str(payload.get("status", "") or payload.get("provider_status", "") or "").strip().lower()
+  if raw in {"success", "partial_success"}:
+    return "success"
+  if raw in {"no_results"}:
+    return "failed"
+  if raw in {"error", "failed", "validation_error"}:
+    return "failed"
+  return raw or "failed"
+
+
 def execute_three_source_search(
   request: StudyDemoSearchRequest,
   *,
@@ -76,7 +87,7 @@ def execute_three_source_search(
           environ=environ,
           client_factory=patent_client_factory,
         )
-        provider_status["patent"] = {"status": patent_results.get("status", "failed"), "error_category": patent_results.get("error_category")}
+        provider_status["patent"] = {"status": _provider_result_status(patent_results), "error_category": patent_results.get("error_category")}
       except Exception as exc:  # noqa: BLE001
         provider_status["patent"] = {"status": "failed", "error_category": type(exc).__name__}
     elif request.enable_patent:
@@ -85,7 +96,7 @@ def execute_three_source_search(
     if request.enable_paper and is_study_demo_paper_search_enabled(environ):
       try:
         paper_results = run_study_demo_paper_execute(request, environ=environ, open_url=open_url)
-        provider_status["paper"] = {"status": paper_results.get("status", "failed"), "error_category": paper_results.get("error_category")}
+        provider_status["paper"] = {"status": _provider_result_status(paper_results), "error_category": paper_results.get("error_category")}
       except Exception as exc:  # noqa: BLE001
         provider_status["paper"] = {"status": "failed", "error_category": type(exc).__name__}
     elif request.enable_paper:
@@ -94,7 +105,7 @@ def execute_three_source_search(
     if request.enable_web and is_study_demo_web_search_enabled(environ):
       try:
         web_results = run_study_demo_web_execute(request, environ=environ, json_post_fn=json_post_fn)
-        provider_status["web"] = {"status": web_results.get("status", "failed"), "error_category": web_results.get("error_category")}
+        provider_status["web"] = {"status": _provider_result_status(web_results), "error_category": web_results.get("error_category")}
       except Exception as exc:  # noqa: BLE001
         provider_status["web"] = {"status": "failed", "error_category": type(exc).__name__}
     elif request.enable_web:

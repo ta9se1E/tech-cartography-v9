@@ -10,7 +10,12 @@ BUCKET="${BUCKET:-tech-cartography-v9-study-demo-1020686343587}"
 ARTIFACT_REPO="${ARTIFACT_REPO:-cloud-run-source-deploy}"
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-tech-cartography-v9-study-demo@devops-ai-agent-hackathon-2026.iam.gserviceaccount.com}"
 PASSWORD_SECRET="${PASSWORD_SECRET:-tech-cartography-v9-study-demo-password}"
-PASSWORD_SECRET_VERSION="${PASSWORD_SECRET_VERSION:-1}"
+PASSWORD_SECRET_VERSION="${PASSWORD_SECRET_VERSION:-2}"
+OPENALEX_SECRET="${OPENALEX_SECRET:-tech-cartography-v9-study-demo-openalex-api-key}"
+OPENALEX_SECRET_VERSION="${OPENALEX_SECRET_VERSION:-1}"
+TAVILY_SECRET="${TAVILY_SECRET:-tech-cartography-v9-study-demo-tavily-api-key}"
+TAVILY_SECRET_VERSION="${TAVILY_SECRET_VERSION:-1}"
+STUDY_DEMO_EXPIRES_AT="${STUDY_DEMO_EXPIRES_AT:-2026-07-11T19:27:30Z}"
 V9_PERSIST_ROOT="${V9_PERSIST_ROOT:-/mnt/v9_study_demo/active}"
 BUILD_ID=""
 SOURCE_BUCKET=""
@@ -88,7 +93,10 @@ print_plan() {
   "project_id": "${PROJECT_ID}",
   "bucket": "${BUCKET}",
   "service_account": "${SERVICE_ACCOUNT}",
-  "password_secret": "${PASSWORD_SECRET}",
+  "password_secret": "${PASSWORD_SECRET}:${PASSWORD_SECRET_VERSION}",
+  "openalex_secret": "${OPENALEX_SECRET}:${OPENALEX_SECRET_VERSION}",
+  "tavily_secret": "${TAVILY_SECRET}:${TAVILY_SECRET_VERSION}",
+  "expires_at_utc": "${STUDY_DEMO_EXPIRES_AT}",
   "min_instances": 0,
   "max_instances": 1,
   "scheduler": "none",
@@ -103,14 +111,14 @@ print_plan() {
     "V9_ENABLE_EMAIL_SEND": "false",
     "DISABLE_EMAIL_SEND": "true",
     "EMAIL_SEND_MODE": "preview",
-    "V9_CLOUD_ENABLE_PATENT": "false",
-    "V9_CLOUD_ENABLE_PAPER": "false",
-    "V9_CLOUD_ENABLE_WEB_COMPANY": "false",
+    "V9_CLOUD_ENABLE_PATENT": "true",
+    "V9_CLOUD_ENABLE_PAPER": "true",
+    "V9_CLOUD_ENABLE_WEB_COMPANY": "true",
     "V9_CLOUD_GOOGLE_GROUNDING": "false",
-    "V9_STUDY_DEMO_SEARCH_ENABLED": "false",
-    "V9_STUDY_DEMO_ENABLE_PATENT_SEARCH": "false",
-    "V9_STUDY_DEMO_ENABLE_PAPER_SEARCH": "false",
-    "V9_STUDY_DEMO_ENABLE_WEB_SEARCH": "false",
+    "V9_STUDY_DEMO_SEARCH_ENABLED": "true",
+    "V9_STUDY_DEMO_ENABLE_PATENT_SEARCH": "true",
+    "V9_STUDY_DEMO_ENABLE_PAPER_SEARCH": "true",
+    "V9_STUDY_DEMO_ENABLE_WEB_SEARCH": "true",
     "V9_STUDY_DEMO_BIGQUERY_DRY_RUN_FIRST": "true",
     "V9_STUDY_DEMO_BIGQUERY_MAX_BYTES_BILLED": "2199023255552"
   },
@@ -142,11 +150,32 @@ assert_password_secret_ready() {
   fi
 }
 
+assert_openalex_secret_ready() {
+  local version_state
+  version_state="$(gcloud secrets versions describe "${OPENALEX_SECRET_VERSION}" \
+    --secret="${OPENALEX_SECRET}" \
+    --project="${PROJECT_ID}" \
+    --format='value(state)' 2>/dev/null || true)"
+  if [[ "${version_state}" != "ENABLED" ]]; then
+    log "ERROR: openalex secret ${OPENALEX_SECRET}:${OPENALEX_SECRET_VERSION} is not ENABLED"
+    exit 1
+  fi
+}
+
+assert_tavily_secret_ready() {
+  local version_state
+  version_state="$(gcloud secrets versions describe "${TAVILY_SECRET_VERSION}" \
+    --secret="${TAVILY_SECRET}" \
+    --project="${PROJECT_ID}" \
+    --format='value(state)' 2>/dev/null || true)"
+  if [[ "${version_state}" != "ENABLED" ]]; then
+    log "ERROR: tavily secret ${TAVILY_SECRET}:${TAVILY_SECRET_VERSION} is not ENABLED"
+    exit 1
+  fi
+}
+
 compute_expiry_utc() {
-  "${PY[@]}" - <<'PY'
-from datetime import datetime, timedelta, timezone
-print((datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ"))
-PY
+  printf '%s' "${STUDY_DEMO_EXPIRES_AT}"
 }
 
 compute_expiry_jst() {
@@ -184,19 +213,18 @@ cleanup_build_source_archive() {
   fi
   local build_json export_lines
   build_json="$(gcloud builds describe "${BUILD_ID}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
-  export_lines="$("${PY[@]}" - <<'PY' <<<"${build_json}"
+  export_lines="$(printf '%s' "${build_json}" | "${PY[@]}" -c "
 import json
 import shlex
 import sys
 from scripts.v9_build_security import build_source_cleanup_target
 payload = json.load(sys.stdin)
 target = build_source_cleanup_target(payload)
-print(f"SOURCE_BUCKET={shlex.quote(str(target.get('bucket', '') or ''))}")
-print(f"SOURCE_OBJECT={shlex.quote(str(target.get('object', '') or ''))}")
-print(f"SOURCE_TARGET_STATUS={shlex.quote(str(target.get('status', '') or ''))}")
-print(f"SOURCE_TARGET_REASON={shlex.quote(str(target.get('reason', '') or ''))}")
-PY
-)"
+print(f\"SOURCE_BUCKET={shlex.quote(str(target.get('bucket', '') or ''))}\")
+print(f\"SOURCE_OBJECT={shlex.quote(str(target.get('object', '') or ''))}\")
+print(f\"SOURCE_TARGET_STATUS={shlex.quote(str(target.get('status', '') or ''))}\")
+print(f\"SOURCE_TARGET_REASON={shlex.quote(str(target.get('reason', '') or ''))}\")
+")"
   eval "${export_lines}"
   if [[ "${SOURCE_TARGET_STATUS:-}" != "ok" || -z "${SOURCE_BUCKET}" || -z "${SOURCE_OBJECT}" ]]; then
     CLEANUP_RESULT="skipped_${SOURCE_TARGET_REASON:-invalid_target}"
@@ -231,16 +259,15 @@ build_study_demo_image() {
     exit 1
   fi
   IMAGE_URI="${image_uri}"
-  IMAGE_DIGEST="$(gcloud builds describe "${BUILD_ID}" --project "${PROJECT_ID}" --region "${REGION}" --format=json | "${PY[@]}" - <<'PY'
-import json,sys
-payload=json.load(sys.stdin)
-images=payload.get("results",{}).get("images",[]) or []
+  IMAGE_DIGEST="$(gcloud builds describe "${BUILD_ID}" --project "${PROJECT_ID}" --region "${REGION}" --format=json | "${PY[@]}" -c "
+import json, sys
+payload = json.load(sys.stdin)
+images = payload.get('results', {}).get('images', []) or []
 for item in images:
-  if isinstance(item, dict) and item.get("digest"):
-    print(item["digest"])
+  if isinstance(item, dict) and item.get('digest'):
+    print(item['digest'])
     break
-PY
-)"
+")"
 }
 
 deploy_private_service() {
@@ -255,8 +282,8 @@ deploy_private_service() {
     --no-allow-unauthenticated \
     --add-volume "name=v9-study-demo,type=cloud-storage,bucket=${BUCKET}" \
     --add-volume-mount "volume=v9-study-demo,mount-path=/mnt/v9_study_demo" \
-    --set-secrets "V9_STUDY_DEMO_PASSWORD=${PASSWORD_SECRET}:${PASSWORD_SECRET_VERSION}" \
-    --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=active/v9_config/weekly_delivery_config.json#V9_STUDY_DEMO_MODE=true#V9_STUDY_DEMO_BUCKET=${BUCKET}#V9_STUDY_DEMO_EXPIRES_AT=${expiry_utc}#V9_STUDY_DEMO_DISABLE_EXTERNAL_EXECUTION=true#V9_STUDY_DEMO_SHARED_STATE=true#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_ENABLE_PATENT=false#V9_CLOUD_ENABLE_PAPER=false#V9_CLOUD_ENABLE_WEB_COMPANY=false#V9_CLOUD_GOOGLE_GROUNDING=false#V9_ENABLE_CLOUD_SCHEDULER_ADMIN=false"
+    --set-secrets "V9_STUDY_DEMO_PASSWORD=${PASSWORD_SECRET}:${PASSWORD_SECRET_VERSION},V9_STUDY_DEMO_OPENALEX_API_KEY=${OPENALEX_SECRET}:${OPENALEX_SECRET_VERSION},V9_STUDY_DEMO_TAVILY_API_KEY=${TAVILY_SECRET}:${TAVILY_SECRET_VERSION}" \
+    --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=active/v9_config/weekly_delivery_config.json#V9_STUDY_DEMO_MODE=true#V9_STUDY_DEMO_BUCKET=${BUCKET}#V9_STUDY_DEMO_EXPIRES_AT=${expiry_utc}#V9_STUDY_DEMO_DISABLE_EXTERNAL_EXECUTION=true#V9_STUDY_DEMO_SHARED_STATE=true#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_ENABLE_PATENT=true#V9_CLOUD_ENABLE_PAPER=true#V9_CLOUD_ENABLE_WEB_COMPANY=true#V9_CLOUD_GOOGLE_GROUNDING=false#V9_STUDY_DEMO_SEARCH_ENABLED=true#V9_STUDY_DEMO_ENABLE_PATENT_SEARCH=true#V9_STUDY_DEMO_ENABLE_PAPER_SEARCH=true#V9_STUDY_DEMO_ENABLE_WEB_SEARCH=true#V9_STUDY_DEMO_BIGQUERY_DRY_RUN_FIRST=true#V9_STUDY_DEMO_BIGQUERY_MAX_BYTES_BILLED=2199023255552#V9_STUDY_DEMO_BIGQUERY_PRICE_PER_TIB_USD=6.25#V9_ENABLE_CLOUD_SCHEDULER_ADMIN=false"
 }
 
 smoke_test_authenticated() {
@@ -308,6 +335,8 @@ apply_deploy() {
   assert_allowed_service
   run_local_checks
   assert_password_secret_ready
+  assert_openalex_secret_ready
+  assert_tavily_secret_ready
 
   local expiry_utc expiry_jst deploy_time_utc deploy_time_jst service_url revision
   expiry_utc="$(compute_expiry_utc)"
@@ -344,6 +373,8 @@ PY
   "service_account": "${SERVICE_ACCOUNT}",
   "bucket": "${BUCKET}",
   "password_secret": "${PASSWORD_SECRET}:${PASSWORD_SECRET_VERSION}",
+  "openalex_secret": "${OPENALEX_SECRET}:${OPENALEX_SECRET_VERSION}",
+  "tavily_secret": "${TAVILY_SECRET}:${TAVILY_SECRET_VERSION}",
   "expires_at_utc": "${expiry_utc}",
   "expires_at_jst": "${expiry_jst}",
   "deployed_at_utc": "${deploy_time_utc}",

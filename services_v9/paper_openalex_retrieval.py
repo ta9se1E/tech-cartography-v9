@@ -28,6 +28,17 @@ SEMANTIC_SCHOLAR_FALLBACK_INTERFACE = {
 }
 
 
+def _redact_sensitive_url(url: str) -> str:
+  text = str(url or "")
+  if not text:
+    return text
+  parsed = urllib.parse.urlsplit(text)
+  pairs = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+  redacted = [(key, "REDACTED") if str(key).lower() in {"api_key", "key"} else (key, value) for key, value in pairs]
+  query = urllib.parse.urlencode(redacted)
+  return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
+
+
 def build_openalex_paper_preview(
   search_plan: dict[str, Any],
   watch_profile: dict[str, Any],
@@ -190,7 +201,7 @@ def execute_openalex_paper_retrieval(
         log_rows.append({
           "page_index": page_index,
           "cursor": cursor,
-          "url": url,
+          "url": _redact_sensitive_url(url),
           "attempt": attempt,
           "status": "ok",
           "results_count": len(normalized),
@@ -206,7 +217,7 @@ def execute_openalex_paper_retrieval(
         log_rows.append({
           "page_index": page_index,
           "cursor": cursor,
-          "url": url,
+          "url": _redact_sensitive_url(url),
           "attempt": attempt,
           "status": f"http_{exc.code}",
           "error": str(exc),
@@ -221,7 +232,7 @@ def execute_openalex_paper_retrieval(
         log_rows.append({
           "page_index": page_index,
           "cursor": cursor,
-          "url": url,
+          "url": _redact_sensitive_url(url),
           "attempt": attempt,
           "status": "error",
           "error": str(exc),

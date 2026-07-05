@@ -16,23 +16,52 @@ from services_v9.patent_bigquery_safety import BigQuerySafetyConfig
 from services_v9.study_demo_config import (
   get_study_demo_bigquery_max_bytes_billed,
   get_study_demo_bigquery_price_per_tib_usd,
+  is_study_demo_patent_search_enabled,
 )
 
 from .request import StudyDemoSearchRequest
 
 
+def _bigquery_config(environ: Mapping[str, str] | None = None) -> BigQuerySafetyConfig:
+  max_bytes = get_study_demo_bigquery_max_bytes_billed(environ)
+  enabled = is_study_demo_patent_search_enabled(environ)
+  base = BigQuerySafetyConfig.from_env()
+  return BigQuerySafetyConfig(
+    enable_bigquery_run=enabled or base.enable_bigquery_run,
+    show_bigquery_admin=base.show_bigquery_admin,
+    bigquery_project_id=base.bigquery_project_id,
+    bigquery_location=base.bigquery_location,
+    bigquery_max_bytes_billed=max_bytes or base.bigquery_max_bytes_billed,
+    bigquery_default_limit=base.bigquery_default_limit,
+    bigquery_dry_run_only=False,
+    bigquery_allow_execute=enabled or base.bigquery_allow_execute,
+    bigquery_dry_run_first=True,
+    bigquery_total_bytes_cap=base.bigquery_total_bytes_cap,
+    bigquery_max_query_executions=base.bigquery_max_query_executions,
+  )
+
+
 def _terms_from_request(request: StudyDemoSearchRequest) -> list[str]:
   terms: list[str] = []
-  for chunk in (request.keywords_ja, request.keywords_en, request.exact_phrase, request.theme):
-    for part in str(chunk or "").replace(",", " ").split():
-      token = part.strip()
-      if token:
-        terms.append(token)
+  for part in str(request.keywords_en or "").split(","):
+    token = part.strip()
+    if token:
+      for word in token.split():
+        if word.strip():
+          terms.append(word.strip())
+    if len(terms) >= 20:
+      break
+  for part in str(request.keywords_ja or "").replace(",", " ").split():
+    token = part.strip()
+    if token and len(token) <= 20:
+      terms.append(token)
+  if request.exact_phrase.strip():
+    terms.append(request.exact_phrase.strip())
   return terms
 
 
 def _exclude_terms(request: StudyDemoSearchRequest) -> list[str]:
-  return [part.strip() for part in str(request.exclude_keywords or "").replace(",", " ").split() if part.strip()]
+  return [part.strip() for part in str(request.exclude_keywords or "").split(",") if part.strip()]
 
 
 def _watch_profile_from_request(request: StudyDemoSearchRequest) -> dict[str, Any]:
@@ -80,7 +109,7 @@ def build_study_demo_patent_plan(
   *,
   environ: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-  cfg = BigQuerySafetyConfig.from_env()
+  cfg = _bigquery_config(environ)
   max_bytes = get_study_demo_bigquery_max_bytes_billed(environ) or cfg.bigquery_max_bytes_billed
   preview = build_patent_bigquery_preview(
     _search_plan_from_request(request),
@@ -130,7 +159,7 @@ def run_study_demo_patent_dry_run(
     time_range=_time_range_from_years(request),
     max_results=request.patent_display_limit,
   )
-  return run_patent_bigquery_dry_run(preview, client_factory=client_factory)
+  return run_patent_bigquery_dry_run(preview, client_factory=client_factory, config=_bigquery_config(environ))
 
 
 def run_study_demo_patent_execute(
@@ -148,4 +177,17 @@ def run_study_demo_patent_execute(
     max_results=request.patent_display_limit,
   )
   preview["dry_run"] = dry_run_result
-  return execute_patent_bigquery_retrieval(preview, client_factory=client_factory)
+  result = execute_patent_bigquery_retrieval(
+    preview,
+    dry_run_result,
+    approved=True,
+    client_factory=client_factory,
+    config=_bigquery_config(environ),
+  )
+  if isinstance(result, dict):
+    result["estimated_bytes"] = dry_run_result.get("estimated_bytes")
+    result["processed_bytes"] = result.get("total_bytes_processed", dry_run_result.get("total_bytes_processed"))
+    result["billed_bytes"] = result.get("total_bytes_billed", dry_run_result.get("total_bytes_billed"))
+    provider_status = str(result.get("provider_status", "") or "").strip().lower()
+    result["status"] = "success" if provider_status == "success" else ("partial_success" if provider_status == "partial_success" else "failed")
+  return result

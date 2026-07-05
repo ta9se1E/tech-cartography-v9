@@ -209,11 +209,11 @@ SELECT
   ) AS matched_keyword_count
 FROM {PUBLICATIONS_TABLE}
 WHERE
-  (ARRAY_LENGTH(@country_codes) = 0 OR country_code IN UNNEST(@country_codes))
+  (COALESCE(ARRAY_LENGTH(@country_codes), 0) = 0 OR country_code IN UNNEST(@country_codes))
   AND (@publication_date_from = 0 OR publication_date >= @publication_date_from)
   AND (@publication_date_to = 0 OR publication_date <= @publication_date_to)
   AND (
-    ARRAY_LENGTH(@include_terms) = 0
+    COALESCE(ARRAY_LENGTH(@include_terms), 0) = 0
     OR EXISTS (
       SELECT 1
       FROM UNNEST(@include_terms) AS term
@@ -754,6 +754,9 @@ def build_patent_candidates_csv(rows: list[dict[str, Any]]) -> str:
 
 
 def _publication_window_from_time_range(time_range: str) -> tuple[int, int]:
+  normalized = str(time_range or "12m").strip().lower()
+  if normalized in {"all", "none", "unbounded"}:
+    return 0, 0
   today = date.today()
   end_value = int(today.strftime("%Y%m%d"))
   months = {
