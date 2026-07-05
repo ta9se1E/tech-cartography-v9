@@ -871,3 +871,72 @@ Stage C5B-1.4 deploy of theme draft mapping pipeline, language classification, e
 ### Browser validation pending
 
 User should confirm short theme name, JA/EN keyword buckets, alias candidate approval, explicit draft review, old plan isolation, and Tier/URL/weekly/digest regression. Stage C5B-2 (Theme Cloud save + Watch Profile + Search Plan + 5/5/5 live search) not yet executed. Final validated tag not yet created.
+
+## Localized Theme Name and Explicit Exclusion Fix Deployment
+
+Stage C5B-1.4.1 deploy of localized theme name sanitization and explicit exclusion provenance preservation. No Theme/Profile/Plan/Theme draft Cloud writes during deploy. No external search or live small-search E2E. Production resources were not modified.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T14:36:13Z |
+| Deployed at (JST) | 2026-07-05 23:36:13 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00016-zfs` |
+| Previous revision | `tech-cartography-v9-study-demo-00015-4v2` |
+| Rollback revision | `tech-cartography-v9-study-demo-00015-4v2` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:4bd62fe` |
+| Image digest | `sha256:af0898808080bd5621babc51ec85b765aa29f0127c3c4c52497bd65c79d2ba4d` |
+| Cloud Build ID | `5e6945a9-fbdd-464e-8bec-90e32c9d9292` |
+| Build source cleanup | deleted |
+| Image pre-push scan | PASS |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Git commit (code) | `4bd62fe` |
+| Tag (code) | `v9-study-demo-theme-name-exclusion-fix-ready` |
+| Tag (live candidate) | `v9-study-demo-theme-name-exclusion-fix-live-candidate` |
+
+### Features deployed
+
+- **Dry燥条件 fix**: Japanese theme name sanitization prevents mixed-script `Dry燥` corruption; suggested name is `PAN系炭素繊維用サイジング剤の組成・付与・乾燥条件`
+- **Explicit exclusion provenance**: `paper sizing`, `starch sizing`, `activated carbon` treated as confirmed `exclude_en` with `provenance=explicit_request_field`
+- **Candidate exclusion**: explicit request terms not shown in alias candidate section or adoption checkboxes
+- **Provenance priority**: user_edited > explicit_request_field > exact_theme_text_match > legacy_import > canonical_alias_suggestion
+
+### Mapping validation (fixture pre-deploy)
+
+- `suggested_theme_name`: PAN系炭素繊維用サイジング剤の組成・付与・乾燥条件
+- `explicit_exclusion_count`: 4 (includes textile)
+- `explicit_exclusion_candidate_count`: 0
+- `language_bucket_mismatch`: 0
+- `old_theme_contamination`: 0
+- `blocking_error_count`: 0
+
+### Active context (read-only verification)
+
+- `active_search_run_id`: `study_demo_search_20260705_061319_e973e4c2`
+- GCS object `analysis_context/active_context.json` unchanged during deploy
+
+### Cloud data writes during deploy
+
+- Theme / Watch Profile / Search Plan / Theme draft: **0**
+- Review / Proposal / Profile draft: **0**
+- active_context / snapshot / digest: **0**
+
+### External HTTP / API execution
+
+- Deploy stage: 0 external HTTP requests
+- Deploy stage: 0 external API calls (BigQuery / OpenAlex / Tavily)
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled
+- Production bucket, secrets, and IAM unchanged
+
+### Browser validation pending
+
+User should confirm suggested theme name without `Dry燥条件`, full description preserved, three explicit English exclusions in confirmed exclude section (not candidates), draft review initial state, old Search Plan isolation, and Tier/URL/weekly/digest regression. Stage C5B-2 not yet executed. Final validated tag not yet created.
