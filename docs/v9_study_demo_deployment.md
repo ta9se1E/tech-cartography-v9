@@ -593,3 +593,68 @@ Redeploy of external source URL resolution fix: standardized URL resolver for pa
 ### Browser validation pending
 
 User should confirm「出典URLを開く」/「引用元を開く」opens external patent/paper/web pages (not the Streamlit app), and missing URLs show「引用元URL未取得」without links. Final validated tag not yet created.
+
+## Google Patents Canonical URL Fix Deployment
+
+Redeploy of Google Patents URL canonicalization: dashed publication numbers in `patents.google.com/patent/` paths are normalized to compact form (e.g. `US-2020-378036-A1` → `US2020378036A1`). Paper and Web URLs unchanged. Production resources were not modified. No external HTTP access or external API execution during deploy.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T11:33:03Z |
+| Deployed at (JST) | 2026-07-05 20:33:03 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00012-9sm` |
+| Previous revision | `tech-cartography-v9-study-demo-00011-l85` |
+| Rollback revision | `tech-cartography-v9-study-demo-00011-l85` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:5abafba` |
+| Image digest | `sha256:39c6512bf9e9903f39b224bb2c9d9787d0d0676723d00f0900dd37cfdc4a6df3` |
+| Cloud Build ID | `f56a237d-6e87-46d1-b725-f89d12cd5263` |
+| Build source cleanup | deleted |
+| Image pre-push scan | PASS |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Git commit (fix) | `5abafba` |
+| Tag (code) | `v9-study-demo-google-patents-url-fix-ready` |
+| Tag (live candidate) | `v9-study-demo-google-patents-url-fix-live-candidate` |
+
+### Fixes deployed
+
+- **Dashed publication number normalization**: `normalize_google_patents_url()` extracts `/patent/<id>`, URL-decodes, strips hyphens/spaces, rebuilds canonical URL
+- **Compact URL preservation**: already-compact Google Patents URLs unchanged
+- **Paper/Web unchanged**: DOI and web canonical URLs not rewritten
+- **Existing active_context preserved**: `analysis_context/active_context.json` unchanged in demo bucket
+
+### Active context (read-only verification)
+
+- `active_search_run_id`: `study_demo_search_20260705_061319_e973e4c2`
+- Object exists in demo bucket; content not modified during deploy
+
+### Unauthenticated smoke test
+
+- HTTP 200, Streamlit SPA shell returned
+- No Secret patterns or active run content exposed in initial HTML
+- Password gate maintained
+- No Google Patents URL fetch during smoke test
+
+### External HTTP / API execution
+
+- Deploy stage: 0 external HTTP requests
+- Deploy stage: 0 external API calls (BigQuery / OpenAlex / Tavily)
+- Demo bucket only; no production bucket reference
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled, anonymous invoker denied
+- Job config unchanged, no new execution
+- Scheduler `ENABLED` (`0 9 * * 1`, `Asia/Tokyo`)
+- Weekly delivery `enabled=true`
+- Production bucket, secrets, and IAM unchanged
+
+### Browser validation pending
+
+User should confirm patent「出典URLを開く」opens `https://patents.google.com/patent/US2020378036A1/en` style URLs (not dashed paths). Final validated tag not yet created.
