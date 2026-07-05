@@ -769,8 +769,20 @@ def render_sources_tab(
   paper_retrieval_status_message: str | None = None,
   global_web_retrieval_state: dict[str, Any] | None = None,
   global_web_retrieval_status_message: str | None = None,
+  *,
+  study_demo_authenticated: bool = False,
 ) -> dict[str, object]:
   st.subheader("情報源")
+  study_events: dict[str, object] = {}
+  try:
+    from services_v9.study_demo_config import is_study_demo_mode
+    from ui_v9.study_demo_search_ui import render_study_demo_keyword_search_section
+
+    if is_study_demo_mode():
+      study_events = render_study_demo_keyword_search_section(authenticated=study_demo_authenticated)
+      st.divider()
+  except Exception:
+    study_events = {}
   st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
   st.radio(
     "データ投入モード",
@@ -1061,6 +1073,7 @@ def render_sources_tab(
     )
 
   return {
+    **study_events,
     "save_retrieval_manifest": save_retrieval_manifest,
     "load_saved_retrieval_manifest": load_saved_retrieval_manifest,
     "regenerate_search_plan": regenerate_from_sources,

@@ -18,6 +18,7 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from .persistence import ensure_v9_run_dirs
+from .study_demo_config import is_study_demo_web_search_enabled
 from .study_demo_guard import assert_external_execution_allowed
 
 JsonPostFn = Callable[..., dict[str, Any]]
@@ -695,7 +696,7 @@ def _run_tavily_discovery(
   raw = search_post(
     url=TAVILY_SEARCH_URL,
     payload=payload,
-    api_key_env="TAVILY_API_KEY",
+    api_key_env=_tavily_api_key_env(),
     timeout_sec=timeout_sec,
   )
   if raw.get("error"):
@@ -805,7 +806,7 @@ def _verify_candidate(
   extract_raw = extract_post(
     url=TAVILY_EXTRACT_URL,
     payload=extract_payload,
-    api_key_env="TAVILY_API_KEY",
+    api_key_env=_tavily_api_key_env(),
     timeout_sec=timeout_sec,
   )
   verified_text, content_access, extract_error = _extract_verified_text(extract_raw)
@@ -1079,6 +1080,12 @@ def _detect_language(text: str) -> str:
 def _is_wechat_url(url: str) -> bool:
   domain = extract_source_domain(url)
   return "wechat" in domain or "weixin" in domain or "mp.weixin.qq.com" in url
+
+
+def _tavily_api_key_env() -> str:
+  if is_study_demo_web_search_enabled():
+    return "V9_STUDY_DEMO_TAVILY_API_KEY"
+  return "TAVILY_API_KEY"
 
 
 def _default_tavily_json_post(

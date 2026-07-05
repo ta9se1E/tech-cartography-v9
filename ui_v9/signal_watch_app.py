@@ -89,6 +89,7 @@ from services_v9.web_company_retrieval import (
 )
 from services_v9.watch_profile_schema import build_profile_from_form, watch_profile_summary
 from services_v9.study_demo_config import is_study_demo_mode
+from services_v9.study_demo_auth import is_authenticated as is_study_demo_authenticated
 from ui_v9.labels import data_source_mode_label_ja
 from ui_v9.study_demo_gate import render_study_demo_banner, render_study_demo_login_screen
 from ui_v9.tabs import (
@@ -1252,6 +1253,7 @@ def run_app() -> None:
       st.session_state.get(STATE_PAPER_RETRIEVAL_MESSAGE),
       global_web_retrieval_state,
       st.session_state.get(STATE_GLOBAL_WEB_RETRIEVAL_MESSAGE),
+      study_demo_authenticated=is_study_demo_authenticated(st.session_state) if is_study_demo_mode() else False,
     )
   with tabs[2]:
     signal_events = render_top_signals_tab(

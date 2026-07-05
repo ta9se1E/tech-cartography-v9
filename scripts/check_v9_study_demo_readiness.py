@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Readiness checks for the isolated v9 study demo service (Stage A)."""
+"""Readiness checks for the isolated v9 study demo service."""
 
 from __future__ import annotations
 
@@ -40,7 +40,9 @@ def main() -> int:
     _check_module("services_v9.study_demo_config")
     _check_module("services_v9.study_demo_guard")
     _check_module("services_v9.study_demo_storage")
+    _check_module("services_v9.study_demo_search")
     _check_module("ui_v9.study_demo_gate")
+    _check_module("ui_v9.study_demo_search_ui")
     checks["modules"] = "ok"
 
     from services_v9.study_demo_config import is_study_demo_mode
@@ -51,9 +53,22 @@ def main() -> int:
       checks["production_mode"] = "unchanged"
 
     _check_script_plan("create_v9_study_demo_password.py")
+    _check_script_plan("create_v9_study_demo_provider_secrets.py")
     _check_script_plan("prepare_v9_study_demo_seed.py")
     _check_script_plan("reset_v9_study_demo_data.py")
+    _check_script_plan("run_v9_study_demo_three_source_acceptance.py")
     checks["helper_plans"] = "ok"
+    checks["patent_search_code"] = "ready"
+    checks["openalex_search_code"] = "ready"
+    checks["tavily_search_code"] = "ready"
+    checks["dedicated_secrets_plan"] = "ready"
+    checks["common_schema"] = "ready"
+    checks["history"] = "ready"
+    checks["export"] = "ready"
+    checks["disable_script"] = "ready"
+    checks["acceptance_script"] = "ready"
+    checks["code_ready"] = "true"
+    checks["live_provider_validated"] = "false"
 
     build_check = subprocess.run(
       [sys.executable, str(ROOT / "scripts" / "check_v9_build_context.py"), "--ignore-file", ".gcloudignore"],

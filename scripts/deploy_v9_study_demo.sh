@@ -106,8 +106,20 @@ print_plan() {
     "V9_CLOUD_ENABLE_PATENT": "false",
     "V9_CLOUD_ENABLE_PAPER": "false",
     "V9_CLOUD_ENABLE_WEB_COMPANY": "false",
-    "V9_CLOUD_GOOGLE_GROUNDING": "false"
+    "V9_CLOUD_GOOGLE_GROUNDING": "false",
+    "V9_STUDY_DEMO_SEARCH_ENABLED": "false",
+    "V9_STUDY_DEMO_ENABLE_PATENT_SEARCH": "false",
+    "V9_STUDY_DEMO_ENABLE_PAPER_SEARCH": "false",
+    "V9_STUDY_DEMO_ENABLE_WEB_SEARCH": "false",
+    "V9_STUDY_DEMO_BIGQUERY_DRY_RUN_FIRST": "true",
+    "V9_STUDY_DEMO_BIGQUERY_MAX_BYTES_BILLED": "2199023255552"
   },
+  "rollback_revision": "tech-cartography-v9-study-demo-00001-b48",
+  "iam_plan_stage_c2": [
+    "roles/bigquery.jobUser on project (demo SA only)",
+    "roles/storage.objectAdmin on demo bucket",
+    "secretAccessor on demo password/openalex/tavily secrets"
+  ],
   "apply_guard": "V9_STUDY_DEMO_DEPLOY_APPROVED=true",
   "notes": [
     "V9_STUDY_DEMO_EXPIRES_AT is set at deploy time to UTC+7days",

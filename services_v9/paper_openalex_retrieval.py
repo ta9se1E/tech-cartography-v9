@@ -102,6 +102,8 @@ def build_openalex_search_url(request: dict[str, Any], *, cursor: str = "*") -> 
   }
   if request.get("polite_email"):
     params["mailto"] = str(request.get("polite_email", "") or "")
+  if str(request.get("api_key", "") or "").strip():
+    params["api_key"] = str(request.get("api_key", "") or "").strip()
   filters = []
   date_from = str(request.get("publication_date_from", "") or "").strip()
   date_to = str(request.get("publication_date_to", "") or "").strip()
