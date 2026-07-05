@@ -166,3 +166,44 @@ Password secret version 1 remains ENABLED. After browser confirmation (new passw
 bash scripts/disable_v9_study_demo_search.sh --plan
 V9_STUDY_DEMO_SEARCH_DISABLE_APPROVED=true bash scripts/disable_v9_study_demo_search.sh --apply
 ```
+
+## Search Cost Preview Redeployment
+
+Redeploy of the Step 1 BigQuery dry-run cost preview fix. Production resources were not modified. No live search acceptance was run during this stage.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T05:28:26Z |
+| Deployed at (JST) | 2026-07-05 14:28:26 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-utejl5os5a-uc.a.run.app |
+| Revision | `tech-cartography-v9-study-demo-00004-hp5` |
+| Previous revision | `tech-cartography-v9-study-demo-00003-wgl` |
+| Rollback revision | `tech-cartography-v9-study-demo-00001-b48` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:550c060` |
+| Image digest | `sha256:5d330034a48c908ac6b324aced800dca250e59e36cb5ca11ba6bfe8d7f594d93` |
+| Cloud Build ID | `6a958a41-10f4-4509-83bf-76321a567196` |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+
+### Changes in this revision
+
+- Step 1「検索計画を確認」で Patent BigQuery dry-run を実行し estimated bytes / GiB / TiB / 参考費用を表示
+- Tavily credit hint を `unavailable_before_execution`（`null`）に修正
+- Web exact phrase を quoted query 方式で反映
+
+### Browser validation pending
+
+User should confirm search plan preview in browser (no automated acceptance in this stage).
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled, anonymous invoker denied
+- Job config unchanged, no new execution
+- Scheduler `ENABLED` (`0 9 * * 1`)
+- Weekly delivery `enabled=true`
+- Production bucket, secrets, and IAM unchanged
