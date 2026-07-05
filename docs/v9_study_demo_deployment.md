@@ -795,3 +795,79 @@ Stage C5B-1.2 deploy of Theme draft review/editor UI and save-as-new workflow. D
 ### Browser validation pending
 
 User should confirm draft section D, draft editor with sizing content, save-as-new/discard buttons, old plan warning, and Tier/URL/weekly/digest regression. Stage C5B-2 (Cloud save + Watch Profile + Search Plan + 5/5/5 live search) not yet executed. Final validated tag not yet created.
+
+## Theme Draft Mapping and Old Plan Isolation Deployment
+
+Stage C5B-1.4 deploy of theme draft mapping pipeline, language classification, explicit draft review, old Search Plan isolation, and UI cleanup. No Theme/Profile/Plan/Theme draft Cloud writes during deploy. No external search or live small-search E2E. Production resources were not modified.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T14:23:33Z |
+| Deployed at (JST) | 2026-07-05 23:23:33 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00015-4v2` |
+| Previous revision | `tech-cartography-v9-study-demo-00014-mwk` |
+| Rollback revision | `tech-cartography-v9-study-demo-00014-mwk` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:a52e4c0` |
+| Image digest | `sha256:64e78646780064d37dc49f5907d9abf18e06549d3133fa3865a3e2dc90d6b405` |
+| Cloud Build ID | `bc3ecc4e-29d4-4abe-bcd0-84f3d18acd99` |
+| Build source cleanup | deleted |
+| Image pre-push scan | PASS |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Git commit (code) | `a52e4c0` |
+| Tag (code) | `v9-study-demo-theme-draft-mapping-fix-ready` |
+| Tag (live candidate) | `v9-study-demo-theme-draft-mapping-fix-live-candidate` |
+
+### Features deployed
+
+- **Theme draft mapping pipeline**: semantic bucket classification, language detection, exact phrase extraction, alias suggestions with provenance
+- **Language classification fix**: English exclude terms routed to `exclude_en`, not `exclude_ja`
+- **Theme name normalization**: concise suggested name; full text kept in description
+- **Explicit draft review**: `not_reviewed` default; checkbox + confirm button; save blocked until reviewed
+- **Old Search Plan isolation**: collapsed expander, scoped success messages, draft-unconnected warnings
+- **UI cleanup**: 保存予定Theme ID labels, technical signature expander, toast-only draft creation, no `keyboard_arrow_right` strings
+
+### Mapping validation (fixture pre-deploy)
+
+- `language_bucket_mismatch`: 0
+- `old_theme_contamination`: 0
+- `blocking_error_count`: 0
+- `suggested_theme_name`: PAN系炭素繊維用サイジング剤の組成・付与・乾燥条件
+
+### Active context (read-only verification)
+
+- `active_search_run_id`: `study_demo_search_20260705_061319_e973e4c2`
+- GCS object `analysis_context/active_context.json` unchanged during deploy
+
+### Cloud data writes during deploy
+
+- Theme / Watch Profile / Search Plan / Theme draft: **0**
+- Review / Proposal / Profile draft: **0**
+- active_context / snapshot / digest: **0**
+
+### Unauthenticated smoke test
+
+- HTTP 200, Streamlit SPA shell returned
+- No Secret patterns or theme/run/signal content in initial HTML
+- Password gate maintained
+
+### External HTTP / API execution
+
+- Deploy stage: 0 external HTTP requests
+- Deploy stage: 0 external API calls (BigQuery / OpenAlex / Tavily)
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled
+- Scheduler `ENABLED` (`0 9 * * 1`, `Asia/Tokyo`)
+- Production bucket, secrets, and IAM unchanged
+
+### Browser validation pending
+
+User should confirm short theme name, JA/EN keyword buckets, alias candidate approval, explicit draft review, old plan isolation, and Tier/URL/weekly/digest regression. Stage C5B-2 (Theme Cloud save + Watch Profile + Search Plan + 5/5/5 live search) not yet executed. Final validated tag not yet created.
