@@ -640,11 +640,48 @@ def render_theme_setup_tab(
   search_plan_state: dict[str, Any],
   profile_status_message: str | None = None,
   search_plan_status_message: str | None = None,
+  *,
+  source_info: dict[str, object] | None = None,
+  theme_state: dict[str, Any] | None = None,
 ) -> dict[str, bool]:
   st.subheader("Tech Cartography v9")
   st.caption("軽量R&Dシグナル監視エージェント")
 
-  upper_left, upper_right = st.columns(2)
+  study_demo_mode = False
+  try:
+    from services_v9.study_demo_config import is_study_demo_mode
+
+    study_demo_mode = is_study_demo_mode()
+  except Exception:
+    study_demo_mode = False
+
+  if study_demo_mode:
+    from ui_v9.study_demo_theme_ui import (
+      render_active_analysis_target_section,
+      render_search_plan_preview_section,
+      render_standard_theme_section,
+      render_study_demo_capability_legend,
+      render_temporary_search_promotion_section,
+    )
+
+    render_study_demo_capability_legend()
+    state = dict(theme_state or {})
+    saved_theme = dict(state.get("saved_theme", {}) or {})
+    widget_theme = dict(state.get("widget_theme", saved_theme) or saved_theme)
+    active_context = dict((source_info or {}).get("active_context", {}) or {}) or None
+    downstream_bundle = dict((source_info or {}).get("study_demo_downstream", {}) or {}) or None
+    search_request = dict((downstream_bundle or {}).get("search_request", {}) or {})
+
+    theme_events = render_standard_theme_section(saved_theme=saved_theme, widget_theme=widget_theme)
+    render_active_analysis_target_section(active_context=active_context, downstream_bundle=downstream_bundle)
+    promotion = render_temporary_search_promotion_section(active_context=active_context, search_request=search_request)
+    render_search_plan_preview_section(dict(state.get("search_plan", {}) or {}))
+
+    upper_left, upper_right = st.columns(2)
+  else:
+    theme_events = {}
+    promotion = {}
+    upper_left, upper_right = st.columns(2)
   with upper_left:
     st.text_input("テーマ名", key="ui_theme_name_input")
     st.text_area("テーマ説明", key="ui_theme_description_input", height=160)
@@ -673,12 +710,13 @@ def render_theme_setup_tab(
       help="カンマ区切り・改行区切りのどちらでも入力できます。",
     )
   with upper_right:
-    st.checkbox("デモモード", key="ui_demo_mode_input")
-    st.markdown("**外部API:** 停止中")
-    st.markdown("**外部検索:** OFF")
-    st.markdown("**実行モード:** ローカルのデモデータ / アップロードCSV/JSONのみ")
-    st.markdown("**メール / スケジューラ:** プレビューのみ / 停止中")
-    st.caption("現在はローカル実行のみです。BigQuery、OpenAlex、Web検索、Gemini APIは実行しません。")
+    if not study_demo_mode:
+      st.checkbox("デモモード", key="ui_demo_mode_input")
+      st.markdown("**外部API:** 停止中")
+      st.markdown("**外部検索:** OFF")
+      st.markdown("**実行モード:** ローカルのデモデータ / アップロードCSV/JSONのみ")
+      st.markdown("**メール / スケジューラ:** プレビューのみ / 停止中")
+      st.caption("現在はローカル実行のみです。BigQuery、OpenAlex、Web検索、Gemini APIは実行しません。")
     st.text_area(
       "コアキーワード 日本語",
       key="ui_core_ja_input",
@@ -749,6 +787,8 @@ def render_theme_setup_tab(
     "save_profile": save_clicked,
     "load_profile": load_clicked,
     "regenerate_search_plan": regenerate_clicked,
+    **theme_events,
+    **{k: v for k, v in promotion.items() if k.endswith("_draft") or k.startswith("promote")},
   }
 
 
@@ -1249,7 +1289,23 @@ def render_top_signals_tab(
       with st.expander("スコア根拠を確認", expanded=False):
         _render_score_explanation(explanation)
       with st.expander("人間レビュー", expanded=False):
-        _render_review_input(display_signal, signal_id)
+        try:
+          from services_v9.study_demo_config import is_study_demo_mode
+          from ui_v9.study_demo_review_proposals_ui import render_enhanced_review_input
+
+          if is_study_demo_mode():
+            active_context = dict(source_info.get("active_context", {}) or {})
+            render_enhanced_review_input(
+              signal=display_signal,
+              signal_id=signal_id,
+              search_run_id=str(active_context.get("active_search_run_id", "") or ""),
+              context_generation=active_context.get("active_context_generation"),
+              active_run_id=str(active_context.get("active_search_run_id", "") or ""),
+            )
+          else:
+            _render_review_input(display_signal, signal_id)
+        except Exception:
+          _render_review_input(display_signal, signal_id)
 
   st.text_input("実行メモ", key="ui_snapshot_run_note")
   save_snapshot_clicked = st.button("現在のスナップショットを保存", key="btn_save_snapshot", width="stretch")
@@ -1510,6 +1566,16 @@ def render_watch_profile_tab(
     st.write(f"**候補企業（自動採用不可）:** {', '.join(draft.get('suggested_companies', []) or []) or 'なし'}")
     st.write(f"**候補国:** {', '.join(draft.get('suggested_countries', []) or []) or 'なし'}")
     st.write(f"**候補CPC/IPC:** {', '.join(draft.get('suggested_cpc_ipc', []) or []) or 'なし'}")
+    try:
+      from ui_v9.study_demo_review_proposals_ui import render_review_proposals_section
+
+      render_review_proposals_section(
+        downstream_bundle=bundle,
+        active_context=dict((source_info or {}).get("active_context", {}) or {}),
+        saved_theme=None,
+      )
+    except Exception:
+      pass
     st.info("勉強会環境では監視プロファイル案の保存のみ可能です。自動週次実行とメール配信は停止しています。")
     return {
       "save_profile": False,

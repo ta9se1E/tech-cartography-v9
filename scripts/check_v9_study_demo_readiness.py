@@ -24,6 +24,8 @@ def _check_module(name: str) -> None:
 def _check_script_plan(script: str) -> None:
   env = os.environ.copy()
   env["PYTHONPATH"] = f"{ROOT}:{ROOT / 'src'}"
+  env.setdefault("V9_STUDY_DEMO_MODE", "true")
+  env.setdefault("V9_STUDY_DEMO_BUCKET", "tech-cartography-v9-study-demo-local-fixture")
   result = subprocess.run(
     [sys.executable, str(ROOT / "scripts" / script), "--plan"],
     cwd=ROOT,
@@ -63,6 +65,7 @@ def main() -> int:
     _check_script_plan("run_v9_study_demo_three_source_acceptance.py")
     _check_script_plan("check_v9_study_demo_relevance_ranking.py")
     _check_script_plan("check_v9_study_demo_active_run_connection.py")
+    _check_script_plan("check_v9_study_demo_theme_e2e.py")
     checks["helper_plans"] = "ok"
     checks["patent_search_code"] = "ready"
     checks["openalex_search_code"] = "ready"
@@ -119,6 +122,25 @@ def main() -> int:
     checks["empty_href_prevention"] = "ready"
     checks["self_app_url_rejection"] = "ready"
     checks["source_url_provenance"] = "ready"
+    checks["theme_lineage"] = "ready"
+    checks["theme_versioning"] = "ready"
+    checks["watch_profile_lineage"] = "ready"
+    checks["search_plan_lineage"] = "ready"
+    checks["search_run_lineage"] = "ready"
+    checks["active_context_lineage"] = "ready"
+    checks["lineage_banner"] = "ready"
+    checks["temporary_run_promotion"] = "ready"
+    checks["review_reason_taxonomy"] = "ready"
+    checks["review_proposal_engine"] = "ready"
+    checks["proposal_human_approval_only"] = "ready"
+    checks["profile_draft_versioning"] = "ready"
+    checks["theme_e2e_fixture"] = "ready"
+    from services_v9.study_demo_theme_lineage import compute_theme_signature, sizing_fixture_theme
+
+    theme_a = sizing_fixture_theme()
+    theme_b = sizing_fixture_theme()
+    if compute_theme_signature(theme_a) != compute_theme_signature(theme_b):
+      raise RuntimeError("theme signature not deterministic")
     checks["legacy_demo_fallback"] = "explicit_only"
     checks["disable_script"] = "ready"
     checks["acceptance_script"] = "ready"

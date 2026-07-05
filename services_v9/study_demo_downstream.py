@@ -116,24 +116,36 @@ def save_run_review(
   decision: str,
   comment: str,
   context_generation: int | None = None,
+  reason_codes: list[str] | None = None,
+  reviewed_signal_version: str | None = None,
   storage_client: Any | None = None,
   environ: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
+  from services_v9.study_demo_review_schema import normalize_review_record
+
   bucket_name = get_study_demo_bucket(environ)
   validate_study_demo_write_target(bucket_name, environ=environ)
   existing = load_run_reviews(search_run_id, storage_client=storage_client, environ=environ)
   reviews = [item for item in list(existing.get("reviews", []) or []) if str(item.get("signal_id", "")) != signal_id]
-  reviews.append(
+  normalized = normalize_review_record(
     {
-      "signal_id": signal_id,
       "decision": decision,
       "comment": comment,
-      "reviewed_at": datetime.now(timezone.utc).isoformat(),
-      "context_generation": context_generation,
-      "source_run_id": search_run_id,
-    }
+      "reason_codes": reason_codes or [],
+      "reviewed_signal_version": reviewed_signal_version,
+      "reviewed": True,
+    },
+    signal_id=signal_id,
+    search_run_id=search_run_id,
+    context_generation=context_generation,
   )
-  payload = {"search_run_id": search_run_id, "reviews": reviews, "updated_at": datetime.now(timezone.utc).isoformat()}
+  reviews.append(normalized)
+  payload = {
+    "search_run_id": search_run_id,
+    "reviews": reviews,
+    "updated_at": datetime.now(timezone.utc).isoformat(),
+    "review_schema_version": normalized.get("review_schema_version"),
+  }
   client = storage_client if storage_client is not None else _build_client()
   blob = client.bucket(bucket_name).blob(_review_object_path(search_run_id))
   blob.upload_from_string(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", content_type="application/json")
@@ -141,6 +153,8 @@ def save_run_review(
 
 
 def summarize_run_reviews(reviews_payload: Mapping[str, Any], signal_ids: Sequence[str]) -> dict[str, int]:
+  from services_v9.study_demo_review_schema import normalize_decision
+
   by_id = {str(item.get("signal_id", "")): item for item in list(reviews_payload.get("reviews", []) or [])}
   summary = {"accepted": 0, "pending": 0, "rejected": 0, "unreviewed": 0}
   for signal_id in signal_ids:
@@ -148,12 +162,12 @@ def summarize_run_reviews(reviews_payload: Mapping[str, Any], signal_ids: Sequen
     if not item:
       summary["unreviewed"] += 1
       continue
-    decision = str(item.get("decision", "") or "")
-    if decision in {"accepted", "採用"}:
+    decision = normalize_decision(item.get("decision", item.get("review_decision", "")))
+    if decision == "accept":
       summary["accepted"] += 1
-    elif decision in {"rejected", "見送り"}:
+    elif decision == "reject":
       summary["rejected"] += 1
-    elif decision in {"pending", "保留"}:
+    elif decision == "hold":
       summary["pending"] += 1
     else:
       summary["unreviewed"] += 1
@@ -419,6 +433,8 @@ def build_active_run_digest(
   profile_draft: Mapping[str, Any] | None,
   review_summary: Mapping[str, int],
   resolved: Mapping[str, Any] | None = None,
+  enriched_context: Mapping[str, Any] | None = None,
+  lineage_status: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
   signals = list(integrated.get("signals", []) or [])
   tier_a = [item for item in signals if str(item.get("relevance_tier", "")) == "A"][:10]
@@ -426,6 +442,8 @@ def build_active_run_digest(
   resolved_payload = dict(resolved or {})
   provider_counts = dict(resolved_payload.get("integrated_source_counts", {}) or context.get("provider_counts", {}) or {})
   tier_counts = dict(resolved_payload.get("tier_counts", {}) or context.get("tier_counts", {}) or {})
+  enriched = dict(enriched_context or context)
+  lineage = dict(lineage_status or {})
   return {
     "theme": context.get("theme"),
     "search_run_id": context.get("active_search_run_id"),
@@ -454,6 +472,9 @@ def build_active_run_digest(
       "keywords_en": search_request.get("keywords_en"),
       "keywords_ja": search_request.get("keywords_ja"),
     },
+    "lineage_status": lineage.get("lineage_status", enriched.get("lineage_status")),
+    "source_search_plan_id": enriched.get("source_search_plan_id"),
+    "run_origin": enriched.get("run_origin"),
   }
 
 
@@ -520,6 +541,18 @@ def build_downstream_bundle(
   reviews = load_run_reviews(str(context.get("active_search_run_id", "")), storage_client=storage_client, environ=environ)
   signal_ids = [str(item.get("signal_id", "")) for item in list(integrated.get("signals", []) or [])]
   review_summary = summarize_run_reviews(reviews, signal_ids)
+  from services_v9.study_demo_review_proposals import generate_review_proposals
+  from services_v9.study_demo_theme_lineage import enrich_active_context_with_lineage, summarize_lineage_status
+
+  enriched_context = enrich_active_context_with_lineage(context, search_request=search_request)
+  lineage_status = summarize_lineage_status(enriched_context)
+  review_proposals = generate_review_proposals(
+    reviews=list(reviews.get("reviews", []) or []),
+    signals=list(integrated.get("signals", []) or []),
+    source_run_id=str(context.get("active_search_run_id", "")),
+    profile_keywords=dict(profile_draft.get("keywords", {}) or {}),
+    theme_name=str(context.get("theme", "") or ""),
+  )
   digest = build_active_run_digest(
     context=context,
     integrated=integrated,
@@ -530,6 +563,8 @@ def build_downstream_bundle(
     profile_draft=profile_draft,
     review_summary=review_summary,
     resolved=resolved,
+    enriched_context=enriched_context,
+    lineage_status=lineage_status,
   )
   return {
     "integrated": integrated,
@@ -549,6 +584,9 @@ def build_downstream_bundle(
     "profile_draft": profile_draft,
     "reviews": reviews,
     "review_summary": review_summary,
+    "review_proposals": review_proposals,
+    "lineage_status": lineage_status,
+    "enriched_context": enriched_context,
     "digest": digest,
     "top_reads_raw": select_top_reads_from_active_signals(list(integrated.get("signals", []) or [])),
     "display_signals": adapt_integrated_signals_for_display(integrated),

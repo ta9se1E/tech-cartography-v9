@@ -160,6 +160,7 @@ STATE_CURRENT_SOURCE_INFO = "state_current_source_info"
 STATE_UPLOADED_SIGNALS = "state_uploaded_signals"
 STATE_UPLOAD_WARNINGS = "state_upload_warnings"
 STATE_REVIEWS_BY_SIGNAL_ID = "reviews_by_signal_id"
+STATE_THEME_LINEAGE = "state_theme_lineage"
 STATE_SEARCH_PLAN_DATA = "state_search_plan_data"
 STATE_SEARCH_PLAN_STATUS_MESSAGE = "state_search_plan_status_message"
 STATE_SEARCH_PLAN_FORCE_REGENERATE = "state_search_plan_force_regenerate"
@@ -278,6 +279,10 @@ def _init_session_state(profile_dict: dict[str, object]) -> None:
   default_mode = "unselected" if is_study_demo_mode() else "demo"
   st.session_state.setdefault(UI_DATA_SOURCE_MODE_KEY, default_mode)
   st.session_state.setdefault(STATE_REVIEWS_BY_SIGNAL_ID, {})
+  if is_study_demo_mode():
+    from ui_v9.study_demo_theme_ui import default_theme_state
+
+    st.session_state.setdefault(STATE_THEME_LINEAGE, default_theme_state())
   st.session_state.setdefault(STATE_PATENT_BIGQUERY_DRY_RUN, {})
   st.session_state.setdefault(STATE_PATENT_BIGQUERY_APPROVED_QUERY_IDS, [])
   st.session_state.setdefault(STATE_PAPER_RETRIEVAL_RESULT, {})
@@ -1310,6 +1315,8 @@ def run_app() -> None:
       search_plan_state,
       st.session_state.get(STATE_PROFILE_MESSAGE),
       st.session_state.get(STATE_SEARCH_PLAN_STATUS_MESSAGE),
+      source_info=source_info,
+      theme_state=dict(st.session_state.get(STATE_THEME_LINEAGE, {}) or {}),
     )
   with tabs[1]:
     source_events = render_sources_tab(

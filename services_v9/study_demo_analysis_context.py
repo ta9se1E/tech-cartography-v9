@@ -101,6 +101,9 @@ def build_active_context_from_run(
     "automatic_weekly_enabled": False,
     "ranked_count": int(resolved.get("integrated_ranked_count", 0) or 0),
   }
+  from services_v9.study_demo_theme_lineage import enrich_active_context_with_lineage
+
+  ctx = enrich_active_context_with_lineage(ctx, search_request=summary)
   return sanitize_active_context(ctx)
 
 

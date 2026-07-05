@@ -6,6 +6,8 @@ from typing import Any, Mapping
 
 import streamlit as st
 
+from ui_v9.study_demo_lineage_banner import render_lineage_banner
+
 
 def _format_provider_counts(raw_counts: Mapping[str, Any]) -> str:
   parts: list[str] = []
@@ -27,6 +29,8 @@ def render_active_analysis_banner(
     )
     return
 
+  render_lineage_banner(active_context=active_context, downstream_bundle=downstream_bundle)
+
   resolved = dict((downstream_bundle or {}).get("resolved_context", {}) or {})
   if not resolved and downstream_bundle:
     resolved = {
@@ -44,9 +48,6 @@ def render_active_analysis_banner(
   integrated_ranked_count = int(resolved.get("integrated_ranked_count", 0) or 0)
 
   lines = [
-    "**現在の分析対象: 一時検索**",
-    f"- search_run_id: `{active_context.get('active_search_run_id', '')}`",
-    f"- テーマ: {active_context.get('theme', '')}",
     f"- 取得結果: {_format_provider_counts(raw_provider_counts)}",
   ]
   if any(stored_artifact_counts.values()):
