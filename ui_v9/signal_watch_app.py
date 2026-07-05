@@ -100,6 +100,7 @@ from ui_v9.study_demo_search_ui import (
   STATE_ACTIVE_CONTEXT_RUN_ID,
 )
 from ui_v9.study_demo_active_banner import render_study_demo_mode_legend
+from ui_v9.study_demo_event_contracts import normalize_digest_events
 from ui_v9.tabs import (
   V9_TAB_LABELS,
   render_digest_export_tab,
@@ -1392,14 +1393,16 @@ def run_app() -> None:
     loaded_count=int(source_info["loaded_count"]),
   )
   with tabs[5]:
-    digest_events = render_digest_export_tab(
-      markdown_text,
-      csv_text,
-      json_text,
-      source_info,
-      email_delivery_state,
-      st.session_state.get(STATE_EMAIL_DELIVERY_MESSAGE),
-      st.session_state.get(STATE_DIGEST_MESSAGE),
+    digest_events = normalize_digest_events(
+      render_digest_export_tab(
+        markdown_text,
+        csv_text,
+        json_text,
+        source_info,
+        email_delivery_state,
+        st.session_state.get(STATE_EMAIL_DELIVERY_MESSAGE),
+        st.session_state.get(STATE_DIGEST_MESSAGE),
+      )
     )
 
   if source_events.get("legacy_demo_selected"):
@@ -1682,7 +1685,7 @@ def run_app() -> None:
     st.session_state[STATE_COMPARE_MESSAGE] = f"{action_text}: {selected_path}"
     st.rerun()
 
-  if digest_events["save_digest_files"]:
+  if digest_events.get("save_digest_files", False):
     snapshot_id = str(st.session_state.get(STATE_LAST_SNAPSHOT_ID, "")).strip()
     auto_snapshot_note = str(st.session_state.get(UI_SNAPSHOT_NOTE_KEY, "")).strip()
     auto_snapshot_path = None

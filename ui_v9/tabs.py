@@ -1647,9 +1647,11 @@ def render_digest_export_tab(
   email_delivery_state: dict[str, object],
   email_delivery_status_message: str | None = None,
   digest_status_message: str | None = None,
-) -> dict[str, bool]:
+) -> dict[str, bool | str | None]:
   from ui_v9.study_demo_active_banner import render_active_analysis_banner
+  from ui_v9.study_demo_event_contracts import default_digest_events
 
+  events = default_digest_events()
   st.subheader("ダイジェスト / エクスポート")
   render_active_analysis_banner(
     active_context=dict(source_info.get("active_context", {}) or {}) or None,
@@ -1709,7 +1711,7 @@ def render_digest_export_tab(
       key=build_study_demo_download_key("digest", "full_provenance_json", run_id),
     )
     st.caption("Study Demoではメール送信は無効です。")
-    return {"save_digest": False, "email_dry_run": False, "email_send": False}
+    return events
 
   st.caption("人間レビューが反映済みのSignalは、その判断を優先してダイジェストへ表示します。未レビューSignalはシステム判断に基づいて補完されます。")
   st.caption("現在の人間レビュー情報は、SnapshotとJSON Exportに含まれます。CSV Exportには含まれません。")
@@ -1797,8 +1799,7 @@ def render_digest_export_tab(
       f"直近送信: status={last_send_result.get('status', '')} / "
       f"recipient={last_send_result.get('recipient_masked', '')}"
     )
-  return {
-    "save_digest_files": save_digest_clicked,
-    "run_email_delivery_dry_run": run_email_delivery_dry_run,
-    "send_email_self_only": send_email_self_only,
-  }
+  events["save_digest_files"] = bool(save_digest_clicked)
+  events["run_email_delivery_dry_run"] = bool(run_email_delivery_dry_run)
+  events["send_email_self_only"] = bool(send_email_self_only)
+  return events

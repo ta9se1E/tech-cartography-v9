@@ -79,6 +79,19 @@ def main() -> int:
     checks["weekly_baseline_connection"] = "ready"
     checks["profile_draft_connection"] = "ready"
     checks["digest_connection"] = "ready"
+    from ui_v9.study_demo_event_contracts import DIGEST_EVENT_KEYS, default_digest_events, normalize_digest_events
+
+    defaults = default_digest_events()
+    if "save_digest_files" not in defaults or not all(key in defaults for key in DIGEST_EVENT_KEYS):
+      raise RuntimeError("digest event contract incomplete")
+    sample = default_digest_events()
+    sample["save_digest_files"] = True
+    normalized = normalize_digest_events(sample)
+    if not normalized["save_digest_files"] or normalized["run_email_delivery_dry_run"]:
+      raise RuntimeError("digest event normalization failed")
+    checks["digest_event_contract"] = "ready"
+    checks["digest_event_normalization"] = "ready"
+    checks["digest_save_explicit_only"] = "ready"
     checks["legacy_demo_fallback"] = "explicit_only"
     checks["disable_script"] = "ready"
     checks["acceptance_script"] = "ready"
