@@ -186,6 +186,20 @@ def cache_metadata_matches(existing: Mapping[str, Any], candidate: Mapping[str, 
   )
 
 
+def lineage_metadata_matches(existing: Mapping[str, Any], candidate: Mapping[str, Any]) -> bool:
+  keys = (
+    "context_type",
+    "active_data_source",
+    "run_origin",
+    "lineage_status",
+    "source_theme_id",
+    "source_watch_profile_id",
+    "source_search_plan_id",
+    "active_context_generation",
+  )
+  return all(existing.get(key) == candidate.get(key) for key in keys)
+
+
 def load_active_context_from_storage(
   *,
   environ: Mapping[str, str] | None = None,
@@ -234,7 +248,11 @@ def save_active_context_to_storage(
     existing_raw = blob.download_as_bytes().decode("utf-8")
     if existing_raw.strip():
       existing_context = sanitize_active_context(json.loads(existing_raw))
-      if is_same_active_context(existing_context, ctx) and cache_metadata_matches(existing_context, ctx):
+      if (
+        is_same_active_context(existing_context, ctx)
+        and cache_metadata_matches(existing_context, ctx)
+        and lineage_metadata_matches(existing_context, ctx)
+      ):
         return {
           "status": "unchanged",
           "context": existing_context,

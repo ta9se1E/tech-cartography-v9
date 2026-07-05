@@ -940,3 +940,73 @@ Stage C5B-1.4.1 deploy of localized theme name sanitization and explicit exclusi
 ### Browser validation pending
 
 User should confirm suggested theme name without `Dry燥条件`, full description preserved, three explicit English exclusions in confirmed exclude section (not candidates), draft review initial state, old Search Plan isolation, and Tier/URL/weekly/digest regression. Stage C5B-2 not yet executed. Final validated tag not yet created.
+
+## Live Watch Profile Lineage UI Repair
+
+Stage C5B-2.1 repair to connect saved Theme / Watch Profile / Search Plan / Search Run artifacts to the Study Demo browser UI without re-running external search.
+
+### Root cause
+
+1. **Cloud Run code lag**: revision `00016-zfs` lacked GCS lineage loader/hydration code from C5B-2 (`04898b0`, `d1e513f`).
+2. **`context_type` / `run_origin` mismatch**: Active Context stored `context_type=temporary_search` with `run_origin=watch_profile`, causing validation failure and partial lineage display.
+3. **Loader overwrite bug**: `enrich_active_context_with_lineage()` rebuilt lineage from `search_request.json` (which uses `source_search_plan_id` not `search_plan_id`) and overwrote existing `source_*` refs with `None`, yielding `lineage_status=partial`.
+4. **UI fixture-only state**: Theme selector and Search Plan Preview used session fixtures (`theme_default_saved`) instead of GCS saved artifacts.
+
+### Deployment
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T15:26:27Z |
+| Deployed at (JST) | 2026-07-06 00:26:27 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00018-wrf` |
+| Rollback revision | `tech-cartography-v9-study-demo-00016-zfs` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:8446055` |
+| Image digest | `sha256:748b33b4b7c1e7e562e4319cf256fbe89bb69cde9489560c57366d7ac2bcb9cc` |
+| Cloud Build ID | `9f722b85-cb4c-44ce-b68b-913bd1393e45` |
+| Git commit (code) | `b60ad96` (+ `8446055` load/save normalization) |
+| Tag (code) | `v9-study-demo-live-lineage-fix-ready` |
+| Tag (live candidate) | `v9-study-demo-live-lineage-fix-live-candidate` |
+
+### Code changes
+
+- **`study_demo_live_lineage_loader.py`**: GCS Theme/Profile/Plan enumeration and session hydration
+- **`enrich_active_context_with_lineage()`**: preserve existing `source_*` refs; extract from `search_request` `source_*` fields
+- **`context_type=watch_profile`**: formally allowed; normalize on GCS load
+- **Theme selector**: lists GCS themes + default fixture; auto-selects active `source_theme_id`
+- **Search Plan Preview**: resolves plan from active lineage; shows 5/5/5 limits and `validation_status=ready_for_execution`
+- **Legacy defect-control plan UI**: hidden when live lineage is connected
+
+### Active Context normalization (post-deploy apply)
+
+| Field | Value |
+|-------|-------|
+| `active_search_run_id` | `study_demo_search_20260705_145711_c06e0a1b` |
+| `context_type` | `watch_profile` |
+| `run_origin` | `watch_profile` |
+| `source_theme_id` | `theme_6d2dfb753f7e` |
+| `source_watch_profile_id` | `wp_theme_6d2dfb753f7e` |
+| `source_search_plan_id` | `plan_wp_theme_6d2dfb753f7e` |
+| `lineage_status` | `connected` |
+| `active_context_generation` | 2 (was 1) |
+| Rollback active run ID | `study_demo_search_20260705_061319_e973e4c2` |
+
+### Artifact verification (read-only)
+
+- Theme `theme_6d2dfb753f7e` v1 saved, signature match
+- Watch Profile `wp_theme_6d2dfb753f7e` saved, signature match
+- Search Plan `plan_wp_theme_6d2dfb753f7e` ready_for_execution, limits 5/5/5
+- Search Run integrated=15, Tier A/B/C/D=3/2/3/7
+- No artifact body rewrites during repair
+
+### External search / production
+
+- External API calls: **0**
+- Production resources modified: **false**
+- Scheduler / email / IAM / secrets: unchanged
+
+### Browser acceptance pending
+
+User should confirm new sizing Theme selected, both themes in list, connected lineage across all tabs, Search Plan Preview 5/5/5, no partial/部分接続 display, integrated=15, Tier=3/2/3/7. Validated tag not yet created.
+
