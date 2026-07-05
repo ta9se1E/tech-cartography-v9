@@ -97,6 +97,7 @@ from ui_v9.study_demo_gate import render_study_demo_banner, render_study_demo_lo
 from ui_v9.study_demo_search_ui import (
   STATE_ACTIVE_CONTEXT,
   STATE_ACTIVE_CONTEXT_GENERATION,
+  STATE_ACTIVE_CONTEXT_RUN_ID,
 )
 from ui_v9.study_demo_active_banner import render_study_demo_mode_legend
 from ui_v9.tabs import (
@@ -365,13 +366,16 @@ def _sync_study_demo_active_context() -> None:
     return
   loaded = load_active_analysis_context(reload_from_storage=True)
   if loaded.get("status") == "ok":
-    st.session_state[STATE_ACTIVE_CONTEXT] = dict(loaded.get("context", {}) or {})
+    context = dict(loaded.get("context", {}) or {})
+    st.session_state[STATE_ACTIVE_CONTEXT] = context
     st.session_state[STATE_ACTIVE_CONTEXT_GENERATION] = loaded.get("generation")
+    st.session_state[STATE_ACTIVE_CONTEXT_RUN_ID] = str(context.get("active_search_run_id", "") or "")
     if str(st.session_state.get(UI_DATA_SOURCE_MODE_KEY, "unselected") or "") == "unselected":
       st.session_state[UI_DATA_SOURCE_MODE_KEY] = "temporary_search"
   elif loaded.get("status") == "missing":
     st.session_state.pop(STATE_ACTIVE_CONTEXT, None)
     st.session_state.pop(STATE_ACTIVE_CONTEXT_GENERATION, None)
+    st.session_state.pop(STATE_ACTIVE_CONTEXT_RUN_ID, None)
 
 
 def _resolve_current_signal_source(

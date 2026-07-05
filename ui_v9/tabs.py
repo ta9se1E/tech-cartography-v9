@@ -787,16 +787,18 @@ def render_sources_tab(
     study_events = {}
   st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
   if study_demo_mode:
-    st.radio(
-      "データ投入モード",
-      options=["unselected", "temporary_search", "legacy_demo", "csv", "json", "retrieval_saved"],
-      format_func=data_source_mode_label_ja,
-      key="ui_data_source_mode",
-      horizontal=True,
-    )
-    if st.button("架空デモ12件を表示", key="btn_show_legacy_demo_12"):
-      st.session_state["ui_data_source_mode"] = "legacy_demo"
-      study_events["legacy_demo_selected"] = True
+    with st.expander("その他のデータソース", expanded=False):
+      st.radio(
+        "データ投入モード",
+        options=["unselected", "temporary_search", "legacy_demo", "csv", "json", "retrieval_saved"],
+        format_func=data_source_mode_label_ja,
+        key="ui_data_source_mode",
+        horizontal=True,
+      )
+      if st.button("架空デモ12件を表示", key="btn_show_legacy_demo_12"):
+        st.session_state["ui_data_source_mode"] = "legacy_demo"
+        study_events["legacy_demo_selected"] = True
+      st.caption("Active Analysis Contextの設定は上の「分析対象として使用」から行います。ここは補助的な表示切替です。")
   else:
     st.radio(
       "データ投入モード",
