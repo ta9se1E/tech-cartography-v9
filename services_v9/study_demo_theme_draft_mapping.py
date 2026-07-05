@@ -16,6 +16,49 @@ from services_v9.watch_profile_schema import normalize_terms, parse_publication_
 JA_RE = re.compile(r"[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]")
 EN_RE = re.compile(r"[A-Za-z]")
 
+PROVENANCE_RANK: dict[str, int] = {
+  "user_edited": 5,
+  "explicit_request_field": 4,
+  "exact_theme_text_match": 3,
+  "legacy_import": 2,
+  "canonical_alias_suggestion": 1,
+}
+
+
+def _provenance_rank(provenance: str) -> int:
+  return PROVENANCE_RANK.get(str(provenance or ""), 0)
+
+
+def _pick_stronger_term(a: Mapping[str, Any], b: Mapping[str, Any]) -> dict[str, Any]:
+  left = dict(a)
+  right = dict(b)
+  if _provenance_rank(left.get("provenance", "")) >= _provenance_rank(right.get("provenance", "")):
+    winner = left
+    loser = right
+  else:
+    winner = right
+    loser = left
+  merged = dict(winner)
+  if loser.get("source_field") and loser.get("source_field") != merged.get("source_field"):
+    sources = list(merged.get("source_fields", []) or [])
+    if merged.get("source_field"):
+      sources.append(str(merged.get("source_field")))
+    sources.append(str(loser.get("source_field")))
+    merged["source_fields"] = sorted({item for item in sources if item})
+  if _provenance_rank(winner.get("provenance", "")) >= _provenance_rank("explicit_request_field"):
+    merged["requires_user_review"] = False
+    merged["accepted_for_theme"] = True
+    merged["confidence"] = "high"
+  return merged
+
+
+def _sanitize_japanese_theme_name(name: str) -> str:
+  if not JA_RE.search(name):
+    return name
+  sanitized = re.sub(r"Dry(?=燥)", "乾", name)
+  sanitized = re.sub(r"(?<=[\u4e00-\u9fff])Dry(?=[\u4e00-\u9fff])", "", sanitized)
+  return sanitized.strip(" ・")
+
 
 def _normalize_value(value: str) -> str:
   text = unicodedata.normalize("NFKC", str(value or "").strip())
@@ -183,6 +226,12 @@ def build_canonical_term_suggestions(
   }
   theme_lower = theme_text.lower()
   sizing_context = any(token in theme_text for token in ("サイジング", "sizing", "炭素繊維", "carbon fiber"))
+  existing_norms = {str(item.get("normalized_value", "")).lower() for item in terms}
+  explicit_norms = {
+    str(item.get("normalized_value", "")).lower()
+    for item in terms
+    if str(item.get("provenance", "")) == "explicit_request_field"
+  }
   for entry in iter_dictionary_entries():
     if not entry.get("safe_alias"):
       continue
@@ -196,6 +245,8 @@ def build_canonical_term_suggestions(
       if not en_term:
         continue
       if en_term.lower() in theme_lower:
+        continue
+      if en_term.lower() in existing_norms or en_term.lower() in explicit_norms:
         continue
       if any(
         _normalize_value(str(item.get("value", ""))).lower() == en_term.lower()
@@ -269,9 +320,7 @@ def merge_terms_with_provenance(
   raw_terms: Sequence[Mapping[str, Any]],
   suggestions: Sequence[Mapping[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-  merged: list[dict[str, Any]] = []
-  candidates: list[dict[str, Any]] = []
-  seen: set[tuple[str, str, str]] = set()
+  by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
 
   def _key(item: Mapping[str, Any]) -> tuple[str, str, str]:
     return (
@@ -282,15 +331,19 @@ def merge_terms_with_provenance(
 
   for item in list(raw_terms) + list(suggestions):
     record = dict(item)
-    if record.get("requires_user_review"):
-      if _key(record) not in seen:
-        candidates.append(record)
-        seen.add(_key(record))
-      continue
-    if _key(record) in seen:
-      continue
-    merged.append(record)
-    seen.add(_key(record))
+    key = _key(record)
+    if key in by_key:
+      by_key[key] = _pick_stronger_term(by_key[key], record)
+    else:
+      by_key[key] = record
+
+  merged: list[dict[str, Any]] = []
+  candidates: list[dict[str, Any]] = []
+  for record in by_key.values():
+    if record.get("accepted_for_theme") and not record.get("requires_user_review"):
+      merged.append(record)
+    elif record.get("requires_user_review") or record.get("provenance") == "canonical_alias_suggestion":
+      candidates.append(record)
   return merged, candidates
 
 
@@ -300,12 +353,16 @@ def _rebucket_by_language(terms: Sequence[Mapping[str, Any]]) -> list[dict[str, 
     record = dict(item)
     value = str(record.get("value", "") or "")
     detected = detect_term_language(value)
+    previous_lang = str(record.get("language", "") or "")
     if detected == "unknown":
       record["language"] = "unknown"
     else:
+      if previous_lang and previous_lang != detected:
+        if record.get("provenance") == "explicit_request_field":
+          record["mapping_method"] = "language_rebucket"
+        elif record.get("mapping_method") == "direct_field_mapping":
+          record["mapping_method"] = "language_rebucket"
       record["language"] = detected
-      if record.get("mapping_method") == "direct_field_mapping" and detected != record.get("language"):
-        record["mapping_method"] = "language_rebucket"
     rebucketed.append(record)
   return rebucketed
 
@@ -359,6 +416,7 @@ def suggest_concise_theme_name(theme_text: str, search_request: Mapping[str, Any
   else:
     name = subject
   name = name.rstrip("について").strip()
+  name = _sanitize_japanese_theme_name(name)
   if len(name) > 60:
     return name[:57] + "..."
   return name
@@ -422,6 +480,20 @@ def build_theme_draft_mapping_report(
   candidates: Sequence[Mapping[str, Any]],
   validation: Sequence[Mapping[str, str]],
 ) -> dict[str, Any]:
+  explicit_exclusions = [
+    item
+    for item in terms
+    if str(item.get("semantic_bucket", "")) == "exclude"
+    and str(item.get("provenance", "")) == "explicit_request_field"
+    and item.get("accepted_for_theme")
+  ]
+  explicit_exclusion_candidates = [
+    item
+    for item in candidates
+    if str(item.get("semantic_bucket", "")) == "exclude"
+    and str(item.get("value", "")).lower()
+    in {str(x.get("normalized_value", "")).lower() for x in explicit_exclusions}
+  ]
   return {
     "raw_term_count": len(terms),
     "ja_count": sum(1 for item in terms if item.get("language") == "ja"),
@@ -436,6 +508,8 @@ def build_theme_draft_mapping_report(
     "blocking_error_count": sum(1 for item in validation if item.get("severity") == "error"),
     "warning_count": sum(1 for item in validation if item.get("severity") == "warning"),
     "old_theme_contamination_count": sum(1 for item in validation if item.get("code") == "old_theme_contamination"),
+    "explicit_exclusion_count": len(explicit_exclusions),
+    "explicit_exclusion_candidate_count": len(explicit_exclusion_candidates),
     "external_api_calls": 0,
     "cloud_writes": 0,
   }

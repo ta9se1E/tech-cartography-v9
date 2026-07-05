@@ -103,7 +103,8 @@ class TestSemanticMapping:
     keywords = dict(draft.get("keywords", {}) or {})
     assert "組成" in keywords.get("material_process_ja", [])
     assert "集束性" in keywords.get("use_ja", [])
-    assert "textile" in keywords.get("exclude_en", [])
+    for term in ["textile", "paper sizing", "starch sizing", "activated carbon"]:
+      assert term in keywords.get("exclude_en", [])
 
 
 class TestThemeName:

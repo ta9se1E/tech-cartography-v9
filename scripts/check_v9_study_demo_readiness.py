@@ -235,6 +235,21 @@ def main() -> int:
       raise RuntimeError("duplicate draft message fix missing")
     checks["duplicate_draft_message_removed"] = "ready"
     checks["theme_draft_mapping_report"] = "ready"
+    if suggest_concise_theme_name(search_request["theme"], search_request) != "PAN系炭素繊維用サイジング剤の組成・付与・乾燥条件":
+      raise RuntimeError("localized theme name fix failed")
+    checks["localized_theme_name_fix"] = "ready"
+    exclude_terms = [
+      item
+      for item in list(draft.get("mapping_terms", []) or [])
+      if str(item.get("semantic_bucket", "")) == "exclude"
+      and str(item.get("provenance", "")) == "explicit_request_field"
+    ]
+    if len(exclude_terms) < 3:
+      raise RuntimeError("explicit exclusion provenance failed")
+    checks["explicit_exclusion_provenance"] = "ready"
+    if any(item.get("value") in {"paper sizing", "starch sizing", "activated carbon"} for item in list(draft.get("term_candidates", []) or [])):
+      raise RuntimeError("explicit exclusions leaked to candidates")
+    checks["explicit_exclusion_not_candidate"] = "ready"
 
     theme_a = sizing_fixture_theme()
     theme_b = sizing_fixture_theme()

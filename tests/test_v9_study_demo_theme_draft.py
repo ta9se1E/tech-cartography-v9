@@ -105,8 +105,9 @@ class TestDraftContent:
   def test_exclude_from_request(self) -> None:
     draft = _draft()
     keywords = dict(draft.get("keywords", {}) or {})
-    assert "textile" in keywords.get("exclude_en", [])
-    assert "textile" not in keywords.get("exclude_ja", [])
+    for term in ["textile", "paper sizing", "starch sizing", "activated carbon"]:
+      assert term in keywords.get("exclude_en", [])
+    assert "paper sizing" not in keywords.get("exclude_ja", [])
 
   def test_no_old_theme_seed_mixing(self) -> None:
     draft = _draft()

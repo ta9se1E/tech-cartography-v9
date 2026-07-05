@@ -44,6 +44,20 @@ def run_plan(*, search_run_id: str) -> dict:
   )
   report = dict(draft.get("mapping_report", {}) or {})
   language_mismatch = sum(1 for item in validation if item.get("code") == "language_bucket_mismatch")
+  explicit_exclusions = [
+    item
+    for item in list(draft.get("mapping_terms", []) or [])
+    if str(item.get("semantic_bucket", "")) == "exclude"
+    and str(item.get("provenance", "")) == "explicit_request_field"
+    and item.get("accepted_for_theme")
+  ]
+  explicit_exclusion_candidates = [
+    item
+    for item in list(draft.get("term_candidates", []) or [])
+    if str(item.get("semantic_bucket", "")) == "exclude"
+    and str(item.get("value", "")).lower()
+    in {str(x.get("normalized_value", "")).lower() for x in explicit_exclusions}
+  ]
   blocking = sum(1 for item in validation if item.get("severity") == "error")
   return {
     "status": "ok" if blocking == 0 and language_mismatch == 0 else "failed",
@@ -61,6 +75,8 @@ def run_plan(*, search_run_id: str) -> dict:
     "sample_use_ja": list(dict(draft.get("keywords", {}) or {}).get("use_ja", []))[:5],
     "sample_material_ja": list(dict(draft.get("keywords", {}) or {}).get("material_process_ja", []))[:5],
     "sample_exclude_en": list(dict(draft.get("keywords", {}) or {}).get("exclude_en", []))[:5],
+    "explicit_exclusion_count": report.get("explicit_exclusion_count", len(explicit_exclusions)),
+    "explicit_exclusion_candidate_count": len(explicit_exclusion_candidates),
     "external_api_calls": 0,
     "cloud_writes": 0,
   }

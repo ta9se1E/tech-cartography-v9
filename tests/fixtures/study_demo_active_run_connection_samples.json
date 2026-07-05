@@ -7,7 +7,7 @@
       "keywords_en": "carbon fiber sizing agent aqueous polyurethane",
       "keywords_ja": "炭素繊維 サイジング剤 PAN",
       "exact_phrase": "carbon fiber sizing agent",
-      "exclude_keywords": "textile",
+      "exclude_keywords": "textile, paper sizing, starch sizing, activated carbon",
       "seed_patent": "",
       "enable_patent": true,
       "enable_paper": true,

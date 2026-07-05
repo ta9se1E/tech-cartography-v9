@@ -206,10 +206,23 @@ def _render_mapping_review(draft: Mapping[str, Any]) -> None:
   terms = list(draft.get("mapping_terms", []) or [])
   if not terms:
     return
+  explicit_excludes = [
+    item
+    for item in terms
+    if str(item.get("semantic_bucket", "")) == "exclude"
+    and str(item.get("provenance", "")) == "explicit_request_field"
+    and item.get("accepted_for_theme")
+  ]
+  if explicit_excludes:
+    st.caption("確定済み英語除外語（一時検索で明示）")
+    for item in explicit_excludes:
+      st.write(f"- {item.get('value')} — 確定済み / 一時検索で明示")
   with st.expander("キーワード分類確認", expanded=False):
     accepted = [item for item in terms if item.get("accepted_for_theme")]
     st.caption("確定語")
     for item in accepted[:12]:
+      if item in explicit_excludes:
+        continue
       st.write(
         f"- {item.get('value')} | {item.get('language')} | {item.get('semantic_bucket')} | "
         f"{item.get('provenance')} | 確定"
@@ -222,7 +235,18 @@ def _render_mapping_review(draft: Mapping[str, Any]) -> None:
 
 
 def _render_term_candidates(draft: Mapping[str, Any]) -> None:
-  candidates = list(draft.get("term_candidates", []) or [])
+  explicit_exclude_values = {
+    str(item.get("value", "") or "").lower()
+    for item in list(draft.get("mapping_terms", []) or [])
+    if str(item.get("semantic_bucket", "")) == "exclude"
+    and str(item.get("provenance", "")) == "explicit_request_field"
+    and item.get("accepted_for_theme")
+  }
+  candidates = [
+    item
+    for item in list(draft.get("term_candidates", []) or [])
+    if str(item.get("value", "") or "").lower() not in explicit_exclude_values
+  ]
   if not candidates:
     return
   draft_id = str(draft.get("draft_id", "") or "")
