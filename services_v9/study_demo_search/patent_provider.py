@@ -123,7 +123,6 @@ def build_study_demo_patent_plan(
   req = dict(preview.get("request", {}) or {})
   if req:
     sql_fingerprint = hashlib.sha256(build_patent_bigquery_sql(req).encode()).hexdigest()[:16]
-  estimated_bytes = 0
   validation_rows = list(preview.get("validation_rows", []) or [])
   ok = all(str(row.get("status", "")) != "error" for row in validation_rows)
   return {
@@ -139,7 +138,7 @@ def build_study_demo_patent_plan(
       "year_end": request.year_end,
       "seed_patent": request.seed_patent,
     },
-    "estimated_bytes": estimated_bytes,
+    "estimated_bytes": None,
     "dry_run_required": True,
     "maximum_bytes_billed": max_bytes,
     "price_per_tib_usd": get_study_demo_bigquery_price_per_tib_usd(environ),

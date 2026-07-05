@@ -27,7 +27,7 @@ def init_usage_metrics() -> dict[str, Any]:
       "request_count": 0,
       "basic_count": 0,
       "advanced_count": 0,
-      "total_credits": 0,
+      "total_credits": None,
       "result_count": 0,
       "error_count": 0,
       "response_time_ms": 0,
@@ -67,7 +67,10 @@ def accumulate_usage_metrics(
   if web:
     metrics["web"]["request_count"] = int(metrics["web"].get("request_count", 0) or 0) + 1
     metrics["web"]["result_count"] = len(list(web.get("rows", []) or []))
-    metrics["web"]["total_credits"] = int(metrics["web"].get("total_credits", 0) or 0) + int(web.get("usage_credits", 0) or 0)
+    usage_credits = web.get("usage_credits")
+    if usage_credits is not None:
+      current = metrics["web"].get("total_credits")
+      metrics["web"]["total_credits"] = int(current or 0) + int(usage_credits or 0)
     if str(web.get("status", "")) == "failed":
       metrics["web"]["error_count"] = int(metrics["web"].get("error_count", 0) or 0) + 1
   return metrics

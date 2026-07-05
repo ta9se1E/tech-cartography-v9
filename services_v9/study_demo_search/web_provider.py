@@ -12,13 +12,28 @@ from services_v9.web_company_retrieval import build_global_web_retrieval_preview
 from .request import StudyDemoSearchRequest
 
 
-def _search_plan_from_request(request: StudyDemoSearchRequest) -> dict[str, Any]:
+def _web_query_parts(request: StudyDemoSearchRequest) -> tuple[str, dict[str, Any]]:
   query_parts: list[str] = []
+  exact = str(request.exact_phrase or "").strip()
+  exact_meta = {
+    "exact_phrase": exact,
+    "exact_phrase_applied": False,
+    "exact_phrase_method": "",
+  }
+  if exact:
+    query_parts.append(f'"{exact}"')
+    exact_meta["exact_phrase_applied"] = True
+    exact_meta["exact_phrase_method"] = "quoted_query"
   if str(request.keywords_en or "").strip():
     query_parts.append(str(request.keywords_en).replace(",", " "))
   if str(request.keywords_ja or "").strip():
     query_parts.append(str(request.keywords_ja).replace(",", " "))
   query_text = " ".join(part.strip() for part in query_parts if part.strip())
+  return query_text, exact_meta
+
+
+def _search_plan_from_request(request: StudyDemoSearchRequest) -> dict[str, Any]:
+  query_text, _exact_meta = _web_query_parts(request)
   time_range = str(request.web_time_range or "none").strip().lower()
   if time_range in {"", "none"}:
     time_range = "12m"
@@ -54,7 +69,7 @@ def build_study_demo_web_plan(
 ) -> dict[str, Any]:
   preview = build_global_web_retrieval_preview(_search_plan_from_request(request))
   api_key_configured = bool(get_study_demo_tavily_api_key(environ))
-  credit_hint = request.web_max_results if request.web_search_depth == "basic" else request.web_max_results * 2
+  _, exact_meta = _web_query_parts(request)
   ok = all(str(row.get("status", "")) != "error" for row in list(preview.get("validation_rows", []) or []))
   return {
     "status": "ready" if ok and api_key_configured else "blocked",
@@ -66,11 +81,14 @@ def build_study_demo_web_plan(
       "search_depth": request.web_search_depth,
       "max_results": request.web_max_results,
       "time_range": request.web_time_range,
-      "exact_match": request.web_exact_match,
+      "query_preview": _web_query_parts(request)[0],
+      **exact_meta,
       "include_raw_content": request.web_include_raw_content,
       "api_key_configured": api_key_configured,
     },
-    "credit_hint": credit_hint,
+    "credit_estimate_status": "unavailable_before_execution",
+    "credit_hint": None,
+    "credit_estimate_basis": None,
     "defaults": {
       "include_answer": False,
       "include_images": False,
@@ -79,6 +97,22 @@ def build_study_demo_web_plan(
       "auto_parameters": False,
     },
   }
+
+
+def _extract_usage_credits(result: Mapping[str, Any]) -> int | None:
+  logs = list(result.get("provider_log", []) or [])
+  credits: int | None = None
+  for entry in logs:
+    if not isinstance(entry, dict):
+      continue
+    if "usage_credits" in entry:
+      credits = int(credits or 0) + int(entry.get("usage_credits") or 0)
+    elif "credits" in entry:
+      credits = int(credits or 0) + int(entry.get("credits") or 0)
+  top_level = result.get("usage_credits")
+  if top_level is not None:
+    credits = int(credits or 0) + int(top_level or 0)
+  return credits
 
 
 def run_study_demo_web_execute(
@@ -116,9 +150,5 @@ def run_study_demo_web_execute(
   if isinstance(result, dict):
     logs = list(result.get("provider_log", []) or [])
     result["request_count"] = int(result.get("query_count", 0) or len(logs) or 0)
-    credits = 0
-    for entry in logs:
-      if isinstance(entry, dict):
-        credits += int(entry.get("usage_credits", 0) or entry.get("credits", 0) or 0)
-    result["usage_credits"] = credits
+    result["usage_credits"] = _extract_usage_credits(result)
   return result

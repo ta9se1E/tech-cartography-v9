@@ -16,6 +16,7 @@ from services_v9.study_demo_search import (
   parse_search_request,
   validate_search_request,
 )
+from services_v9.study_demo_search.request import request_fingerprint
 
 STATE_SEARCH_FORM = "v9_study_demo_search_form"
 STATE_SEARCH_PLAN = "v9_study_demo_search_plan"
@@ -74,6 +75,7 @@ def render_study_demo_keyword_search_section(*, authenticated: bool = True) -> d
         plan = build_search_plan_preview(request)
         st.session_state[STATE_SEARCH_PLAN] = plan
         st.session_state.pop(STATE_SEARCH_RESULT, None)
+        st.session_state.pop("v9_study_demo_search_confirmed", None)
         events["search_plan_created"] = plan
         st.success("検索計画を作成しました。本検索はまだ実行していません。")
     except ValueError as exc:
@@ -81,15 +83,42 @@ def render_study_demo_keyword_search_section(*, authenticated: bool = True) -> d
 
   plan = dict(st.session_state.get(STATE_SEARCH_PLAN, {}) or {})
   if plan:
+    try:
+      current_request = parse_search_request(payload)
+      current_fingerprint = request_fingerprint(current_request)
+    except ValueError:
+      current_fingerprint = ""
+    if current_fingerprint and str(plan.get("request_fingerprint", "")) != current_fingerprint:
+      st.warning("検索条件が変更されました。再度「検索計画を確認」を実行してください。")
+      plan = {}
+      st.session_state.pop(STATE_SEARCH_PLAN, None)
+      st.session_state.pop("v9_study_demo_search_confirmed", None)
+  if plan:
     st.markdown("#### 検索計画")
     st.json({k: plan.get(k) for k in ("search_plan_id", "summary", "cost_estimate", "providers")})
-    confirmed = st.checkbox("計画と費用・API利用を確認した")
+    try:
+      current_request = parse_search_request(payload)
+    except ValueError as exc:
+      st.error(str(exc))
+      current_request = None
+    confirmed = st.checkbox("計画と費用・API利用を確認した", key="v9_study_demo_search_confirmed")
+    patent_plan = dict(dict(plan.get("providers", {}) or {}).get("patent", {}) or {})
+    patent_enabled = bool(current_request.enable_patent) if current_request else bool(plan.get("summary", {}).get("providers", {}).get("patent"))
+    patent_blocks_execute = patent_plan.get("status") in {"dry_run_failed", "dry_run_zero_bytes"} or (
+      patent_enabled and not bool(patent_plan.get("bigquery_execution_allowed", True))
+    )
+    if patent_blocks_execute and patent_enabled:
+      st.error("Patent BigQuery dry-run が成功していないか、本実行が許可されていません。検索計画を再作成してください。")
     if execute_button:
-      if not confirmed:
+      if patent_blocks_execute and patent_enabled:
+        st.error("Patent dry-run 未完了のため本検索できません。")
+      elif not confirmed:
         st.error("本検索前に確認チェックが必要です。")
+      elif current_request is None:
+        pass
       else:
         try:
-          request = parse_search_request(payload)
+          request = current_request
           executed_ids = set(st.session_state.get(STATE_EXECUTED_PLAN_IDS, set()) or set())
           result = execute_three_source_search(
             request,

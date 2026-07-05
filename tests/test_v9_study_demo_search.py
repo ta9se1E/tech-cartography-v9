@@ -88,24 +88,55 @@ def test_sql_like_input_rejected() -> None:
 
 def test_plan_does_not_execute_providers() -> None:
   request = _request()
+
+  def runner(*args, **kwargs):
+    return {
+      "dry_run_status": "ok",
+      "estimated_bytes": 1000,
+      "would_be_blocked_by_max_bytes": False,
+      "job_id": "dry",
+      "total_bytes_processed": 1000,
+    }
+
   with patch.dict("os.environ", SEARCH_ENV, clear=False):
-    plan = build_search_plan_preview(request)
+    plan = build_search_plan_preview(request, patent_dry_run_runner=runner)
   assert plan["status"] == "plan"
   assert plan["execution_blocked"] is True
+  assert plan["providers"]["patent"]["estimated_bytes"] == 1000
 
 
 def test_execute_requires_confirmation() -> None:
   request = _request()
+
+  def runner(*args, **kwargs):
+    return {
+      "dry_run_status": "ok",
+      "estimated_bytes": 1000,
+      "would_be_blocked_by_max_bytes": False,
+      "job_id": "dry",
+      "total_bytes_processed": 1000,
+    }
+
   with patch.dict("os.environ", SEARCH_ENV, clear=False):
-    plan = build_search_plan_preview(request)
+    plan = build_search_plan_preview(request, patent_dry_run_runner=runner)
     result = execute_three_source_search(request, plan=plan, confirmed=False)
   assert result["status"] == "blocked"
 
 
 def test_duplicate_plan_id_blocked() -> None:
   request = _request()
+
+  def runner(*args, **kwargs):
+    return {
+      "dry_run_status": "ok",
+      "estimated_bytes": 1000,
+      "would_be_blocked_by_max_bytes": False,
+      "job_id": "dry",
+      "total_bytes_processed": 1000,
+    }
+
   with patch.dict("os.environ", SEARCH_ENV, clear=False):
-    plan = build_search_plan_preview(request)
+    plan = build_search_plan_preview(request, patent_dry_run_runner=runner)
     executed = {str(plan["search_plan_id"])}
     result = execute_three_source_search(request, plan=plan, confirmed=True, executed_plan_ids=executed)
   assert "duplicate" in str(result.get("errors", []))

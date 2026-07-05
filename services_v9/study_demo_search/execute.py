@@ -17,10 +17,10 @@ from .export import build_export_bundle
 from .integration import integrate_search_results
 from .keywords import build_keyword_suggestions
 from .lock import acquire_search_lock, release_search_lock
-from .patent_provider import run_study_demo_patent_dry_run, run_study_demo_patent_execute
+from .patent_provider import run_study_demo_patent_execute
 from .paper_provider import run_study_demo_paper_execute
 from .plan import build_search_plan_preview, plan_fingerprint
-from .request import StudyDemoSearchRequest, validate_search_request
+from .request import StudyDemoSearchRequest, request_fingerprint, validate_search_request
 from .similar import build_similar_patents
 from .storage import save_search_run
 from .usage import accumulate_usage_metrics, init_usage_metrics
@@ -63,8 +63,23 @@ def execute_three_source_search(
     return {"status": "blocked", "errors": ["search plan id is required"]}
   if executed_plan_ids and plan_id in executed_plan_ids:
     return {"status": "blocked", "errors": ["duplicate search_plan_id execution is forbidden"]}
-  if str(plan.get("request_fingerprint", "")) != request_fingerprint_from_plan(plan, request):
+  if str(plan.get("request_fingerprint", "")) != request_fingerprint(request):
     return {"status": "blocked", "errors": ["search conditions changed since plan; regenerate plan"]}
+
+  patent_plan = dict(dict(plan.get("providers", {}) or {}).get("patent", {}) or {})
+  if request.enable_patent and is_study_demo_patent_search_enabled(environ):
+    patent_status = str(patent_plan.get("status", "") or "")
+    if patent_status == "dry_run_failed":
+      return {"status": "blocked", "errors": ["patent BigQuery dry-run failed; regenerate plan"]}
+    if patent_status == "dry_run_zero_bytes":
+      return {"status": "blocked", "errors": ["patent BigQuery dry-run returned zero bytes; regenerate plan"]}
+    if patent_plan.get("dry_run_fingerprint") != request_fingerprint(request):
+      return {"status": "blocked", "errors": ["patent dry-run fingerprint mismatch; regenerate plan"]}
+    dry_run = dict(patent_plan.get("dry_run", {}) or {})
+    if str(dry_run.get("dry_run_status", "") or "") != "ok":
+      return {"status": "blocked", "errors": ["patent dry-run result missing or invalid; regenerate plan"]}
+    if not bool(patent_plan.get("bigquery_execution_allowed", False)):
+      return {"status": "blocked", "errors": ["patent BigQuery execution blocked by cost guard; regenerate plan"]}
 
   search_run_id = f"study_demo_search_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
   lock_info: dict[str, Any] = {}
@@ -80,7 +95,7 @@ def execute_three_source_search(
 
     if request.enable_patent and is_study_demo_patent_search_enabled(environ):
       try:
-        dry_run = run_study_demo_patent_dry_run(request, environ=environ, client_factory=patent_client_factory)
+        dry_run = dict(patent_plan.get("dry_run", {}) or {})
         patent_results = run_study_demo_patent_execute(
           request,
           dry_run_result=dry_run,
