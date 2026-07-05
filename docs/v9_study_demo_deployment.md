@@ -726,3 +726,72 @@ Stage C5B-1 deploy of Theme → Watch Profile → Search Plan → Run lineage UI
 ### Browser validation pending
 
 User should confirm Theme tab separation, lineage banner, review/proposal UI, Tier counts, URLs, weekly, digest. Stage C5B-2 live 5/5/5 search not yet executed. Final validated tag not yet created.
+
+## Theme Draft Review and Save-as-New UI Deployment
+
+Stage C5B-1.2 deploy of Theme draft review/editor UI and save-as-new workflow. Draft content is session-only (`persist_to_cloud=false`); no Theme/Profile/Plan/Theme draft Cloud writes during deploy. No external search or live small-search E2E. Production resources were not modified.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T13:57:59Z |
+| Deployed at (JST) | 2026-07-05 22:57:59 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00014-mwk` |
+| Previous revision | `tech-cartography-v9-study-demo-00013-vtl` |
+| Rollback revision | `tech-cartography-v9-study-demo-00013-vtl` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:45067f9` |
+| Image digest | `sha256:2d58310cb02c6952c98952a711a36f92ee5eb9a6e60c4a47012cc73f4da6f026` |
+| Cloud Build ID | `e64369f3-12f3-4f92-93b5-12599ec75e4b` |
+| Build source cleanup | deleted |
+| Image pre-push scan | PASS |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Git commit (code) | `45067f9` |
+| Tag (code) | `v9-study-demo-theme-draft-ui-ready` |
+| Tag (live candidate) | `v9-study-demo-theme-draft-ui-live-candidate` |
+
+### Features deployed
+
+- **Theme draft section D**:「作成した未保存テーマ案」status card with provenance and impact indicators
+- **Draft-only editor**: separate widget keys (`theme_draft_{draft_id}_*`), sizing content from active run only
+- **Draft actions**: keep changes (session), save-as-new (session-only, `persist_to_cloud=false`), discard
+- **Old Search Plan warning**: saved standard theme plan shown as unconnected to draft
+- **Saved theme selector**: multiple themes list without auto-search or active context change
+- **Standard theme actions clarified**: no confusion with draft save path
+
+### Active context (read-only verification)
+
+- `active_search_run_id`: `study_demo_search_20260705_061319_e973e4c2`
+- GCS object `analysis_context/active_context.json` unchanged during deploy
+
+### Cloud data writes during deploy
+
+- Theme / Watch Profile / Search Plan / Theme draft: **0**
+- Review / Proposal / Profile draft: **0**
+- active_context / snapshot / digest: **0**
+
+### Unauthenticated smoke test
+
+- HTTP 200, Streamlit SPA shell returned
+- No Secret patterns or theme/run/signal content in initial HTML
+- Password gate maintained
+
+### External HTTP / API execution
+
+- Deploy stage: 0 external HTTP requests
+- Deploy stage: 0 external API calls (BigQuery / OpenAlex / Tavily)
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled
+- Scheduler `ENABLED` (`0 9 * * 1`, `Asia/Tokyo`)
+- Production bucket, secrets, and IAM unchanged
+
+### Browser validation pending
+
+User should confirm draft section D, draft editor with sizing content, save-as-new/discard buttons, old plan warning, and Tier/URL/weekly/digest regression. Stage C5B-2 (Cloud save + Watch Profile + Search Plan + 5/5/5 live search) not yet executed. Final validated tag not yet created.
