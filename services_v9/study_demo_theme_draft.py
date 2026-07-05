@@ -298,6 +298,20 @@ def compare_draft_with_saved_theme(draft: Mapping[str, Any], saved_theme: Mappin
   }
 
 
+def _normalize_draft_keywords_for_theme(keywords: Mapping[str, Any]) -> dict[str, list[str]]:
+  raw = dict(keywords or {})
+  return {
+    "core_en": list(raw.get("core_en", []) or []),
+    "core_ja": list(raw.get("core_ja", []) or []),
+    "application_en": list(raw.get("use_en", raw.get("application_en", [])) or []),
+    "application_ja": list(raw.get("use_ja", raw.get("application_ja", [])) or []),
+    "material_process_en": list(raw.get("material_process_en", []) or []),
+    "material_process_ja": list(raw.get("material_process_ja", []) or []),
+    "exclude_en": list(raw.get("exclude_en", []) or []),
+    "exclude_ja": list(raw.get("exclude_ja", []) or []),
+  }
+
+
 def build_new_saved_theme_from_draft(
   draft: Mapping[str, Any],
   *,
@@ -315,7 +329,7 @@ def build_new_saved_theme_from_draft(
     {
       "name": draft.get("name"),
       "description": draft.get("description"),
-      "keywords": draft.get("keywords"),
+      "keywords": _normalize_draft_keywords_for_theme(dict(draft.get("keywords", {}) or {})),
       "seed_publication_numbers": draft.get("seed_publication_numbers", []),
       "additional_candidate_publication_numbers": draft.get("additional_candidate_publication_numbers", []),
       "status": "saved",

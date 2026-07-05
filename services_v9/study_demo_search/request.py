@@ -96,10 +96,10 @@ def validate_search_request(request: StudyDemoSearchRequest) -> list[str]:
       errors.append(f"{label} must be YYYY")
   if request.year_start and request.year_end and int(request.year_start) > int(request.year_end):
     errors.append("year_start must be <= year_end")
-  if request.patent_display_limit not in {20, 50, 100}:
-    errors.append("patent_display_limit must be 20, 50, or 100")
-  if request.paper_display_limit not in {20, 50, 100, 200}:
-    errors.append("paper_display_limit must be 20, 50, 100, or 200")
+  if request.patent_display_limit not in {5, 20, 50, 100}:
+    errors.append("patent_display_limit must be 5, 20, 50, or 100")
+  if request.paper_display_limit not in {5, 20, 50, 100, 200}:
+    errors.append("paper_display_limit must be 5, 20, 50, 100, or 200")
   if request.web_max_results not in {5, 10, 20}:
     errors.append("web_max_results must be 5, 10, or 20")
   if request.web_search_depth not in {"basic", "advanced"}:
