@@ -527,3 +527,69 @@ Redeploy of digest tab event contract fix: standardized `default_digest_events()
 ### Browser validation pending
 
 User should confirm weekly tab opens without crash, digest tab renders without `KeyError`, and active run context displays correctly. Final validated tag not yet created.
+
+## External Source URL Resolution Fix Redeployment
+
+Redeploy of external source URL resolution fix: standardized URL resolver for patent/paper/web signals; `st.link_button` renderer replaces empty-href Markdown links; `source_url` field propagation in active run adapter. Production resources were not modified. No external HTTP access, external API execution, active_context update, snapshot write, or digest save during deploy.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T10:52:23Z |
+| Deployed at (JST) | 2026-07-05 19:52:23 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00011-l85` |
+| Previous revision | `tech-cartography-v9-study-demo-00010-ncr` |
+| Rollback revision | `tech-cartography-v9-study-demo-00010-ncr` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:1e011e8` |
+| Image digest | `sha256:208538c6414347034094fe524b7368e16b3f1d1337456f6cede597637e25636a` |
+| Cloud Build ID | `1d84e545-2474-418b-99e6-4069186e6887` |
+| Build source cleanup | deleted |
+| Image pre-push scan | PASS |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Git commit | `1e011e8` |
+| Tag (code) | `v9-study-demo-source-url-fix-ready` |
+| Tag (live candidate) | `v9-study-demo-source-url-fix-live-candidate` |
+
+### Fixes deployed
+
+- **Empty href fix**: removed `[出典URLを開く]()` Markdown links that opened the Streamlit app itself
+- **source_url field propagation**: adapter resolves `source_url` / publication number / DOI / canonical URL
+- **External link renderer**: `ui_v9/study_demo_source_link.py` with `st.link_button` for valid external URLs only
+- **Study Demo self URL rejection**: Cloud Run host URLs are not used as citation links
+- **Existing active_context preserved**: `analysis_context/active_context.json` unchanged in demo bucket
+
+### Active context (read-only verification)
+
+- `active_search_run_id`: `study_demo_search_20260705_061319_e973e4c2`
+- Object exists in demo bucket; content not modified during deploy
+
+### Unauthenticated smoke test
+
+- HTTP 200, Streamlit SPA shell returned
+- No Secret patterns, active run ID, or signal content exposed in initial HTML
+- Password gate maintained (login required for app content)
+- No external citation URL fetch during smoke test
+
+### External HTTP / API execution
+
+- Deploy stage: 0 external HTTP requests (no HEAD/GET to citation URLs, DOI, Google Patents)
+- Deploy stage: 0 external API calls (BigQuery / OpenAlex / Tavily)
+- Demo bucket only; no production bucket reference
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled, anonymous invoker denied
+- Job config unchanged, no new execution
+- Scheduler `ENABLED` (`0 9 * * 1`, `Asia/Tokyo`)
+- Weekly delivery `enabled=true`
+- Production bucket, secrets, and IAM unchanged
+
+### Browser validation pending
+
+User should confirm「出典URLを開く」/「引用元を開く」opens external patent/paper/web pages (not the Streamlit app), and missing URLs show「引用元URL未取得」without links. Final validated tag not yet created.
