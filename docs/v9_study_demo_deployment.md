@@ -207,3 +207,45 @@ User should confirm search plan preview in browser (no automated acceptance in t
 - Scheduler `ENABLED` (`0 9 * * 1`)
 - Weekly delivery `enabled=true`
 - Production bucket, secrets, and IAM unchanged
+
+## Search Plan Normalization Redeployment
+
+Redeploy of unified BigQuery execution gate, 6.25 USD/TiB cost display, validation cleanup, and Web exact-phrase dedupe. Production resources were not modified. No live search acceptance was run.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T05:48:26Z |
+| Deployed at (JST) | 2026-07-05 14:48:26 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-utejl5os5a-uc.a.run.app |
+| Revision | `tech-cartography-v9-study-demo-00005-cwc` |
+| Previous revision | `tech-cartography-v9-study-demo-00004-hp5` |
+| Rollback revision | `tech-cartography-v9-study-demo-00001-b48` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:12df459` |
+| Image digest | `sha256:d14a3a0cf2ca1fe1173c5a4984f5c5f7d50749ccff61be9e70be1de34fe002ff` |
+| Cloud Build ID | `cbe2435c-4483-43f2-b06d-f4fe3d0e1077` |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+
+### Changes in this revision
+
+- Unified `bigquery_execution_allowed` / `dry_run.execution_allowed` / `execution_performed` separation
+- BigQuery reference cost at 6.25 USD/TiB across all cost fields
+- Removed false `maximum_bytes_billed` validation warning when configured
+- Web query dedupes exact phrase from keywords_en (quoted once)
+
+### Browser validation pending
+
+User should confirm search plan preview shows consistent execution flags and ~1.484 USD cost for sizing theme.
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled, anonymous invoker denied
+- Job config unchanged, no new execution
+- Scheduler `ENABLED`
+- Weekly delivery `enabled=true`
+- Production bucket, secrets, and IAM unchanged
