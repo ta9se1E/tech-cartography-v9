@@ -295,3 +295,64 @@ Redeploy of Tier A/B/C/D relevance ranking, PAN/pitch material matching, relevan
 - Scheduler `ENABLED` (`0 9 * * 1`)
 - Weekly delivery `enabled=true`
 - Production bucket, secrets, and IAM unchanged
+
+## Active Search Run Connection Deployment
+
+Stage C4B deployment connecting saved temporary search runs to downstream tabs via shared Active Analysis Context. Production resources were not modified. No live search, external provider execution, or active_context Cloud write was performed during deploy.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T07:34:14Z |
+| Deployed at (JST) | 2026-07-05 16:34:14 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00007-6bw` |
+| Previous revision | `tech-cartography-v9-study-demo-00006-6zf` |
+| Rollback revision | `tech-cartography-v9-study-demo-00006-6zf` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:dd20eb2` |
+| Image digest | `sha256:cd29f3bdf3f021e5af1d11bdaaf686f7471f6900909345d97a55dc7bea8094d7` |
+| Cloud Build ID | `08a60f78-1700-4fcd-bccf-563317ba0723` |
+| Build source cleanup | deleted |
+| Service Account | `tech-cartography-v9-study-demo@devops-ai-agent-hackathon-2026.iam.gserviceaccount.com` |
+| Min / max instances | 0 / 1 |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Password version 2 | in use |
+| Git commit | `dd20eb2` |
+| Tag (code) | `v9-study-demo-active-run-connection-ready` |
+| Tag (live candidate) | `v9-study-demo-active-run-connection-live-candidate` |
+
+### Active run connection
+
+- Active Analysis Context code deployed (`analysis_context/active_context.json` schema, GCS generation precondition, shared loader)
+- Downstream tabs (注目シグナル / 週次更新 / 監視プロファイル / ダイジェスト) use common loader when active context is set
+- Legacy demo 12件: explicit button only; no automatic fallback when active context is unset
+- **active_context initial write pending user action** (browser UI: 情報源タブ → 「この検索runを分析対象に設定」)
+
+### Saved run available for browser validation
+
+- `study_demo_search_20260705_061319_e973e4c2`
+- All required artifacts present in demo bucket (search_request, provider_status, patent/paper/web results, integrated_signals, usage_metrics, search_status, search_report)
+- ranked_count: 100 (integrated_signals.json)
+- active_context: not yet created in demo bucket
+
+### External API execution
+
+- Deploy stage: 0 external API calls (BigQuery / OpenAlex / Tavily)
+- Page display uses stored artifacts only until user initiates search
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled, anonymous invoker denied
+- Job config unchanged, no new execution during Stage C4B
+- Scheduler `ENABLED` (`0 9 * * 1`, `Asia/Tokyo`)
+- Weekly delivery `enabled=true`
+- Production bucket, secrets, and IAM unchanged
+
+### Browser validation pending
+
+User should log in, select saved run `study_demo_search_20260705_061319_e973e4c2`, set as active analysis target, and confirm downstream tabs show consistent 100-item context. Final tag `v9-study-demo-active-run-connection-live-validated` awaits browser acceptance.
