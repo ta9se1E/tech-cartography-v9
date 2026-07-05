@@ -25,7 +25,7 @@ def _check_script_plan(script: str) -> None:
   env = os.environ.copy()
   env["PYTHONPATH"] = f"{ROOT}:{ROOT / 'src'}"
   env.setdefault("V9_STUDY_DEMO_MODE", "true")
-  env.setdefault("V9_STUDY_DEMO_BUCKET", "tech-cartography-v9-study-demo-local-fixture")
+  env.setdefault("V9_STUDY_DEMO_BUCKET", "tech-cartography-v9-study-demo-1020686343587")
   result = subprocess.run(
     [sys.executable, str(ROOT / "scripts" / script), "--plan"],
     cwd=ROOT,

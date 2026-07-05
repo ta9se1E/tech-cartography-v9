@@ -658,3 +658,71 @@ Redeploy of Google Patents URL canonicalization: dashed publication numbers in `
 ### Browser validation pending
 
 User should confirm patent「出典URLを開く」opens `https://patents.google.com/patent/US2020378036A1/en` style URLs (not dashed paths). Final validated tag not yet created.
+
+## Theme Lineage and Review Proposal Deployment
+
+Stage C5B-1 deploy of Theme → Watch Profile → Search Plan → Run lineage UI and human review improvement proposal UI. No Theme/Profile/Plan/Review/Proposal Cloud writes during deploy. No external search or live small-search E2E. Production resources were not modified.
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-05T13:22:50Z |
+| Deployed at (JST) | 2026-07-05 22:22:50 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00013-vtl` |
+| Previous revision | `tech-cartography-v9-study-demo-00012-9sm` |
+| Rollback revision | `tech-cartography-v9-study-demo-00012-9sm` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:b888397` |
+| Image digest | `sha256:12c42c7a554bc6e31dc37ffb3abc2667936faa4761852cdbfc65bd15ad5ac89c` |
+| Cloud Build ID | `64f2a86c-4af2-4579-af33-11a1652a3b29` |
+| Build source cleanup | deleted |
+| Image pre-push scan | PASS |
+| Password secret | `tech-cartography-v9-study-demo-password:2` |
+| OpenAlex secret | `tech-cartography-v9-study-demo-openalex-api-key:1` |
+| Tavily secret | `tech-cartography-v9-study-demo-tavily-api-key:1` |
+| Password version 1 | ENABLED (not disabled) |
+| Git commit (code) | `b888397` |
+| Tag (code) | `v9-study-demo-theme-lineage-review-proposals-ready` |
+| Tag (live candidate) | `v9-study-demo-theme-lineage-review-proposals-live-candidate` |
+
+### Features deployed
+
+- **Theme lineage UI**: standard theme vs active analysis target separation, run_origin, lineage_status banner
+- **Temporary run promotion**:「この検索条件からテーマ案を作成」draft-only path (no overwrite)
+- **Review UI**: decision / reason_codes / comment with schema v2
+- **Proposal UI**: deterministic improvement proposals, human approval only, observation-only below threshold
+- **Lineage banner**: shared across attention / weekly / profile / digest tabs
+
+### Active context (read-only verification)
+
+- `active_search_run_id`: `study_demo_search_20260705_061319_e973e4c2`
+- GCS object unchanged during deploy (no lineage fields written to Cloud; runtime enrichment only)
+
+### Cloud data writes during deploy
+
+- Theme / Watch Profile / Search Plan: **0**
+- Review / Proposal / Profile draft: **0**
+- active_context / snapshot / digest: **0**
+
+### Unauthenticated smoke test
+
+- HTTP 200, Streamlit SPA shell returned
+- No Secret patterns or theme/run/signal content in initial HTML
+- Password gate maintained
+
+### External HTTP / API execution
+
+- Deploy stage: 0 external HTTP requests
+- Deploy stage: 0 external API calls (BigQuery / OpenAlex / Tavily)
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled
+- Scheduler `ENABLED` (`0 9 * * 1`, `Asia/Tokyo`)
+- Production bucket, secrets, and IAM unchanged
+
+### Browser validation pending
+
+User should confirm Theme tab separation, lineage banner, review/proposal UI, Tier counts, URLs, weekly, digest. Stage C5B-2 live 5/5/5 search not yet executed. Final validated tag not yet created.
