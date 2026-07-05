@@ -40,6 +40,7 @@ def render_lineage_banner(
     f"**作成経路:** {status.get('creation_path_label', enriched.get('run_origin', 'unknown'))}",
     f"- search_run_id: `{active_context.get('active_search_run_id', '')}`",
     f"- run_origin: `{enriched.get('run_origin', 'temporary_search')}`",
+    f"- context_type: `{enriched.get('context_type', active_context.get('context_type', '—'))}`",
     f"- lineage status: `{lineage_state}`",
     f"- Active Runテーマ: {active_context.get('theme', '')}",
   ]

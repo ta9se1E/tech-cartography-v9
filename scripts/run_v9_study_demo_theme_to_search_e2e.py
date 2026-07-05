@@ -402,8 +402,8 @@ def run_apply(*, source_run_id: str, environ: Mapping[str, str]) -> dict[str, An
     artifacts["search_request.json"] = search_request_saved
     enriched = enrich_active_context_with_lineage(ctx, search_request=search_request_saved, run_lineage=run_lineage)
     enriched["active_context_generation"] = prior_generation + 1
-    enriched["context_type"] = "temporary_search"
-    enriched["active_data_source"] = "temporary_search"
+    enriched["context_type"] = "watch_profile"
+    enriched["active_data_source"] = "watch_profile"
     enriched["theme"] = str(theme.get("name", ""))
 
     lineage = validate_theme_lineage(

@@ -14,6 +14,16 @@ from services_v9.study_demo_storage import validate_study_demo_write_target
 ACTIVE_CONTEXT_SCHEMA_VERSION = 1
 ACTIVE_CONTEXT_OBJECT = "analysis_context/active_context.json"
 ACTIVE_CONTEXT_AUDIT_PREFIX = "analysis_context/audit/"
+ALLOWED_CONTEXT_TYPES = frozenset(
+  {
+    "temporary_search",
+    "watch_profile",
+    "uploaded_csv",
+    "uploaded_json",
+    "stored_artifact",
+    "legacy_demo",
+  }
+)
 FORBIDDEN_CONTEXT_KEYS = frozenset(
   {
     "password",
@@ -60,7 +70,10 @@ def build_active_context_from_run(
 
   summary = dict(artifacts.get("search_request.json", {}) or {})
   from services_v9.study_demo_resolved_context import resolve_active_run_counts
+  from services_v9.study_demo_theme_lineage import infer_run_origin
 
+  run_origin = infer_run_origin(summary)
+  context_type = "watch_profile" if run_origin == "watch_profile" else "temporary_search"
   loaded_bundle = {"search_run_id": search_run_id, "artifacts": artifacts}
   resolved = resolve_active_run_counts(
     {"active_search_run_id": search_run_id, "theme": summary.get("theme", ""), "tier_counts": {}, "provider_counts": {}},
@@ -72,7 +85,7 @@ def build_active_context_from_run(
   prefix = _search_run_prefix(search_run_id)
   ctx = {
     "schema_version": ACTIVE_CONTEXT_SCHEMA_VERSION,
-    "context_type": "temporary_search",
+    "context_type": context_type,
     "active_search_run_id": search_run_id,
     "selected_at": _utc_now_iso(),
     "selected_by": selected_by,
@@ -95,7 +108,7 @@ def build_active_context_from_run(
       "C": int(tier_counts.get("C", 0) or 0),
       "D": int(tier_counts.get("D", 0) or 0),
     },
-    "active_data_source": "temporary_search",
+    "active_data_source": context_type,
     "external_execution_enabled": False,
     "email_enabled": False,
     "automatic_weekly_enabled": False,
@@ -107,8 +120,32 @@ def build_active_context_from_run(
   return sanitize_active_context(ctx)
 
 
-def sanitize_active_context(payload: Mapping[str, Any]) -> dict[str, Any]:
+def normalize_active_context_types(payload: Mapping[str, Any]) -> dict[str, Any]:
   cleaned = dict(payload)
+  run_origin = str(cleaned.get("run_origin", "") or "").strip()
+  context_type = str(cleaned.get("context_type", "") or "").strip()
+  if run_origin == "watch_profile":
+    cleaned["context_type"] = "watch_profile"
+    cleaned["active_data_source"] = "watch_profile"
+  elif run_origin == "temporary_search" and not context_type:
+    cleaned["context_type"] = "temporary_search"
+    cleaned["active_data_source"] = str(cleaned.get("active_data_source", "") or "temporary_search")
+  elif context_type in ALLOWED_CONTEXT_TYPES:
+    cleaned["context_type"] = context_type
+  return cleaned
+
+
+def detect_context_lineage_inconsistency(payload: Mapping[str, Any]) -> list[str]:
+  errors: list[str] = []
+  run_origin = str(payload.get("run_origin", "") or "")
+  context_type = str(payload.get("context_type", "") or "")
+  if run_origin == "watch_profile" and context_type == "temporary_search":
+    errors.append("context_type_run_origin_mismatch")
+  return errors
+
+
+def sanitize_active_context(payload: Mapping[str, Any]) -> dict[str, Any]:
+  cleaned = normalize_active_context_types(dict(payload))
   for key in list(cleaned.keys()):
     if any(token in str(key).lower() for token in FORBIDDEN_CONTEXT_KEYS):
       cleaned.pop(key, None)
@@ -126,8 +163,10 @@ def validate_active_context(payload: Mapping[str, Any]) -> list[str]:
   errors: list[str] = []
   if int(payload.get("schema_version", 0) or 0) != ACTIVE_CONTEXT_SCHEMA_VERSION:
     errors.append("unsupported schema_version")
-  if str(payload.get("context_type", "")) != "temporary_search":
+  context_type = str(payload.get("context_type", "") or "")
+  if context_type not in ALLOWED_CONTEXT_TYPES:
     errors.append("unsupported context_type")
+  errors.extend(detect_context_lineage_inconsistency(payload))
   if not str(payload.get("active_search_run_id", "")).strip():
     errors.append("active_search_run_id is required")
   if not str(payload.get("source_prefix", "")).startswith("search_runs/"):

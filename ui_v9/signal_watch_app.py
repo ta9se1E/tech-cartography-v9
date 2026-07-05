@@ -372,13 +372,21 @@ def _sync_study_demo_active_context() -> None:
     return
   loaded = load_active_analysis_context(reload_from_storage=True)
   if loaded.get("status") == "ok":
-    context = dict(loaded.get("context", {}) or {})
+    from services_v9.study_demo_analysis_context import normalize_active_context_types, sanitize_active_context
+    from services_v9.study_demo_live_lineage_loader import hydrate_theme_lineage_session_state
+
+    context = sanitize_active_context(normalize_active_context_types(dict(loaded.get("context", {}) or {})))
     previous_run = str(st.session_state.get(STATE_ACTIVE_CONTEXT_RUN_ID, "") or "")
     st.session_state[STATE_ACTIVE_CONTEXT] = context
     st.session_state[STATE_ACTIVE_CONTEXT_GENERATION] = loaded.get("generation")
     st.session_state[STATE_ACTIVE_CONTEXT_RUN_ID] = str(context.get("active_search_run_id", "") or "")
     if str(st.session_state.get(UI_DATA_SOURCE_MODE_KEY, "unselected") or "") == "unselected":
       st.session_state[UI_DATA_SOURCE_MODE_KEY] = "temporary_search"
+    base_theme_state = dict(st.session_state.get(STATE_THEME_LINEAGE, {}) or {})
+    st.session_state[STATE_THEME_LINEAGE] = hydrate_theme_lineage_session_state(
+      context,
+      base_state=base_theme_state,
+    )
     _clear_theme_draft_if_run_changed(previous_run)
   elif loaded.get("status") == "missing":
     st.session_state.pop(STATE_ACTIVE_CONTEXT, None)
@@ -524,9 +532,24 @@ def _handle_study_demo_theme_events(theme_events: dict[str, object]) -> bool:
     selected = str(theme_events.get("select_theme_id", "") or "")
     for item in list(state.get("saved_themes", []) or []):
       if str(item.get("theme_id", "")) == selected:
+        from services_v9.study_demo_live_lineage_loader import load_lineage_for_theme_id, resolve_active_lineage_artifacts
+
         state["selected_saved_theme_id"] = selected
         state["saved_theme"] = dict(item)
         state["widget_theme"] = dict(item)
+        active_ctx = dict(st.session_state.get(STATE_ACTIVE_CONTEXT, {}) or {})
+        active_theme_id = str(active_ctx.get("source_theme_id", "") or "")
+        if active_theme_id and selected == active_theme_id:
+          resolved = resolve_active_lineage_artifacts(active_ctx)
+          if resolved.get("watch_profile"):
+            state["watch_profile"] = dict(resolved["watch_profile"])
+          if resolved.get("search_plan"):
+            state["search_plan"] = dict(resolved["search_plan"])
+            state["active_lineage_search_plan"] = dict(resolved["search_plan"])
+        else:
+          lineage = load_lineage_for_theme_id(selected)
+          state["watch_profile"] = dict(lineage["watch_profile"]) if lineage.get("watch_profile") else None
+          state["search_plan"] = dict(lineage["search_plan"]) if lineage.get("search_plan") else None
         state["draft_message"] = f"テーマ `{selected}` を選択しました。"
         changed = True
         break

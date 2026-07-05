@@ -54,6 +54,7 @@ def render_active_analysis_target_section(
   status = dict((downstream_bundle or {}).get("lineage_status", {}) or summarize_lineage_status(enriched))
   st.write(f"- active run ID: `{active_context.get('active_search_run_id', '')}`")
   st.write(f"- run_origin: `{enriched.get('run_origin', 'temporary_search')}`")
+  st.write(f"- context_type: `{enriched.get('context_type', active_context.get('context_type', '—'))}`")
   st.write(f"- Active Runテーマ: {active_context.get('theme', '')}")
   st.write(f"- lineage status: `{status.get('lineage_status', 'unavailable')}`")
   st.write(f"- Watch Profile接続: {status.get('watch_profile_connection', '未接続')}")

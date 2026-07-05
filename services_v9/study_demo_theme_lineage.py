@@ -69,6 +69,8 @@ SIGNATURE_EXCLUDE_KEYS = frozenset(
     "temporary_search_request_id",
     "validation_messages",
     "validation_status",
+    "email_enabled",
+    "scheduler_enabled",
     "estimated_cost_usd",
     "audit_metadata",
     "proposal_set_id",
@@ -394,6 +396,7 @@ def build_search_run_lineage(
   watch_profile: Mapping[str, Any] | None,
   run_origin: str,
   temporary_search_request_id: str | None = None,
+  search_request: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
   lineage = {
     "search_run_id": search_run_id,
@@ -409,6 +412,11 @@ def build_search_run_lineage(
     "source_search_plan_version": None,
     "source_search_plan_signature": None,
   }
+  request = dict(search_request or {})
+  if run_origin == "watch_profile" and request.get("source_theme_id"):
+    from services_v9.study_demo_live_lineage_loader import lineage_refs_from_search_request
+
+    lineage.update(lineage_refs_from_search_request(request))
   if run_origin == "watch_profile" and search_plan:
     lineage.update(
       {
@@ -449,6 +457,24 @@ def enrich_active_context_with_lineage(
   run_lineage: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
   enriched = dict(context)
+  preserved = {
+    key: enriched.get(key)
+    for key in (
+      "source_theme_id",
+      "source_theme_version",
+      "source_theme_signature",
+      "source_watch_profile_id",
+      "source_watch_profile_version",
+      "source_watch_profile_signature",
+      "source_search_plan_id",
+      "source_search_plan_version",
+      "source_search_plan_signature",
+      "run_origin",
+      "context_type",
+      "active_data_source",
+    )
+    if enriched.get(key) not in (None, "")
+  }
   request = dict(search_request or {})
   lineage = dict(run_lineage or {})
   if not lineage and request:
@@ -460,21 +486,39 @@ def enrich_active_context_with_lineage(
       watch_profile=None,
       run_origin=run_origin,
       temporary_search_request_id=str(request.get("temporary_search_request_id", "") or "") or None,
+      search_request=request,
     )
     if request.get("lineage"):
-      lineage = dict(request.get("lineage", {}) or {})
+      lineage = {**lineage, **dict(request.get("lineage", {}) or {})}
 
-  run_origin = str(lineage.get("run_origin") or request.get("run_origin") or infer_run_origin(request) or "temporary_search")
+  run_origin = str(
+    lineage.get("run_origin")
+    or preserved.get("run_origin")
+    or request.get("run_origin")
+    or infer_run_origin(request)
+    or enriched.get("run_origin")
+    or "temporary_search"
+  )
   enriched["run_origin"] = run_origin
-  enriched["source_theme_id"] = lineage.get("source_theme_id")
-  enriched["source_theme_version"] = lineage.get("source_theme_version")
-  enriched["source_theme_signature"] = lineage.get("source_theme_signature")
-  enriched["source_watch_profile_id"] = lineage.get("source_watch_profile_id")
-  enriched["source_watch_profile_version"] = lineage.get("source_watch_profile_version")
-  enriched["source_watch_profile_signature"] = lineage.get("source_watch_profile_signature")
-  enriched["source_search_plan_id"] = lineage.get("source_search_plan_id")
-  enriched["source_search_plan_version"] = lineage.get("source_search_plan_version")
-  enriched["source_search_plan_signature"] = lineage.get("source_search_plan_signature")
+  if run_origin == "watch_profile":
+    enriched["context_type"] = "watch_profile"
+    enriched["active_data_source"] = "watch_profile"
+  for key in (
+    "source_theme_id",
+    "source_theme_version",
+    "source_theme_signature",
+    "source_watch_profile_id",
+    "source_watch_profile_version",
+    "source_watch_profile_signature",
+    "source_search_plan_id",
+    "source_search_plan_version",
+    "source_search_plan_signature",
+  ):
+    value = lineage.get(key)
+    if value in (None, "") and preserved.get(key) not in (None, ""):
+      value = preserved.get(key)
+    if value not in (None, ""):
+      enriched[key] = value
   enriched["theme_lineage_ref"] = {
     "theme_id": enriched.get("source_theme_id"),
     "theme_version": enriched.get("source_theme_version"),

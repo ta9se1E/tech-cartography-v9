@@ -702,12 +702,18 @@ def render_theme_setup_tab(
       saved_themes=saved_themes,
       selected_theme_id=str(state.get("selected_saved_theme_id", saved_theme.get("theme_id", "")) or ""),
     )
+    from services_v9.study_demo_live_lineage_loader import resolve_display_search_plan
+
+    display_plan = resolve_display_search_plan(active_context=active_context, theme_state=state)
+    lineage_status = dict((downstream_bundle or {}).get("lineage_status", {}) or {})
     render_search_plan_preview_with_draft_warning(
-      dict(state.get("search_plan", {}) or {}) or None,
+      display_plan,
       draft=unsaved_draft,
       saved_theme=saved_theme,
       profile_summary=profile_summary,
       search_plan_state=search_plan_state,
+      active_context=active_context,
+      lineage_status=lineage_status,
     )
     draft_message = str(state.get("draft_message", "") or "")
     if draft_message and not unsaved_draft:
@@ -716,15 +722,23 @@ def render_theme_setup_tab(
       st.success(draft_message)
 
     st.divider()
-    legacy_controls = render_legacy_search_plan_controls(
-      has_unsaved_draft=bool(unsaved_draft),
-      profile_status_message=profile_status_message,
-      search_plan_status_message=search_plan_status_message,
-      search_plan_state=search_plan_state,
-      profile_summary=profile_summary,
-      saved_theme_name=str(saved_theme.get("name", "") or ""),
+    live_lineage_connected = (
+      bool(state.get("live_lineage_hydrated"))
+      and str(lineage_status.get("lineage_status", "")) == "connected"
+      and not unsaved_draft
+      and str(active_context.get("source_theme_id", "") or "") == str(saved_theme.get("theme_id", "") or "")
     )
-    if not unsaved_draft:
+    legacy_controls = {"save_profile": False, "load_profile": False, "regenerate_search_plan": False}
+    if not live_lineage_connected:
+      legacy_controls = render_legacy_search_plan_controls(
+        has_unsaved_draft=bool(unsaved_draft),
+        profile_status_message=profile_status_message,
+        search_plan_status_message=search_plan_status_message,
+        search_plan_state=search_plan_state,
+        profile_summary=profile_summary,
+        saved_theme_name=str(saved_theme.get("name", "") or ""),
+      )
+    if not unsaved_draft and not live_lineage_connected:
       _show_status_message(profile_status_message)
       _show_status_message(search_plan_status_message)
       st.markdown("### 検索計画状態")

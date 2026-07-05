@@ -314,6 +314,8 @@ def render_search_plan_preview_with_draft_warning(
   saved_theme: Mapping[str, Any] | None,
   profile_summary: Mapping[str, Any] | None = None,
   search_plan_state: Mapping[str, Any] | None = None,
+  active_context: Mapping[str, Any] | None = None,
+  lineage_status: Mapping[str, Any] | None = None,
 ) -> None:
   if should_show_old_plan_warning(draft, search_plan, saved_theme):
     theme_name = str((saved_theme or {}).get("name", DEFAULT_SAVED_THEME_NAME))
@@ -356,9 +358,30 @@ def render_search_plan_preview_with_draft_warning(
       st.info("Search Plan未生成。保存済みWatch Profileから生成してください。")
     return
   summary = build_search_plan_preview_summary(search_plan)
+  status = dict(lineage_status or {})
+  connected = str(status.get("lineage_status", "")) == "connected"
   st.write(f"- Search Plan ID: `{summary.get('search_plan_id')}` v{summary.get('search_plan_version')}")
   st.write(f"- signature: `{summary.get('search_plan_signature_short')}`")
   st.write(f"- 元Theme: `{summary.get('source_theme_id')}` v{summary.get('source_theme_version')}")
+  st.write(f"- source Watch Profile: `{summary.get('source_watch_profile_id')}` v{summary.get('source_watch_profile_version')}")
+  st.write(f"- validation_status: `{summary.get('validation_status', '—')}`")
+  limits = dict(summary.get("provider_limits", {}) or {})
+  st.write(
+    f"- provider limits: Patent {limits.get('patent', '—')} / Paper {limits.get('paper', '—')} / Web {limits.get('web', '—')}"
+  )
+  if summary.get("patent_query_summary"):
+    st.write(f"- patent query: {summary.get('patent_query_summary')}")
+  if summary.get("paper_query_summary"):
+    st.write(f"- paper query: {summary.get('paper_query_summary')}")
+  if summary.get("web_query_summary"):
+    st.write(f"- web query: {summary.get('web_query_summary')}")
+  excludes = list(summary.get("exclude_keywords", []) or [])
+  if excludes:
+    st.write(f"- exclusions: {', '.join(str(item) for item in excludes[:8])}")
+  if connected:
+    st.write("- lineage_status: **connected**")
+  elif active_context:
+    st.write(f"- lineage_status: `{status.get('lineage_status', active_context.get('lineage_status', '—'))}`")
 
 
 def render_standard_theme_actions(*, has_unsaved_draft: bool) -> dict[str, bool]:

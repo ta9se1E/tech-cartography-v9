@@ -67,6 +67,7 @@ def main() -> int:
     _check_script_plan("check_v9_study_demo_active_run_connection.py")
     _check_script_plan("check_v9_study_demo_theme_e2e.py")
     _check_script_plan("check_v9_study_demo_theme_draft_mapping.py")
+    _check_script_plan("check_v9_study_demo_live_lineage.py")
     checks["helper_plans"] = "ok"
     checks["patent_search_code"] = "ready"
     checks["openalex_search_code"] = "ready"
