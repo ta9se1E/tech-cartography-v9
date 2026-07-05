@@ -378,17 +378,32 @@ def render_active_run_selector(
 
 def _reload_active_context_from_storage() -> dict[str, Any]:
   from services_v9.study_demo_active_loader import load_active_analysis_context
+  from services_v9.study_demo_analysis_context import save_active_context_to_storage
+  from services_v9.study_demo_resolved_context import build_resolved_context_cache_patch, resolve_active_run_counts
 
   events: dict[str, Any] = {}
   loaded = load_active_analysis_context(reload_from_storage=True)
   if loaded.get("status") == "ok":
     context = dict(loaded.get("context", {}) or {})
+    resolved = resolve_active_run_counts(context)
+    patched = {**context, **build_resolved_context_cache_patch(resolved)}
+    save_result = save_active_context_to_storage(
+      patched,
+      expected_generation=loaded.get("generation"),
+    )
+    if save_result.get("status") == "conflict":
+      st.session_state[STATE_ACTIVE_CONTEXT_MESSAGE] = (
+        "別の参加者が分析対象を更新しました。現在の分析対象を再読み込みしてください。"
+      )
+      return events
+    context = dict(save_result.get("context", patched))
     st.session_state[STATE_ACTIVE_CONTEXT] = context
-    st.session_state[STATE_ACTIVE_CONTEXT_GENERATION] = loaded.get("generation")
+    st.session_state[STATE_ACTIVE_CONTEXT_GENERATION] = save_result.get("generation")
     st.session_state[STATE_ACTIVE_CONTEXT_RUN_ID] = str(context.get("active_search_run_id", "") or "")
     st.session_state[STATE_ACTIVE_CONTEXT_MESSAGE] = "分析対象を再読み込みしました。"
     st.session_state["ui_data_source_mode"] = "temporary_search"
     events["active_context_reloaded"] = context
+    events["resolved_context"] = resolved
   else:
     st.session_state.pop(STATE_ACTIVE_CONTEXT, None)
     st.session_state.pop(STATE_ACTIVE_CONTEXT_GENERATION, None)
@@ -521,13 +536,41 @@ def _render_search_result(result: dict[str, Any]) -> None:
   similar = dict(result.get("similar_patents", {}) or {})
   export_signals = filtered if filters.get("export_mode", "filtered") == "filtered" else all_signals
   export = _build_export_bundle(all_signals, keywords, similar, usage, filtered_signals=export_signals)
+  from ui_v9.study_demo_download_keys import build_study_demo_download_key
+
+  run_id = str(result.get("search_run_id", "") or "")
   if export.get("integrated_csv"):
-    st.download_button("Integrated CSV (filtered)", data=export["integrated_csv"], file_name="integrated_filtered.csv")
+    st.download_button(
+      "Integrated CSV (filtered)",
+      data=export["integrated_csv"],
+      file_name="integrated_filtered.csv",
+      key=build_study_demo_download_key("information", "integrated_csv_filtered", run_id),
+    )
   if export.get("integrated_csv_all_tiers"):
-    st.download_button("Integrated CSV (all tiers)", data=export["integrated_csv_all_tiers"], file_name="integrated_all.csv")
+    st.download_button(
+      "Integrated CSV (all tiers)",
+      data=export["integrated_csv_all_tiers"],
+      file_name="integrated_all.csv",
+      key=build_study_demo_download_key("information", "integrated_csv_all_tiers", run_id),
+    )
   if export.get("all_results_json"):
-    st.download_button("All Results JSON", data=export["all_results_json"], file_name="results_all.json")
+    st.download_button(
+      "All Results JSON",
+      data=export["all_results_json"],
+      file_name="results_all.json",
+      key=build_study_demo_download_key("information", "all_results_json", run_id),
+    )
   if export.get("filtered_results_json"):
-    st.download_button("Filtered Results JSON", data=export["filtered_results_json"], file_name="results_filtered.json")
+    st.download_button(
+      "Filtered Results JSON",
+      data=export["filtered_results_json"],
+      file_name="results_filtered.json",
+      key=build_study_demo_download_key("information", "filtered_results_json", run_id),
+    )
   if export.get("integrated_markdown"):
-    st.download_button("Integrated Markdown (all)", data=export["integrated_markdown"], file_name="integrated_all.md")
+    st.download_button(
+      "Integrated Markdown (all)",
+      data=export["integrated_markdown"],
+      file_name="integrated_all.md",
+      key=build_study_demo_download_key("information", "integrated_markdown_all", run_id),
+    )

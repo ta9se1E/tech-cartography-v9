@@ -418,17 +418,22 @@ def build_active_run_digest(
   weekly_state: Mapping[str, Any],
   profile_draft: Mapping[str, Any] | None,
   review_summary: Mapping[str, int],
+  resolved: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
   signals = list(integrated.get("signals", []) or [])
   tier_a = [item for item in signals if str(item.get("relevance_tier", "")) == "A"][:10]
   tier_b = [item for item in signals if str(item.get("relevance_tier", "")) == "B"][:10]
-  provider_counts = dict(context.get("provider_counts", {}) or {})
-  tier_counts = dict(context.get("tier_counts", {}) or {})
+  resolved_payload = dict(resolved or {})
+  provider_counts = dict(resolved_payload.get("integrated_source_counts", {}) or context.get("provider_counts", {}) or {})
+  tier_counts = dict(resolved_payload.get("tier_counts", {}) or context.get("tier_counts", {}) or {})
   return {
     "theme": context.get("theme"),
     "search_run_id": context.get("active_search_run_id"),
     "selected_at": context.get("selected_at"),
     "provider_counts": provider_counts,
+    "raw_provider_counts": dict(resolved_payload.get("raw_provider_counts", {}) or {}),
+    "stored_artifact_counts": dict(resolved_payload.get("stored_artifact_counts", {}) or {}),
+    "integrated_ranked_count": int(resolved_payload.get("integrated_ranked_count", context.get("ranked_count", 0)) or 0),
     "tier_counts": tier_counts,
     "weekly_state": weekly_state.get("state"),
     "weekly_message": weekly_state.get("message"),
@@ -489,8 +494,10 @@ def build_downstream_bundle(
     load_active_search_request,
     load_active_usage_metrics,
   )
+  from services_v9.study_demo_resolved_context import resolve_active_run_counts
 
   integrated = load_active_integrated_signals(context, storage_client=storage_client, recompute_relevance=True)
+  resolved = resolve_active_run_counts(context, storage_client=storage_client)
   search_request = load_active_search_request(context, storage_client=storage_client)
   provider_status = load_active_provider_status(context, storage_client=storage_client)
   usage_metrics = load_active_usage_metrics(context, storage_client=storage_client)
@@ -514,9 +521,19 @@ def build_downstream_bundle(
     weekly_state=weekly_state,
     profile_draft=profile_draft,
     review_summary=review_summary,
+    resolved=resolved,
   )
   return {
     "integrated": integrated,
+    "resolved_context": resolved,
+    "raw_provider_counts": dict(resolved.get("raw_provider_counts", {}) or {}),
+    "stored_artifact_counts": dict(resolved.get("stored_artifact_counts", {}) or {}),
+    "integrated_ranked_count": int(resolved.get("integrated_ranked_count", 0) or 0),
+    "integrated_source_counts": dict(resolved.get("integrated_source_counts", {}) or {}),
+    "tier_counts": dict(resolved.get("tier_counts", {}) or {}),
+    "unknown_tier_count": int(resolved.get("unknown_tier_count", 0) or 0),
+    "count_validation_status": str(resolved.get("count_validation_status", "") or ""),
+    "count_validation_message": str(resolved.get("count_validation_message", "") or ""),
     "search_request": search_request,
     "provider_status": provider_status,
     "usage_metrics": usage_metrics,

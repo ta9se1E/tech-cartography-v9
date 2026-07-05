@@ -150,31 +150,26 @@ def build_temporary_search_source_payload(
   *,
   storage_client: Any | None = None,
 ) -> dict[str, Any]:
+  from services_v9.study_demo_resolved_context import resolve_active_run_counts
+
   integrated = load_active_integrated_signals(context, storage_client=storage_client, recompute_relevance=True)
   adapted = adapt_integrated_signals_for_display(integrated)
-  provider_counts = dict(context.get("provider_counts", {}) or {})
-  tier_counts = dict(context.get("tier_counts", {}) or {})
-  relevance_summary = dict(integrated.get("relevance_summary", {}) or {})
-  if relevance_summary and not any(tier_counts.values()):
-    tier_counts = {
-      "A": int(relevance_summary.get("tier_a", 0) or 0),
-      "B": int(relevance_summary.get("tier_b", 0) or 0),
-      "C": int(relevance_summary.get("tier_c", 0) or 0),
-      "D": int(relevance_summary.get("tier_d", 0) or 0),
-    }
+  resolved = resolve_active_run_counts(context, storage_client=storage_client)
+  tier_counts = dict(resolved.get("tier_counts", {}) or {})
   return {
     "requested_mode": "temporary_search",
     "mode": "temporary_search",
     "label": "一時検索run",
     "signals": adapted,
-    "loaded_count": int(context.get("ranked_count", len(adapted)) or len(adapted)),
+    "loaded_count": int(resolved.get("integrated_ranked_count", len(adapted)) or len(adapted)),
     "warnings": [],
     "provisional_scoring": False,
     "active_context": dict(context),
+    "resolved_context": resolved,
     "integration_summary": {
       "integration_run_id": str(context.get("active_search_run_id", "")),
-      "ranked_count": int(context.get("ranked_count", len(adapted)) or len(adapted)),
-      "provider_counts": provider_counts,
+      "ranked_count": int(resolved.get("integrated_ranked_count", len(adapted)) or len(adapted)),
+      "provider_counts": dict(resolved.get("integrated_source_counts", {}) or {}),
       "tier_counts": tier_counts,
       "data_origin": "temporary_search_artifact",
       "active_search_run_id": str(context.get("active_search_run_id", "")),

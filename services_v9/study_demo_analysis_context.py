@@ -59,18 +59,15 @@ def build_active_context_from_run(
   reject_production_bucket_path(bucket)
 
   summary = dict(artifacts.get("search_request.json", {}) or {})
-  integrated = dict(artifacts.get("integrated_signals.json", {}) or {})
-  provider_status = dict(artifacts.get("provider_status.json", {}) or {})
-  relevance_summary = dict(integrated.get("relevance_summary", {}) or {})
+  from services_v9.study_demo_resolved_context import resolve_active_run_counts
 
-  patent_count = int(integrated.get("patent_count", 0) or 0)
-  paper_count = int(integrated.get("paper_count", 0) or 0)
-  web_count = int(integrated.get("web_count", 0) or 0)
-  if not any((patent_count, paper_count, web_count)):
-    signals = list(integrated.get("signals", []) or [])
-    patent_count = sum(1 for item in signals if str(item.get("source_type", "")) == "patent")
-    paper_count = sum(1 for item in signals if str(item.get("source_type", "")) == "paper")
-    web_count = sum(1 for item in signals if str(item.get("source_type", "")) == "web_company")
+  loaded_bundle = {"search_run_id": search_run_id, "artifacts": artifacts}
+  resolved = resolve_active_run_counts(
+    {"active_search_run_id": search_run_id, "theme": summary.get("theme", ""), "tier_counts": {}, "provider_counts": {}},
+    loaded_bundle=loaded_bundle,
+  )
+  integrated_source_counts = dict(resolved.get("integrated_source_counts", {}) or {})
+  tier_counts = dict(resolved.get("tier_counts", {}) or {})
 
   prefix = _search_run_prefix(search_run_id)
   ctx = {
@@ -87,18 +84,22 @@ def build_active_context_from_run(
     "integrated_signals_ref": f"{prefix}integrated_signals.json",
     "usage_metrics_ref": f"{prefix}usage_metrics.json",
     "search_report_ref": f"{prefix}search_report.md",
-    "provider_counts": {"patent": patent_count, "paper": paper_count, "web": web_count},
+    "provider_counts": {
+      "patent": int(integrated_source_counts.get("patent", 0) or 0),
+      "paper": int(integrated_source_counts.get("paper", 0) or 0),
+      "web": int(integrated_source_counts.get("web", 0) or 0),
+    },
     "tier_counts": {
-      "A": int(relevance_summary.get("tier_a", 0) or 0),
-      "B": int(relevance_summary.get("tier_b", 0) or 0),
-      "C": int(relevance_summary.get("tier_c", 0) or 0),
-      "D": int(relevance_summary.get("tier_d", 0) or 0),
+      "A": int(tier_counts.get("A", 0) or 0),
+      "B": int(tier_counts.get("B", 0) or 0),
+      "C": int(tier_counts.get("C", 0) or 0),
+      "D": int(tier_counts.get("D", 0) or 0),
     },
     "active_data_source": "temporary_search",
     "external_execution_enabled": False,
     "email_enabled": False,
     "automatic_weekly_enabled": False,
-    "ranked_count": int(integrated.get("ranked_count", len(integrated.get("signals", []) or [])) or 0),
+    "ranked_count": int(resolved.get("integrated_ranked_count", 0) or 0),
   }
   return sanitize_active_context(ctx)
 
@@ -133,6 +134,14 @@ def validate_active_context(payload: Mapping[str, Any]) -> list[str]:
 
 def is_same_active_context(existing: Mapping[str, Any], candidate: Mapping[str, Any]) -> bool:
   return str(existing.get("active_search_run_id", "")) == str(candidate.get("active_search_run_id", ""))
+
+
+def cache_metadata_matches(existing: Mapping[str, Any], candidate: Mapping[str, Any]) -> bool:
+  return (
+    dict(existing.get("provider_counts", {}) or {}) == dict(candidate.get("provider_counts", {}) or {})
+    and dict(existing.get("tier_counts", {}) or {}) == dict(candidate.get("tier_counts", {}) or {})
+    and int(existing.get("ranked_count", 0) or 0) == int(candidate.get("ranked_count", 0) or 0)
+  )
 
 
 def load_active_context_from_storage(
@@ -182,7 +191,7 @@ def save_active_context_to_storage(
     existing_raw = blob.download_as_bytes().decode("utf-8")
     if existing_raw.strip():
       existing_context = sanitize_active_context(json.loads(existing_raw))
-      if is_same_active_context(existing_context, ctx):
+      if is_same_active_context(existing_context, ctx) and cache_metadata_matches(existing_context, ctx):
         return {
           "status": "unchanged",
           "context": existing_context,

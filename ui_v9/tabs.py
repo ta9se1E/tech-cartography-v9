@@ -844,6 +844,7 @@ def render_sources_tab(
       file_name="v9_signal_upload_template.csv",
       mime="text/csv",
       use_container_width=True,
+      key="study_demo_download_sources_csv_template",
     )
   with upload_right:
     st.markdown("### JSONアップロード")
@@ -854,6 +855,7 @@ def render_sources_tab(
       file_name="v9_signal_upload_template.json",
       mime="application/json",
       use_container_width=True,
+      key="study_demo_download_sources_json_template",
     )
 
   st.write(f"- 現在のデータソース: {source_info['label']}")
@@ -1287,6 +1289,17 @@ def render_weekly_updates_tab(
       f"- accepted: {review_summary.get('accepted', 0)} | pending: {review_summary.get('pending', 0)} | "
       f"rejected: {review_summary.get('rejected', 0)} | unreviewed: {review_summary.get('unreviewed', 0)}"
     )
+    exports = dict(bundle.get("digest_exports", {}) or {})
+    if exports.get("weekly_diff_csv"):
+      from ui_v9.study_demo_download_keys import build_study_demo_download_key
+
+      run_id = str(dict(source_info.get("active_context", {}) or {}).get("active_search_run_id", "") or "")
+      st.download_button(
+        "Weekly Diff CSV",
+        data=exports.get("weekly_diff_csv", ""),
+        file_name="weekly_diff.csv",
+        key=build_study_demo_download_key("weekly", "weekly_diff_csv", run_id),
+      )
     return {"load_previous_snapshot": False, "compare_snapshot": False, "save_study_demo_baseline": False}
 
   st.caption(f"現在の比較対象データ: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
@@ -1645,17 +1658,56 @@ def render_digest_export_tab(
   st.caption(f"現在のデータソース: {source_info['label']} | 読み込み件数: {source_info['loaded_count']}件")
   bundle = dict(source_info.get("study_demo_downstream", {}) or {})
   if str(source_info.get("mode", "")) == "temporary_search" and bundle:
+    from ui_v9.study_demo_download_keys import build_study_demo_download_key
+
     exports = dict(bundle.get("digest_exports", {}) or {})
+    active_context = dict(source_info.get("active_context", {}) or {})
+    run_id = str(active_context.get("active_search_run_id", "") or "")
     markdown_text = str(exports.get("digest_markdown", markdown_text) or markdown_text)
     st.caption("active run artifact再利用 / メール未送信 / 自動週次停止中")
     st.markdown(markdown_text)
-    st.download_button("Active Context JSON", data=exports.get("active_context_json", "{}"), file_name="active_context.json")
-    st.download_button("Digest Markdown", data=exports.get("digest_markdown", ""), file_name="study_demo_digest.md")
-    st.download_button("Digest JSON", data=exports.get("digest_json", "{}"), file_name="study_demo_digest.json")
-    st.download_button("Integrated CSV (all tiers)", data=exports.get("integrated_csv_all_tiers", ""), file_name="integrated_all.csv")
-    st.download_button("Weekly Diff CSV", data=exports.get("weekly_diff_csv", ""), file_name="weekly_diff.csv")
-    st.download_button("Profile Draft JSON", data=exports.get("profile_draft_json", "{}"), file_name="profile_draft.json")
-    st.download_button("Full Provenance JSON", data=exports.get("full_provenance_json", "{}"), file_name="provenance.json")
+    st.download_button(
+      "Active Context JSON",
+      data=exports.get("active_context_json", "{}"),
+      file_name="active_context.json",
+      key=build_study_demo_download_key("digest", "active_context_json", run_id),
+    )
+    st.download_button(
+      "Digest Markdown",
+      data=exports.get("digest_markdown", ""),
+      file_name="study_demo_digest.md",
+      key=build_study_demo_download_key("digest", "digest_markdown", run_id),
+    )
+    st.download_button(
+      "Digest JSON",
+      data=exports.get("digest_json", "{}"),
+      file_name="study_demo_digest.json",
+      key=build_study_demo_download_key("digest", "digest_json", run_id),
+    )
+    st.download_button(
+      "Integrated CSV (all tiers)",
+      data=exports.get("integrated_csv_all_tiers", ""),
+      file_name="integrated_all.csv",
+      key=build_study_demo_download_key("digest", "integrated_csv_all_tiers", run_id),
+    )
+    st.download_button(
+      "Weekly Diff CSV",
+      data=exports.get("weekly_diff_csv", ""),
+      file_name="weekly_diff.csv",
+      key=build_study_demo_download_key("digest", "weekly_diff_csv", run_id),
+    )
+    st.download_button(
+      "Profile Draft JSON",
+      data=exports.get("profile_draft_json", "{}"),
+      file_name="profile_draft.json",
+      key=build_study_demo_download_key("digest", "profile_draft_json", run_id),
+    )
+    st.download_button(
+      "Full Provenance JSON",
+      data=exports.get("full_provenance_json", "{}"),
+      file_name="provenance.json",
+      key=build_study_demo_download_key("digest", "full_provenance_json", run_id),
+    )
     st.caption("Study Demoではメール送信は無効です。")
     return {"save_digest": False, "email_dry_run": False, "email_send": False}
 
@@ -1671,6 +1723,7 @@ def render_digest_export_tab(
       file_name="tech_cartography_v9_weekly_digest.md",
       mime="text/markdown",
       use_container_width=True,
+      key="study_demo_download_digest_markdown_legacy",
     )
   with button_mid:
     st.download_button(
@@ -1679,6 +1732,7 @@ def render_digest_export_tab(
       file_name="tech_cartography_v9_top_signals.csv",
       mime="text/csv",
       use_container_width=True,
+      key="study_demo_download_digest_csv_legacy",
     )
   with button_right:
     st.download_button(
@@ -1687,6 +1741,7 @@ def render_digest_export_tab(
       file_name="tech_cartography_v9_signal_watch.json",
       mime="application/json",
       use_container_width=True,
+      key="study_demo_download_digest_json_legacy",
     )
 
   save_digest_clicked = st.button("ダイジェストファイルを保存", key="btn_save_digest_files", width="stretch")
