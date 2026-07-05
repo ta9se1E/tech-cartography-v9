@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, Mapping
 
 from services_v9.study_demo_config import get_study_demo_tavily_api_key
@@ -12,20 +13,42 @@ from services_v9.web_company_retrieval import build_global_web_retrieval_preview
 from .request import StudyDemoSearchRequest
 
 
+def _normalize_phrase(text: str) -> str:
+  return re.sub(r"\s+", " ", str(text or "").strip().lower())
+
+
+def _dedupe_exact_phrase_from_keywords(keywords_en: str, exact: str) -> str:
+  exact_norm = _normalize_phrase(exact)
+  if not exact_norm:
+    return re.sub(r"\s+", " ", str(keywords_en or "").replace(",", " ")).strip()
+  removed = False
+  deduped_parts: list[str] = []
+  for raw_part in str(keywords_en or "").split(","):
+    part = re.sub(r"\s+", " ", raw_part.strip())
+    if not part:
+      continue
+    if not removed and _normalize_phrase(part) == exact_norm:
+      removed = True
+      continue
+    deduped_parts.append(part)
+  return " ".join(deduped_parts)
+
+
 def _web_query_parts(request: StudyDemoSearchRequest) -> tuple[str, dict[str, Any]]:
-  query_parts: list[str] = []
   exact = str(request.exact_phrase or "").strip()
   exact_meta = {
     "exact_phrase": exact,
     "exact_phrase_applied": False,
     "exact_phrase_method": "",
   }
+  query_parts: list[str] = []
   if exact:
     query_parts.append(f'"{exact}"')
     exact_meta["exact_phrase_applied"] = True
     exact_meta["exact_phrase_method"] = "quoted_query"
-  if str(request.keywords_en or "").strip():
-    query_parts.append(str(request.keywords_en).replace(",", " "))
+  keywords_text = _dedupe_exact_phrase_from_keywords(str(request.keywords_en or ""), exact)
+  if keywords_text:
+    query_parts.append(keywords_text)
   if str(request.keywords_ja or "").strip():
     query_parts.append(str(request.keywords_ja).replace(",", " "))
   query_text = " ".join(part.strip() for part in query_parts if part.strip())
@@ -69,7 +92,7 @@ def build_study_demo_web_plan(
 ) -> dict[str, Any]:
   preview = build_global_web_retrieval_preview(_search_plan_from_request(request))
   api_key_configured = bool(get_study_demo_tavily_api_key(environ))
-  _, exact_meta = _web_query_parts(request)
+  query_preview, exact_meta = _web_query_parts(request)
   ok = all(str(row.get("status", "")) != "error" for row in list(preview.get("validation_rows", []) or []))
   return {
     "status": "ready" if ok and api_key_configured else "blocked",
@@ -81,7 +104,7 @@ def build_study_demo_web_plan(
       "search_depth": request.web_search_depth,
       "max_results": request.web_max_results,
       "time_range": request.web_time_range,
-      "query_preview": _web_query_parts(request)[0],
+      "query_preview": query_preview,
       **exact_meta,
       "include_raw_content": request.web_include_raw_content,
       "api_key_configured": api_key_configured,

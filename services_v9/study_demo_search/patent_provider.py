@@ -20,6 +20,7 @@ from services_v9.study_demo_config import (
 )
 
 from .request import StudyDemoSearchRequest
+from .cost_preview import normalize_study_demo_patent_validation_rows
 
 
 def _bigquery_config(environ: Mapping[str, str] | None = None) -> BigQuerySafetyConfig:
@@ -123,7 +124,10 @@ def build_study_demo_patent_plan(
   req = dict(preview.get("request", {}) or {})
   if req:
     sql_fingerprint = hashlib.sha256(build_patent_bigquery_sql(req).encode()).hexdigest()[:16]
-  validation_rows = list(preview.get("validation_rows", []) or [])
+  validation_rows = normalize_study_demo_patent_validation_rows(
+    list(preview.get("validation_rows", []) or []),
+    max_bytes=max_bytes,
+  )
   ok = all(str(row.get("status", "")) != "error" for row in validation_rows)
   return {
     "status": "ready" if ok else "blocked",
@@ -157,6 +161,7 @@ def run_study_demo_patent_dry_run(
     selected_query_id="study_demo_patent_q01",
     time_range=_time_range_from_years(request),
     max_results=request.patent_display_limit,
+    config=_bigquery_config(environ),
   )
   return run_patent_bigquery_dry_run(preview, client_factory=client_factory, config=_bigquery_config(environ))
 
