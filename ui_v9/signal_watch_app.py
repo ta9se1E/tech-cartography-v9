@@ -373,15 +373,128 @@ def _sync_study_demo_active_context() -> None:
   loaded = load_active_analysis_context(reload_from_storage=True)
   if loaded.get("status") == "ok":
     context = dict(loaded.get("context", {}) or {})
+    previous_run = str(st.session_state.get(STATE_ACTIVE_CONTEXT_RUN_ID, "") or "")
     st.session_state[STATE_ACTIVE_CONTEXT] = context
     st.session_state[STATE_ACTIVE_CONTEXT_GENERATION] = loaded.get("generation")
     st.session_state[STATE_ACTIVE_CONTEXT_RUN_ID] = str(context.get("active_search_run_id", "") or "")
     if str(st.session_state.get(UI_DATA_SOURCE_MODE_KEY, "unselected") or "") == "unselected":
       st.session_state[UI_DATA_SOURCE_MODE_KEY] = "temporary_search"
+    _clear_theme_draft_if_run_changed(previous_run)
   elif loaded.get("status") == "missing":
     st.session_state.pop(STATE_ACTIVE_CONTEXT, None)
     st.session_state.pop(STATE_ACTIVE_CONTEXT_GENERATION, None)
     st.session_state.pop(STATE_ACTIVE_CONTEXT_RUN_ID, None)
+
+
+def _clear_theme_draft_if_run_changed(previous_run: str) -> None:
+  state = dict(st.session_state.get(STATE_THEME_LINEAGE, {}) or {})
+  draft = dict(state.get("unsaved_theme_draft", {}) or {}) or None
+  if not draft:
+    return
+  current_run = str(st.session_state.get(STATE_ACTIVE_CONTEXT_RUN_ID, "") or "")
+  if previous_run and current_run and previous_run != current_run:
+    state["unsaved_theme_draft"] = None
+    state["draft_message"] = None
+    state["theme_saved_from_draft"] = False
+    st.session_state[STATE_THEME_LINEAGE] = state
+
+
+def _handle_study_demo_theme_events(theme_events: dict[str, object]) -> bool:
+  if not is_study_demo_mode():
+    return False
+  from ui_v9.study_demo_theme_ui import default_theme_state
+
+  from services_v9.study_demo_theme_draft import (
+    build_new_saved_theme_from_draft,
+    draft_from_editor_payload,
+    save_theme_to_storage,
+    validate_theme_draft,
+  )
+
+  state = dict(st.session_state.get(STATE_THEME_LINEAGE, {}) or default_theme_state())
+  changed = False
+
+  if theme_events.get("promote_theme_draft") and theme_events.get("theme_draft"):
+    state["unsaved_theme_draft"] = dict(theme_events.get("theme_draft", {}) or {})
+    draft_id = str(state["unsaved_theme_draft"].get("draft_id", "") or "")
+    state["draft_message"] = f"テーマ案 draft を作成しました: `{draft_id}`（自動保存・自動適用はしません）"
+    state["theme_saved_from_draft"] = False
+    changed = True
+
+  draft = dict(state.get("unsaved_theme_draft", {}) or {}) or None
+  if draft and theme_events.get("keep_draft_changes"):
+    try:
+      payload = dict(theme_events.get("draft_editor_payload", {}) or {})
+      updated = draft_from_editor_payload(draft, payload)
+      updated["loaded_into_editor"] = True
+      state["unsaved_theme_draft"] = updated
+      state["draft_message"] = "テーマ案の変更をsession上に保持しました。"
+      changed = True
+    except ValueError:
+      state["draft_message"] = "同じテーマ案が更新されています。再読み込みしてください。"
+      changed = True
+
+  if draft and theme_events.get("discard_draft") and theme_events.get("discard_confirmed"):
+    state["unsaved_theme_draft"] = None
+    state["draft_message"] = "未保存テーマ案を破棄しました。"
+    state["theme_saved_from_draft"] = False
+    changed = True
+
+  if draft and theme_events.get("save_draft_as_new"):
+    if not theme_events.get("save_confirmed"):
+      state["draft_message"] = "保存前に確認チェックボックスをオンにしてください。"
+      changed = True
+    else:
+      try:
+        payload = dict(theme_events.get("draft_editor_payload", {}) or {})
+        current_draft = draft_from_editor_payload(draft, payload)
+        errors = validate_theme_draft(current_draft)
+        if errors:
+          state["draft_message"] = "テーマ名とテーマ説明を入力してください。"
+        else:
+          from services_v9.study_demo_theme_lineage import compute_theme_signature
+
+          existing = list(state.get("saved_themes", []) or [])
+          old_snapshot = {str(item.get("theme_id", "")): dict(item) for item in existing}
+          saved = build_new_saved_theme_from_draft(current_draft, existing_themes=existing)
+          save_theme_to_storage(saved, persist_to_cloud=False)
+          existing.append(dict(saved))
+          state["saved_themes"] = existing
+          state["selected_saved_theme_id"] = str(saved.get("theme_id", ""))
+          state["saved_theme"] = dict(saved)
+          state["widget_theme"] = dict(saved)
+          state["unsaved_theme_draft"] = None
+          state["theme_saved_from_draft"] = True
+          for theme_id, snapshot in old_snapshot.items():
+            current = next((item for item in existing if str(item.get("theme_id", "")) == theme_id), None)
+            if current and compute_theme_signature(snapshot) != compute_theme_signature(current):
+              if theme_id != str(saved.get("theme_id", "")):
+                raise RuntimeError("existing theme mutated during save-as-new")
+          message = "新しいテーマとして保存しました。旧テーマは変更していません。"
+          if saved.get("same_name_warning"):
+            message += " 同名テーマが存在します。新しいTheme IDで保存しました。"
+          state["draft_message"] = message
+          changed = True
+      except ValueError as exc:
+        state["draft_message"] = str(exc) or "新しいテーマの保存に失敗しました。既存テーマとActive Runは変更されていません。"
+        changed = True
+
+  if theme_events.get("select_theme_id"):
+    selected = str(theme_events.get("select_theme_id", "") or "")
+    for item in list(state.get("saved_themes", []) or []):
+      if str(item.get("theme_id", "")) == selected:
+        state["selected_saved_theme_id"] = selected
+        state["saved_theme"] = dict(item)
+        state["widget_theme"] = dict(item)
+        state["draft_message"] = f"テーマ `{selected}` を選択しました。"
+        changed = True
+        break
+
+  if draft and (theme_events.get("generate_watch_profile") or theme_events.get("generate_search_plan")):
+    state["draft_message"] = "この操作は保存済み標準監視テーマに対する操作です。未保存テーマ案には適用されません。"
+
+  st.session_state[STATE_THEME_LINEAGE] = state
+  return changed
 
 
 def _resolve_current_signal_source(
@@ -1435,6 +1548,9 @@ def run_app() -> None:
 
   if theme_events["save_profile"] or profile_events["save_profile"]:
     _save_profile_and_rerun(watch_profile_dict)
+
+  if _handle_study_demo_theme_events(theme_events):
+    st.rerun()
 
   if theme_events["load_profile"] or profile_events["load_profile"]:
     _load_profile_into_widgets(raw_profile)

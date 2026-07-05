@@ -135,7 +135,64 @@ def main() -> int:
     checks["proposal_human_approval_only"] = "ready"
     checks["profile_draft_versioning"] = "ready"
     checks["theme_e2e_fixture"] = "ready"
-    from services_v9.study_demo_theme_lineage import compute_theme_signature, sizing_fixture_theme
+    _check_module("services_v9.study_demo_theme_draft")
+    _check_module("ui_v9.study_demo_theme_draft_ui")
+    from services_v9.study_demo_theme_draft import (
+      build_new_saved_theme_from_draft,
+      build_theme_draft_from_temporary_search,
+      should_show_old_plan_warning,
+      validate_draft_generation_precondition,
+    )
+    from services_v9.study_demo_theme_lineage import (
+      compute_theme_signature,
+      default_saved_theme_fixture,
+      sizing_fixture_theme,
+    )
+
+    fixture_path = ROOT / "tests/fixtures/study_demo_active_run_connection_samples.json"
+    fixture_payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    search_request = dict(fixture_payload["artifacts"]["search_request.json"])
+    run_id = str(fixture_payload.get("search_run_id", "") or "")
+    draft = build_theme_draft_from_temporary_search(
+      search_request,
+      search_run_id=run_id,
+      active_context={"active_search_run_id": run_id, "theme": search_request["theme"], "active_context_generation": 1},
+      context_generation=1,
+    )
+    if draft.get("status") != "draft" or draft.get("source") != "promoted_from_temporary_search":
+      raise RuntimeError("theme draft state model failed")
+    checks["theme_draft_state_model"] = "ready"
+    if not draft.get("source_search_run_id") or draft.get("source_run_origin") != "temporary_search":
+      raise RuntimeError("theme draft provenance failed")
+    checks["theme_draft_provenance"] = "ready"
+    draft_ui = (ROOT / "ui_v9/study_demo_theme_draft_ui.py").read_text(encoding="utf-8")
+    if "D. 作成した未保存テーマ案" not in draft_ui or "テーマ案の変更を保持" not in draft_ui:
+      raise RuntimeError("theme draft editor UI missing")
+    checks["theme_draft_editor"] = "ready"
+    saved_old = default_saved_theme_fixture()
+    saved_new = build_new_saved_theme_from_draft(draft, existing_themes=[saved_old])
+    if saved_new.get("theme_id") == saved_old.get("theme_id"):
+      raise RuntimeError("save-as-new reused theme_id")
+    checks["theme_draft_save_as_new"] = "ready"
+    if "テーマ案を破棄" not in draft_ui:
+      raise RuntimeError("theme draft discard UI missing")
+    checks["theme_draft_discard"] = "ready"
+    if "render_saved_theme_selector" not in draft_ui:
+      raise RuntimeError("saved theme selector missing")
+    checks["saved_theme_selector"] = "ready"
+    if not should_show_old_plan_warning(
+      draft,
+      {"source_theme_id": saved_old.get("theme_id"), "source_theme_version": saved_old.get("theme_version")},
+      saved_old,
+    ):
+      raise RuntimeError("old plan warning predicate failed")
+    checks["old_plan_warning"] = "ready"
+    if "source_run_mismatch" not in validate_draft_generation_precondition(
+      draft,
+      {"active_search_run_id": "other_run", "active_context_generation": 1},
+    ):
+      raise RuntimeError("theme draft concurrency guard failed")
+    checks["theme_draft_concurrency_guard"] = "ready"
 
     theme_a = sizing_fixture_theme()
     theme_b = sizing_fixture_theme()

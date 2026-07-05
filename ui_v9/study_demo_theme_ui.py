@@ -6,55 +6,38 @@ from typing import Any, Mapping
 
 import streamlit as st
 
+from services_v9.study_demo_theme_draft import (
+  build_theme_draft_from_temporary_search,
+  find_existing_draft_for_run,
+)
 from services_v9.study_demo_theme_lineage import (
   build_search_plan_from_watch_profile,
-  build_search_plan_preview_summary,
   build_theme_record,
   build_watch_profile_from_theme,
   default_saved_theme_fixture,
-  promote_temporary_search_to_theme_draft,
   summarize_lineage_status,
   theme_dirty,
 )
 
 
-def render_standard_theme_section(
+def render_standard_theme_summary(
   *,
   saved_theme: Mapping[str, Any] | None,
   widget_theme: Mapping[str, Any],
-) -> dict[str, bool]:
-  st.markdown("### A. 標準監視テーマ")
+) -> None:
   current = dict(widget_theme or {})
   dirty = theme_dirty(saved_theme, current)
-  st.write(f"- Theme name: {current.get('name', '未設定')}")
+  st.write(f"- 現在選択中: {current.get('name', '未設定')}")
   st.write(f"- Theme ID: `{current.get('theme_id', '未割当')}` / version `{current.get('theme_version', 1)}`")
   st.write(f"- Theme signature: `{str(current.get('theme_signature', ''))[:8]}`")
   st.write(f"- 保存状態: `{current.get('status', 'draft')}`")
   st.write(f"- 未保存変更: {'あり' if dirty else 'なし'}")
   st.write(f"- 最終保存: {saved_theme.get('updated_at', '未保存') if saved_theme else '未保存'}")
-
-  col1, col2, col3, col4 = st.columns(4)
-  events = {
-    "save_theme": False,
-    "load_saved_theme": False,
-    "generate_watch_profile": False,
-    "generate_search_plan": False,
-  }
-  with col1:
-    events["save_theme"] = st.button("テーマを保存", key="btn_theme_save_theme")
-  with col2:
-    events["load_saved_theme"] = st.button("保存済みテーマを読み込む", key="btn_theme_load_saved")
-  with col3:
-    events["generate_watch_profile"] = st.button("Watch Profile案を生成", key="btn_theme_gen_profile")
-  with col4:
-    events["generate_search_plan"] = st.button("Search Planを生成", key="btn_theme_gen_plan")
-
   if dirty:
     st.warning(
       "入力内容が保存済みテーマと異なります。"
       "先に保存するか、保存済み設定からSearch Planを生成してください。"
     )
-  return events
 
 
 def render_active_analysis_target_section(
@@ -83,6 +66,7 @@ def render_temporary_search_promotion_section(
   *,
   active_context: Mapping[str, Any] | None,
   search_request: Mapping[str, Any] | None,
+  existing_draft: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
   st.markdown("### C. 一時検索runからテーマ案へ昇格")
   if not active_context:
@@ -92,50 +76,30 @@ def render_temporary_search_promotion_section(
     st.caption("標準監視テーマ由来runのため、一時検索昇格は不要です。")
     return {"promote_theme_draft": False, "theme_draft": None}
 
+  run_id = str(active_context.get("active_search_run_id", "") or "")
+  if find_existing_draft_for_run(existing_draft, run_id):
+    st.info(f"このSearch Run向けの未保存テーマ案が既にあります: `{existing_draft.get('draft_id', '')}`")
+    st.caption("Dセクションで内容を確認・編集してください。重複作成はしません。")
+    return {"promote_theme_draft": False, "theme_draft": None, "duplicate_skipped": True}
+
   confirm = st.checkbox(
     "一時検索条件をテーマ案として作成します。既存テーマは上書きしません",
     key="ui_promote_theme_confirm",
   )
   clicked = st.button("この検索条件からテーマ案を作成", key="btn_promote_theme_draft")
-  draft = None
-  if clicked and confirm and search_request:
-    draft = promote_temporary_search_to_theme_draft(
-      search_request,
-      search_run_id=str(active_context.get("active_search_run_id", "") or ""),
-    )
-    st.success(f"テーマ案 draft を作成しました: `{draft.get('theme_id')}`（自動保存・自動適用はしません）")
-  elif clicked and not confirm:
+  if clicked and not confirm:
     st.warning("確認チェックボックスをオンにしてください。")
-  return {"promote_theme_draft": bool(clicked and confirm), "theme_draft": draft}
-
-
-def render_search_plan_preview_section(search_plan: Mapping[str, Any] | None) -> None:
-  st.markdown("### Search Plan Preview")
-  if not search_plan:
-    st.info("Search Plan未生成。保存済みWatch Profileから生成してください。")
-    return
-  summary = build_search_plan_preview_summary(search_plan)
-  st.write(f"- Search Plan ID: `{summary.get('search_plan_id')}` v{summary.get('search_plan_version')}")
-  st.write(f"- signature: `{summary.get('search_plan_signature_short')}`")
-  st.write(f"- 元Theme: `{summary.get('source_theme_id')}` v{summary.get('source_theme_version')}")
-  st.write(f"- 元Watch Profile: `{summary.get('source_watch_profile_id')}` v{summary.get('source_watch_profile_version')}")
-  st.write(f"- Patent query: {summary.get('patent_query_summary')}")
-  st.write(f"- Paper query: {summary.get('paper_query_summary')}")
-  st.write(f"- Web query: {summary.get('web_query_summary')}")
-  st.write(f"- 完全一致語: {', '.join(summary.get('exact_phrases', []) or []) or 'なし'}")
-  st.write(f"- 除外語: {', '.join(summary.get('exclude_keywords', []) or []) or 'なし'}")
-  year_range = dict(summary.get("year_range", {}) or {})
-  st.write(f"- 年範囲: {year_range.get('start', '—')} - {year_range.get('end', '—')}")
-  st.write(f"- Seed公報: {', '.join(summary.get('seed_publications', []) or []) or 'なし'}")
-  st.write(f"- provider上限: {summary.get('provider_limits')}")
-  st.write(f"- query数: {summary.get('estimated_query_count')}")
-  st.write(f"- 外部実行可否: {summary.get('external_execution_allowed')}")
-  if summary.get("validation_messages"):
-    st.warning("; ".join(str(item) for item in summary.get("validation_messages", [])))
-  with st.expander("Provider plan details", expanded=False):
-    for provider, plan in dict(search_plan.get("provider_plans", {}) or {}).items():
-      st.markdown(f"**{provider}**")
-      st.json(plan)
+    return {"promote_theme_draft": False, "theme_draft": None}
+  if clicked and confirm and search_request:
+    draft = build_theme_draft_from_temporary_search(
+      search_request,
+      search_run_id=run_id,
+      active_context=active_context,
+      context_generation=active_context.get("active_context_generation"),
+    )
+    draft["loaded_into_editor"] = True
+    return {"promote_theme_draft": True, "theme_draft": draft}
+  return {"promote_theme_draft": False, "theme_draft": None}
 
 
 def render_study_demo_capability_legend() -> None:
@@ -150,7 +114,17 @@ def render_study_demo_capability_legend() -> None:
 
 def default_theme_state() -> dict[str, Any]:
   saved = default_saved_theme_fixture()
-  return {"saved_theme": saved, "widget_theme": dict(saved), "watch_profile": None, "search_plan": None}
+  return {
+    "saved_themes": [dict(saved)],
+    "selected_saved_theme_id": str(saved.get("theme_id", "")),
+    "saved_theme": dict(saved),
+    "widget_theme": dict(saved),
+    "unsaved_theme_draft": None,
+    "watch_profile": None,
+    "search_plan": None,
+    "theme_saved_from_draft": False,
+    "draft_message": None,
+  }
 
 
 def generate_watch_profile_from_saved_theme(saved_theme: Mapping[str, Any]) -> dict[str, Any]:

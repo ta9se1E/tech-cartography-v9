@@ -656,31 +656,68 @@ def render_theme_setup_tab(
     study_demo_mode = False
 
   if study_demo_mode:
+    from ui_v9.study_demo_theme_draft_ui import (
+      render_saved_theme_selector,
+      render_search_plan_preview_with_draft_warning,
+      render_standard_theme_actions,
+      render_theme_draft_section,
+    )
     from ui_v9.study_demo_theme_ui import (
       render_active_analysis_target_section,
-      render_search_plan_preview_section,
-      render_standard_theme_section,
+      render_standard_theme_summary,
       render_study_demo_capability_legend,
       render_temporary_search_promotion_section,
     )
 
     render_study_demo_capability_legend()
     state = dict(theme_state or {})
+    saved_themes = list(state.get("saved_themes", []) or [])
     saved_theme = dict(state.get("saved_theme", {}) or {})
+    if not saved_themes and saved_theme:
+      saved_themes = [saved_theme]
     widget_theme = dict(state.get("widget_theme", saved_theme) or saved_theme)
+    unsaved_draft = dict(state.get("unsaved_theme_draft", {}) or {}) or None
     active_context = dict((source_info or {}).get("active_context", {}) or {}) or None
     downstream_bundle = dict((source_info or {}).get("study_demo_downstream", {}) or {}) or None
     search_request = dict((downstream_bundle or {}).get("search_request", {}) or {})
+    theme_saved_from_draft = bool(state.get("theme_saved_from_draft", False))
 
-    theme_events = render_standard_theme_section(saved_theme=saved_theme, widget_theme=widget_theme)
+    theme_events = render_standard_theme_actions(has_unsaved_draft=bool(unsaved_draft))
+    render_standard_theme_summary(saved_theme=saved_theme, widget_theme=widget_theme)
     render_active_analysis_target_section(active_context=active_context, downstream_bundle=downstream_bundle)
-    promotion = render_temporary_search_promotion_section(active_context=active_context, search_request=search_request)
-    render_search_plan_preview_section(dict(state.get("search_plan", {}) or {}))
+    promotion = render_temporary_search_promotion_section(
+      active_context=active_context,
+      search_request=search_request,
+      existing_draft=unsaved_draft,
+    )
+    draft_events = render_theme_draft_section(
+      draft=unsaved_draft,
+      active_context=active_context,
+      saved_theme=saved_theme,
+      search_plan=dict(state.get("search_plan", {}) or {}) or None,
+      theme_saved_from_draft=theme_saved_from_draft,
+    )
+    selector_events = render_saved_theme_selector(
+      saved_themes=saved_themes,
+      selected_theme_id=str(state.get("selected_saved_theme_id", saved_theme.get("theme_id", "")) or ""),
+    )
+    render_search_plan_preview_with_draft_warning(
+      dict(state.get("search_plan", {}) or {}) or None,
+      draft=unsaved_draft,
+      saved_theme=saved_theme,
+    )
+    if state.get("draft_message"):
+      st.success(str(state.get("draft_message")))
 
-    upper_left, upper_right = st.columns(2)
+    st.divider()
+    with st.expander("保存済み標準監視テーマの編集フォーム", expanded=not bool(unsaved_draft)):
+      st.caption("この操作は保存済み標準監視テーマに対する操作です。未保存テーマ案には適用されません。")
+      upper_left, upper_right = st.columns(2)
   else:
     theme_events = {}
     promotion = {}
+    draft_events = {}
+    selector_events = {}
     upper_left, upper_right = st.columns(2)
   with upper_left:
     st.text_input("テーマ名", key="ui_theme_name_input")
@@ -788,7 +825,9 @@ def render_theme_setup_tab(
     "load_profile": load_clicked,
     "regenerate_search_plan": regenerate_clicked,
     **theme_events,
-    **{k: v for k, v in promotion.items() if k.endswith("_draft") or k.startswith("promote")},
+    **draft_events,
+    **selector_events,
+    **{k: v for k, v in promotion.items() if k in {"promote_theme_draft", "theme_draft", "duplicate_skipped"}},
   }
 
 

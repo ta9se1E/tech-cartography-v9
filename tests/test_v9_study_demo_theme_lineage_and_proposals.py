@@ -345,7 +345,7 @@ class TestDownstreamIntegration:
 class TestUIWiring:
   def test_theme_tab_has_lineage_sections(self) -> None:
     text = (ROOT / "ui_v9" / "tabs.py").read_text(encoding="utf-8")
-    assert "render_standard_theme_section" in text
+    assert "render_theme_draft_section" in text
     assert "render_active_analysis_target_section" in text
 
   def test_lineage_banner_wired(self) -> None:
