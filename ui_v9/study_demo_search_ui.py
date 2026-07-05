@@ -452,6 +452,8 @@ def _render_filter_controls() -> dict[str, Any]:
 
 
 def _render_signal_card(signal: dict[str, Any]) -> None:
+  from ui_v9.study_demo_source_link import render_external_source_link
+
   title = str(signal.get("title", "") or "")[:140]
   tier = signal.get("relevance_tier", "")
   score = signal.get("relevance_score", "")
@@ -462,7 +464,12 @@ def _render_signal_card(signal: dict[str, Any]) -> None:
     st.write(f"**source type:** `{signal.get('source_type', '')}`")
     st.write(f"**organization:** {signal.get('organization', '')}")
     st.write(f"**publication date:** {signal.get('published_at', '')}")
-    st.write(f"**URL:** {signal.get('url', '')}")
+    render_external_source_link(
+      signal,
+      key_namespace="sources_integrated",
+      search_run_id=str(signal.get("search_run_id", "") or ""),
+      label="引用元を開く",
+    )
     st.write(f"**matched core terms:** {signal.get('matched_core_terms', [])}")
     st.write(f"**matched material terms:** {signal.get('matched_material_terms', [])}")
     st.write(f"**matched process/property terms:** {signal.get('matched_process_terms', [])} / {signal.get('matched_property_terms', [])}")

@@ -94,48 +94,58 @@ def load_active_search_report(
 
 def adapt_study_demo_signal_to_display(signal: Mapping[str, Any], *, index: int = 0) -> dict[str, Any]:
   from services_v9.study_demo_downstream import build_what_to_check, build_next_action
+  from services_v9.study_demo_source_url import enrich_signal_with_url_provenance, resolve_signal_source_url
 
-  source_type = str(signal.get("source_type", "") or "")
+  enriched = enrich_signal_with_url_provenance(signal)
+  resolution = resolve_signal_source_url(enriched)
+  source_type = str(enriched.get("source_type", "") or "")
   signal_type = SOURCE_TYPE_TO_SIGNAL_TYPE.get(source_type, "web")
-  relevance_reason = str(signal.get("relevance_reason", "") or "")
-  title = str(signal.get("title", "") or "")
-  summary = str(signal.get("summary", "") or "")
-  organization = str(signal.get("organization", "") or "")
-  published = str(signal.get("published_at", "") or "")
-  url = str(signal.get("url", "") or "")
-  score = float(signal.get("relevance_score", signal.get("integrated_relevance_score", 0)) or 0) / 100.0
-  signal_id = str(signal.get("signal_id", "") or signal.get("source_id", "") or f"study-demo-{index}")
-  tags = list(signal.get("matched_core_terms", []) or []) + list(signal.get("matched_process_terms", []) or [])
+  relevance_reason = str(enriched.get("relevance_reason", "") or "")
+  title = str(enriched.get("title", "") or "")
+  summary = str(enriched.get("summary", "") or "")
+  organization = str(enriched.get("organization", "") or "")
+  published = str(enriched.get("published_at", "") or "")
+  url = resolution.resolved_url if resolution.is_valid else ""
+  score = float(enriched.get("relevance_score", enriched.get("integrated_relevance_score", 0)) or 0) / 100.0
+  signal_id = str(enriched.get("signal_id", "") or enriched.get("source_id", "") or f"study-demo-{index}")
+  tags = list(enriched.get("matched_core_terms", []) or []) + list(enriched.get("matched_process_terms", []) or [])
   return {
     "id": signal_id,
     "title": title,
     "type": signal_type,
     "source_url": url,
+    "source_url_original": enriched.get("source_url_original", ""),
+    "source_url_resolved": enriched.get("source_url_resolved", ""),
+    "source_url_status": enriched.get("source_url_status", ""),
+    "source_url_source": enriched.get("source_url_source", ""),
+    "url_resolution_status": enriched.get("url_resolution_status", ""),
+    "resolved_url": enriched.get("resolved_url", ""),
     "source_name": organization or source_type,
     "published_date": published,
     "summary": summary,
     "score": max(0.0, min(1.0, score)),
     "previous_score": None,
     "status": "Stable",
-    "action": "Read Now" if str(signal.get("relevance_tier", "")) == "A" else "Watch",
+    "action": "Read Now" if str(enriched.get("relevance_tier", "")) == "A" else "Watch",
     "why_read": relevance_reason or summary[:240],
-    "what_to_check": build_what_to_check(signal),
-    "next_action": build_next_action(signal),
+    "what_to_check": build_what_to_check(enriched),
+    "next_action": build_next_action(enriched),
     "tags": tags[:8],
     "companies": [organization] if organization else [],
-    "language": str(signal.get("language", "") or ""),
+    "language": str(enriched.get("language", "") or ""),
     "memo": "",
     "study_demo": {
-      "relevance_tier": signal.get("relevance_tier"),
-      "relevance_score": signal.get("relevance_score"),
+      "relevance_tier": enriched.get("relevance_tier"),
+      "relevance_score": enriched.get("relevance_score"),
       "relevance_reason": relevance_reason,
-      "target_material_match": signal.get("target_material_match"),
-      "target_material_mismatch": signal.get("target_material_mismatch"),
-      "matched_core_terms": signal.get("matched_core_terms", []),
-      "matched_negative_terms": signal.get("matched_negative_terms", []),
-      "score_breakdown": signal.get("score_breakdown", {}),
-      "source_run_id": signal.get("search_run_id", ""),
+      "target_material_match": enriched.get("target_material_match"),
+      "target_material_mismatch": enriched.get("target_material_mismatch"),
+      "matched_core_terms": enriched.get("matched_core_terms", []),
+      "matched_negative_terms": enriched.get("matched_negative_terms", []),
+      "score_breakdown": enriched.get("score_breakdown", {}),
+      "source_run_id": enriched.get("search_run_id", ""),
       "source_type_raw": source_type,
+      "url_source": resolution.url_source,
     },
   }
 

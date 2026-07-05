@@ -458,6 +458,8 @@ def build_active_run_digest(
 
 
 def digest_to_markdown(digest: Mapping[str, Any]) -> str:
+  from services_v9.study_demo_source_url import resolve_signal_source_url
+
   lines = [
     "# Study Demo Active Run Digest",
     "",
@@ -475,8 +477,14 @@ def digest_to_markdown(digest: Mapping[str, Any]) -> str:
     "## Tier A 上位",
   ]
   for index, item in enumerate(list(digest.get("top_tier_a", []) or []), start=1):
+    enriched = dict(item)
+    resolution = resolve_signal_source_url(enriched)
     lines.append(f"{index}. [{item.get('source_type')}] {item.get('title')} (score={item.get('relevance_score')})")
     lines.append(f"   - {item.get('relevance_reason', '')}")
+    if resolution.is_valid:
+      lines.append(f"   - 引用元: {resolution.resolved_url}")
+    else:
+      lines.append("   - 引用元URL未取得")
   lines.extend(["", "## Review summary", str(digest.get("review_summary", {})), ""])
   return "\n".join(lines) + "\n"
 

@@ -1160,7 +1160,16 @@ def render_top_signals_tab(
         st.write(signal.why_read)
         st.write(f"確認すべき点: {signal.what_to_check}")
         st.write(f"次の行動: {signal.next_action}")
-        st.markdown(f"[出典URLを開く]({signal.source_url})")
+        from ui_v9.study_demo_source_link import render_external_source_link
+
+        active_context = dict(source_info.get("active_context", {}) or {})
+        run_id = str(active_context.get("active_search_run_id", "") or "")
+        render_external_source_link(
+          signal,
+          key_namespace="top_signals_top3",
+          search_run_id=run_id,
+          label="出典URLを開く",
+        )
 
   available_types = sorted({signal.type for signal in top_signals})
   available_statuses = ["New", "Rising", "Dropped", "Stable"]
@@ -1227,7 +1236,16 @@ def render_top_signals_tab(
       st.write(f"**出典名:** {signal.source_name}")
       st.write(f"**タグ:** {', '.join(signal.tags) if signal.tags else 'なし'}")
       st.write(f"**関連企業:** {', '.join(signal.companies) if signal.companies else 'なし'}")
-      st.markdown(f"[出典URLを開く]({signal.source_url})")
+      from ui_v9.study_demo_source_link import render_external_source_link
+
+      active_context = dict(source_info.get("active_context", {}) or {})
+      run_id = str(active_context.get("active_search_run_id", "") or "")
+      render_external_source_link(
+        signal,
+        key_namespace="top_signals_list",
+        search_run_id=run_id,
+        label="出典URLを開く",
+      )
       with st.expander("スコア根拠を確認", expanded=False):
         _render_score_explanation(explanation)
       with st.expander("人間レビュー", expanded=False):

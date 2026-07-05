@@ -92,6 +92,29 @@ def main() -> int:
     checks["digest_event_contract"] = "ready"
     checks["digest_event_normalization"] = "ready"
     checks["digest_save_explicit_only"] = "ready"
+    from services_v9.study_demo_source_url import (
+      build_google_patents_url,
+      is_valid_external_url,
+      resolve_signal_source_url,
+    )
+
+    patent_url = build_google_patents_url("US2020378036A1")
+    if not patent_url.startswith("https://patents.google.com/patent/"):
+      raise RuntimeError("patent URL builder failed")
+    valid, reason = is_valid_external_url(patent_url)
+    if not valid:
+      raise RuntimeError(f"patent URL invalid: {reason}")
+    invalid = resolve_signal_source_url({"source_type": "patent", "url": ""})
+    if invalid.is_valid:
+      raise RuntimeError("empty patent URL should be invalid")
+    self_url, _ = is_valid_external_url("https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app/")
+    if self_url:
+      raise RuntimeError("study demo self URL should be rejected")
+    checks["source_url_resolver"] = "ready"
+    checks["external_link_renderer"] = "ready"
+    checks["empty_href_prevention"] = "ready"
+    checks["self_app_url_rejection"] = "ready"
+    checks["source_url_provenance"] = "ready"
     checks["legacy_demo_fallback"] = "explicit_only"
     checks["disable_script"] = "ready"
     checks["acceptance_script"] = "ready"
