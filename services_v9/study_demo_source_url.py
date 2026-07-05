@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from services_v9.watch_profile_schema import normalize_publication_number
 
@@ -16,6 +16,10 @@ STUDY_DEMO_HOST_SUFFIXES = (
 
 DOI_PREFIX_RE = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:)\s*", re.I)
 OPENALEX_ID_RE = re.compile(r"^W\d+$", re.I)
+GOOGLE_PATENTS_URL_RE = re.compile(
+  r"^https?://(?:www\.)?patents\.google\.com/patent/([^/?#]+)",
+  re.I,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,11 +76,33 @@ def build_doi_url(doi: str) -> str:
   return f"https://doi.org/{quote(normalized, safe='/-._;()')}"
 
 
-def build_google_patents_url(publication_number: str) -> str:
+def build_google_patents_url(publication_number: str, *, language: str = "en") -> str:
   normalized = normalize_publication_number(publication_number)
   if not normalized:
     return ""
-  return f"https://patents.google.com/patent/{quote(normalized, safe='')}/en"
+  lang = (language or "en").strip().lower() or "en"
+  return f"https://patents.google.com/patent/{quote(normalized, safe='')}/{lang}"
+
+
+def extract_publication_number_from_google_patents_url(url: str) -> str:
+  match = GOOGLE_PATENTS_URL_RE.match(str(url or "").strip())
+  if not match:
+    return ""
+  return normalize_publication_number(unquote(match.group(1)))
+
+
+def normalize_google_patents_url(url: str) -> str:
+  text = str(url or "").strip()
+  if not GOOGLE_PATENTS_URL_RE.match(text):
+    return text
+  pub = extract_publication_number_from_google_patents_url(text)
+  if not pub:
+    return text
+  language = "en"
+  tail = text.rstrip("/").rsplit("/", 1)[-1]
+  if tail.lower() in {"en", "ja", "zh", "de", "fr", "ko"}:
+    language = tail.lower()
+  return build_google_patents_url(pub, language=language)
 
 
 def build_openalex_url(openalex_id: str) -> str:
@@ -131,6 +157,11 @@ def _resolve_patent_url(signal: Mapping[str, Any], meta: Mapping[str, Any]) -> t
   )
   for source, value in candidates:
     text = str(value or "").strip()
+    if GOOGLE_PATENTS_URL_RE.match(text):
+      normalized = normalize_google_patents_url(text)
+      if normalized != text:
+        source = "google_patents_url_normalized"
+      text = normalized
     valid, _ = is_valid_external_url(text)
     if valid:
       return text, source

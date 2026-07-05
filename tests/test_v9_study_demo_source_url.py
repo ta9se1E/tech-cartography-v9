@@ -26,6 +26,7 @@ from services_v9.study_demo_source_url import (
   enrich_signal_with_url_provenance,
   is_valid_external_url,
   normalize_doi,
+  normalize_google_patents_url,
   resolve_signal_source_url,
   summarize_url_resolution,
 )
@@ -89,6 +90,45 @@ def test_patent_publication_number_builds_google_patents_url() -> None:
   assert resolution.is_valid
   assert resolution.resolved_url == "https://patents.google.com/patent/US2020378036A1/en"
   assert resolution.url_source == "publication_number"
+
+
+def test_dashed_google_patents_url_is_normalized() -> None:
+  dashed = "https://patents.google.com/patent/US-2020-378036-A1/en"
+  resolution = resolve_signal_source_url(_patent_signal(source_url=dashed, url=""))
+  assert resolution.is_valid
+  assert resolution.resolved_url == "https://patents.google.com/patent/US2020378036A1/en"
+  assert resolution.url_source == "google_patents_url_normalized"
+
+
+def test_compact_google_patents_url_unchanged() -> None:
+  compact = "https://patents.google.com/patent/US2020378036A1/en"
+  assert normalize_google_patents_url(compact) == compact
+
+
+def test_dashed_google_patents_url_strips_query_and_fragment() -> None:
+  dashed = "https://patents.google.com/patent/US-2020-378036-A1/en?utm=1#section"
+  normalized = normalize_google_patents_url(dashed)
+  assert normalized == "https://patents.google.com/patent/US2020378036A1/en"
+  assert "?" not in normalized
+  assert "#" not in normalized
+  assert "-2020" not in normalized
+
+
+def test_google_patents_path_has_no_duplicate_segments() -> None:
+  normalized = normalize_google_patents_url("https://patents.google.com/patent/US-2020-378036-A1/en")
+  assert normalized.count("/patent/") == 1
+  assert normalized.count("/en") == 1
+
+
+def test_paper_url_not_rewritten_by_google_patents_normalizer() -> None:
+  paper_url = "https://doi.org/10.1000/example"
+  resolution = resolve_signal_source_url(_paper_signal(source_url=paper_url, url=paper_url))
+  assert resolution.resolved_url == paper_url
+
+
+def test_web_url_not_rewritten_by_google_patents_normalizer() -> None:
+  resolution = resolve_signal_source_url(_web_signal(source_url="https://company.example.com/news/a"))
+  assert resolution.resolved_url == "https://company.example.com/news/a"
 
 
 def test_paper_doi_builds_https_doi_url() -> None:

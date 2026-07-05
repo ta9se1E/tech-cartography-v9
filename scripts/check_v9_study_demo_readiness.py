@@ -95,12 +95,16 @@ def main() -> int:
     from services_v9.study_demo_source_url import (
       build_google_patents_url,
       is_valid_external_url,
+      normalize_google_patents_url,
       resolve_signal_source_url,
     )
 
     patent_url = build_google_patents_url("US2020378036A1")
-    if not patent_url.startswith("https://patents.google.com/patent/"):
+    if patent_url != "https://patents.google.com/patent/US2020378036A1/en":
       raise RuntimeError("patent URL builder failed")
+    dashed = normalize_google_patents_url("https://patents.google.com/patent/US-2020-378036-A1/en")
+    if dashed != "https://patents.google.com/patent/US2020378036A1/en":
+      raise RuntimeError("dashed google patents URL normalization failed")
     valid, reason = is_valid_external_url(patent_url)
     if not valid:
       raise RuntimeError(f"patent URL invalid: {reason}")
