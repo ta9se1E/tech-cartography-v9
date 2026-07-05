@@ -10,6 +10,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
+from services_v9.study_demo_theme_draft_mapping import (
+  adopt_term_candidates,
+  apply_mapping_to_draft_payload,
+  validate_theme_draft_mapping,
+  validate_theme_name,
+)
 from services_v9.study_demo_theme_lineage import (
   build_theme_record,
   compute_theme_signature,
@@ -40,11 +46,13 @@ def build_theme_draft_from_temporary_search(
   search_run_id: str,
   active_context: Mapping[str, Any] | None = None,
   context_generation: int | None = None,
+  old_theme_keywords: Mapping[str, Sequence[str]] | None = None,
 ) -> dict[str, Any]:
   base = promote_temporary_search_to_theme_draft(search_request, search_run_id=search_run_id)
+  mapping = apply_mapping_to_draft_payload(search_request, old_theme_keywords=old_theme_keywords)
   draft_id = _new_draft_id()
   now = _utc_now_iso()
-  keywords = dict(base.get("keywords", {}) or {})
+  theme_text = str((active_context or {}).get("theme", search_request.get("theme", "")) or "")
   provider_settings = {
     "enable_patent": bool(search_request.get("enable_patent", True)),
     "enable_paper": bool(search_request.get("enable_paper", True)),
@@ -59,7 +67,10 @@ def build_theme_draft_from_temporary_search(
     "schema_version": THEME_DRAFT_SCHEMA_VERSION,
     "status": "draft",
     "source_run_origin": "temporary_search",
-    "original_active_theme_text": str((active_context or {}).get("theme", search_request.get("theme", "")) or ""),
+    "name": mapping.get("suggested_name") or base.get("name", ""),
+    "description": theme_text or str(search_request.get("theme", "") or ""),
+    "keywords": dict(mapping.get("keywords", {}) or {}),
+    "original_active_theme_text": theme_text,
     "original_search_request_ref": f"search_runs/{search_run_id}/search_request.json",
     "created_from_context_generation": context_generation,
     "year_range": {
@@ -67,7 +78,17 @@ def build_theme_draft_from_temporary_search(
       "end": str(search_request.get("year_end", "") or ""),
     },
     "provider_settings": provider_settings,
-    "exact_phrase": str(search_request.get("exact_phrase", "") or ""),
+    "exact_phrase": str(mapping.get("exact_phrase", search_request.get("exact_phrase", "")) or ""),
+    "seed_publication_numbers": list(mapping.get("seed_publication_numbers", []) or []),
+    "mapping_terms": list(mapping.get("mapping_terms", []) or []),
+    "term_candidates": list(mapping.get("term_candidates", []) or []),
+    "mapping_validation": list(mapping.get("mapping_validation", []) or []),
+    "mapping_report": dict(mapping.get("mapping_report", {}) or {}),
+    "suggested_theme_name": mapping.get("suggested_name", ""),
+    "review_status": "not_reviewed",
+    "reviewed_at": None,
+    "reviewed_signature": None,
+    "reviewed_context_generation": None,
     "dirty": False,
     "loaded_into_editor": False,
     "save_status": "unsaved",
@@ -110,6 +131,20 @@ def validate_theme_draft(draft: Mapping[str, Any]) -> list[str]:
     errors.append("name required")
   if not str(draft.get("description", "")).strip():
     errors.append("description required")
+  name_issues = [item for item in validate_theme_name(str(draft.get("name", "")), description=str(draft.get("description", ""))) if item.get("severity") == "error"]
+  errors.extend(str(item.get("code", "")) for item in name_issues)
+  mapping_errors = [
+    item for item in validate_theme_draft_mapping(
+      list(draft.get("mapping_terms", []) or []),
+      dict(draft.get("keywords", {}) or {}),
+    )
+    if item.get("severity") == "error"
+  ]
+  errors.extend(str(item.get("code", "")) for item in mapping_errors)
+  if str(draft.get("review_status", "")) != "reviewed":
+    errors.append("review_not_complete")
+  elif str(draft.get("reviewed_signature", "")) != str(draft.get("theme_draft_signature", "")):
+    errors.append("review_signature_stale")
   return errors
 
 
@@ -158,7 +193,60 @@ def update_theme_draft(
   updated["updated_at"] = _utc_now_iso()
   updated["dirty"] = True
   updated["save_status"] = "unsaved"
+  reviewed_sig = str(updated.get("reviewed_signature", "") or "")
+  current_sig = compute_theme_draft_signature({**updated, "theme_draft_signature": ""})
+  if reviewed_sig and reviewed_sig != current_sig:
+    updated["review_status"] = "needs_rereview"
   updated["theme_draft_signature"] = compute_theme_draft_signature(updated)
+  return updated
+
+
+def complete_draft_review(
+  draft: Mapping[str, Any],
+  *,
+  context_generation: int | None = None,
+) -> dict[str, Any]:
+  updated = copy.deepcopy(dict(draft))
+  validation = validate_theme_draft_mapping(
+    list(updated.get("mapping_terms", []) or []),
+    dict(updated.get("keywords", {}) or {}),
+  )
+  blocking = [item for item in validation if item.get("severity") == "error"]
+  if blocking:
+    raise ValueError("mapping validation has blocking errors")
+  updated["review_status"] = "reviewed"
+  updated["reviewed_at"] = _utc_now_iso()
+  updated["reviewed_signature"] = str(updated.get("theme_draft_signature", "") or "")
+  updated["reviewed_context_generation"] = context_generation
+  updated["dirty"] = False
+  return updated
+
+
+def apply_adopted_candidates_to_draft(
+  draft: Mapping[str, Any],
+  adopted_values: Sequence[str],
+) -> dict[str, Any]:
+  from services_v9.study_demo_theme_draft_mapping import build_keywords_from_terms
+
+  terms, candidates = adopt_term_candidates(
+    list(draft.get("mapping_terms", []) or []),
+    list(draft.get("term_candidates", []) or []),
+    adopted_values,
+  )
+  keywords = dict(draft.get("keywords", {}) or {})
+  merged_keywords = build_keywords_from_terms(terms)
+  updated = update_theme_draft(
+    draft,
+    {"keywords": merged_keywords},
+    expected_signature=str(draft.get("theme_draft_signature", "") or "") or None,
+  )
+  updated["mapping_terms"] = terms
+  updated["term_candidates"] = candidates
+  updated["mapping_validation"] = validate_theme_draft_mapping(terms, keywords)
+  updated["mapping_report"] = dict(draft.get("mapping_report", {}) or {})
+  updated["theme_draft_signature"] = compute_theme_draft_signature(updated)
+  if str(updated.get("reviewed_signature", "")) and updated["reviewed_signature"] != updated["theme_draft_signature"]:
+    updated["review_status"] = "needs_rereview"
   return updated
 
 
@@ -275,7 +363,15 @@ def summarize_theme_draft_state(
         "live_search_executed": False,
       },
     }
-  reviewed = bool(draft.get("loaded_into_editor")) and not bool(draft.get("dirty"))
+  review_status = str(draft.get("review_status", "not_reviewed") or "not_reviewed")
+  reviewed = review_status == "reviewed" and str(draft.get("reviewed_signature", "")) == str(
+    draft.get("theme_draft_signature", "")
+  )
+  review_label = {
+    "not_reviewed": "未完了",
+    "reviewed": "完了",
+    "needs_rereview": "再確認が必要",
+  }.get(review_status, "未完了")
   return {
     "has_draft": True,
     "draft_id": draft.get("draft_id"),
@@ -284,9 +380,12 @@ def summarize_theme_draft_state(
     "theme_draft_signature_short": str(draft.get("theme_draft_signature", ""))[:8],
     "dirty": bool(draft.get("dirty")),
     "save_status": draft.get("save_status"),
+    "review_status": review_status,
+    "review_label": review_label,
     "workflow": {
       "draft_created": True,
       "draft_reviewed": reviewed,
+      "draft_review_label": review_label,
       "theme_saved": theme_saved,
       "watch_profile_generated": False,
       "search_plan_generated": bool(search_plan) and not should_show_old_plan_warning(draft, search_plan, saved_theme),
@@ -307,6 +406,15 @@ def should_show_old_plan_warning(
   plan_theme_id = str(search_plan.get("source_theme_id", "") or "")
   saved_theme_id = str((saved_theme or {}).get("theme_id", "") or "")
   return bool(plan_theme_id and saved_theme_id and plan_theme_id == saved_theme_id)
+
+
+def can_save_draft_as_new(draft: Mapping[str, Any] | None) -> bool:
+  if not draft:
+    return False
+  return (
+    str(draft.get("review_status", "")) == "reviewed"
+    and str(draft.get("reviewed_signature", "")) == str(draft.get("theme_draft_signature", ""))
+  )
 
 
 def can_generate_plan_for_draft(draft: Mapping[str, Any] | None, *, theme_saved: bool) -> bool:

@@ -91,14 +91,18 @@ def render_temporary_search_promotion_section(
     st.warning("確認チェックボックスをオンにしてください。")
     return {"promote_theme_draft": False, "theme_draft": None}
   if clicked and confirm and search_request:
+    from services_v9.study_demo_theme_lineage import default_saved_theme_fixture
+
+    saved = default_saved_theme_fixture()
     draft = build_theme_draft_from_temporary_search(
       search_request,
       search_run_id=run_id,
       active_context=active_context,
       context_generation=active_context.get("active_context_generation"),
+      old_theme_keywords=dict(saved.get("keywords", {}) or {}),
     )
     draft["loaded_into_editor"] = True
-    return {"promote_theme_draft": True, "theme_draft": draft}
+    return {"promote_theme_draft": True, "theme_draft": draft, "show_create_toast": True}
   return {"promote_theme_draft": False, "theme_draft": None}
 
 

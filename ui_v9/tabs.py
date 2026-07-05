@@ -657,6 +657,7 @@ def render_theme_setup_tab(
 
   if study_demo_mode:
     from ui_v9.study_demo_theme_draft_ui import (
+      render_legacy_search_plan_controls,
       render_saved_theme_selector,
       render_search_plan_preview_with_draft_warning,
       render_standard_theme_actions,
@@ -705,9 +706,42 @@ def render_theme_setup_tab(
       dict(state.get("search_plan", {}) or {}) or None,
       draft=unsaved_draft,
       saved_theme=saved_theme,
+      profile_summary=profile_summary,
+      search_plan_state=search_plan_state,
     )
-    if state.get("draft_message"):
-      st.success(str(state.get("draft_message")))
+    draft_message = str(state.get("draft_message", "") or "")
+    if draft_message and not unsaved_draft:
+      st.success(draft_message)
+    elif draft_message and unsaved_draft and "作成しました" not in draft_message:
+      st.success(draft_message)
+
+    st.divider()
+    legacy_controls = render_legacy_search_plan_controls(
+      has_unsaved_draft=bool(unsaved_draft),
+      profile_status_message=profile_status_message,
+      search_plan_status_message=search_plan_status_message,
+      search_plan_state=search_plan_state,
+      profile_summary=profile_summary,
+      saved_theme_name=str(saved_theme.get("name", "") or ""),
+    )
+    if not unsaved_draft:
+      _show_status_message(profile_status_message)
+      _show_status_message(search_plan_status_message)
+      st.markdown("### 検索計画状態")
+      st.write(f"- 最終生成: {search_plan_state.get('generated_at', '未生成')}")
+      st.write(
+        f"- Watch Profile signature一致: "
+        f"{bool_label_ja(not bool(search_plan_state.get('profile_signature_changed', False)))}"
+      )
+      st.write(
+        f"- 設定変更の未反映: "
+        f"{bool_label_ja(bool(search_plan_state.get('settings_signature_changed', False)))}"
+      )
+      if search_plan_state.get("stale"):
+        st.warning("現在の検索計画は最新のWatch Profileまたは設定をまだ反映していません。")
+      else:
+        st.success("現在の検索計画は最新の入力と一致しています。")
+      _render_profile_summary(profile_summary)
 
     st.divider()
     with st.expander("保存済み標準監視テーマの編集フォーム", expanded=not bool(unsaved_draft)):
@@ -718,6 +752,7 @@ def render_theme_setup_tab(
     promotion = {}
     draft_events = {}
     selector_events = {}
+    legacy_controls = {}
     upper_left, upper_right = st.columns(2)
   with upper_left:
     st.text_input("テーマ名", key="ui_theme_name_input")
@@ -795,31 +830,36 @@ def render_theme_setup_tab(
       help="カンマ区切り・改行区切りのどちらでも入力できます。",
     )
 
-  button_left, button_mid, button_right = st.columns(3)
-  with button_left:
-    save_clicked = st.button("監視プロファイルを保存", key="btn_theme_save_profile", width="stretch")
-  with button_mid:
-    load_clicked = st.button("保存済み監視プロファイルを読み込む", key="btn_theme_load_profile", width="stretch")
-  with button_right:
-    regenerate_clicked = st.button("検索計画を再生成", key="btn_theme_regenerate_search_plan", width="stretch")
-
-  _show_status_message(profile_status_message)
-  _show_status_message(search_plan_status_message)
-  st.markdown("### 検索計画状態")
-  st.write(f"- 最終生成: {search_plan_state.get('generated_at', '未生成')}")
-  st.write(
-    f"- Watch Profile signature一致: "
-    f"{bool_label_ja(not bool(search_plan_state.get('profile_signature_changed', False)))}"
-  )
-  st.write(
-    f"- 設定変更の未反映: "
-    f"{bool_label_ja(bool(search_plan_state.get('settings_signature_changed', False)))}"
-  )
-  if search_plan_state.get("stale"):
-    st.warning("現在の検索計画は最新のWatch Profileまたは設定をまだ反映していません。")
+  if study_demo_mode:
+    save_clicked = legacy_controls.get("save_profile", False)
+    load_clicked = legacy_controls.get("load_profile", False)
+    regenerate_clicked = legacy_controls.get("regenerate_search_plan", False)
   else:
-    st.success("現在の検索計画は最新の入力と一致しています。")
-  _render_profile_summary(profile_summary)
+    button_left, button_mid, button_right = st.columns(3)
+    with button_left:
+      save_clicked = st.button("監視プロファイルを保存", key="btn_theme_save_profile", width="stretch")
+    with button_mid:
+      load_clicked = st.button("保存済み監視プロファイルを読み込む", key="btn_theme_load_profile", width="stretch")
+    with button_right:
+      regenerate_clicked = st.button("検索計画を再生成", key="btn_theme_regenerate_search_plan", width="stretch")
+
+    _show_status_message(profile_status_message)
+    _show_status_message(search_plan_status_message)
+    st.markdown("### 検索計画状態")
+    st.write(f"- 最終生成: {search_plan_state.get('generated_at', '未生成')}")
+    st.write(
+      f"- Watch Profile signature一致: "
+      f"{bool_label_ja(not bool(search_plan_state.get('profile_signature_changed', False)))}"
+    )
+    st.write(
+      f"- 設定変更の未反映: "
+      f"{bool_label_ja(bool(search_plan_state.get('settings_signature_changed', False)))}"
+    )
+    if search_plan_state.get("stale"):
+      st.warning("現在の検索計画は最新のWatch Profileまたは設定をまだ反映していません。")
+    else:
+      st.success("現在の検索計画は最新の入力と一致しています。")
+    _render_profile_summary(profile_summary)
   return {
     "save_profile": save_clicked,
     "load_profile": load_clicked,

@@ -66,6 +66,7 @@ def main() -> int:
     _check_script_plan("check_v9_study_demo_relevance_ranking.py")
     _check_script_plan("check_v9_study_demo_active_run_connection.py")
     _check_script_plan("check_v9_study_demo_theme_e2e.py")
+    _check_script_plan("check_v9_study_demo_theme_draft_mapping.py")
     checks["helper_plans"] = "ok"
     checks["patent_search_code"] = "ready"
     checks["openalex_search_code"] = "ready"
@@ -140,9 +141,11 @@ def main() -> int:
     from services_v9.study_demo_theme_draft import (
       build_new_saved_theme_from_draft,
       build_theme_draft_from_temporary_search,
+      complete_draft_review,
       should_show_old_plan_warning,
       validate_draft_generation_precondition,
     )
+    from services_v9.study_demo_theme_draft_mapping import detect_term_language, suggest_concise_theme_name
     from services_v9.study_demo_theme_lineage import (
       compute_theme_signature,
       default_saved_theme_fixture,
@@ -153,11 +156,13 @@ def main() -> int:
     fixture_payload = json.loads(fixture_path.read_text(encoding="utf-8"))
     search_request = dict(fixture_payload["artifacts"]["search_request.json"])
     run_id = str(fixture_payload.get("search_run_id", "") or "")
+    saved_old = default_saved_theme_fixture()
     draft = build_theme_draft_from_temporary_search(
       search_request,
       search_run_id=run_id,
       active_context={"active_search_run_id": run_id, "theme": search_request["theme"], "active_context_generation": 1},
       context_generation=1,
+      old_theme_keywords=dict(saved_old.get("keywords", {}) or {}),
     )
     if draft.get("status") != "draft" or draft.get("source") != "promoted_from_temporary_search":
       raise RuntimeError("theme draft state model failed")
@@ -169,8 +174,8 @@ def main() -> int:
     if "D. 作成した未保存テーマ案" not in draft_ui or "テーマ案の変更を保持" not in draft_ui:
       raise RuntimeError("theme draft editor UI missing")
     checks["theme_draft_editor"] = "ready"
-    saved_old = default_saved_theme_fixture()
-    saved_new = build_new_saved_theme_from_draft(draft, existing_themes=[saved_old])
+    reviewed = complete_draft_review(draft, context_generation=1)
+    saved_new = build_new_saved_theme_from_draft(reviewed, existing_themes=[saved_old])
     if saved_new.get("theme_id") == saved_old.get("theme_id"):
       raise RuntimeError("save-as-new reused theme_id")
     checks["theme_draft_save_as_new"] = "ready"
@@ -193,6 +198,43 @@ def main() -> int:
     ):
       raise RuntimeError("theme draft concurrency guard failed")
     checks["theme_draft_concurrency_guard"] = "ready"
+    if detect_term_language("textile") != "en" or detect_term_language("paper sizing") != "en":
+      raise RuntimeError("theme draft language classification failed")
+    checks["theme_draft_language_classification"] = "ready"
+    keywords = dict(draft.get("keywords", {}) or {})
+    if "組成" not in keywords.get("material_process_ja", []) or "集束性" not in keywords.get("use_ja", []):
+      raise RuntimeError("theme draft semantic mapping failed")
+    checks["theme_draft_semantic_mapping"] = "ready"
+    if draft.get("mapping_report", {}).get("exact_match_count", 0) < 1:
+      raise RuntimeError("exact phrase extraction failed")
+    checks["theme_draft_exact_phrase_extraction"] = "ready"
+    if not isinstance(draft.get("term_candidates"), list):
+      raise RuntimeError("alias suggestions missing")
+    checks["theme_draft_alias_suggestions"] = "ready"
+    if not draft.get("mapping_terms"):
+      raise RuntimeError("mapping provenance missing")
+    checks["theme_draft_mapping_provenance"] = "ready"
+    concise = suggest_concise_theme_name(search_request["theme"])
+    if not concise or concise == search_request["theme"]:
+      raise RuntimeError("theme name normalization failed")
+    checks["theme_name_normalization"] = "ready"
+    if draft.get("review_status") != "not_reviewed":
+      raise RuntimeError("explicit draft review default failed")
+    checks["explicit_draft_review"] = "ready"
+    if "保存済み標準テーマ由来の旧Search Plan" not in draft_ui:
+      raise RuntimeError("old plan isolation UI missing")
+    checks["old_plan_isolation"] = "ready"
+    if "保存予定Theme ID" not in draft_ui or "Theme内容シグネチャ" not in draft_ui:
+      raise RuntimeError("user facing signature labels missing")
+    checks["user_facing_signature_labels"] = "ready"
+    ui_files = " ".join(path.read_text(encoding="utf-8") for path in (ROOT / "ui_v9").rglob("*.py"))
+    if "keyboard_arrow_right" in ui_files:
+      raise RuntimeError("material icon text still present")
+    checks["material_icon_text_removed"] = "ready"
+    if "study_demo_draft_create_toast" not in (ROOT / "ui_v9/signal_watch_app.py").read_text(encoding="utf-8"):
+      raise RuntimeError("duplicate draft message fix missing")
+    checks["duplicate_draft_message_removed"] = "ready"
+    checks["theme_draft_mapping_report"] = "ready"
 
     theme_a = sizing_fixture_theme()
     theme_b = sizing_fixture_theme()

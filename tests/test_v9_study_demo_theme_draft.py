@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 from services_v9.study_demo_theme_draft import (
   build_new_saved_theme_from_draft,
   build_theme_draft_from_temporary_search,
+  complete_draft_review,
   draft_from_editor_payload,
   draft_widget_key,
   find_existing_draft_for_run,
@@ -48,14 +49,20 @@ def _active_context() -> dict:
 
 
 def _draft(**overrides: object) -> dict:
+  saved = default_saved_theme_fixture()
   draft = build_theme_draft_from_temporary_search(
     _search_request(),
     search_run_id=RUN_ID,
     active_context=_active_context(),
     context_generation=7,
+    old_theme_keywords=dict(saved.get("keywords", {}) or {}),
   )
   draft.update(overrides)
   return draft
+
+
+def _reviewed(**overrides: object) -> dict:
+  return complete_draft_review(_draft(**overrides), context_generation=7)
 
 
 class TestDraftCreation:
@@ -98,7 +105,8 @@ class TestDraftContent:
   def test_exclude_from_request(self) -> None:
     draft = _draft()
     keywords = dict(draft.get("keywords", {}) or {})
-    assert "textile" in keywords.get("exclude_ja", []) or "textile" in keywords.get("exclude_en", [])
+    assert "textile" in keywords.get("exclude_en", [])
+    assert "textile" not in keywords.get("exclude_ja", [])
 
   def test_no_old_theme_seed_mixing(self) -> None:
     draft = _draft()
@@ -124,7 +132,7 @@ class TestDraftActions:
     assert updated["dirty"] is True
 
   def test_save_as_new_new_id(self) -> None:
-    draft = _draft()
+    draft = _reviewed()
     saved_old = default_saved_theme_fixture()
     saved = build_new_saved_theme_from_draft(draft, existing_themes=[saved_old])
     assert saved["theme_id"] != saved_old["theme_id"]
@@ -133,20 +141,20 @@ class TestDraftActions:
     assert compute_theme_signature(saved_old) == compute_theme_signature(default_saved_theme_fixture())
 
   def test_save_as_new_provenance(self) -> None:
-    draft = _draft()
+    draft = _reviewed()
     saved = build_new_saved_theme_from_draft(draft, existing_themes=[default_saved_theme_fixture()])
     assert saved["created_from_draft_id"] == draft["draft_id"]
     assert saved["source_search_run_id"] == RUN_ID
 
   def test_same_name_new_id(self) -> None:
-    draft = _draft()
+    draft = _reviewed()
     draft["name"] = default_saved_theme_fixture()["name"]
     saved = build_new_saved_theme_from_draft(draft, existing_themes=[default_saved_theme_fixture()])
     assert saved["same_name_warning"] is True
     assert saved["theme_id"] != default_saved_theme_fixture()["theme_id"]
 
   def test_session_only_storage(self) -> None:
-    saved = build_new_saved_theme_from_draft(_draft(), existing_themes=[default_saved_theme_fixture()])
+    saved = build_new_saved_theme_from_draft(_reviewed(), existing_themes=[default_saved_theme_fixture()])
     result = save_theme_to_storage(saved, persist_to_cloud=False)
     assert result["status"] == "session_only"
 
@@ -206,6 +214,6 @@ class TestStorageFailure:
       def bucket(self, _name: str) -> object:
         raise OSError("storage down")
 
-    saved = build_new_saved_theme_from_draft(_draft(), existing_themes=[default_saved_theme_fixture()])
+    saved = build_new_saved_theme_from_draft(_reviewed(), existing_themes=[default_saved_theme_fixture()])
     with pytest.raises(OSError):
       save_theme_to_storage(saved, storage_client=_BrokenClient(), persist_to_cloud=True)

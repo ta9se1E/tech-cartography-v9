@@ -399,13 +399,33 @@ def _clear_theme_draft_if_run_changed(previous_run: str) -> None:
     st.session_state[STATE_THEME_LINEAGE] = state
 
 
+def _apply_draft_editor_payload(draft: dict[str, object], payload: dict[str, object]) -> dict[str, object]:
+  from services_v9.study_demo_theme_draft import apply_adopted_candidates_to_draft, draft_from_editor_payload
+
+  editor = dict(payload)
+  if editor.get("use_suggested_name") and draft.get("suggested_theme_name"):
+    editor["name"] = str(draft.get("suggested_theme_name", "") or editor.get("name", ""))
+  updated = draft_from_editor_payload(draft, editor)
+  adopted = list(editor.get("adopted_candidates", []) or [])
+  if adopted:
+    updated = apply_adopted_candidates_to_draft(updated, adopted)
+  return updated
+
+
+def _maybe_show_draft_create_toast() -> None:
+  if st.session_state.pop("study_demo_draft_create_toast", False):
+    st.toast("未保存テーマ案を作成しました。Dセクションで内容を確認してください。")
+
+
 def _handle_study_demo_theme_events(theme_events: dict[str, object]) -> bool:
   if not is_study_demo_mode():
     return False
   from ui_v9.study_demo_theme_ui import default_theme_state
 
   from services_v9.study_demo_theme_draft import (
+    apply_adopted_candidates_to_draft,
     build_new_saved_theme_from_draft,
+    complete_draft_review,
     draft_from_editor_payload,
     save_theme_to_storage,
     validate_theme_draft,
@@ -416,16 +436,34 @@ def _handle_study_demo_theme_events(theme_events: dict[str, object]) -> bool:
 
   if theme_events.get("promote_theme_draft") and theme_events.get("theme_draft"):
     state["unsaved_theme_draft"] = dict(theme_events.get("theme_draft", {}) or {})
-    draft_id = str(state["unsaved_theme_draft"].get("draft_id", "") or "")
-    state["draft_message"] = f"テーマ案 draft を作成しました: `{draft_id}`（自動保存・自動適用はしません）"
+    state["draft_message"] = None
     state["theme_saved_from_draft"] = False
+    if theme_events.get("show_create_toast"):
+      st.session_state["study_demo_draft_create_toast"] = True
     changed = True
+
+  draft = dict(state.get("unsaved_theme_draft", {}) or {}) or None
+  if draft and theme_events.get("complete_draft_review"):
+    payload = dict(theme_events.get("draft_editor_payload", {}) or {})
+    if not payload.get("review_confirmed"):
+      state["draft_message"] = "確認チェックボックスをオンにしてください。"
+      changed = True
+    else:
+      try:
+        working = _apply_draft_editor_payload(draft, payload)
+        ctx_gen = st.session_state.get(STATE_ACTIVE_CONTEXT_GENERATION)
+        state["unsaved_theme_draft"] = complete_draft_review(working, context_generation=ctx_gen)
+        state["draft_message"] = "テーマ案の確認を完了しました。"
+        changed = True
+      except ValueError as exc:
+        state["draft_message"] = str(exc) or "キーワード分類の確認を完了できません。"
+        changed = True
 
   draft = dict(state.get("unsaved_theme_draft", {}) or {}) or None
   if draft and theme_events.get("keep_draft_changes"):
     try:
       payload = dict(theme_events.get("draft_editor_payload", {}) or {})
-      updated = draft_from_editor_payload(draft, payload)
+      updated = _apply_draft_editor_payload(draft, payload)
       updated["loaded_into_editor"] = True
       state["unsaved_theme_draft"] = updated
       state["draft_message"] = "テーマ案の変更をsession上に保持しました。"
@@ -447,10 +485,13 @@ def _handle_study_demo_theme_events(theme_events: dict[str, object]) -> bool:
     else:
       try:
         payload = dict(theme_events.get("draft_editor_payload", {}) or {})
-        current_draft = draft_from_editor_payload(draft, payload)
+        current_draft = _apply_draft_editor_payload(draft, payload)
         errors = validate_theme_draft(current_draft)
         if errors:
-          state["draft_message"] = "テーマ名とテーマ説明を入力してください。"
+          if "review_not_complete" in errors or "review_signature_stale" in errors:
+            state["draft_message"] = "Draft確認が完了するまで新規保存できません。"
+          else:
+            state["draft_message"] = "テーマ名とテーマ説明を入力してください。"
         else:
           from services_v9.study_demo_theme_lineage import compute_theme_signature
 
@@ -1549,6 +1590,7 @@ def run_app() -> None:
   if theme_events["save_profile"] or profile_events["save_profile"]:
     _save_profile_and_rerun(watch_profile_dict)
 
+  _maybe_show_draft_create_toast()
   if _handle_study_demo_theme_events(theme_events):
     st.rerun()
 

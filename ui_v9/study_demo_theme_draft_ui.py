@@ -8,14 +8,13 @@ import streamlit as st
 
 from services_v9.study_demo_theme_draft import (
   can_generate_plan_for_draft,
-  can_generate_watch_profile_for_draft,
-  draft_from_editor_payload,
+  can_save_draft_as_new,
   draft_widget_key,
   should_show_old_plan_warning,
   summarize_theme_draft_state,
   validate_draft_generation_precondition,
-  validate_theme_draft,
 )
+from services_v9.study_demo_theme_draft_mapping import validate_theme_name
 from services_v9.study_demo_theme_lineage import DEFAULT_SAVED_THEME_NAME, build_search_plan_preview_summary
 
 
@@ -32,7 +31,7 @@ def _ensure_draft_widget_defaults(draft: Mapping[str, Any]) -> None:
 
 def _read_draft_editor(draft: Mapping[str, Any]) -> dict[str, Any]:
   draft_id = str(draft.get("draft_id", "") or "")
-  return {
+  payload = {
     field: st.session_state.get(draft_widget_key(draft_id, field))
     for field in (
       "name",
@@ -58,6 +57,16 @@ def _read_draft_editor(draft: Mapping[str, Any]) -> dict[str, Any]:
       "web_max_results",
     )
   }
+  candidates = list(draft.get("term_candidates", []) or [])
+  adopted: list[str] = []
+  for item in candidates:
+    value = str(item.get("value", "") or "")
+    if st.session_state.get(draft_widget_key(draft_id, f"adopt_{value}")):
+      adopted.append(value)
+  payload["adopted_candidates"] = adopted
+  payload["review_confirmed"] = bool(st.session_state.get(draft_widget_key(draft_id, "review_confirmed")))
+  payload["use_suggested_name"] = bool(st.session_state.get(draft_widget_key(draft_id, "use_suggested_name")))
+  return payload
 
 
 def render_theme_draft_section(
@@ -73,6 +82,7 @@ def render_theme_draft_section(
     "keep_draft_changes": False,
     "save_draft_as_new": False,
     "discard_draft": False,
+    "complete_draft_review": False,
     "draft_editor_payload": None,
     "save_confirmed": False,
     "discard_confirmed": False,
@@ -93,38 +103,54 @@ def render_theme_draft_section(
     search_plan=search_plan,
     theme_saved=theme_saved_from_draft,
   )
-  st.markdown("**状態:** 未保存のテーマ案")
+  st.markdown("**状態:** 未保存テーマ案")
   st.write(f"- Theme draft ID: `{draft.get('draft_id', '')}`")
-  st.write(f"- Theme ID: `{draft.get('theme_id', '')}` / version `{draft.get('theme_version', 1)}`")
-  st.write(f"- Theme signature: `{str(draft.get('theme_signature', ''))[:8]}`")
-  st.write(f"- Theme draft signature: `{summary.get('theme_draft_signature_short', '')}`")
+  st.write(f"- 保存予定Theme ID: `{draft.get('theme_id', '')}` / version `{draft.get('theme_version', 1)}`")
   st.write("- **作成元:** 一時キーワード検索")
   st.write(f"- **元Search Run:** `{draft.get('source_search_run_id', '')}`")
-  st.write(f"- source: `{draft.get('source', '')}`")
-  st.write(f"- 作成日時: {draft.get('created_at', '')}")
-  st.write(f"- 最終編集: {draft.get('updated_at', '')}")
   st.write(f"- 未保存変更: {'あり' if draft.get('dirty') else 'なし'}")
   st.write("- **既存テーマへの影響:** なし")
-  st.write("- Active Contextへの影響: なし")
-  st.write("- 自動保存: しない")
-  st.write("- 自動適用: しない")
+  st.write("- **Active Contextへの影響:** なし")
+  st.write("- 自動保存: しない / 自動適用: しない")
+  review_label = str(summary.get("review_label", "未完了"))
+  st.write(f"- Draft確認: **{review_label}**")
+
+  with st.expander("技術情報", expanded=False):
+    st.write(f"- Theme内容シグネチャ: `{str(draft.get('theme_signature', ''))[:8]}`")
+    st.write(f"- Draft状態シグネチャ: `{summary.get('theme_draft_signature_short', '')}`")
+    st.write(f"- context generation: `{draft.get('created_from_context_generation', '')}`")
+    st.write(f"- source request ref: `{draft.get('original_search_request_ref', '')}`")
 
   _ensure_draft_widget_defaults(draft)
   draft_id = str(draft.get("draft_id", "") or "")
+  suggested = str(draft.get("suggested_theme_name", "") or "")
+  if suggested:
+    st.markdown("#### 推奨テーマ名")
+    st.caption(f"元の検索テーマ文: {draft.get('original_active_theme_text', '')}")
+    st.write(f"推奨: **{suggested}**")
+    st.checkbox("推奨テーマ名を使う", key=draft_widget_key(draft_id, "use_suggested_name"), value=True)
+  for issue in validate_theme_name(str(draft.get("name", "")), description=str(draft.get("description", ""))):
+    if issue.get("severity") == "warning":
+      st.warning(str(issue.get("message", "")))
+
   st.markdown("#### テーマ案の編集")
   st.text_input("テーマ名", key=draft_widget_key(draft_id, "name"))
   st.text_area("テーマ説明", key=draft_widget_key(draft_id, "description"), height=120)
   col_left, col_right = st.columns(2)
   with col_left:
     st.text_area("コアキーワード 日本語", key=draft_widget_key(draft_id, "core_ja"), height=100)
-    st.text_area("用途キーワード 日本語", key=draft_widget_key(draft_id, "use_ja"), height=80)
+    st.text_area("用途・評価キーワード 日本語", key=draft_widget_key(draft_id, "use_ja"), height=80)
     st.text_area("材料・プロセス 日本語", key=draft_widget_key(draft_id, "material_process_ja"), height=80)
     st.text_area("除外キーワード 日本語", key=draft_widget_key(draft_id, "exclude_ja"), height=80)
   with col_right:
     st.text_area("コアキーワード 英語", key=draft_widget_key(draft_id, "core_en"), height=100)
-    st.text_area("用途キーワード 英語", key=draft_widget_key(draft_id, "use_en"), height=80)
+    st.text_area("用途・評価キーワード 英語", key=draft_widget_key(draft_id, "use_en"), height=80)
     st.text_area("材料・プロセス 英語", key=draft_widget_key(draft_id, "material_process_en"), height=80)
     st.text_area("除外キーワード 英語", key=draft_widget_key(draft_id, "exclude_en"), height=80)
+
+  _render_mapping_review(draft)
+  _render_term_candidates(draft)
+
   pub_left, pub_right = st.columns(2)
   with pub_left:
     st.text_area("Seed publication numbers", key=draft_widget_key(draft_id, "seed_publications"), height=80)
@@ -140,6 +166,14 @@ def render_theme_draft_section(
   st.checkbox("Paper", key=draft_widget_key(draft_id, "enable_paper"))
   st.checkbox("Web", key=draft_widget_key(draft_id, "enable_web"))
 
+  st.checkbox(
+    "テーマ案の内容とキーワード分類を確認しました",
+    key=draft_widget_key(draft_id, "review_confirmed"),
+  )
+  events["complete_draft_review"] = st.button("テーマ案の確認を完了", key=f"btn_complete_review_{draft_id}")
+  if str(draft.get("review_status", "")) != "reviewed":
+    st.caption("Draft確認が完了するまで新規保存できません。")
+
   events["save_confirmed"] = st.checkbox(
     "このテーマ案を新しいテーマとして保存します。既存の標準監視テーマは上書きしません。",
     key=f"confirm_save_draft_{draft_id}",
@@ -154,7 +188,12 @@ def render_theme_draft_section(
   with btn1:
     events["keep_draft_changes"] = st.button("テーマ案の変更を保持", key=f"btn_keep_draft_{draft_id}")
   with btn2:
-    events["save_draft_as_new"] = st.button("新しいテーマとして保存", key=f"btn_save_draft_{draft_id}")
+    save_disabled = not can_save_draft_as_new(draft)
+    events["save_draft_as_new"] = st.button(
+      "新しいテーマとして保存",
+      key=f"btn_save_draft_{draft_id}",
+      disabled=save_disabled,
+    )
   with btn3:
     events["discard_draft"] = st.button("テーマ案を破棄", key=f"btn_discard_draft_{draft_id}")
 
@@ -163,12 +202,48 @@ def render_theme_draft_section(
   return events
 
 
+def _render_mapping_review(draft: Mapping[str, Any]) -> None:
+  terms = list(draft.get("mapping_terms", []) or [])
+  if not terms:
+    return
+  with st.expander("キーワード分類確認", expanded=False):
+    accepted = [item for item in terms if item.get("accepted_for_theme")]
+    st.caption("確定語")
+    for item in accepted[:12]:
+      st.write(
+        f"- {item.get('value')} | {item.get('language')} | {item.get('semantic_bucket')} | "
+        f"{item.get('provenance')} | 確定"
+      )
+    pending = [item for item in terms if item.get("requires_user_review")]
+    if pending:
+      st.caption("要確認")
+      for item in pending[:8]:
+        st.write(f"- {item.get('value')} | 候補 | {item.get('provenance')}")
+
+
+def _render_term_candidates(draft: Mapping[str, Any]) -> None:
+  candidates = list(draft.get("term_candidates", []) or [])
+  if not candidates:
+    return
+  draft_id = str(draft.get("draft_id", "") or "")
+  st.markdown("#### テーマ文から抽出した候補 / 英語alias候補")
+  st.caption("候補語は内容確認後に採用してください。")
+  for item in candidates:
+    value = str(item.get("value", "") or "")
+    label = (
+      f"{value} ({item.get('language')}, {item.get('semantic_bucket')}) "
+      f"— 確認が必要 [{item.get('provenance')}]"
+    )
+    st.checkbox(label, key=draft_widget_key(draft_id, f"adopt_{value}"))
+
+
 def _render_workflow_guide(summary: Mapping[str, Any]) -> None:
   workflow = dict(summary.get("workflow", {}) or {})
   st.markdown("#### 操作ガイド")
+  review_label = str(workflow.get("draft_review_label", "未完了"))
   steps = [
     ("Draft作成", workflow.get("draft_created")),
-    ("Draft確認", workflow.get("draft_reviewed")),
+    (f"Draft確認 ({review_label})", workflow.get("draft_reviewed")),
     ("Theme保存", workflow.get("theme_saved")),
     ("Watch Profile", workflow.get("watch_profile_generated")),
     ("Search Plan", workflow.get("search_plan_generated")),
@@ -213,21 +288,43 @@ def render_search_plan_preview_with_draft_warning(
   *,
   draft: Mapping[str, Any] | None,
   saved_theme: Mapping[str, Any] | None,
+  profile_summary: Mapping[str, Any] | None = None,
+  search_plan_state: Mapping[str, Any] | None = None,
 ) -> None:
-  st.markdown("### Search Plan Preview")
   if should_show_old_plan_warning(draft, search_plan, saved_theme):
+    theme_name = str((saved_theme or {}).get("name", DEFAULT_SAVED_THEME_NAME))
+    st.markdown("### Search Plan Preview")
     st.warning(
-      f"以下は保存済み標準監視テーマ『{saved_theme.get('name', DEFAULT_SAVED_THEME_NAME) if saved_theme else DEFAULT_SAVED_THEME_NAME}』"
-      "に由来するSearch Planです。現在の未保存サイジング剤テーマ案とは接続されていません。"
+      f"保存済み標準テーマ『{theme_name}』に由来する旧Search Planです。"
+      "現在の未保存テーマ案とは**未接続**です。このPlanはdraft用検索には使用されません。"
     )
-    if search_plan:
-      summary = build_search_plan_preview_summary(search_plan)
-      st.write(f"- Search Plan source theme: `{summary.get('source_theme_id')}` v{summary.get('source_theme_version')}")
-      st.write(f"- source Watch Profile: `{summary.get('source_watch_profile_id')}` v{summary.get('source_watch_profile_version')}")
-      st.write("- draftとの接続状態: **未接続**")
-    if draft and str(draft.get("status", "")) == "draft":
-      st.info("Theme draft未保存のため、draft向けWatch Profile / Search Planは生成できません。")
+    if draft:
+      st.write(f"- Current draft ID: `{draft.get('draft_id', '')}`")
+    st.write("- 接続状態: **未接続**")
+    with st.expander("保存済み標準テーマ由来の旧Search Plan（現在のTheme draftとは未接続）", expanded=False):
+      if search_plan:
+        summary = build_search_plan_preview_summary(search_plan)
+        st.write(f"- Plan source theme: `{summary.get('source_theme_id')}` v{summary.get('source_theme_version')}")
+        st.write(f"- source Watch Profile: `{summary.get('source_watch_profile_id')}` v{summary.get('source_watch_profile_version')}")
+        st.write(f"- source Search Plan: `{summary.get('search_plan_id')}` v{summary.get('search_plan_version')}")
+        st.write(f"- signature: `{summary.get('search_plan_signature_short')}`")
+      if search_plan_state:
+        st.write(
+          f"- Watch Profile signature一致: "
+          f"{'有効' if not bool(search_plan_state.get('profile_signature_changed', False)) else '不一致'}"
+        )
+        if search_plan_state.get("stale"):
+          st.warning("保存済み標準テーマについて、Search Planが最新Watch Profileをまだ反映していません。")
+        else:
+          st.success(
+            f"保存済み標準テーマ『{theme_name}』については、Search Planが最新です。"
+            "現在の未保存Theme draftには適用されません。"
+          )
+      if draft and str(draft.get("status", "")) == "draft":
+        st.info("Theme draft未保存のため、draft向けWatch Profile / Search Planは生成できません。")
     return
+
+  st.markdown("### Search Plan Preview")
   if not search_plan:
     if draft and str(draft.get("status", "")) == "draft":
       st.info("Theme draft未保存のため、Search Planは未生成です。新しいテーマとして保存後にWatch Profile案を生成してください。")
@@ -244,26 +341,94 @@ def render_standard_theme_actions(*, has_unsaved_draft: bool) -> dict[str, bool]
   st.markdown("### A. 標準監視テーマ")
   if has_unsaved_draft:
     st.caption("未保存テーマ案（Dセクション）とは別です。下の操作は保存済み標準監視テーマ向けです。")
-  col1, col2, col3 = st.columns(3)
   events = {
     "save_theme": False,
     "load_saved_theme": False,
     "generate_watch_profile": False,
     "generate_search_plan": False,
   }
-  with col1:
-    with st.expander("現在の標準監視テーマを更新保存", expanded=False):
-      st.warning("誤操作防止: 更新保存は確認後に実行してください。")
+  if has_unsaved_draft:
+    with st.expander("保存済み標準監視テーマの操作（未保存テーマ案には影響しません）", expanded=False):
+      st.warning("これらの操作は旧標準テーマ向けです。未保存Theme draftには適用されません。")
       events["save_theme"] = st.button("標準監視テーマを更新保存", key="btn_theme_update_saved")
+      events["generate_watch_profile"] = st.button(
+        "標準監視テーマからWatch Profile案を生成",
+        key="btn_theme_gen_profile_std",
+      )
+      events["generate_search_plan"] = st.button(
+        "標準監視テーマからSearch Planを生成",
+        key="btn_theme_gen_plan_std",
+      )
+      events["load_saved_theme"] = st.button("保存済みテーマを読み込む", key="btn_theme_load_saved_std")
+  else:
+    col1, col2, col3 = st.columns(3)
+    with col1:
+      with st.expander("現在の標準監視テーマを更新保存", expanded=False):
+        st.warning("誤操作防止: 更新保存は確認後に実行してください。")
+        events["save_theme"] = st.button("標準監視テーマを更新保存", key="btn_theme_update_saved")
+    with col2:
+      events["generate_watch_profile"] = st.button(
+        "標準監視テーマからWatch Profile案を生成",
+        key="btn_theme_gen_profile_std",
+      )
+    with col3:
+      events["generate_search_plan"] = st.button(
+        "標準監視テーマからSearch Planを生成",
+        key="btn_theme_gen_plan_std",
+      )
+    events["load_saved_theme"] = st.button("保存済みテーマを読み込む", key="btn_theme_load_saved_std")
+  return events
+
+
+def render_legacy_search_plan_controls(
+  *,
+  has_unsaved_draft: bool,
+  profile_status_message: str | None,
+  search_plan_status_message: str | None,
+  search_plan_state: Mapping[str, Any],
+  profile_summary: Mapping[str, Any],
+  saved_theme_name: str,
+) -> dict[str, bool]:
+  """Watch profile / search plan controls scoped away from draft when draft exists."""
+  events = {
+    "save_profile": False,
+    "load_profile": False,
+    "regenerate_search_plan": False,
+  }
+  if has_unsaved_draft:
+    with st.expander("保存済み標準テーマ由来の監視プロファイル操作（draft未接続）", expanded=False):
+      st.warning("未保存Theme draftには影響しません。旧標準テーマ向けの操作です。")
+      col1, col2, col3 = st.columns(3)
+      with col1:
+        events["save_profile"] = st.button("監視プロファイルを保存", key="btn_theme_save_profile", width="stretch")
+      with col2:
+        events["load_profile"] = st.button("保存済み監視プロファイルを読み込む", key="btn_theme_load_profile", width="stretch")
+      with col3:
+        events["regenerate_search_plan"] = st.button("検索計画を再生成", key="btn_theme_regenerate_search_plan", width="stretch")
+      if profile_status_message:
+        st.caption(profile_status_message)
+      if search_plan_status_message:
+        st.caption(search_plan_status_message)
+      st.markdown("#### 旧Search Plan状態")
+      st.write(f"- 最終生成: {search_plan_state.get('generated_at', '未生成')}")
+      st.write(
+        f"- Watch Profile signature一致: "
+        f"{'有効' if not bool(search_plan_state.get('profile_signature_changed', False)) else '不一致'}"
+      )
+      if search_plan_state.get("stale"):
+        st.warning("保存済み標準テーマについて、Search Planが最新Watch Profileをまだ反映していません。")
+      else:
+        st.success(
+          f"保存済み標準テーマ『{saved_theme_name}』については、Search Planが最新です。"
+          "現在の未保存Theme draftには適用されません。"
+        )
+    return events
+
+  col1, col2, col3 = st.columns(3)
+  with col1:
+    events["save_profile"] = st.button("監視プロファイルを保存", key="btn_theme_save_profile", width="stretch")
   with col2:
-    events["generate_watch_profile"] = st.button(
-      "標準監視テーマからWatch Profile案を生成",
-      key="btn_theme_gen_profile_std",
-    )
+    events["load_profile"] = st.button("保存済み監視プロファイルを読み込む", key="btn_theme_load_profile", width="stretch")
   with col3:
-    events["generate_search_plan"] = st.button(
-      "標準監視テーマからSearch Planを生成",
-      key="btn_theme_gen_plan_std",
-    )
-  events["load_saved_theme"] = st.button("保存済みテーマを読み込む", key="btn_theme_load_saved_std")
+    events["regenerate_search_plan"] = st.button("検索計画を再生成", key="btn_theme_regenerate_search_plan", width="stretch")
   return events
