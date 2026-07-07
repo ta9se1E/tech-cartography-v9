@@ -644,9 +644,6 @@ def render_theme_setup_tab(
   source_info: dict[str, object] | None = None,
   theme_state: dict[str, Any] | None = None,
 ) -> dict[str, bool]:
-  st.subheader("Tech Cartography v9")
-  st.caption("軽量R&Dシグナル監視エージェント")
-
   study_demo_mode = False
   try:
     from services_v9.study_demo_config import is_study_demo_mode
@@ -654,6 +651,23 @@ def render_theme_setup_tab(
     study_demo_mode = is_study_demo_mode()
   except Exception:
     study_demo_mode = False
+
+  if study_demo_mode:
+    from services_v9.study_demo_ui_mode import is_study_demo_simple_ui
+
+    if is_study_demo_simple_ui():
+      from ui_v9.study_demo_simple_theme_ui import render_simple_theme_tab
+
+      state = dict(theme_state or {})
+      return render_simple_theme_tab(
+        theme_state=state,
+        source_info=source_info,
+        profile_summary=profile_summary,
+        search_plan_state=search_plan_state,
+      )
+
+  st.subheader("Tech Cartography v9")
+  st.caption("軽量R&Dシグナル監視エージェント")
 
   if study_demo_mode:
     from ui_v9.study_demo_theme_draft_ui import (
@@ -916,6 +930,30 @@ def render_sources_tab(
 
     study_demo_mode = is_study_demo_mode()
     if study_demo_mode:
+      from services_v9.study_demo_ui_mode import is_study_demo_simple_ui
+
+      if is_study_demo_simple_ui():
+        from ui_v9.study_demo_simple_sources_ui import render_simple_sources_tab
+
+        study_events = render_simple_sources_tab(
+          source_info=source_info,
+          theme_state=theme_state,
+          study_demo_authenticated=study_demo_authenticated,
+          search_plan_state=search_plan_state,
+          retrieval_reload_state=retrieval_reload_state,
+          retrieval_manifest_status_message=retrieval_manifest_status_message,
+          csv_template_text=csv_template_text,
+          json_template_text=json_template_text,
+        )
+        return {
+          **study_events,
+          "save_retrieval_manifest": False,
+          "load_saved_retrieval_manifest": False,
+          "approve_patent_query": False,
+          "run_patent_retrieval": False,
+          "run_paper_retrieval": False,
+          "run_global_web_retrieval": False,
+        }
       study_events = render_study_demo_keyword_search_section(authenticated=study_demo_authenticated)
       st.divider()
   except Exception:
@@ -1290,6 +1328,21 @@ def render_top_signals_tab(
   source_info: dict[str, object],
   snapshot_status_message: str | None = None,
 ) -> dict[str, bool]:
+  try:
+    from services_v9.study_demo_config import is_study_demo_mode
+    from services_v9.study_demo_ui_mode import is_study_demo_simple_ui
+
+    if is_study_demo_mode() and is_study_demo_simple_ui():
+      from ui_v9.study_demo_simple_signals_ui import render_simple_signals_tab
+
+      return render_simple_signals_tab(
+        signals=signals,
+        display_signals=display_signals,
+        source_info=source_info,
+      )
+  except Exception:
+    pass
+
   from ui_v9.study_demo_active_banner import render_active_analysis_banner
 
   st.subheader("注目シグナル")
@@ -1459,6 +1512,17 @@ def render_weekly_updates_tab(
   previous_snapshot_info: dict | None,
   compare_status_message: str | None = None,
 ) -> dict[str, bool]:
+  try:
+    from services_v9.study_demo_config import is_study_demo_mode
+    from services_v9.study_demo_ui_mode import is_study_demo_simple_ui
+
+    if is_study_demo_mode() and is_study_demo_simple_ui():
+      from ui_v9.study_demo_simple_tabs_ui import render_simple_weekly_tab
+
+      return render_simple_weekly_tab(source_info=source_info)
+  except Exception:
+    pass
+
   from ui_v9.study_demo_active_banner import render_active_analysis_banner
 
   st.subheader("週次更新")
@@ -1662,6 +1726,22 @@ def render_watch_profile_tab(
   *,
   source_info: dict[str, object] | None = None,
 ) -> dict[str, bool]:
+  try:
+    from services_v9.study_demo_config import is_study_demo_mode
+    from services_v9.study_demo_ui_mode import is_study_demo_simple_ui
+
+    if is_study_demo_mode() and is_study_demo_simple_ui():
+      from ui_v9.study_demo_simple_tabs_ui import render_simple_watch_profile_tab
+
+      return render_simple_watch_profile_tab(
+        watch_profile=watch_profile,
+        profile_summary=profile_summary,
+        suggestions=suggestions,
+        source_info=source_info,
+      )
+  except Exception:
+    pass
+
   from ui_v9.study_demo_active_banner import render_active_analysis_banner
 
   st.subheader("監視プロファイル")
@@ -1867,6 +1947,21 @@ def render_digest_export_tab(
   email_delivery_status_message: str | None = None,
   digest_status_message: str | None = None,
 ) -> dict[str, bool | str | None]:
+  try:
+    from services_v9.study_demo_config import is_study_demo_mode
+    from services_v9.study_demo_ui_mode import is_study_demo_simple_ui
+
+    if is_study_demo_mode() and is_study_demo_simple_ui():
+      from ui_v9.study_demo_simple_tabs_ui import render_simple_digest_tab
+
+      return render_simple_digest_tab(
+        markdown_text=markdown_text,
+        csv_text=csv_text,
+        source_info=source_info,
+      )
+  except Exception:
+    pass
+
   from ui_v9.study_demo_active_banner import render_active_analysis_banner
   from ui_v9.study_demo_event_contracts import default_digest_events
 

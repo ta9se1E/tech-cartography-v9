@@ -1398,7 +1398,10 @@ def run_app() -> None:
   if is_study_demo_mode():
     if not render_study_demo_login_screen():
       return
-    render_study_demo_banner()
+    from services_v9.study_demo_ui_mode import is_study_demo_simple_ui
+
+    if not is_study_demo_simple_ui():
+      render_study_demo_banner()
     _sync_study_demo_active_context()
 
   ensure_v9_run_dirs()
@@ -1486,17 +1489,28 @@ def run_app() -> None:
       operation_rows = build_active_run_operation_rows(metrics)
   csv_text = signals_to_csv(signals)
 
-  st.title("Tech Cartography v9")
-  st.caption("軽量R&Dシグナル監視エージェント")
-  render_notice()
-  if is_study_demo_mode():
-    render_study_demo_mode_legend()
-  else:
-    st.caption(
-      "ローカルのデモデータ、アップロードされたCSV/JSON、または明示的に読込んだ取得済みartifactで動作します。"
-      "BigQuery、OpenAlex、Web検索、OCR、PDFスキャン、"
-      "スケジューラ、外部APIは起動時に実行しません。"
+  from services_v9.study_demo_ui_mode import is_study_demo_simple_ui
+
+  if is_study_demo_mode() and is_study_demo_simple_ui():
+    from ui_v9.study_demo_compact_components import render_compact_header, render_context_bar
+
+    render_compact_header()
+    render_context_bar(
+      source_info=source_info,
+      theme_state=dict(st.session_state.get(STATE_THEME_LINEAGE, {}) or {}),
     )
+  else:
+    st.title("Tech Cartography v9")
+    st.caption("軽量R&Dシグナル監視エージェント")
+    render_notice()
+    if is_study_demo_mode():
+      render_study_demo_mode_legend()
+    else:
+      st.caption(
+        "ローカルのデモデータ、アップロードされたCSV/JSON、または明示的に読込んだ取得済みartifactで動作します。"
+        "BigQuery、OpenAlex、Web検索、OCR、PDFスキャン、"
+        "スケジューラ、外部APIは起動時に実行しません。"
+      )
 
   tabs = st.tabs(V9_TAB_LABELS)
   with tabs[0]:

@@ -282,19 +282,23 @@ def render_saved_theme_selector(
   *,
   saved_themes: list[Mapping[str, Any]],
   selected_theme_id: str,
+  show_technical_ids: bool = True,
 ) -> dict[str, Any]:
   st.markdown("### 保存済みテーマ一覧")
   if not saved_themes:
     st.info("保存済みテーマはありません。")
     return {"select_theme_id": None}
   options = [str(item.get("theme_id", "")) for item in saved_themes]
-  labels = {
-    str(item.get("theme_id", "")): (
-      f"{item.get('name', '')} | {str(item.get('theme_id', ''))[:12]} | v{item.get('theme_version', 1)} | "
-      f"{item.get('status', '')} | {item.get('source', '')}"
-    )
-    for item in saved_themes
-  }
+  if show_technical_ids:
+    labels = {
+      str(item.get("theme_id", "")): (
+        f"{item.get('name', '')} | {str(item.get('theme_id', ''))[:12]} | v{item.get('theme_version', 1)} | "
+        f"{item.get('status', '')} | {item.get('source', '')}"
+      )
+      for item in saved_themes
+    }
+  else:
+    labels = {str(item.get("theme_id", "")): str(item.get("name", "") or item.get("theme_id", "")) for item in saved_themes}
   current_index = options.index(selected_theme_id) if selected_theme_id in options else 0
   chosen = st.selectbox(
     "Themeを選択",

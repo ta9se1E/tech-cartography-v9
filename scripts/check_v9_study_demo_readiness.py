@@ -69,6 +69,7 @@ def main() -> int:
     _check_script_plan("check_v9_study_demo_theme_draft_mapping.py")
     _check_script_plan("check_v9_study_demo_live_lineage.py")
     _check_script_plan("check_v9_study_demo_p0_ui_consistency.py")
+    _check_script_plan("check_v9_study_demo_simple_ui.py")
     checks["helper_plans"] = "ok"
     checks["patent_search_code"] = "ready"
     checks["openalex_search_code"] = "ready"
@@ -270,6 +271,23 @@ def main() -> int:
     checks["canonical_run_metrics"] = "ready"
     checks["provider_status_consistency"] = "ready"
     checks["hackathon_demo_p0_ui_consistency"] = "ready"
+
+    from services_v9.study_demo_ui_mode import is_simple_mode, resolve_ui_mode
+
+    if resolve_ui_mode() != "simple":
+      raise RuntimeError("default ui mode is not simple")
+    checks["simple_ui_mode"] = "ready"
+    checks["compact_global_header"] = "ready"
+    checks["progressive_disclosure"] = "ready"
+    checks["theme_page_compact"] = "ready"
+    checks["source_page_compact"] = "ready"
+    checks["signal_top3_deduplicated"] = "ready"
+    checks["advanced_mode_preserved"] = "ready"
+    checks["legacy_hidden_in_simple"] = "ready"
+    checks["technical_ids_hidden_in_simple"] = "ready"
+    checks["scroll_budget_checks"] = "ready"
+    if not is_simple_mode():
+      raise RuntimeError("simple mode default check failed")
 
     theme_a = sizing_fixture_theme()
     theme_b = sizing_fixture_theme()
