@@ -242,17 +242,9 @@ def synthesize_role_summary(role: Mapping[str, Any]) -> str:
 
 
 def build_ranking_basis(signal: Mapping[str, Any], fact_sheet: Mapping[str, Any]) -> dict[str, Any]:
-  return {
-    "summary": str(signal.get("relevance_reason", "") or "Theme一致語と取得済み概要に基づく候補"),
-    "evidence": [
-      {"kind": "keyword_match", "value": term} for term in list(fact_sheet.get("matched_terms", []) or [])[:5]
-    ]
-    + [{"kind": "theme_axis", "value": axis} for axis in list(fact_sheet.get("matched_theme_axes", []) or [])[:5]]
-    + [
-      {"kind": "score", "value": str(signal.get("relevance_score", ""))},
-      {"kind": "tier", "value": str(signal.get("relevance_tier", ""))},
-    ],
-  }
+  from services_v9.ranking_match_evidence import build_ranking_basis_payload
+
+  return build_ranking_basis_payload(signal, fact_sheet)
 
 
 def synthesize_research_value_output(

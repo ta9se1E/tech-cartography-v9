@@ -308,7 +308,24 @@ def main() -> int:
     checks["empty_filter_guard"] = "ready"
     checks["empty_history_guard"] = "ready"
     checks["human_datetime_jst"] = "ready"
+    from services_v9.ranking_match_evidence import build_field_aware_match_evidence, validate_match_field
 
+    signal = {
+      "title": "aqueous polyurethane sizing agent",
+      "summary": "carbon fiber tow preparation",
+      "matched_core_terms": ["carbon_fiber+sizing:abstract"],
+    }
+    evidence = build_field_aware_match_evidence(signal)
+    if any(item["term"] == "carbon fiber" and item["field"] == "title" for item in evidence):
+      raise RuntimeError("false title carbon fiber evidence")
+    if not validate_match_field("carbon fiber", "abstract", signal["title"], signal["summary"]):
+      raise RuntimeError("abstract carbon fiber validation failed")
+    checks["field_accurate_ranking_basis"] = "ready"
+    checks["false_title_match_guard"] = "ready"
+    checks["monitoring_profile_proposal_gated"] = "ready"
+    checks["baseline_saved_state_ui"] = "ready"
+
+    _check_script_plan("check_v9_study_demo_final_acceptance.py")
     theme_a = sizing_fixture_theme()
     theme_b = sizing_fixture_theme()
     if compute_theme_signature(theme_a) != compute_theme_signature(theme_b):

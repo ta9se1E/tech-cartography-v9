@@ -16,6 +16,7 @@ from services_v9.simple_review_state import (
   save_review_blocked_message,
   to_backend_decision,
 )
+from services_v9.study_demo_ui_mode import should_show_technical_ids
 from services_v9.study_demo_review_schema import normalize_review_record, validate_review_record
 from services_v9.study_demo_theme_lineage import sizing_fixture_theme
 from ui_v9.labels import type_label_ja
@@ -203,10 +204,14 @@ def render_research_value_card(
   ranking_basis = dict(output.get("ranking_basis", {}) or {})
   with st.expander("ランキング根拠", expanded=False):
     st.write(str(ranking_basis.get("summary", "") or ""))
-    for evidence in list(ranking_basis.get("evidence", []) or []):
-      st.write(f"- {evidence.get('kind', '')}: {evidence.get('value', '')}")
-    st.write(f"- data_basis: {output.get('data_basis', '')}")
-    st.write(f"- confidence: {output.get('confidence', '')}")
+    for label in list(ranking_basis.get("human_labels", []) or []):
+      st.write(label)
+    if should_show_technical_ids():
+      for evidence in list(ranking_basis.get("raw_evidence", []) or []):
+        st.write(f"- {evidence.get('kind', '')}: {evidence.get('value', '')}")
+      for evidence in list(ranking_basis.get("evidence", []) or []):
+        st.write(f"- verified {evidence.get('field', '')}: {evidence.get('term', '')}")
+      st.write(f"- confidence: {output.get('confidence', '')}")
 
 
 def build_research_value_bundle(

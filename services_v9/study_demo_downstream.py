@@ -333,7 +333,7 @@ def build_weekly_state(
   snapshots: Sequence[Mapping[str, Any]],
   integrated: Mapping[str, Any],
 ) -> dict[str, Any]:
-  from services_v9.run_baseline_state import is_initial_baseline, resolve_run_baseline_state
+  from services_v9.run_baseline_state import is_initial_baseline, resolve_run_baseline_state, resolve_snapshot_state
 
   signals = list(integrated.get("signals", []) or [])
   integrated_count = len(signals)
@@ -355,8 +355,13 @@ def build_weekly_state(
     integrated_count=integrated_count,
     priority_count=3,
   )
+  snapshot_state = resolve_snapshot_state(
+    snapshots=snapshots,
+    current_run_id=str(context.get("active_search_run_id", "") or ""),
+  )
   payload = {
     **baseline,
+    "snapshot_state": snapshot_state,
     "previous_snapshot": None if is_initial_baseline(baseline) else previous,
     "diff": None if is_initial_baseline(baseline) else diff,
   }

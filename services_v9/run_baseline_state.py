@@ -116,15 +116,33 @@ def is_initial_baseline(state: Mapping[str, Any]) -> bool:
   return str(state.get("state", "") or "") == "initial_baseline"
 
 
+def resolve_snapshot_state(
+  *,
+  snapshots: Sequence[Mapping[str, Any]] | None,
+  current_run_id: str,
+) -> str:
+  run_id = str(current_run_id or "").strip()
+  if not run_id:
+    return "unknown"
+  for snapshot in list(snapshots or []):
+    if str(snapshot.get("source_run_id", "") or "") == run_id:
+      return "saved"
+  return "unsaved"
+
+
 def build_baseline_summary(state: Mapping[str, Any]) -> dict[str, Any]:
   if is_initial_baseline(state):
+    snapshot_state = str(state.get("snapshot_state", "") or "unsaved")
+    headline = "初回ベースラインを保存しました" if snapshot_state == "saved" else "初回ベースライン"
     return {
-      "headline": "初回ベースラインを保存しました",
+      "headline": headline,
       "current_count": int(state.get("current_count", 0) or 0),
       "priority_count": int(state.get("priority_count", 3) or 3),
       "comparison_label": "なし",
       "next_message": str(state.get("next_message", "") or ""),
       "show_diff_counts": False,
+      "snapshot_state": snapshot_state,
+      "saved_state_label": "保存済み" if snapshot_state == "saved" else "未保存",
     }
   diff = dict(state.get("diff", {}) or {})
   counts = dict(diff.get("counts", {}) or {})
@@ -160,4 +178,5 @@ __all__ = [
   "build_change_labels",
   "is_initial_baseline",
   "resolve_run_baseline_state",
+  "resolve_snapshot_state",
 ]

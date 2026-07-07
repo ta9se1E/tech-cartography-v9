@@ -7,19 +7,22 @@ from typing import Any, Mapping, Sequence
 import streamlit as st
 
 from services_v9.run_baseline_state import build_baseline_summary, is_initial_baseline
-from services_v9.search_improvement_eligibility import build_insufficient_review_message
+from services_v9.search_improvement_eligibility import (
+  build_insufficient_review_message,
+  evaluate_proposal_eligibility,
+  filter_human_proposals,
+  reject_internal_token,
+)
 from services_v9.study_demo_ui_mode import should_show_technical_ids
 from services_v9.human_digest_builder import human_digest_to_markdown
-from ui_v9.labels import cadence_label_ja, type_label_ja, watch_profile_suggestion_label_ja
+from ui_v9.labels import cadence_label_ja, type_label_ja
 from ui_v9.study_demo_event_contracts import default_digest_events
 
 
-def _filter_simple_suggestions(suggestions: Sequence[str]) -> list[str]:
-  blocked_prefixes = (
-    "raise priority of source type:",
-    "lower priority of irrelevant source:",
-  )
-  return [item for item in suggestions if not str(item).startswith(blocked_prefixes)]
+def _baseline_save_controls_visible(weekly_state: Mapping[str, object]) -> bool:
+  if not is_initial_baseline(weekly_state):
+    return False
+  return str(weekly_state.get("snapshot_state", "") or "unsaved") != "saved"
 
 
 def render_simple_weekly_tab(*, source_info: Mapping[str, object]) -> dict[str, bool]:
@@ -31,18 +34,26 @@ def render_simple_weekly_tab(*, source_info: Mapping[str, object]) -> dict[str, 
 
   if is_initial_baseline(weekly_state):
     st.markdown("#### 週次更新")
-    st.success(summary.get("headline", "初回ベースラインを保存しました"))
+    st.success(summary.get("headline", "初回ベースライン"))
+    if str(summary.get("snapshot_state", "") or "") == "saved":
+      st.write(f"**保存状態:** {summary.get('saved_state_label', '保存済み')}")
     st.write(f"**今回取得:** {summary.get('current_count', integrated)}件")
     st.write(f"**優先確認:** {summary.get('priority_count', 3)}件")
     st.write("**比較対象:** なし")
     st.caption(str(summary.get("next_message", "")))
     st.caption("Demo: 自動実行・メール送信は停止中")
-    confirm = st.checkbox("このrunを初回スナップショットとして保存します", key="ui_study_demo_baseline_confirm")
-    save_baseline = st.button("このrunを初回スナップショットとして保存", key="btn_study_demo_save_baseline")
-    if save_baseline and not confirm:
-      st.error("確認チェックが必要です。")
-      save_baseline = False
-    return {"load_previous_snapshot": False, "compare_snapshot": False, "save_study_demo_baseline": bool(save_baseline and confirm)}
+    if _baseline_save_controls_visible(weekly_state):
+      confirm = st.checkbox("このrunを初回スナップショットとして保存します", key="ui_study_demo_baseline_confirm")
+      save_baseline = st.button("このrunを初回スナップショットとして保存", key="btn_study_demo_save_baseline")
+      if save_baseline and not confirm:
+        st.error("確認チェックが必要です。")
+        save_baseline = False
+      return {
+        "load_previous_snapshot": False,
+        "compare_snapshot": False,
+        "save_study_demo_baseline": bool(save_baseline and confirm),
+      }
+    return {"load_previous_snapshot": False, "compare_snapshot": False, "save_study_demo_baseline": False}
 
   st.markdown("#### 週次更新")
   st.write(f"**今回取得:** {summary.get('current_count', integrated)}件")
@@ -64,6 +75,29 @@ def render_simple_weekly_tab(*, source_info: Mapping[str, object]) -> dict[str, 
   return {"load_previous_snapshot": False, "compare_snapshot": False, "save_study_demo_baseline": False}
 
 
+def _render_proposal_insufficient(*, review_count: int) -> None:
+  st.markdown("#### 検索改善案")
+  st.info(build_insufficient_review_message())
+  st.caption(f"現在の保存済みレビュー: {review_count}件")
+
+
+def _render_eligible_proposals(proposals_payload: Mapping[str, object]) -> None:
+  st.markdown("#### 検索改善案")
+  proposals = filter_human_proposals(list(proposals_payload.get("proposals", []) or []))
+  summary = dict(proposals_payload.get("summary", {}) or {})
+  st.caption(f"対象レビュー件数: {summary.get('review_count', 0)}件")
+  for index, proposal in enumerate(proposals, start=1):
+    label = str(proposal.get("human_label", "") or proposal.get("proposed_value", "") or "")
+    if reject_internal_token(label):
+      continue
+    st.write(f"{index}. {label}")
+    st.caption(
+      f"種別: {proposal.get('proposal_type', '')} / 根拠レビュー: {proposal.get('support_count', 0)}件"
+    )
+    st.button("採用", key=f"simple_proposal_adopt_{proposal.get('proposal_id', index)}", disabled=True)
+    st.button("見送り", key=f"simple_proposal_skip_{proposal.get('proposal_id', index)}", disabled=True)
+
+
 def render_simple_watch_profile_tab(
   *,
   watch_profile: Any,
@@ -73,8 +107,11 @@ def render_simple_watch_profile_tab(
 ) -> dict[str, bool]:
   bundle = dict((source_info or {}).get("study_demo_downstream", {}) or {})
   draft = dict(bundle.get("profile_draft", {}) or {})
+  reviews_payload = dict(bundle.get("reviews", {}) or {})
+  reviews = list(reviews_payload.get("reviews", []) or [])
   proposals_payload = dict(bundle.get("review_proposals", {}) or {})
-  simple_suggestions = _filter_simple_suggestions(suggestions)
+  eligibility = evaluate_proposal_eligibility(reviews)
+  proposal_eligible = bool(eligibility.get("eligible"))
 
   if draft:
     st.markdown("#### 監視プロファイル案")
@@ -82,12 +119,10 @@ def render_simple_watch_profile_tab(
     st.write("**対象情報源:** Patent / Paper / Web")
     st.caption("更新頻度: 週次（デモでは自動実行停止中）")
     st.write(f"**注目企業:** {', '.join(draft.get('suggested_companies', []) or []) or 'なし'}")
-    if simple_suggestions:
-      st.markdown("**改善提案**")
-      for index, suggestion in enumerate(simple_suggestions, start=1):
-        st.write(f"{index}. {watch_profile_suggestion_label_ja(suggestion)}")
-    elif not proposals_payload.get("summary", {}).get("eligible", False):
-      st.info(build_insufficient_review_message())
+    if proposal_eligible:
+      _render_eligible_proposals(proposals_payload)
+    else:
+      _render_proposal_insufficient(review_count=int(eligibility.get("valid_review_count", 0) or 0))
     return {
       "save_profile": False,
       "load_profile": False,
@@ -103,10 +138,10 @@ def render_simple_watch_profile_tab(
   st.write(f"**更新頻度:** {cadence_label_ja(watch_profile.cadence)}")
   st.write(f"**対象国:** {', '.join(watch_profile.countries) if watch_profile.countries else 'なし'}")
   st.write(f"**注目企業:** {', '.join(profile_summary.get('target_companies', [])) or 'なし'}")
-  if simple_suggestions:
-    st.markdown("**改善提案**")
-    for index, suggestion in enumerate(simple_suggestions, start=1):
-      st.write(f"{index}. {watch_profile_suggestion_label_ja(suggestion)}")
+  if proposal_eligible:
+    _render_eligible_proposals(proposals_payload)
+  else:
+    _render_proposal_insufficient(review_count=int(eligibility.get("valid_review_count", 0) or 0))
   return {
     "save_profile": False,
     "load_profile": False,
@@ -197,6 +232,7 @@ def render_simple_digest_tab(
 
 
 __all__ = [
+  "_baseline_save_controls_visible",
   "render_simple_digest_tab",
   "render_simple_watch_profile_tab",
   "render_simple_weekly_tab",
