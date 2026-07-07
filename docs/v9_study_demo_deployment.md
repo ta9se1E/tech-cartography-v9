@@ -1010,3 +1010,80 @@ Stage C5B-2.1 repair to connect saved Theme / Watch Profile / Search Plan / Sear
 
 User should confirm new sizing Theme selected, both themes in list, connected lineage across all tabs, Search Plan Preview 5/5/5, no partial/部分接続 display, integrated=15, Tier=3/2/3/7. Validated tag not yet created.
 
+## Hackathon Demo P0 UI Consistency Deployment
+
+Stage C5B-3B deploy of P0 UI/state consistency fixes (Theme selector/editor sync, information source active run state, canonical metrics) to Study Demo only.
+
+### Deployment
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-07T13:09:00Z |
+| Deployed at (JST) | 2026-07-07 22:09:00 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00019-8zp` |
+| Rollback revision | `tech-cartography-v9-study-demo-00018-wrf` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:5183415` |
+| Image digest | `sha256:ba309d1b564cdc99dc176c1f9b284552afa24b8d2cef5ec76916471ec98808c2` |
+| Cloud Build ID | `49fbba74-e3c2-4829-abce-f036d1f5e561` |
+| Build source cleanup | deleted |
+| Git commit (code) | `5183415` |
+| Tag (code) | `v9-study-demo-hackathon-p0-ready` |
+| Tag (live candidate) | `v9-study-demo-hackathon-p0-live-candidate` |
+
+### Features deployed
+
+- Theme selector / editor sync (`selected_saved_theme_id` SSOT, versioned widget keys, save guard)
+- Active Theme auto-selection from watch_profile Active Context
+- Information source tab: current run state from Active Context / artifacts (B region); legacy isolated (C region)
+- Canonical run metrics (`study_demo_run_metrics.py`) with unknown-metric handling and consistency validation
+- Legacy source state isolation (`手動アップロード・旧データ投入機能`, default collapsed)
+
+### Data preservation (read-only verified post-deploy)
+
+| Field | Value |
+|-------|-------|
+| `active_context_generation` | 2 (unchanged) |
+| `active_search_run_id` | `study_demo_search_20260705_145711_c06e0a1b` |
+| `context_type` | `watch_profile` |
+| `run_origin` | `watch_profile` |
+| `source_theme_id` | `theme_6d2dfb753f7e` |
+| `source_watch_profile_id` | `wp_theme_6d2dfb753f7e` |
+| `source_search_plan_id` | `plan_wp_theme_6d2dfb753f7e` |
+| `lineage_status` | `connected` |
+| `provider_counts` | Patent 5 / Paper 5 / Web 5 |
+| `tier_counts` | A 3 / B 2 / C 3 / D 7 |
+| integrated signals | 15 |
+
+- No Theme / Watch Profile / Search Plan / Search Run artifact writes
+- No Active Context update (GCS `Update time` unchanged since 2026-07-05)
+- External API execution: **0**
+- Cloud data writes: **0**
+
+### Service configuration (unchanged)
+
+- Service Account: `tech-cartography-v9-study-demo@devops-ai-agent-hackathon-2026.iam.gserviceaccount.com`
+- Password secret: version **2**
+- OpenAlex secret: version **1**
+- Tavily secret: version **1**
+- min instances: 0 / max instances: 1
+- Public password gate: maintained (`allUsers` invoker + in-app password)
+- email: false
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled
+- Scheduler `tech-cartography-v9-weekly-watch-scheduler`: ENABLED, `0 9 * * 1` Asia/Tokyo
+- Production weekly `enabled=true`
+- Production bucket, secrets, IAM, and jobs unchanged
+
+### Unauthenticated smoke test
+
+- HTTP 200, Streamlit SPA bootstrap detected
+- No Theme/Run/Signal content or secret patterns in unauthenticated response
+
+### Browser acceptance pending
+
+User should confirm Theme selector/editor match sizing Theme, information source current section shows saved standard search run with provider success 5/5/5, lineage connected, integrated=15, Tier=3/2/3/7, no demo/準備中/none/0 misdisplay in current section, legacy expander isolated. Validated tag not yet created.
+
