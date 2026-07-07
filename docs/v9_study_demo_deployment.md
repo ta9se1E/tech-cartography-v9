@@ -1087,3 +1087,89 @@ Stage C5B-3B deploy of P0 UI/state consistency fixes (Theme selector/editor sync
 
 User should confirm Theme selector/editor match sizing Theme, information source current section shows saved standard search run with provider success 5/5/5, lineage connected, integrated=15, Tier=3/2/3/7, no demo/準備中/none/0 misdisplay in current section, legacy expander isolated. Validated tag not yet created.
 
+## Hackathon Demo Simple Mode Deployment
+
+Stage C5B-4B deploy of progressive disclosure Simple Mode UI to Study Demo only.
+
+### Deployment
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-07T13:57:58Z |
+| Deployed at (JST) | 2026-07-07 22:57:58 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-1020686343587.us-central1.run.app |
+| Revision | `tech-cartography-v9-study-demo-00020-bg2` |
+| Rollback revision | `tech-cartography-v9-study-demo-00019-8zp` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:1a5848f` |
+| Image digest | `sha256:70e7e3ab8a806e197819e4f6f3b2c08b9454d1540c86c730742c1be58b4b3d41` |
+| Cloud Build ID | `b07394a3-cb83-4039-8cca-945fa7fb0e27` |
+| Build source cleanup | deleted |
+| Git commit (code) | `1a5848f` |
+| Tag (code) | `v9-study-demo-simple-ui-ready` |
+| Tag (live candidate) | `v9-study-demo-simple-ui-live-candidate` |
+
+### UI mode
+
+| Setting | Value |
+|---------|-------|
+| `V9_UI_MODE` | `simple` (explicit on Cloud Run) |
+| Compact header | enabled |
+| Compact context bar | enabled (once per page) |
+| Advanced mode | preserved in code (`V9_UI_MODE=advanced`) |
+| User-facing mode toggle | none |
+
+### Features deployed
+
+- Theme page simplification (card + collapsed search conditions, editor on demand)
+- Source page simplification (provider cards, collapsed history/query, new search on button)
+- Signal Top3 deduplication with remaining signals collapsed
+- Legacy tools hidden in simple mode
+- Weekly / Profile / Digest compact views
+- Download limited to 2 user-facing options in simple Digest tab
+
+### Data preservation (read-only verified post-deploy)
+
+| Field | Value |
+|-------|-------|
+| `active_context_generation` | 2 (unchanged) |
+| `active_search_run_id` | `study_demo_search_20260705_145711_c06e0a1b` |
+| `context_type` | `watch_profile` |
+| `run_origin` | `watch_profile` |
+| `source_theme_id` | `theme_6d2dfb753f7e` |
+| `source_watch_profile_id` | `wp_theme_6d2dfb753f7e` |
+| `source_search_plan_id` | `plan_wp_theme_6d2dfb753f7e` |
+| `lineage_status` | `connected` |
+| `provider_counts` | Patent 5 / Paper 5 / Web 5 |
+| `tier_counts` | A 3 / B 2 / C 3 / D 7 |
+
+- No Theme / Watch Profile / Search Plan / Search Run artifact writes
+- No Active Context update (GCS `Update time` unchanged since 2026-07-05)
+- External API execution: **0**
+- Cloud data writes: **0**
+
+### Service configuration (unchanged)
+
+- Service Account: `tech-cartography-v9-study-demo@devops-ai-agent-hackathon-2026.iam.gserviceaccount.com`
+- Password secret: version **2**
+- OpenAlex secret: version **1**
+- Tavily secret: version **1**
+- min instances: 0 / max instances: 1
+- Public password gate: maintained
+- email: false
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`
+- Scheduler ENABLED, `0 9 * * 1` Asia/Tokyo
+- Production weekly `enabled=true`
+
+### Unauthenticated smoke test
+
+- HTTP 200, Streamlit SPA bootstrap detected
+- No Theme/Run/Signal content or secret patterns in unauthenticated response
+
+### Browser acceptance pending
+
+User should confirm single header/context bar, Theme/Sources within ~2 screens, Signals Top3 only with remaining collapsed, no legacy/internal metrics in simple view, Download ≤2, lineage/15件/Tier maintained, no external API on page load. Validated tag not yet created.
+
