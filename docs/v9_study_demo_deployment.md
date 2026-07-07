@@ -1263,3 +1263,87 @@ Stage C5B-5C deploy of deterministic research value synthesis (C5B-5A) and human
 
 User should confirm Top3 research value cards, Initial Baseline weekly/digest semantics, unreviewed review default, proposal insufficient message, no internal tokens, Tier labels, JST dates, and lineage/15件/Tier maintained. Validated tag not yet created.
 
+## Final Browser Acceptance Fixes Deployment
+
+Stage C5B-5E deploy of field-aware ranking evidence, Monitoring Profile proposal gating, and baseline saved-state UI to Study Demo only. No Theme/Profile/Plan/Run/Review/Proposal/snapshot Cloud writes during deploy. No external search or production changes.
+
+### Deployment
+
+| Item | Value |
+|------|-------|
+| Deployed at (UTC) | 2026-07-07T15:36:00Z |
+| Deployed at (JST) | 2026-07-08 00:36:00 JST |
+| Expires at (UTC) | 2026-07-11T19:27:30Z |
+| Expires at (JST) | 2026-07-12 04:27:30 JST |
+| Service | `tech-cartography-v9-study-demo` |
+| Service URL | https://tech-cartography-v9-study-demo-utejl5os5a-uc.a.run.app |
+| Revision | `tech-cartography-v9-study-demo-00022-mmv` |
+| Rollback revision | `tech-cartography-v9-study-demo-00021-x27` |
+| Image URI | `us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/cloud-run-source-deploy/tech-cartography-v9-study-demo:5af0f4d` |
+| Image digest | `sha256:234536c432bb922f6faf90aedbccad2103c088a0ea513e2071f1e16c991870a7` |
+| Cloud Build ID | `a0027069-6ea7-4c62-ab4a-e30364cc3506` |
+| Build source cleanup | deleted |
+| Image pre-push scan | PASS |
+| Git commit (code) | `5af0f4d` |
+| Tag (code) | `v9-study-demo-final-acceptance-ready` |
+| Tag (live candidate) | `v9-study-demo-final-acceptance-live-candidate` |
+
+### Features deployed
+
+- **Field-aware ranking evidence**: title/abstract verified match labels; false title match guard (3rd signal: no「タイトルにcarbon fiber」)
+- **Simple internal token hidden**: `sizing:title`, `keyword_match:`, `data_basis` codes suppressed in Simple Mode ranking basis
+- **Monitoring Profile proposal gating**: `evaluate_proposal_eligibility()` SSOT; insufficient review message when `proposal_eligible=false`
+- **Baseline saved-state UI**: `snapshot_state=saved` hides save checkbox/button; shows「保存状態: 保存済み」
+- **V9_UI_MODE** | `simple` (explicit, maintained)
+
+### Data preservation (read-only verified post-deploy)
+
+| Field | Value |
+|-------|-------|
+| `active_context_generation` | 2 (unchanged) |
+| `active_search_run_id` | `study_demo_search_20260705_145711_c06e0a1b` |
+| `source_theme_id` | `theme_6d2dfb753f7e` |
+| `source_watch_profile_id` | `wp_theme_6d2dfb753f7e` |
+| `source_search_plan_id` | `plan_wp_theme_6d2dfb753f7e` |
+| `lineage_status` | `connected` |
+| `provider_counts` | Patent 5 / Paper 5 / Web 5 |
+| `tier_counts` | A 3 / B 2 / C 3 / D 7 |
+| integrated signals | 15 |
+| `saved_review_count` | 0 |
+| `proposal_eligible` | false |
+| `snapshot_state` | saved (`snapshot_20260705_154805_a77c05cb`) |
+
+- No Theme / Watch Profile / Search Plan / Search Run artifact writes
+- No Review / Proposal real data writes
+- No snapshot real data writes
+- No Active Context update
+- External API execution: **0**
+- Cloud data writes: **0**
+
+### Service configuration (unchanged)
+
+- Service Account: `tech-cartography-v9-study-demo@devops-ai-agent-hackathon-2026.iam.gserviceaccount.com`
+- Password secret: version **2**
+- OpenAlex secret: version **1**
+- Tavily secret: version **1**
+- min instances: 0 / max instances: 1
+- Public password gate: maintained
+- email: false
+
+### Production unchanged (verified post-deploy)
+
+- Service `tech-cartography-v9-signal-watch` revision `00003-br7`, IAP enabled
+- Scheduler ENABLED, `0 9 * * 1` Asia/Tokyo
+- Production weekly `enabled=true`
+- Production bucket, secrets, IAM, and jobs unchanged
+
+### Unauthenticated smoke test
+
+- HTTP 200, Streamlit SPA bootstrap detected
+- No Theme/Run/Signal/Digest content or secret patterns in unauthenticated response
+- Password gate maintained (login required for app content)
+
+### Browser acceptance pending
+
+User should confirm 3rd ranking basis field accuracy, Monitoring Profile insufficient message, baseline saved UI without re-save controls, and Top3/Digest/Review/Provider/Tier regression. Validated tag not yet created.
+
