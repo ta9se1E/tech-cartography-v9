@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 import streamlit as st
 
+from services_v9.human_datetime import format_datetime_jst
 from services_v9.study_demo_run_metrics import format_unknown_metric
 from services_v9.study_demo_ui_mode import should_show_legacy_tools, should_show_technical_ids
 from ui_v9.study_demo_compact_components import render_provider_cards
@@ -29,9 +30,10 @@ def render_simple_sources_tab(
   st.markdown("#### 現在の取得状況")
   render_provider_cards(metrics=metrics)
   integrated = format_unknown_metric(metrics.get("integrated_count", source_info.get("loaded_count")))
-  executed_at = str(active_context.get("selected_at", "") or "—")
+  executed_at = format_datetime_jst(active_context.get("selected_at", ""))
   cost = dict(source_info.get("cost_estimate", {}) or metrics.get("cost_estimate", {}) or {})
-  cost_text = cost.get("total_usd_estimate", cost.get("estimated_total_usd", "—"))
+  cost_value = cost.get("total_usd_estimate", cost.get("estimated_total_usd"))
+  cost_text = "未計測" if cost_value in {None, "", "—", "-"} else str(cost_value)
   st.write(f"**統合後:** {integrated}件")
   st.caption(f"最終実行日時: {executed_at} | 参考費用: {cost_text}")
 
@@ -55,12 +57,22 @@ def render_simple_sources_tab(
       history = list_search_history(limit=10)
     except Exception:
       history = []
-    if not history:
-      st.caption("過去の検索履歴はありません。")
-    for item in history:
+    comparable_history = [
+      item
+      for item in history
+      if str(item.get("search_run_id", "") or "").strip()
+      and str(item.get("theme", "") or "").strip()
+      and str(item.get("created_at", "") or "").strip()
+    ]
+    if not comparable_history:
+      st.caption("過去の検索履歴はまだありません。今回のRunが初回ベースラインです。")
+    for item in comparable_history:
       run_id = str(item.get("search_run_id", "") or "")
       active_mark = "（現在使用中）" if run_id == str(active_context.get("active_search_run_id", "")) else ""
-      label = f"{item.get('created_at', '—')} | {item.get('theme', '—')} | {item.get('integrated_count', '—')}件{active_mark}"
+      created = format_datetime_jst(item.get("created_at", ""))
+      theme = str(item.get("theme", "") or "")
+      count = item.get("integrated_count", "")
+      label = f"{created} | {theme} | {count}件{active_mark}"
       if should_show_technical_ids():
         label = f"{label} | `{run_id}`"
       st.write(f"- {label}")

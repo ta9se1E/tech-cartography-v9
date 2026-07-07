@@ -6,6 +6,8 @@ from typing import Any, Mapping, Sequence
 
 import streamlit as st
 
+from services_v9.human_datetime import format_datetime_jst
+from services_v9.human_digest_builder import short_theme_label
 from services_v9.study_demo_auth import format_expiry_jst
 from services_v9.study_demo_config import is_study_demo_shared_state
 from services_v9.study_demo_run_metrics import format_unknown_metric
@@ -14,14 +16,28 @@ from ui_v9.labels import action_label_ja, score_level_label_ja, status_label_ja,
 from ui_v9.study_demo_source_link import render_external_source_link
 
 
-def render_compact_header(*, environ: Mapping[str, str] | None = None) -> None:
+def render_compact_header(
+  *,
+  environ: Mapping[str, str] | None = None,
+  source_info: Mapping[str, Any] | None = None,
+  theme_state: Mapping[str, Any] | None = None,
+) -> None:
+  active_context = dict((source_info or {}).get("active_context", {}) or {})
+  saved_theme = dict((theme_state or {}).get("saved_theme", {}) or {})
+  theme_name = str(saved_theme.get("name", "") or active_context.get("theme", "") or "未設定")
+  theme_short = short_theme_label(theme_name)
+  updated = format_datetime_jst(active_context.get("selected_at", "") or saved_theme.get("updated_at", ""))
+  lineage = str(active_context.get("lineage_status", "") or "")
+  status_label = "接続済み" if lineage == "connected" else "要確認"
+
   header_left, header_right = st.columns([4, 1])
   with header_left:
     st.markdown("### Tech Cartography")
-    st.caption("R&D Signal Watch")
-    st.caption(
-      "保存済み実データを表示中 | 自動週次: 停止中 | メール: 停止中"
-    )
+    st.caption("DEMO")
+    st.markdown(f"**{theme_short}**")
+    if theme_short != theme_name:
+      st.caption(theme_name)
+    st.caption(f"保存済み実データ | {status_label} | {updated}")
   with header_right:
     from services_v9.study_demo_auth import SESSION_AUTHENTICATED_KEY, clear_authentication
 
@@ -48,7 +64,6 @@ def render_compact_header(*, environ: Mapping[str, str] | None = None) -> None:
           "・ページ表示・履歴表示: 外部APIを実行しない",
           "・自動週次実行: 停止中",
           "・メール送信: 停止中",
-          "・本番環境: 変更しない",
           f"・公開終了日時: {expiry_text}",
           "",
           "v9は軽量なR&Dシグナル監視プレビューです。"
@@ -69,8 +84,8 @@ def render_context_bar(
   theme_name = str(saved_theme.get("name", "") or active_context.get("theme", "") or "未設定")
   lineage = str(active_context.get("lineage_status", "") or "")
   status_label = "接続済み" if lineage == "connected" else "要確認"
-  updated = str(active_context.get("selected_at", "") or saved_theme.get("updated_at", "") or "—")
-  st.info(f"**{theme_name}** | 最終更新: {updated} | 状態: {status_label}")
+  updated = format_datetime_jst(active_context.get("selected_at", "") or saved_theme.get("updated_at", ""))
+  st.info(f"**{short_theme_label(theme_name)}** | 最終更新: {updated} | 状態: {status_label}")
 
 
 def render_provider_cards(*, metrics: Mapping[str, Any]) -> None:

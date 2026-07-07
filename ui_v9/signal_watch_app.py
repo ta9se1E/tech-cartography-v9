@@ -1494,7 +1494,10 @@ def run_app() -> None:
   if is_study_demo_mode() and is_study_demo_simple_ui():
     from ui_v9.study_demo_compact_components import render_compact_header, render_context_bar
 
-    render_compact_header()
+    render_compact_header(
+      source_info=source_info,
+      theme_state=dict(st.session_state.get(STATE_THEME_LINEAGE, {}) or {}),
+    )
     render_context_bar(
       source_info=source_info,
       theme_state=dict(st.session_state.get(STATE_THEME_LINEAGE, {}) or {}),

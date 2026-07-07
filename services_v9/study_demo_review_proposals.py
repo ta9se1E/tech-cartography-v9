@@ -150,13 +150,57 @@ def generate_review_proposals(
   profile_keywords: Mapping[str, Any] | None = None,
   theme_name: str = "",
 ) -> dict[str, Any]:
+  from services_v9.search_improvement_eligibility import (
+    build_insufficient_review_message,
+    evaluate_proposal_eligibility,
+    filter_human_proposals,
+    reject_internal_token,
+  )
+
   signal_by_id = {str(item.get("signal_id", "")): dict(item) for item in signals}
   eligible_reviews = [
     dict(item)
     for item in reviews
     if item.get("reviewed") or item.get("reviewed_at")
   ]
+  eligibility = evaluate_proposal_eligibility(eligible_reviews)
   proposal_set_id = _proposal_set_id(eligible_reviews, source_run_id)
+  if not eligibility.get("eligible"):
+    return {
+      "proposal_set_id": proposal_set_id,
+      "source_run_id": source_run_id,
+      "generation_precondition": {"review_count": eligibility.get("valid_review_count", 0)},
+      "created_at": _utc_now_iso(),
+      "proposals": [
+        {
+          "proposal_id": _proposal_id("no_change_observation", "insufficient_review_support", source_run_id),
+          "proposal_type": "no_change_observation",
+          "proposed_value": "insufficient_review_support",
+          "normalized_value": "insufficient_review_support",
+          "source_run_id": source_run_id,
+          "supporting_review_ids": [],
+          "supporting_signal_ids": [],
+          "supporting_reason_codes": [],
+          "support_count": int(eligibility.get("valid_review_count", 0) or 0),
+          "confidence": "low",
+          "expected_effect": "観察のみ",
+          "recall_risk": "low",
+          "precision_risk": "low",
+          "explanation": build_insufficient_review_message(),
+          "status": PROPOSAL_STATUS_PROPOSED,
+          "created_at": _utc_now_iso(),
+        }
+      ],
+      "summary": {
+        "review_count": len(eligible_reviews),
+        "accept_count": 0,
+        "reject_count": 0,
+        "proposal_count": 0,
+        "observation_only": True,
+        "eligible": False,
+        "ineligible_reason": eligibility.get("reason", ""),
+      },
+    }
   core_keywords = _collect_core_keywords(profile_keywords)
   theme_tokens = set(_tokenize(theme_name))
 
@@ -191,6 +235,8 @@ def generate_review_proposals(
       if len(token) < 3 or token in STOP_WORDS or token in core_keywords or token in theme_tokens:
         continue
       if _is_identifier_like(token):
+        continue
+      if reject_internal_token(token):
         continue
       include_token_support[token] += 1
       include_token_reviews[token].append(str(review.get("signal_id", "")))
@@ -228,6 +274,8 @@ def generate_review_proposals(
       if len(token) < 4 or token in STOP_WORDS or token in core_keywords or token in theme_tokens:
         continue
       if _is_identifier_like(token):
+        continue
+      if reject_internal_token(token):
         continue
       exclude_token_support[token] += 1
       exclude_token_reviews[token].append(str(review.get("signal_id", "")))
@@ -353,6 +401,8 @@ def generate_review_proposals(
       )
     )
 
+  proposals = filter_human_proposals(proposals, simple_mode=True)
+
   if not proposals:
     proposals.append(
       _build_proposal(
@@ -385,6 +435,7 @@ def generate_review_proposals(
       "reject_count": len(reject_reviews),
       "proposal_count": len([item for item in proposals if item.get("proposal_type") != "no_change_observation"]),
       "observation_only": any(item.get("proposal_type") == "no_change_observation" for item in proposals),
+      "eligible": True,
     },
   }
 

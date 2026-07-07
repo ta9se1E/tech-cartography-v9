@@ -7,17 +7,19 @@ from typing import Any, Mapping, Sequence
 import streamlit as st
 
 from services_v9.research_value_pipeline import build_research_value_top3
+from services_v9.run_baseline_state import is_initial_baseline as is_initial_baseline_state
+from services_v9.simple_review_state import (
+  SIMPLE_REVIEW_OPTIONS,
+  can_save_review,
+  is_saved_review,
+  normalize_simple_decision,
+  save_review_blocked_message,
+  to_backend_decision,
+)
 from services_v9.study_demo_review_schema import normalize_review_record, validate_review_record
 from services_v9.study_demo_theme_lineage import sizing_fixture_theme
 from ui_v9.labels import type_label_ja
 from ui_v9.study_demo_source_link import render_external_source_link
-
-
-SIMPLE_REVIEW_OPTIONS = (
-  ("accept", "関連"),
-  ("hold", "保留"),
-  ("reject", "除外"),
-)
 
 
 def resolve_theme_for_research_value(source_info: Mapping[str, Any]) -> dict[str, Any]:
@@ -78,7 +80,7 @@ def integrated_signals_from_source(
 def is_initial_baseline_run(source_info: Mapping[str, Any]) -> bool:
   bundle = dict(source_info.get("study_demo_downstream", {}) or {})
   weekly_state = dict(bundle.get("weekly_state", {}) or {})
-  return str(weekly_state.get("state", "") or "") == "initial_baseline"
+  return is_initial_baseline_state(weekly_state)
 
 
 def render_simple_review_input(
@@ -100,8 +102,10 @@ def render_simple_review_input(
 
   labels = [label for _, label in SIMPLE_REVIEW_OPTIONS]
   codes = [code for code, _ in SIMPLE_REVIEW_OPTIONS]
-  default_code = str(existing.get("decision", "hold"))
-  default_label = next((label for code, label in SIMPLE_REVIEW_OPTIONS if code == default_code), "保留")
+  default_code = "unreviewed"
+  if is_saved_review(existing):
+    default_code = normalize_simple_decision(existing.get("decision", ""))
+  default_label = next((label for code, label in SIMPLE_REVIEW_OPTIONS if code == default_code), "未判断")
   if decision_key not in st.session_state:
     st.session_state[decision_key] = default_label
   if comment_key not in st.session_state:
@@ -111,11 +115,18 @@ def render_simple_review_input(
   selected_code = codes[labels.index(selected_label)]
   comment = st.text_area("メモ（任意）", key=comment_key, height=68)
   if st.button("レビューを保存", key=apply_key):
+    if not can_save_review(selected_code):
+      st.error(save_review_blocked_message())
+      return
+    backend_decision = to_backend_decision(selected_code)
+    if not backend_decision:
+      st.error(save_review_blocked_message())
+      return
     record = normalize_review_record(
       {
         "signal_id": signal_id,
-        "decision": selected_code,
-        "reason_codes": ["unclear_relevance"] if selected_code == "hold" else ["direct_evidence"],
+        "decision": backend_decision,
+        "reason_codes": ["unclear_relevance"] if backend_decision == "hold" else ["direct_evidence"],
         "comment": comment,
         "reviewed": True,
       },

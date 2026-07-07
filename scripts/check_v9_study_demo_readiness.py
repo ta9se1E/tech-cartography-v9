@@ -71,6 +71,7 @@ def main() -> int:
     _check_script_plan("check_v9_study_demo_p0_ui_consistency.py")
     _check_script_plan("check_v9_study_demo_simple_ui.py")
     _check_script_plan("check_v9_study_demo_research_value.py")
+    _check_script_plan("check_v9_study_demo_human_facing_safety.py")
     checks["helper_plans"] = "ok"
     checks["patent_search_code"] = "ready"
     checks["openalex_search_code"] = "ready"
@@ -297,6 +298,16 @@ def main() -> int:
     checks["baseline_labeling"] = "ready"
     checks["ranking_basis_separated"] = "ready"
     checks["research_value_quality_gate"] = "ready"
+    checks["initial_baseline_semantics"] = "ready"
+    checks["human_facing_digest"] = "ready"
+    checks["unreviewed_default"] = "ready"
+    checks["proposal_review_threshold"] = "ready"
+    checks["internal_token_hidden"] = "ready"
+    checks["provider_priority_proposal_hidden"] = "ready"
+    checks["low_relevance_labeling"] = "ready"
+    checks["empty_filter_guard"] = "ready"
+    checks["empty_history_guard"] = "ready"
+    checks["human_datetime_jst"] = "ready"
 
     theme_a = sizing_fixture_theme()
     theme_b = sizing_fixture_theme()

@@ -86,7 +86,7 @@ class TestUiMode:
 class TestCompactLayout:
   def test_compact_header_once(self) -> None:
     source = (ROOT / "ui_v9/signal_watch_app.py").read_text(encoding="utf-8")
-    assert "render_compact_header()" in source
+    assert "render_compact_header(" in source
     assert "if not is_study_demo_simple_ui()" in source
 
   def test_no_duplicate_title_in_simple_path(self) -> None:
@@ -156,7 +156,7 @@ class TestSignalsSimple:
 
   def test_remaining_collapsed(self) -> None:
     source = (ROOT / "ui_v9/study_demo_simple_signals_ui.py").read_text(encoding="utf-8")
-    assert "残り" in source
+    assert "参考・低優先" in source
     assert "expanded=False" in source
 
   def test_no_related_companies_none_line(self) -> None:
@@ -172,7 +172,7 @@ class TestWeeklyProfileDigestSimple:
   def test_digest_download_limit(self) -> None:
     source = (ROOT / "ui_v9/study_demo_simple_tabs_ui.py").read_text(encoding="utf-8")
     assert source.count("st.download_button(") >= 2
-    assert "技術者向けDownload" in source
+    assert "実行証跡" in source
 
 
 class TestSimpleUiCheck:

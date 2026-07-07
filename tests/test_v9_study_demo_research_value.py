@@ -273,7 +273,8 @@ class TestUi:
 
   def test_simple_review_labels(self) -> None:
     source = (ROOT / "ui_v9/study_demo_research_value_ui.py").read_text(encoding="utf-8")
-    assert "関連" in source and "除外" in source
+    assert "SIMPLE_REVIEW_OPTIONS" in source
+    assert "can_save_review" in source
 
   def test_initial_candidate_label(self) -> None:
     source = (ROOT / "ui_v9/study_demo_research_value_ui.py").read_text(encoding="utf-8")

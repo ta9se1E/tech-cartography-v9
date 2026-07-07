@@ -48,6 +48,7 @@ SIMPLE_UI_FILES = (
   "ui_v9/study_demo_simple_tabs_ui.py",
   "ui_v9/study_demo_compact_components.py",
   "ui_v9/study_demo_research_value_ui.py",
+  "ui_v9/study_demo_simple_signal_cards.py",
 )
 
 
@@ -86,7 +87,7 @@ def analyze_simple_source_layout(*, mode: str = "simple") -> dict[str, Any]:
   simple_sources = "\n".join(_read(path) for path in SIMPLE_UI_FILES)
 
   duplicate_header_count = 0
-  if "render_compact_header()" in app_source and 'st.title("Tech Cartography v9")' in app_source:
+  if "render_compact_header(" in app_source and 'st.title("Tech Cartography v9")' in app_source:
     if "is_study_demo_simple_ui()" in app_source and "if not is_study_demo_simple_ui()" in app_source:
       duplicate_header_count = 0
     else:

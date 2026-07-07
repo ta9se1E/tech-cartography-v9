@@ -6,35 +6,37 @@ from typing import Any, Mapping, Sequence
 
 import streamlit as st
 
-from services_v9.signal_models import Signal
+from services_v9.run_baseline_state import build_baseline_summary, is_initial_baseline
+from services_v9.search_improvement_eligibility import build_insufficient_review_message
 from services_v9.study_demo_ui_mode import should_show_technical_ids
+from services_v9.human_digest_builder import human_digest_to_markdown
 from ui_v9.labels import cadence_label_ja, type_label_ja, watch_profile_suggestion_label_ja
-from ui_v9.study_demo_compact_components import render_signal_card_simple
 from ui_v9.study_demo_event_contracts import default_digest_events
 
 
-def select_top_reads_from_bundle(bundle: Mapping[str, Any]) -> list[Signal]:
-  from services_v9.study_demo_active_loader import adapt_study_demo_signal_to_display
-
-  raw = list(bundle.get("top_reads_raw", []) or [])
-  if raw:
-    return [Signal.from_dict(adapt_study_demo_signal_to_display(item, index=index)) for index, item in enumerate(raw)]
-  display = [Signal.from_dict(item) for item in list(bundle.get("display_signals", []) or [])[:3]]
-  return display
+def _filter_simple_suggestions(suggestions: Sequence[str]) -> list[str]:
+  blocked_prefixes = (
+    "raise priority of source type:",
+    "lower priority of irrelevant source:",
+  )
+  return [item for item in suggestions if not str(item).startswith(blocked_prefixes)]
 
 
 def render_simple_weekly_tab(*, source_info: Mapping[str, object]) -> dict[str, bool]:
   bundle = dict(source_info.get("study_demo_downstream", {}) or {})
   weekly_state = dict(bundle.get("weekly_state", {}) or {})
   metrics = dict(source_info.get("canonical_metrics", {}) or {})
-  integrated = metrics.get("integrated_count", source_info.get("loaded_count", 0))
+  integrated = int(metrics.get("integrated_count", source_info.get("loaded_count", 0)) or 0)
+  summary = build_baseline_summary(weekly_state)
 
-  if weekly_state.get("state") == "initial_baseline":
-    st.info("今回は初回ベースラインです。次回runから比較できます。")
-  st.write(f"**取得件数:** {integrated}件")
-  st.caption("次回予定: 自動週次は停止中（ハッカソンデモ）")
-
-  if weekly_state.get("state") == "initial_baseline":
+  if is_initial_baseline(weekly_state):
+    st.markdown("#### 週次更新")
+    st.success(summary.get("headline", "初回ベースラインを保存しました"))
+    st.write(f"**今回取得:** {summary.get('current_count', integrated)}件")
+    st.write(f"**優先確認:** {summary.get('priority_count', 3)}件")
+    st.write("**比較対象:** なし")
+    st.caption(str(summary.get("next_message", "")))
+    st.caption("Demo: 自動実行・メール送信は停止中")
     confirm = st.checkbox("このrunを初回スナップショットとして保存します", key="ui_study_demo_baseline_confirm")
     save_baseline = st.button("このrunを初回スナップショットとして保存", key="btn_study_demo_save_baseline")
     if save_baseline and not confirm:
@@ -42,12 +44,18 @@ def render_simple_weekly_tab(*, source_info: Mapping[str, object]) -> dict[str, 
       save_baseline = False
     return {"load_previous_snapshot": False, "compare_snapshot": False, "save_study_demo_baseline": bool(save_baseline and confirm)}
 
-  diff_payload = dict(weekly_state.get("diff", {}) or {})
-  counts = dict(diff_payload.get("counts", {}) or {})
-  if counts:
+  st.markdown("#### 週次更新")
+  st.write(f"**今回取得:** {summary.get('current_count', integrated)}件")
+  st.write(f"**優先確認:** {summary.get('priority_count', 3)}件")
+  st.write(f"**比較対象:** {summary.get('comparison_label', 'あり')}")
+  st.caption("Demo: 自動実行・メール送信は停止中")
+  counts = dict(summary.get("counts", {}) or {})
+  if counts and weekly_state.get("show_diff_counts"):
     st.markdown("#### 前回からの変化")
-    for key, label in (("new", "新規"), ("score_up", "スコア上昇"), ("score_down", "スコア低下")):
-      st.write(f"- {label}: {counts.get(key, 0)}件")
+    for key, label in (("new", "新規"), ("score_up", "順位上昇"), ("score_down", "順位低下")):
+      value = int(counts.get(key, 0) or 0)
+      if value:
+        st.write(f"- {label}: {value}件")
 
   if should_show_technical_ids():
     with st.expander("技術情報（週次）", expanded=False):
@@ -65,21 +73,21 @@ def render_simple_watch_profile_tab(
 ) -> dict[str, bool]:
   bundle = dict((source_info or {}).get("study_demo_downstream", {}) or {})
   draft = dict(bundle.get("profile_draft", {}) or {})
+  proposals_payload = dict(bundle.get("review_proposals", {}) or {})
+  simple_suggestions = _filter_simple_suggestions(suggestions)
+
   if draft:
     st.markdown("#### 監視プロファイル案")
     st.write(f"**Theme:** {draft.get('theme_name', profile_summary.get('theme_name', ''))}")
-    st.write(f"**対象情報源:** Patent / Paper / Web")
+    st.write("**対象情報源:** Patent / Paper / Web")
     st.caption("更新頻度: 週次（デモでは自動実行停止中）")
     st.write(f"**注目企業:** {', '.join(draft.get('suggested_companies', []) or []) or 'なし'}")
-    if suggestions:
+    if simple_suggestions:
       st.markdown("**改善提案**")
-      for index, suggestion in enumerate(suggestions, start=1):
+      for index, suggestion in enumerate(simple_suggestions, start=1):
         st.write(f"{index}. {watch_profile_suggestion_label_ja(suggestion)}")
-    if st.button("プロファイルを編集", key="btn_simple_profile_edit"):
-      st.session_state["ui_simple_profile_edit_open"] = True
-    with st.expander("キーワード詳細", expanded=False):
-      st.write(f"keywords_ja: {draft.get('keywords_ja', '')}")
-      st.write(f"keywords_en: {draft.get('keywords_en', '')}")
+    elif not proposals_payload.get("summary", {}).get("eligible", False):
+      st.info(build_insufficient_review_message())
     return {
       "save_profile": False,
       "load_profile": False,
@@ -95,9 +103,9 @@ def render_simple_watch_profile_tab(
   st.write(f"**更新頻度:** {cadence_label_ja(watch_profile.cadence)}")
   st.write(f"**対象国:** {', '.join(watch_profile.countries) if watch_profile.countries else 'なし'}")
   st.write(f"**注目企業:** {', '.join(profile_summary.get('target_companies', [])) or 'なし'}")
-  if suggestions:
+  if simple_suggestions:
     st.markdown("**改善提案**")
-    for index, suggestion in enumerate(suggestions, start=1):
+    for index, suggestion in enumerate(simple_suggestions, start=1):
       st.write(f"{index}. {watch_profile_suggestion_label_ja(suggestion)}")
   return {
     "save_profile": False,
@@ -120,33 +128,37 @@ def render_simple_digest_tab(
   active_context = dict(source_info.get("active_context", {}) or {})
   run_id = str(active_context.get("active_search_run_id", "") or "")
   exports = dict(bundle.get("digest_exports", {}) or {})
-  digest_markdown = str(exports.get("digest_markdown", markdown_text) or markdown_text)
+  human_digest = dict(bundle.get("human_digest", {}) or {})
+  digest_markdown = str(exports.get("digest_markdown", "") or human_digest_to_markdown(human_digest) or markdown_text)
 
-  top_signals = select_top_reads_from_bundle(bundle)
-  display_signals = list(bundle.get("display_signals", []) or [])
-  display_lookup = {
-    f"{item.get('type', '')}:{item.get('title', '')}:{item.get('source_name', '')}": item
-    for item in display_signals
-    if isinstance(item, dict)
-  }
+  st.markdown("#### 今週のR&Dシグナル")
+  st.caption("Demo: 自動週次・メール送信は停止中")
 
-  st.markdown("#### 今週読むべき3件")
-  if top_signals:
-    for index, signal in enumerate(top_signals, start=1):
-      key = f"{signal.type}:{signal.title}:{signal.source_name}"
-      render_signal_card_simple(
-        signal=signal,
-        display_signal=display_lookup.get(key, {}),
-        explanation={},
-        search_run_id=run_id,
-        key_namespace="simple_digest_top3",
-        index=index,
-      )
+  if human_digest:
+    st.markdown(f"**テーマ:** {human_digest.get('theme_name', '')}")
+    if is_initial_baseline({"state": human_digest.get("baseline_state", "")}):
+      st.write("- 初回ベースライン")
+    st.write(f"- 実データ {human_digest.get('current_count', 0)}件")
+    st.write(f"- 優先確認 {human_digest.get('priority_count', 3)}件")
+    st.write(f"- 比較対象 {'なし' if not human_digest.get('has_comparison') else 'あり'}")
+    st.markdown("##### 今回まず確認する3件")
+    for item in list(human_digest.get("top3", []) or []):
+      role = dict(item.get("role", {}) or {})
+      st.markdown(f"**{item.get('short_title_ja', '')}** ({role.get('label_ja', '')})")
+      st.write(str(item.get("research_value", "") or ""))
+      for question in list(item.get("verification_questions", []) or []):
+        st.write(f"- {question}")
+      st.write(f"読後: {item.get('readout_artifact', '')}")
+      if item.get("source_url"):
+        st.write(f"[原典を確認]({item.get('source_url')})")
+    review = dict(human_digest.get("review_summary", {}) or {})
+    st.markdown("##### 人間レビュー")
+    st.write(
+      f"未判断 {review.get('unreviewed', 0)} | 関連 {review.get('accept', 0)} | "
+      f"保留 {review.get('hold', 0)} | 除外 {review.get('reject', 0)}"
+    )
   else:
-    st.caption("ダイジェスト対象シグナルがありません。")
-
-  st.markdown("#### 次に確認すること")
-  st.markdown(digest_markdown[:1200] + ("..." if len(digest_markdown) > 1200 else ""))
+    st.markdown(digest_markdown[:1200] + ("..." if len(digest_markdown) > 1200 else ""))
 
   from ui_v9.study_demo_download_keys import build_study_demo_download_key
 
@@ -154,7 +166,7 @@ def render_simple_digest_tab(
   with download_left:
     st.download_button(
       "Digest Markdown",
-      data=exports.get("digest_markdown", digest_markdown),
+      data=digest_markdown,
       file_name="study_demo_digest.md",
       key=build_study_demo_download_key("digest", "digest_markdown_simple", run_id),
     )
@@ -167,12 +179,18 @@ def render_simple_digest_tab(
     )
 
   if should_show_technical_ids():
-    with st.expander("技術者向けDownload", expanded=False):
+    with st.expander("実行証跡", expanded=False):
       st.download_button(
         "Digest JSON",
         data=exports.get("digest_json", "{}"),
         file_name="study_demo_digest.json",
         key=build_study_demo_download_key("digest", "digest_json_simple", run_id),
+      )
+      st.download_button(
+        "Technical Digest Markdown",
+        data=exports.get("digest_markdown_technical", ""),
+        file_name="study_demo_digest_technical.md",
+        key=build_study_demo_download_key("digest", "digest_markdown_technical", run_id),
       )
 
   return events
@@ -182,5 +200,4 @@ __all__ = [
   "render_simple_digest_tab",
   "render_simple_watch_profile_tab",
   "render_simple_weekly_tab",
-  "select_top_reads_from_bundle",
 ]

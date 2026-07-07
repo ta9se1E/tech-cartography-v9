@@ -333,16 +333,36 @@ def build_weekly_state(
   snapshots: Sequence[Mapping[str, Any]],
   integrated: Mapping[str, Any],
 ) -> dict[str, Any]:
-  if not snapshots:
-    return {
-      "state": "initial_baseline",
-      "message": "次回runから差分比較できます",
-      "previous_snapshot": None,
-      "diff": None,
+  from services_v9.run_baseline_state import is_initial_baseline, resolve_run_baseline_state
+
+  signals = list(integrated.get("signals", []) or [])
+  integrated_count = len(signals)
+  previous = snapshots[0] if snapshots else None
+  diff = None
+  weekly_seed: dict[str, Any] = {"comparison_status": "not_comparable"}
+  if previous:
+    diff = compare_active_run_snapshots(previous, signals)
+    weekly_seed = {
+      "state": "comparable",
+      "comparison_status": "comparable",
+      "diff": diff,
     }
-  previous = snapshots[0]
-  diff = compare_active_run_snapshots(previous, list(integrated.get("signals", []) or []))
-  return {"state": "comparable", "message": "", "previous_snapshot": previous, "diff": diff}
+  baseline = resolve_run_baseline_state(
+    context,
+    previous_run=previous,
+    snapshots=snapshots,
+    weekly_state=weekly_seed,
+    integrated_count=integrated_count,
+    priority_count=3,
+  )
+  payload = {
+    **baseline,
+    "previous_snapshot": None if is_initial_baseline(baseline) else previous,
+    "diff": None if is_initial_baseline(baseline) else diff,
+  }
+  if not is_initial_baseline(baseline) and diff is not None:
+    payload["show_diff_counts"] = True
+  return payload
 
 
 def build_profile_draft_from_search_request(
@@ -553,6 +573,19 @@ def build_downstream_bundle(
     profile_keywords=dict(profile_draft.get("keywords", {}) or {}),
     theme_name=str(context.get("theme", "") or ""),
   )
+  from services_v9.human_digest_builder import build_human_digest
+  from services_v9.study_demo_theme_lineage import sizing_fixture_theme
+
+  theme_for_digest = sizing_fixture_theme()
+  theme_for_digest["name"] = str(context.get("theme", "") or theme_for_digest.get("name", ""))
+  human_digest = build_human_digest(
+    theme=theme_for_digest,
+    signals=list(integrated.get("signals", []) or []),
+    baseline_state=weekly_state,
+    reviews=list(reviews.get("reviews", []) or []),
+    updated_at=str(context.get("selected_at", "") or ""),
+    integrated_count=int(resolved.get("integrated_count", len(list(integrated.get("signals", []) or []))) or 0),
+  )
   digest = build_active_run_digest(
     context=context,
     integrated=integrated,
@@ -588,6 +621,7 @@ def build_downstream_bundle(
     "lineage_status": lineage_status,
     "enriched_context": enriched_context,
     "digest": digest,
+    "human_digest": human_digest,
     "top_reads_raw": select_top_reads_from_active_signals(list(integrated.get("signals", []) or [])),
     "display_signals": adapt_integrated_signals_for_display(integrated),
     "digest_exports": build_digest_exports(
@@ -597,6 +631,7 @@ def build_downstream_bundle(
       weekly_state=weekly_state,
       profile_draft=profile_draft,
       context=context,
+      human_digest=human_digest,
     ),
     "profile_signature": profile_signature,
   }
@@ -610,6 +645,7 @@ def build_digest_exports(
   weekly_state: Mapping[str, Any],
   profile_draft: Mapping[str, Any] | None,
   context: Mapping[str, Any],
+  human_digest: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
   from services_v9.study_demo_search.export import build_export_bundle
 
@@ -636,10 +672,16 @@ def build_digest_exports(
           }
         )
     diff_csv = buffer.getvalue()
+  human_markdown = ""
+  if human_digest:
+    from services_v9.human_digest_builder import human_digest_to_markdown
+
+    human_markdown = human_digest_to_markdown(human_digest)
   return {
     "active_context_json": json.dumps(context, ensure_ascii=False, indent=2),
-    "digest_markdown": digest_to_markdown(digest),
-    "digest_json": json.dumps(digest, ensure_ascii=False, indent=2),
+    "digest_markdown": human_markdown or digest_to_markdown(digest),
+    "digest_markdown_technical": digest_to_markdown(digest),
+    "digest_json": json.dumps(human_digest or digest, ensure_ascii=False, indent=2),
     "review_json": json.dumps(reviews, ensure_ascii=False, indent=2),
     "profile_draft_json": json.dumps(profile_draft or {}, ensure_ascii=False, indent=2),
     "weekly_diff_csv": diff_csv,

@@ -263,6 +263,7 @@ class TestProposalEngine:
       self._review("s1", "reject", ["commercial_noise"]),
       self._review("s2", "reject", ["commercial_noise"]),
       self._review("s3", "reject", ["commercial_noise"]),
+      self._review("s4", "accept", ["direct_evidence"]),
     ]
     signals = [
       self._signal("s1", title="textile fabric commercial"),
@@ -291,6 +292,7 @@ class TestProposalEngine:
     reviews = [
       self._review("s1", "accept", ["important_company_signal"]),
       self._review("s2", "accept", ["important_company_signal"]),
+      self._review("s3", "hold", ["unclear_relevance"]),
     ]
     signals = [
       self._signal("s1", organization="Toray Industries"),
