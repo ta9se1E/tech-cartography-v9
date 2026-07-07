@@ -215,8 +215,8 @@ def test_ui_does_not_gate_selector_on_data_mode() -> None:
 
 def test_tabs_collapses_legacy_data_mode() -> None:
   source = Path(ROOT / "ui_v9/tabs.py").read_text(encoding="utf-8")
-  assert "その他のデータソース" in source
-  assert 'st.expander("その他のデータソース"' in source
+  assert "手動アップロード・旧データ投入機能" in source
+  assert 'st.expander("手動アップロード・旧データ投入機能"' in source
 
 
 @pytest.mark.parametrize("data_mode", ["unselected", "temporary_search", "legacy_demo", "retrieval_saved"])

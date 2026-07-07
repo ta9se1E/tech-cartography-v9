@@ -684,7 +684,7 @@ def render_theme_setup_tab(
     theme_saved_from_draft = bool(state.get("theme_saved_from_draft", False))
 
     theme_events = render_standard_theme_actions(has_unsaved_draft=bool(unsaved_draft))
-    render_standard_theme_summary(saved_theme=saved_theme, widget_theme=widget_theme)
+    render_standard_theme_summary(saved_theme=saved_theme, widget_theme=saved_theme)
     render_active_analysis_target_section(active_context=active_context, downstream_bundle=downstream_bundle)
     promotion = render_temporary_search_promotion_section(
       active_context=active_context,
@@ -760,7 +760,13 @@ def render_theme_setup_tab(
     st.divider()
     with st.expander("保存済み標準監視テーマの編集フォーム", expanded=not bool(unsaved_draft)):
       st.caption("この操作は保存済み標準監視テーマに対する操作です。未保存テーマ案には適用されません。")
-      upper_left, upper_right = st.columns(2)
+      from ui_v9.study_demo_saved_theme_editor_ui import render_saved_theme_editor_form
+
+      editor_events = render_saved_theme_editor_form(theme_state=state)
+      theme_events.update(editor_events)
+    save_clicked = legacy_controls.get("save_profile", False)
+    load_clicked = legacy_controls.get("load_profile", False)
+    regenerate_clicked = legacy_controls.get("regenerate_search_plan", False)
   else:
     theme_events = {}
     promotion = {}
@@ -768,87 +774,81 @@ def render_theme_setup_tab(
     selector_events = {}
     legacy_controls = {}
     upper_left, upper_right = st.columns(2)
-  with upper_left:
-    st.text_input("テーマ名", key="ui_theme_name_input")
-    st.text_area("テーマ説明", key="ui_theme_description_input", height=160)
-    st.text_area(
-      "コアキーワード 英語",
-      key="ui_core_en_input",
-      height=160,
-      help="カンマ区切り・改行区切りのどちらでも入力できます。",
-    )
-    st.text_area(
-      "用途キーワード 英語",
-      key="ui_application_en_input",
-      height=140,
-      help="カンマ区切り・改行区切りのどちらでも入力できます。",
-    )
-    st.text_area(
-      "材料・プロセスキーワード 英語",
-      key="ui_material_process_en_input",
-      height=180,
-      help="カンマ区切り・改行区切りのどちらでも入力できます。",
-    )
-    st.text_area(
-      "除外キーワード 英語",
-      key="ui_exclude_en_input",
-      height=120,
-      help="カンマ区切り・改行区切りのどちらでも入力できます。",
-    )
-  with upper_right:
-    if not study_demo_mode:
+    with upper_left:
+      st.text_input("テーマ名", key="ui_theme_name_input")
+      st.text_area("テーマ説明", key="ui_theme_description_input", height=160)
+      st.text_area(
+        "コアキーワード 英語",
+        key="ui_core_en_input",
+        height=160,
+        help="カンマ区切り・改行区切りのどちらでも入力できます。",
+      )
+      st.text_area(
+        "用途キーワード 英語",
+        key="ui_application_en_input",
+        height=140,
+        help="カンマ区切り・改行区切りのどちらでも入力できます。",
+      )
+      st.text_area(
+        "材料・プロセスキーワード 英語",
+        key="ui_material_process_en_input",
+        height=180,
+        help="カンマ区切り・改行区切りのどちらでも入力できます。",
+      )
+      st.text_area(
+        "除外キーワード 英語",
+        key="ui_exclude_en_input",
+        height=120,
+        help="カンマ区切り・改行区切りのどちらでも入力できます。",
+      )
+    with upper_right:
       st.checkbox("デモモード", key="ui_demo_mode_input")
       st.markdown("**外部API:** 停止中")
       st.markdown("**外部検索:** OFF")
       st.markdown("**実行モード:** ローカルのデモデータ / アップロードCSV/JSONのみ")
       st.markdown("**メール / スケジューラ:** プレビューのみ / 停止中")
       st.caption("現在はローカル実行のみです。BigQuery、OpenAlex、Web検索、Gemini APIは実行しません。")
-    st.text_area(
-      "コアキーワード 日本語",
-      key="ui_core_ja_input",
-      height=160,
-      help="カンマ区切り・改行区切りのどちらでも入力できます。",
-    )
-    st.text_area(
-      "用途キーワード 日本語",
-      key="ui_application_ja_input",
-      height=140,
-      help="カンマ区切り・改行区切りのどちらでも入力できます。",
-    )
-    st.text_area(
-      "材料・プロセスキーワード 日本語",
-      key="ui_material_process_ja_input",
-      height=180,
-      help="カンマ区切り・改行区切りのどちらでも入力できます。",
-    )
-    st.text_area(
-      "除外キーワード 日本語",
-      key="ui_exclude_ja_input",
-      height=120,
-      help="カンマ区切り・改行区切りのどちらでも入力できます。",
-    )
+      st.text_area(
+        "コアキーワード 日本語",
+        key="ui_core_ja_input",
+        height=160,
+        help="カンマ区切り・改行区切りのどちらでも入力できます。",
+      )
+      st.text_area(
+        "用途キーワード 日本語",
+        key="ui_application_ja_input",
+        height=140,
+        help="カンマ区切り・改行区切りのどちらでも入力できます。",
+      )
+      st.text_area(
+        "材料・プロセスキーワード 日本語",
+        key="ui_material_process_ja_input",
+        height=180,
+        help="カンマ区切り・改行区切りのどちらでも入力できます。",
+      )
+      st.text_area(
+        "除外キーワード 日本語",
+        key="ui_exclude_ja_input",
+        height=120,
+        help="カンマ区切り・改行区切りのどちらでも入力できます。",
+      )
 
-  pub_left, pub_right = st.columns(2)
-  with pub_left:
-    st.text_area(
-      "Seed publication numbers",
-      key="ui_seed_publications_input",
-      height=120,
-      help="カンマ区切り・改行区切りのどちらでも入力できます。",
-    )
-  with pub_right:
-    st.text_area(
-      "追加候補 publication numbers",
-      key="ui_candidate_publications_input",
-      height=120,
-      help="カンマ区切り・改行区切りのどちらでも入力できます。",
-    )
+    pub_left, pub_right = st.columns(2)
+    with pub_left:
+      st.text_area(
+        "Seed publication numbers",
+        key="ui_seed_publications_input",
+        height=120,
+        help="カンマ区切り・改行区切りのどちらでも入力できます。",
+      )
+    with pub_right:
+      st.text_area(
+        "追加候補 publication numbers",
+        key="ui_candidate_publications_input",
+        height=120,
+        help="カンマ区切り・改行区切りのどちらでも入力できます。",
+      )
 
-  if study_demo_mode:
-    save_clicked = legacy_controls.get("save_profile", False)
-    load_clicked = legacy_controls.get("load_profile", False)
-    regenerate_clicked = legacy_controls.get("regenerate_search_plan", False)
-  else:
     button_left, button_mid, button_right = st.columns(3)
     with button_left:
       save_clicked = st.button("監視プロファイルを保存", key="btn_theme_save_profile", width="stretch")
@@ -874,6 +874,7 @@ def render_theme_setup_tab(
     else:
       st.success("現在の検索計画は最新の入力と一致しています。")
     _render_profile_summary(profile_summary)
+
   return {
     "save_profile": save_clicked,
     "load_profile": load_clicked,
@@ -904,6 +905,7 @@ def render_sources_tab(
   global_web_retrieval_status_message: str | None = None,
   *,
   study_demo_authenticated: bool = False,
+  theme_state: dict[str, Any] | None = None,
 ) -> dict[str, object]:
   st.subheader("情報源")
   study_events: dict[str, object] = {}
@@ -918,11 +920,20 @@ def render_sources_tab(
       st.divider()
   except Exception:
     study_events = {}
-  st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
+
+  legacy_events: dict[str, bool] = {"save_retrieval_manifest": False, "load_saved_retrieval_manifest": False}
   if study_demo_mode:
-    with st.expander("その他のデータソース", expanded=False):
+    from ui_v9.study_demo_sources_ui import (
+      render_study_demo_active_run_section,
+      render_study_demo_legacy_sources_section,
+    )
+
+    render_study_demo_active_run_section(source_info=source_info, theme_state=theme_state)
+    st.divider()
+    with st.expander("手動アップロード・旧データ投入機能", expanded=False):
+      st.caption("現在の保存済み標準検索runとは別機能です。通常のハッカソンデモでは操作不要です。")
       st.radio(
-        "データ投入モード",
+        "データ投入モード（legacy）",
         options=["unselected", "temporary_search", "legacy_demo", "csv", "json", "retrieval_saved"],
         format_func=data_source_mode_label_ja,
         key="ui_data_source_mode",
@@ -931,8 +942,32 @@ def render_sources_tab(
       if st.button("架空デモ12件を表示", key="btn_show_legacy_demo_12"):
         st.session_state["ui_data_source_mode"] = "legacy_demo"
         study_events["legacy_demo_selected"] = True
-      st.caption("Active Analysis Contextの設定は上の「分析対象として使用」から行います。ここは補助的な表示切替です。")
+    legacy_events = render_study_demo_legacy_sources_section(
+      retrieval_reload_state=retrieval_reload_state,
+      retrieval_manifest_status_message=retrieval_manifest_status_message,
+      csv_template_text=csv_template_text,
+      json_template_text=json_template_text,
+    )
+    save_retrieval_manifest = legacy_events.get("save_retrieval_manifest", False)
+    load_saved_retrieval_manifest = legacy_events.get("load_saved_retrieval_manifest", False)
+    integration_summary = dict(source_info.get("integration_summary", {}) or {})
+    if source_info.get("is_watch_profile_run"):
+      for row in source_rows:
+        st.markdown(
+          f"- **{type_label_ja(str(row['source_type']))}** | "
+          f"provider: `{row.get('provider_status', '—')}` | "
+          f"件数: `{row.get('result_count', row.get('top_n', 0))}` | "
+          f"{row.get('note', '')}"
+        )
+      st.markdown("### 個別ステータス")
+      for item in operation_rows:
+        label = type_label_ja(item["label"]) if item["label"] in {"patent", "paper", "web", "company"} else item["label"]
+        st.write(f"- {label}: {source_mode_label_ja(item['mode'])}")
+    else:
+      st.write(f"- 現在のデータソース: {source_info['label']}")
+      st.write(f"- 読み込み件数: {source_info['loaded_count']}件")
   else:
+    st.caption("特許・論文・Web情報・企業情報を、軽量なローカル / 準備中データとして表示します。")
     st.radio(
       "データ投入モード",
       options=["demo", "csv", "json", "retrieval_saved"],
@@ -940,100 +975,107 @@ def render_sources_tab(
       key="ui_data_source_mode",
       horizontal=True,
     )
-  st.caption(f"現在のデータ投入モード: {data_source_mode_label_ja(str(source_info['requested_mode']))}")
-  st.info(
-    "ページ表示だけでは外部検索や保存済みmanifest読込を実行しません。アップロードされたCSV/JSONの仮スコア表示に加えて、"
-    "特許 / 論文 / Global Web の取得と保存済み結果の読込は明示ボタン時のみ実行します。"
-  )
-
-  st.markdown("### 保存済み取得結果")
-  _show_status_message(retrieval_manifest_status_message)
-  manifest_summary = dict(retrieval_reload_state.get("manifest_summary", {}) or {})
-  current_run_ids = dict(retrieval_reload_state.get("current_run_ids", {}) or {})
-  st.write(f"- Watch Profile signature: `{str(retrieval_reload_state.get('watch_profile_signature', '') or '')[:8]}`")
-  st.write(f"- 現在session内の特許run ID: `{current_run_ids.get('patent', '') or 'なし'}`")
-  st.write(f"- 現在session内の論文run ID: `{current_run_ids.get('paper', '') or 'なし'}`")
-  st.write(f"- 現在session内のWeb/企業run ID: `{current_run_ids.get('web_company', '') or 'なし'}`")
-  if manifest_summary.get("checked"):
-    availability_label = "あり" if bool(manifest_summary.get("available")) else "なし"
-    st.write(f"- 保存済みmanifestの有無: `{availability_label}`")
-    st.write(f"- manifest status: `{manifest_summary.get('status', 'none')}`")
-    st.write(f"- 候補件数: `{int(manifest_summary.get('candidate_count', 0) or 0)}`")
-  else:
-    st.write("- 保存済みmanifestの有無: `未確認`")
-    st.write("- manifest status: `未確認`")
-    st.write("- 候補件数: `未確認`")
-  retrieval_cols = st.columns(2)
-  save_retrieval_manifest = retrieval_cols[0].button("現在の取得runを保存", use_container_width=True)
-  load_saved_retrieval_manifest = retrieval_cols[1].button("最新の保存済み取得結果を読み込む", use_container_width=True)
-
-  upload_left, upload_right = st.columns(2)
-  with upload_left:
-    st.markdown("### CSVアップロード")
-    st.file_uploader("CSVファイル", type=["csv"], key="ui_csv_upload")
-    st.download_button(
-      "CSVテンプレートをダウンロード",
-      data=csv_template_text,
-      file_name="v9_signal_upload_template.csv",
-      mime="text/csv",
-      use_container_width=True,
-      key="study_demo_download_sources_csv_template",
-    )
-  with upload_right:
-    st.markdown("### JSONアップロード")
-    st.file_uploader("JSONファイル", type=["json"], key="ui_json_upload")
-    st.download_button(
-      "JSONテンプレートをダウンロード",
-      data=json_template_text,
-      file_name="v9_signal_upload_template.json",
-      mime="application/json",
-      use_container_width=True,
-      key="study_demo_download_sources_json_template",
+    st.caption(f"現在のデータ投入モード: {data_source_mode_label_ja(str(source_info['requested_mode']))}")
+    st.info(
+      "ページ表示だけでは外部検索や保存済みmanifest読込を実行しません。アップロードされたCSV/JSONの仮スコア表示に加えて、"
+      "特許 / 論文 / Global Web の取得と保存済み結果の読込は明示ボタン時のみ実行します。"
     )
 
-  st.write(f"- 現在のデータソース: {source_info['label']}")
-  st.write(f"- 読み込み件数: {source_info['loaded_count']}件")
-  if str(source_info.get("mode", "")) == "temporary_search":
-    active_context = dict(source_info.get("active_context", {}) or {})
-    if active_context.get("active_search_run_id"):
-      st.write(f"- run ID: `{active_context.get('active_search_run_id', '')}`")
-  if source_info.get("provisional_scoring"):
-    if str(source_info.get("mode", "") or "") == "retrieval_saved":
-      st.caption("取得済み候補は既存の統合・重複除去・ランキング処理を再実行した結果です。デモ/CSV/JSONは混在していません。")
+    st.markdown("### 保存済み取得結果")
+    _show_status_message(retrieval_manifest_status_message)
+    manifest_summary = dict(retrieval_reload_state.get("manifest_summary", {}) or {})
+    current_run_ids = dict(retrieval_reload_state.get("current_run_ids", {}) or {})
+    st.write(f"- Watch Profile signature: `{str(retrieval_reload_state.get('watch_profile_signature', '') or '')[:8]}`")
+    st.write(f"- 現在session内の特許run ID: `{current_run_ids.get('patent', '') or 'なし'}`")
+    st.write(f"- 現在session内の論文run ID: `{current_run_ids.get('paper', '') or 'なし'}`")
+    st.write(f"- 現在session内のWeb/企業run ID: `{current_run_ids.get('web_company', '') or 'なし'}`")
+    if manifest_summary.get("checked"):
+      availability_label = "あり" if bool(manifest_summary.get("available")) else "なし"
+      st.write(f"- 保存済みmanifestの有無: `{availability_label}`")
+      st.write(f"- manifest status: `{manifest_summary.get('status', 'none')}`")
+      st.write(f"- 候補件数: `{int(manifest_summary.get('candidate_count', 0) or 0)}`")
     else:
-      st.caption("アップロードデータは Watch Profile に基づく仮スコアリング済みです。既存スコアがある場合はその値を尊重します。")
+      st.write("- 保存済みmanifestの有無: `未確認`")
+      st.write("- manifest status: `未確認`")
+      st.write("- 候補件数: `未確認`")
+    retrieval_cols = st.columns(2)
+    save_retrieval_manifest = retrieval_cols[0].button("現在の取得runを保存", use_container_width=True)
+    load_saved_retrieval_manifest = retrieval_cols[1].button("最新の保存済み取得結果を読み込む", use_container_width=True)
+
+    upload_left, upload_right = st.columns(2)
+    with upload_left:
+      st.markdown("### CSVアップロード")
+      st.file_uploader("CSVファイル", type=["csv"], key="ui_csv_upload")
+      st.download_button(
+        "CSVテンプレートをダウンロード",
+        data=csv_template_text,
+        file_name="v9_signal_upload_template.csv",
+        mime="text/csv",
+        use_container_width=True,
+        key="study_demo_download_sources_csv_template",
+      )
+    with upload_right:
+      st.markdown("### JSONアップロード")
+      st.file_uploader("JSONファイル", type=["json"], key="ui_json_upload")
+      st.download_button(
+        "JSONテンプレートをダウンロード",
+        data=json_template_text,
+        file_name="v9_signal_upload_template.json",
+        mime="application/json",
+        use_container_width=True,
+        key="study_demo_download_sources_json_template",
+      )
+
+    st.write(f"- 現在のデータソース: {source_info['label']}")
+    st.write(f"- 読み込み件数: {source_info['loaded_count']}件")
+    if str(source_info.get("mode", "")) == "temporary_search":
+      active_context = dict(source_info.get("active_context", {}) or {})
+      if active_context.get("active_search_run_id"):
+        st.write(f"- run ID: `{active_context.get('active_search_run_id', '')}`")
+    if source_info.get("provisional_scoring"):
+      if str(source_info.get("mode", "") or "") == "retrieval_saved":
+        st.caption("取得済み候補は既存の統合・重複除去・ランキング処理を再実行した結果です。デモ/CSV/JSONは混在していません。")
+      else:
+        st.caption("アップロードデータは Watch Profile に基づく仮スコアリング済みです。既存スコアがある場合はその値を尊重します。")
+    integration_summary = dict(source_info.get("integration_summary", {}) or {})
+    if integration_summary:
+      st.markdown("### 統合・重複除去サマリー")
+      st.write(
+        f"- run_id: `{integration_summary.get('integration_run_id', '')}` | "
+        f"raw: `{integration_summary.get('raw_count', 0)}` | "
+        f"capped: `{integration_summary.get('capped_count', 0)}` | "
+        f"deduped: `{integration_summary.get('deduped_count', 0)}` | "
+        f"ranked top100: `{integration_summary.get('ranked_count', 0)}`"
+      )
+      active_sources = ", ".join(str(item) for item in list(integration_summary.get("active_sources", []) or [])) or "none"
+      st.write(f"- active retrieval sources: `{active_sources}`")
+    warnings = list(source_info.get("warnings", []))
+    if warnings:
+      st.markdown("### 読み込み警告")
+      for warning in warnings:
+        st.warning(str(warning))
+
+    for row in source_rows:
+      st.markdown(
+        f"- **{type_label_ja(str(row['source_type']))}** | "
+        f"有効/無効: `{bool_label_ja(bool(row['enabled']))}` | "
+        f"モード: `{source_mode_label_ja(str(row['mode']))}` | "
+        f"取得件数: `{row['top_n']}` | 最終更新: `{row['last_updated']}` | メモ: {row['note']}"
+      )
+
+    st.markdown("### 個別ステータス")
+    for item in operation_rows:
+      label = type_label_ja(item["label"]) if item["label"] in {"patent", "paper", "web", "company"} else item["label"]
+      st.write(f"- {label}: {source_mode_label_ja(item['mode'])}")
+
   integration_summary = dict(source_info.get("integration_summary", {}) or {})
-  if integration_summary:
-    st.markdown("### 統合・重複除去サマリー")
-    st.write(
-      f"- run_id: `{integration_summary.get('integration_run_id', '')}` | "
-      f"raw: `{integration_summary.get('raw_count', 0)}` | "
-      f"capped: `{integration_summary.get('capped_count', 0)}` | "
-      f"deduped: `{integration_summary.get('deduped_count', 0)}` | "
-      f"ranked top100: `{integration_summary.get('ranked_count', 0)}`"
-    )
-    active_sources = ", ".join(str(item) for item in list(integration_summary.get("active_sources", []) or [])) or "none"
-    st.write(f"- active retrieval sources: `{active_sources}`")
   warnings = list(source_info.get("warnings", []))
-  if warnings:
+  if warnings and not study_demo_mode:
     st.markdown("### 読み込み警告")
     for warning in warnings:
       st.warning(str(warning))
 
-  for row in source_rows:
-    st.markdown(
-      f"- **{type_label_ja(str(row['source_type']))}** | "
-      f"有効/無効: `{bool_label_ja(bool(row['enabled']))}` | "
-      f"モード: `{source_mode_label_ja(str(row['mode']))}` | "
-      f"取得件数: `{row['top_n']}` | 最終更新: `{row['last_updated']}` | メモ: {row['note']}"
-    )
-
-  st.markdown("### 個別ステータス")
-  for item in operation_rows:
-    label = type_label_ja(item["label"]) if item["label"] in {"patent", "paper", "web", "company"} else item["label"]
-    st.write(f"- {label}: {source_mode_label_ja(item['mode'])}")
-
-  if integration_summary:
+  if integration_summary.get("top_by_source"):
     st.markdown("### 情報源別Top5")
     top_by_source = dict(integration_summary.get("top_by_source", {}) or {})
     for source_type in ("patent", "paper", "web", "company"):

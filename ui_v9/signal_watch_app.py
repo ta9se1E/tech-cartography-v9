@@ -387,6 +387,9 @@ def _sync_study_demo_active_context() -> None:
       context,
       base_state=base_theme_state,
     )
+    from ui_v9.study_demo_saved_theme_editor_ui import hydrate_saved_theme_editor_widgets
+
+    hydrate_saved_theme_editor_widgets(st.session_state[STATE_THEME_LINEAGE])
     _clear_theme_draft_if_run_changed(previous_run)
   elif loaded.get("status") == "missing":
     st.session_state.pop(STATE_ACTIVE_CONTEXT, None)
@@ -530,13 +533,13 @@ def _handle_study_demo_theme_events(theme_events: dict[str, object]) -> bool:
 
   if theme_events.get("select_theme_id"):
     selected = str(theme_events.get("select_theme_id", "") or "")
+    from services_v9.study_demo_live_lineage_loader import load_lineage_for_theme_id, resolve_active_lineage_artifacts
+    from services_v9.study_demo_saved_theme_editor import apply_editor_selection_metadata
+    from ui_v9.study_demo_saved_theme_editor_ui import hydrate_saved_theme_editor_widgets
+
     for item in list(state.get("saved_themes", []) or []):
       if str(item.get("theme_id", "")) == selected:
-        from services_v9.study_demo_live_lineage_loader import load_lineage_for_theme_id, resolve_active_lineage_artifacts
-
-        state["selected_saved_theme_id"] = selected
-        state["saved_theme"] = dict(item)
-        state["widget_theme"] = dict(item)
+        state = apply_editor_selection_metadata(state, dict(item))
         active_ctx = dict(st.session_state.get(STATE_ACTIVE_CONTEXT, {}) or {})
         active_theme_id = str(active_ctx.get("source_theme_id", "") or "")
         if active_theme_id and selected == active_theme_id:
@@ -550,6 +553,9 @@ def _handle_study_demo_theme_events(theme_events: dict[str, object]) -> bool:
           lineage = load_lineage_for_theme_id(selected)
           state["watch_profile"] = dict(lineage["watch_profile"]) if lineage.get("watch_profile") else None
           state["search_plan"] = dict(lineage["search_plan"]) if lineage.get("search_plan") else None
+          state["active_lineage_search_plan"] = None
+        st.session_state[STATE_THEME_LINEAGE] = state
+        hydrate_saved_theme_editor_widgets(state)
         state["draft_message"] = f"テーマ `{selected}` を選択しました。"
         changed = True
         break
@@ -1471,6 +1477,13 @@ def run_app() -> None:
   drift = compute_theme_drift_alert(signals, watch_profile)
   source_rows = build_source_rows(signals, data_source_mode=str(source_info.get("mode", "demo") or "demo"))
   operation_rows = _build_operation_rows()
+  if is_study_demo_mode() and source_info.get("is_watch_profile_run"):
+    from services_v9.study_demo_run_metrics import build_active_run_operation_rows, build_active_run_source_rows
+
+    metrics = dict(source_info.get("canonical_metrics", {}) or {})
+    if metrics:
+      source_rows = build_active_run_source_rows(metrics)
+      operation_rows = build_active_run_operation_rows(metrics)
   csv_text = signals_to_csv(signals)
 
   st.title("Tech Cartography v9")
@@ -1514,6 +1527,7 @@ def run_app() -> None:
       global_web_retrieval_state,
       st.session_state.get(STATE_GLOBAL_WEB_RETRIEVAL_MESSAGE),
       study_demo_authenticated=is_study_demo_authenticated(st.session_state) if is_study_demo_mode() else False,
+      theme_state=dict(st.session_state.get(STATE_THEME_LINEAGE, {}) or {}),
     )
   with tabs[2]:
     signal_events = render_top_signals_tab(

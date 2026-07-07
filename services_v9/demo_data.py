@@ -116,9 +116,9 @@ def build_operation_status_rows(
   email_mode: str = "off",
 ) -> list[dict[str, str]]:
   return [
-    {"label": "patent", "mode": "demo"},
-    {"label": "paper", "mode": "demo"},
-    {"label": "web", "mode": "staged"},
+    {"label": "patent", "mode": bigquery_mode if bigquery_mode != "off" else "demo"},
+    {"label": "paper", "mode": openalex_mode if openalex_mode != "off" else "demo"},
+    {"label": "web", "mode": web_search_mode if web_search_mode != "off" else "staged"},
     {"label": "company", "mode": "staged"},
     {"label": "BigQuery", "mode": bigquery_mode},
     {"label": "OpenAlex", "mode": openalex_mode},

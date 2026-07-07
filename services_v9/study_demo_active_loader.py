@@ -170,35 +170,61 @@ def build_temporary_search_source_payload(
   storage_client: Any | None = None,
 ) -> dict[str, Any]:
   from services_v9.study_demo_resolved_context import resolve_active_run_counts
+  from services_v9.study_demo_run_metrics import (
+    build_canonical_run_metrics,
+    resolve_active_source_label,
+    resolve_creation_path_label,
+  )
 
   integrated = load_active_integrated_signals(context, storage_client=storage_client, recompute_relevance=True)
   adapted = adapt_integrated_signals_for_display(integrated)
   resolved = resolve_active_run_counts(context, storage_client=storage_client)
+  provider_status = load_active_provider_status(context, storage_client=storage_client)
+  usage_metrics = load_active_usage_metrics(context, storage_client=storage_client)
+  metrics = build_canonical_run_metrics(
+    context=context,
+    resolved=resolved,
+    provider_status=provider_status,
+    usage_metrics=usage_metrics,
+  )
   tier_counts = dict(resolved.get("tier_counts", {}) or {})
+  label = resolve_active_source_label(context)
   return {
     "requested_mode": "temporary_search",
     "mode": "temporary_search",
-    "label": "一時検索run",
+    "label": label,
+    "creation_path_label": resolve_creation_path_label(context),
     "signals": adapted,
-    "loaded_count": int(resolved.get("integrated_ranked_count", len(adapted)) or len(adapted)),
+    "loaded_count": int(metrics.get("integrated_count") or len(adapted) or 0),
     "warnings": [],
     "provisional_scoring": False,
     "active_context": dict(context),
     "resolved_context": resolved,
+    "canonical_metrics": metrics,
+    "provider_status": dict(provider_status or {}),
     "integration_summary": {
       "integration_run_id": str(context.get("active_search_run_id", "")),
-      "ranked_count": int(resolved.get("integrated_ranked_count", len(adapted)) or len(adapted)),
-      "provider_counts": dict(resolved.get("integrated_source_counts", {}) or {}),
+      "ranked_count": metrics.get("ranked_count"),
+      "integrated_count": metrics.get("integrated_count"),
+      "saved_count": metrics.get("saved_count"),
+      "provider_counts": dict(metrics.get("provider_counts", {}) or {}),
       "tier_counts": tier_counts,
-      "data_origin": "temporary_search_artifact",
+      "data_origin": "active_search_run_artifact",
       "active_search_run_id": str(context.get("active_search_run_id", "")),
+      "active_sources": list(metrics.get("active_retrieval_sources", []) or []),
+      "provider_success_rate": metrics.get("provider_success_rate"),
+      "metric_inconsistencies": list(metrics.get("inconsistencies", []) or []),
+      "metric_sources": dict(metrics.get("metric_sources", {}) or {}),
     },
+    "is_watch_profile_run": str(context.get("run_origin", "")) == "watch_profile"
+      or str(context.get("context_type", "")) == "watch_profile",
   }
 
 
 def resolve_loader_mode(context_type: str) -> str:
   mapping = {
     "temporary_search": "temporary_search",
+    "watch_profile": "temporary_search",
     "uploaded_csv": "csv",
     "uploaded_json": "json",
     "stored_artifact": "retrieval_saved",

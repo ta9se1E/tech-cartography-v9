@@ -233,6 +233,8 @@ def hydrate_theme_lineage_session_state(
   environ: Mapping[str, str] | None = None,
   storage_client: Any | None = None,
 ) -> dict[str, Any]:
+  from services_v9.study_demo_saved_theme_editor import apply_editor_selection_metadata
+
   state = dict(base_state or {})
   ctx = dict(active_context or {})
   saved_themes = list_saved_themes_from_storage(environ=environ, storage_client=storage_client)
@@ -240,10 +242,8 @@ def hydrate_theme_lineage_session_state(
   active_theme = pick_active_saved_theme(saved_themes, active_context=ctx)
   if resolved.get("theme"):
     active_theme = dict(resolved["theme"])
+  state = apply_editor_selection_metadata(state, active_theme)
   state["saved_themes"] = saved_themes
-  state["saved_theme"] = active_theme
-  state["selected_saved_theme_id"] = str(active_theme.get("theme_id", ""))
-  state["widget_theme"] = dict(active_theme)
   if resolved.get("watch_profile"):
     state["watch_profile"] = dict(resolved["watch_profile"])
   if resolved.get("search_plan"):

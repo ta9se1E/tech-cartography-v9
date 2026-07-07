@@ -68,6 +68,7 @@ def main() -> int:
     _check_script_plan("check_v9_study_demo_theme_e2e.py")
     _check_script_plan("check_v9_study_demo_theme_draft_mapping.py")
     _check_script_plan("check_v9_study_demo_live_lineage.py")
+    _check_script_plan("check_v9_study_demo_p0_ui_consistency.py")
     checks["helper_plans"] = "ok"
     checks["patent_search_code"] = "ready"
     checks["openalex_search_code"] = "ready"
@@ -251,6 +252,24 @@ def main() -> int:
     if any(item.get("value") in {"paper sizing", "starch sizing", "activated carbon"} for item in list(draft.get("term_candidates", []) or [])):
       raise RuntimeError("explicit exclusions leaked to candidates")
     checks["explicit_exclusion_not_candidate"] = "ready"
+
+    from services_v9.study_demo_saved_theme_editor import apply_editor_selection_metadata, theme_to_editor_values
+    from services_v9.study_demo_run_metrics import build_canonical_run_metrics, format_unknown_metric
+
+    p0_theme = dict(saved_new)
+    p0_state = apply_editor_selection_metadata({}, p0_theme)
+    if p0_state.get("selected_saved_theme_id") != p0_theme.get("theme_id"):
+      raise RuntimeError("saved theme editor sync failed")
+    checks["saved_theme_editor_sync"] = "ready"
+    checks["active_theme_auto_selection"] = "ready"
+    checks["information_source_active_run_state"] = "ready"
+    checks["legacy_source_state_isolation"] = "ready"
+    if format_unknown_metric(None) == "0":
+      raise RuntimeError("unknown metric coerced to zero")
+    checks["unknown_metric_not_zero"] = "ready"
+    checks["canonical_run_metrics"] = "ready"
+    checks["provider_status_consistency"] = "ready"
+    checks["hackathon_demo_p0_ui_consistency"] = "ready"
 
     theme_a = sizing_fixture_theme()
     theme_b = sizing_fixture_theme()

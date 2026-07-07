@@ -1,0 +1,303 @@
+{
+  "_fixture_note": "Synthetic P0 watch_profile demo state. Not live Cloud artifacts.",
+  "search_run_id": "study_demo_search_20260705_145711_c06e0a1b",
+  "active_context": {
+    "schema_version": 1,
+    "context_type": "watch_profile",
+    "run_origin": "watch_profile",
+    "lineage_status": "connected",
+    "active_search_run_id": "study_demo_search_20260705_145711_c06e0a1b",
+    "theme": "PAN系炭素繊維用サイジング剤の組成・付与・乾燥条件",
+    "source_theme_id": "theme_6d2dfb753f7e",
+    "source_theme_version": 1,
+    "source_theme_signature": "1c7dc1874fea1be64ab5ee3d25c8ac5ef8335a6cefe3723a396696c0a90ff232",
+    "source_watch_profile_id": "wp_theme_6d2dfb753f7e",
+    "source_watch_profile_version": 1,
+    "source_watch_profile_signature": "0c8edb9a8121607cfeaec57ca1bf565a9f5ce666dc14008e4eac3daba3feef05",
+    "source_search_plan_id": "plan_wp_theme_6d2dfb753f7e",
+    "source_search_plan_version": 1,
+    "source_search_plan_signature": "1eb07b15e611544b9b173d4abcdb6aec8f557d3b571bf892023832962c555854",
+    "provider_counts": {
+      "patent": 5,
+      "paper": 5,
+      "web": 5
+    },
+    "tier_counts": {
+      "A": 3,
+      "B": 2,
+      "C": 3,
+      "D": 7
+    },
+    "ranked_count": 15,
+    "selected_at": "2026-07-05T14:58:44.110155+00:00",
+    "source_prefix": "search_runs/study_demo_search_20260705_145711_c06e0a1b/"
+  },
+  "themes": {
+    "new_theme": {
+      "theme_id": "theme_6d2dfb753f7e",
+      "theme_version": 1,
+      "theme_signature": "1c7dc1874fea1be64ab5ee3d25c8ac5ef8335a6cefe3723a396696c0a90ff232",
+      "name": "PAN系炭素繊維用サイジング剤の組成・付与・乾燥条件",
+      "description": "PAN系炭素繊維のサイジング剤について、組成、付与量、乾燥条件",
+      "status": "saved",
+      "source": "promoted_from_temporary_search",
+      "keywords": {
+        "core_ja": [
+          "炭素繊維",
+          "サイジング剤",
+          "PAN"
+        ],
+        "core_en": [
+          "carbon fiber",
+          "sizing agent",
+          "PAN"
+        ],
+        "use_ja": [
+          "集束性",
+          "開繊性",
+          "界面接着性"
+        ],
+        "use_en": [
+          "tow integrity",
+          "spreadability"
+        ],
+        "material_process_ja": [
+          "組成",
+          "付与量",
+          "乾燥条件"
+        ],
+        "material_process_en": [
+          "composition",
+          "add-on amount",
+          "drying condition"
+        ],
+        "exclude_ja": [],
+        "exclude_en": [
+          "paper sizing",
+          "textile fabric"
+        ]
+      },
+      "seed_publication_numbers": [],
+      "additional_candidate_publication_numbers": []
+    },
+    "old_theme": {
+      "theme_id": "theme_default_saved",
+      "theme_version": 1,
+      "theme_signature": "abc123def456",
+      "name": "PAN系炭素繊維前駆体の表面・内部欠陥制御",
+      "description": "旧デモテーマ",
+      "status": "saved",
+      "source": "manual",
+      "keywords": {
+        "core_ja": [
+          "炭素繊維",
+          "欠陥"
+        ],
+        "core_en": [
+          "carbon fiber",
+          "defect"
+        ],
+        "use_ja": [],
+        "use_en": [],
+        "material_process_ja": [],
+        "material_process_en": [],
+        "exclude_ja": [],
+        "exclude_en": []
+      },
+      "seed_publication_numbers": [],
+      "additional_candidate_publication_numbers": []
+    }
+  },
+  "watch_profile": {
+    "watch_profile_id": "wp_theme_6d2dfb753f7e",
+    "watch_profile_version": 1,
+    "watch_profile_signature": "0c8edb9a8121607cfeaec57ca1bf565a9f5ce666dc14008e4eac3daba3feef05",
+    "source_theme_id": "theme_6d2dfb753f7e",
+    "source_theme_version": 1,
+    "source_theme_signature": "1c7dc1874fea1be64ab5ee3d25c8ac5ef8335a6cefe3723a396696c0a90ff232",
+    "status": "saved"
+  },
+  "search_plan": {
+    "search_plan_id": "plan_wp_theme_6d2dfb753f7e",
+    "search_plan_version": 1,
+    "search_plan_signature": "1eb07b15e611544b9b173d4abcdb6aec8f557d3b571bf892023832962c555854",
+    "source_theme_id": "theme_6d2dfb753f7e",
+    "source_watch_profile_id": "wp_theme_6d2dfb753f7e",
+    "validation_status": "ready_for_execution",
+    "provider_limits": {
+      "patent": 5,
+      "paper": 5,
+      "web": 5
+    },
+    "provider_plans": {
+      "patent": {
+        "query_text_summary": "sizing PAN"
+      },
+      "paper": {
+        "query_text_summary": "carbon fiber sizing"
+      },
+      "web": {
+        "query_text_summary": "sizing agent fiber"
+      }
+    },
+    "exclude_keywords": [
+      "textile"
+    ]
+  },
+  "artifacts": {
+    "search_request.json": {
+      "theme": "PAN系炭素繊維用サイジング剤の組成・付与・乾燥条件",
+      "run_origin": "watch_profile",
+      "source_theme_id": "theme_6d2dfb753f7e",
+      "source_watch_profile_id": "wp_theme_6d2dfb753f7e",
+      "source_search_plan_id": "plan_wp_theme_6d2dfb753f7e"
+    },
+    "provider_status.json": {
+      "patent": {
+        "status": "success",
+        "result_count": 5
+      },
+      "paper": {
+        "status": "success",
+        "result_count": 5
+      },
+      "web": {
+        "status": "success",
+        "result_count": 5
+      }
+    },
+    "patent_results.json": {
+      "rows": [
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    "paper_results.json": {
+      "rows": [
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    "web_results.json": {
+      "rows": [
+        {},
+        {},
+        {},
+        {},
+        {}
+      ]
+    },
+    "integrated_signals.json": {
+      "ranked_count": 15,
+      "signals": [
+        {
+          "signal_id": "patent:0",
+          "source_type": "patent",
+          "title": "signal 0",
+          "relevance_tier": "A"
+        },
+        {
+          "signal_id": "patent:1",
+          "source_type": "patent",
+          "title": "signal 1",
+          "relevance_tier": "A"
+        },
+        {
+          "signal_id": "patent:2",
+          "source_type": "patent",
+          "title": "signal 2",
+          "relevance_tier": "A"
+        },
+        {
+          "signal_id": "patent:3",
+          "source_type": "patent",
+          "title": "signal 3",
+          "relevance_tier": "B"
+        },
+        {
+          "signal_id": "patent:4",
+          "source_type": "patent",
+          "title": "signal 4",
+          "relevance_tier": "B"
+        },
+        {
+          "signal_id": "paper:5",
+          "source_type": "paper",
+          "title": "signal 5",
+          "relevance_tier": "C"
+        },
+        {
+          "signal_id": "paper:6",
+          "source_type": "paper",
+          "title": "signal 6",
+          "relevance_tier": "C"
+        },
+        {
+          "signal_id": "paper:7",
+          "source_type": "paper",
+          "title": "signal 7",
+          "relevance_tier": "C"
+        },
+        {
+          "signal_id": "paper:8",
+          "source_type": "paper",
+          "title": "signal 8",
+          "relevance_tier": "D"
+        },
+        {
+          "signal_id": "paper:9",
+          "source_type": "paper",
+          "title": "signal 9",
+          "relevance_tier": "D"
+        },
+        {
+          "signal_id": "web:10",
+          "source_type": "web_company",
+          "title": "signal 10",
+          "relevance_tier": "D"
+        },
+        {
+          "signal_id": "web:11",
+          "source_type": "web_company",
+          "title": "signal 11",
+          "relevance_tier": "D"
+        },
+        {
+          "signal_id": "web:12",
+          "source_type": "web_company",
+          "title": "signal 12",
+          "relevance_tier": "D"
+        },
+        {
+          "signal_id": "web:13",
+          "source_type": "web_company",
+          "title": "signal 13",
+          "relevance_tier": "D"
+        },
+        {
+          "signal_id": "web:14",
+          "source_type": "web_company",
+          "title": "signal 14",
+          "relevance_tier": "D"
+        }
+      ]
+    },
+    "usage_metrics.json": {
+      "patent": {
+        "result_count": 5
+      },
+      "paper": {
+        "result_count": 5
+      },
+      "web": {
+        "result_count": 5
+      }
+    }
+  }
+}
