@@ -1347,3 +1347,37 @@ Stage C5B-5E deploy of field-aware ranking evidence, Monitoring Profile proposal
 
 User should confirm 3rd ranking basis field accuracy, Monitoring Profile insufficient message, baseline saved UI without re-save controls, and Top3/Digest/Review/Provider/Tier regression. Validated tag not yet created.
 
+## Final Browser Acceptance Validated
+
+| Item | Value |
+|------|-------|
+| Validated at (UTC) | 2026-07-07T15:49:00Z |
+| Validated at (JST) | 2026-07-08 00:49:00 JST |
+| Validated revision | `tech-cartography-v9-study-demo-00022-mmv` |
+| Browser acceptance | **passed** (user confirmed) |
+| Field-aware ranking evidence | passed |
+| Monitoring Profile proposal gating | passed |
+| Baseline saved-state UI | passed |
+| Top3 / Digest / Review regression | passed |
+| Provider counts | Patent 5 / Paper 5 / Web 5 |
+| Integrated signals | 15 |
+| Tier counts | A 3 / B 2 / C 3 / D 7 |
+| Active Context generation | 2 (preserved) |
+| Production | unchanged |
+| Demo status | **frozen for video recording** |
+| Validated tag | `v9-study-demo-final-acceptance-live-validated` |
+
+## Demo Freeze (Video Recording)
+
+Effective from browser acceptance validation until video recording is complete:
+
+- **No new features** until video recording is finished
+- **No fixes** except fatal P0/P1 defects
+- **Active Run change forbidden** (`study_demo_search_20260705_145711_c06e0a1b`)
+- **Theme / Watch Profile / Search Plan change forbidden**
+- **External search forbidden**
+- **Study Demo Cloud Run revision frozen** at `tech-cartography-v9-study-demo-00022-mmv`
+- **Rollback / redeploy forbidden** unless fatal defect requires it
+
+Video recording target revision: `tech-cartography-v9-study-demo-00022-mmv`
+
