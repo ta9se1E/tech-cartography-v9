@@ -47,6 +47,7 @@ SIMPLE_UI_FILES = (
   "ui_v9/study_demo_simple_signals_ui.py",
   "ui_v9/study_demo_simple_tabs_ui.py",
   "ui_v9/study_demo_compact_components.py",
+  "ui_v9/study_demo_research_value_ui.py",
 )
 
 

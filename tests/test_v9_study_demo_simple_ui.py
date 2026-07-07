@@ -209,10 +209,16 @@ class TestRegressionSafety:
     assert (ROOT / "ui_v9/study_demo_saved_theme_editor_ui.py").is_file()
 
   @patch("ui_v9.study_demo_simple_signals_ui.st")
-  def test_simple_signals_render_mock(self, mock_st: MagicMock) -> None:
+  @patch("ui_v9.study_demo_simple_signals_ui.build_research_value_bundle")
+  def test_simple_signals_render_mock(self, mock_bundle: MagicMock, mock_st: MagicMock) -> None:
     from ui_v9.study_demo_simple_signals_ui import render_simple_signals_tab
 
-    mock_st.columns.return_value = [MagicMock(), MagicMock(), MagicMock()]
+    mock_bundle.return_value = {"items": []}
+    mock_st.columns.side_effect = [
+      [MagicMock(), MagicMock()],
+      [MagicMock(), MagicMock(), MagicMock()],
+      [MagicMock(), MagicMock(), MagicMock()],
+    ]
     mock_st.multiselect.return_value = ["patent"]
     mock_st.markdown = MagicMock()
     mock_st.info = MagicMock()

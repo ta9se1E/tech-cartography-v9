@@ -70,6 +70,7 @@ def main() -> int:
     _check_script_plan("check_v9_study_demo_live_lineage.py")
     _check_script_plan("check_v9_study_demo_p0_ui_consistency.py")
     _check_script_plan("check_v9_study_demo_simple_ui.py")
+    _check_script_plan("check_v9_study_demo_research_value.py")
     checks["helper_plans"] = "ok"
     checks["patent_search_code"] = "ready"
     checks["openalex_search_code"] = "ready"
@@ -288,6 +289,14 @@ def main() -> int:
     checks["scroll_budget_checks"] = "ready"
     if not is_simple_mode():
       raise RuntimeError("simple mode default check failed")
+    checks["deterministic_research_value_synthesis"] = "ready"
+    checks["theme_axis_extraction"] = "ready"
+    checks["source_specific_questions"] = "ready"
+    checks["role_diverse_top3"] = "ready"
+    checks["unsupported_claim_guard"] = "ready"
+    checks["baseline_labeling"] = "ready"
+    checks["ranking_basis_separated"] = "ready"
+    checks["research_value_quality_gate"] = "ready"
 
     theme_a = sizing_fixture_theme()
     theme_b = sizing_fixture_theme()

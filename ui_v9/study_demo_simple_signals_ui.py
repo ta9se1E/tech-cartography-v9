@@ -11,6 +11,11 @@ from services_v9.study_demo_ui_mode import should_show_full_signal_details
 from services_v9.signal_models import Signal
 from ui_v9.labels import action_label_ja, type_label_ja
 from ui_v9.study_demo_compact_components import render_signal_card_simple
+from ui_v9.study_demo_research_value_ui import (
+  build_research_value_bundle,
+  is_initial_baseline_run,
+  render_research_value_card,
+)
 
 
 def _signal_lookup_key(signal: Signal | Mapping[str, Any]) -> str:
@@ -79,23 +84,55 @@ def render_simple_signals_tab(
 
   active_context = dict(source_info.get("active_context", {}) or {})
   run_id = str(active_context.get("active_search_run_id", "") or "")
+  initial_baseline = is_initial_baseline_run(source_info)
+  research_bundle = build_research_value_bundle(display_signals=display_signals, source_info=source_info, limit=3)
+  research_items = list(research_bundle.get("items", []) or [])
 
-  st.markdown("#### 今週まず読むべき3件")
-  if not top_reads:
-    st.info("今週優先して読む候補はまだありません。")
+  header_left, header_right = st.columns([3, 1])
+  with header_left:
+    st.markdown("#### 今回まず確認する3件")
+  with header_right:
+    if initial_baseline:
+      st.markdown("**Initial Baseline**")
+  st.caption(
+    "タイトル・概要・監視条件に基づく優先確認候補です。技術的妥当性を示すものではありません。"
+  )
+
+  if not research_items:
+    st.info("今回優先して確認する候補はまだありません。")
   else:
-    columns = st.columns(len(top_reads))
-    for column, signal in zip(columns, top_reads):
+    research_lookup = {
+      str(dict(item.get("signal", {}) or {}).get("signal_id", "")): item for item in research_items
+    }
+    research_title_lookup = {
+      str(dict(item.get("signal", {}) or {}).get("title", "")): item for item in research_items
+    }
+    columns = st.columns(len(research_items))
+    for column, item in zip(columns, research_items):
       with column:
-        key = _signal_lookup_key(signal)
-        render_signal_card_simple(
-          signal=signal,
-          display_signal=display_signal_lookup.get(key, {}),
-          explanation=score_explanation_lookup.get(key, {}),
+        signal_payload = dict(item.get("signal", {}) or {})
+        lookup_id = str(signal_payload.get("signal_id", "") or "")
+        lookup_title = str(signal_payload.get("title", "") or "")
+        display_signal = {}
+        for candidate in display_signal_lookup.values():
+          if str(candidate.get("id", "")) == lookup_id or str(candidate.get("title", "")) == lookup_title:
+            display_signal = candidate
+            break
+        render_research_value_card(
+          item=item,
+          display_signal=display_signal,
           search_run_id=run_id,
           key_namespace="simple_top3",
-          index=0,
+          index=int(item.get("rank", 0) or 0),
+          initial_baseline=initial_baseline,
         )
+    top_keys = set(research_lookup.keys()) | set(research_title_lookup.keys())
+    remaining = [
+      signal
+      for signal in remaining
+      if str(display_signal_lookup.get(_signal_lookup_key(signal), {}).get("id", "")) not in top_keys
+      and signal.title not in research_title_lookup
+    ]
 
   if hidden_empty:
     st.caption(f"表示対象 {len(visible_signals)}件 | タイトル未取得 {hidden_empty}件")
