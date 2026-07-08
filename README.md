@@ -738,14 +738,32 @@ Streamlit の **別テーマ検証** トップレベルタブで操作します�
 Study Demo uses GitHub Actions for **CI** and **approved Continuous Delivery**:
 
 - **CI** (`.github/workflows/ci.yml`): runs on push/PR to `v9-study-demo` via `scripts/run_v9_ci_checks.sh`
-  - compileall, pytest (1116+), readiness, build-context safety, final acceptance plan checks
+  - compileall, pytest (1116+), readiness (`--scope offline-ci`), build-context safety, final acceptance plan checks
   - no Cloud auth, no secrets, no external APIs
 - **CD** (`.github/workflows/deploy-study-demo.yml`): `workflow_dispatch` only
   - GitHub Environment `study-demo` approval required
   - Workload Identity Federation (keyless; no Service Account JSON)
   - deploys **validated tag only** (`v9-study-demo-*-validated`)
-  - post-deploy smoke test and automatic rollback to previous revision on failure
+  - pre/post-deploy live-cloud readiness (`--scope live-cloud`), smoke test, and automatic rollback to previous revision on failure
 - **Rollback** (`.github/workflows/rollback-study-demo.yml`): manual approved traffic switch
+
+### Readiness validation scopes
+
+`scripts/check_v9_study_demo_readiness.py` exposes two scopes that share identical validation logic:
+
+- `--scope offline-ci`: deterministic, network-free checks using frozen lineage fixtures. No ADC, no Cloud reads/writes (`cloud_reads=0`, `cloud_writes=0`). Used by CI.
+
+```bash
+python scripts/check_v9_study_demo_readiness.py --scope offline-ci
+```
+
+- `--scope live-cloud`: read-only verification against the real Study Demo GCS bucket (Active Context / Run / Theme / Profile / Plan). Requires authentication (WIF in the Deploy workflow, or local ADC). Never falls back to offline silently.
+
+```bash
+python scripts/check_v9_study_demo_readiness.py --scope live-cloud
+```
+
+Invoking without `--scope` preserves the previous behavior (full offline suite plus a live-cloud lineage check) for backward compatibility.
 
 Production (`tech-cartography-v9-signal-watch`) is never a deploy target. Browser acceptance remains manual after deploy.
 

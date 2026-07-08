@@ -80,7 +80,7 @@ run_local_checks() {
   shopt -s nullglob
   local test_files=(tests/test_v9_*.py)
   PYTHONPATH=.:src "${PY[@]}" -m pytest "${test_files[@]}" -q
-  "${PY[@]}" scripts/check_v9_study_demo_readiness.py
+  "${PY[@]}" scripts/check_v9_study_demo_readiness.py --scope offline-ci
   "${PY[@]}" scripts/check_v9_build_context.py --ignore-file .gcloudignore
 }
 

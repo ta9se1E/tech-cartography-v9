@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -16,18 +18,23 @@ if str(ROOT) not in sys.path:
 if str(ROOT / "src") not in sys.path:
   sys.path.insert(0, str(ROOT / "src"))
 
+SEARCH_RUN_ID = "study_demo_search_20260705_145711_c06e0a1b"
+VALID_SCOPES = ("offline-ci", "live-cloud")
+
 
 def _check_module(name: str) -> None:
   importlib.import_module(name)
 
 
-def _check_script_plan(script: str) -> None:
+def _check_script_plan(script: str, *, extra_args: list[str] | None = None) -> None:
   env = os.environ.copy()
   env["PYTHONPATH"] = f"{ROOT}:{ROOT / 'src'}"
   env.setdefault("V9_STUDY_DEMO_MODE", "true")
   env.setdefault("V9_STUDY_DEMO_BUCKET", "tech-cartography-v9-study-demo-1020686343587")
+  command = [sys.executable, str(ROOT / "scripts" / script), "--plan"]
+  command.extend(list(extra_args or []))
   result = subprocess.run(
-    [sys.executable, str(ROOT / "scripts" / script), "--plan"],
+    command,
     cwd=ROOT,
     check=True,
     capture_output=True,
@@ -39,7 +46,8 @@ def _check_script_plan(script: str) -> None:
     raise RuntimeError(f"{script} plan status unexpected: {payload.get('status')}")
 
 
-def main() -> int:
+def _run_full_readiness(*, lineage_scope: str | None) -> tuple[int, dict[str, Any]]:
+  lineage_extra_args = ["--scope", "offline-ci"] if lineage_scope == "offline-ci" else None
   checks: dict[str, str] = {}
   try:
     _check_module("services_v9.study_demo_auth")
@@ -67,7 +75,7 @@ def main() -> int:
     _check_script_plan("check_v9_study_demo_active_run_connection.py")
     _check_script_plan("check_v9_study_demo_theme_e2e.py")
     _check_script_plan("check_v9_study_demo_theme_draft_mapping.py")
-    _check_script_plan("check_v9_study_demo_live_lineage.py")
+    _check_script_plan("check_v9_study_demo_live_lineage.py", extra_args=lineage_extra_args)
     _check_script_plan("check_v9_study_demo_p0_ui_consistency.py")
     _check_script_plan("check_v9_study_demo_simple_ui.py")
     _check_script_plan("check_v9_study_demo_research_value.py")
@@ -349,13 +357,77 @@ def main() -> int:
       raise RuntimeError(f"build context check failed: {build_payload}")
     checks["build_context"] = "ok"
 
-    print("[v9 study demo readiness] OK")
-    print(json.dumps({"status": "ok", "checks": checks}, ensure_ascii=False, indent=2))
-    return 0
-  except Exception as exc:
+    return 0, {"status": "ok", "checks": checks}
+  except Exception as exc:  # noqa: BLE001
     print(f"[v9 study demo readiness] FAILED: {exc}", file=sys.stderr)
-    print(json.dumps({"status": "failed", "checks": checks, "error": str(exc)}, ensure_ascii=False, indent=2))
-    return 1
+    return 1, {"status": "failed", "checks": checks, "error": str(exc)}
+
+
+def _emit_offline_ci() -> int:
+  code, payload = _run_full_readiness(lineage_scope="offline-ci")
+  payload.update(
+    {
+      "validation_scope": "offline-ci",
+      "cloud_auth_required": False,
+      "cloud_reads": 0,
+      "cloud_writes": 0,
+      "production_modifications": False,
+      "external_api_calls": 0,
+      "fixture": SEARCH_RUN_ID,
+    }
+  )
+  print(json.dumps(payload, ensure_ascii=False, indent=2))
+  return code
+
+
+def _emit_live_cloud() -> int:
+  """Run the live-cloud lineage confirmation (real Study Demo GCS, read-only)."""
+  env = os.environ.copy()
+  env["PYTHONPATH"] = f"{ROOT}:{ROOT / 'src'}"
+  env.setdefault("V9_STUDY_DEMO_MODE", "true")
+  env.setdefault("V9_STUDY_DEMO_BUCKET", "tech-cartography-v9-study-demo-1020686343587")
+  result = subprocess.run(
+    [
+      sys.executable,
+      str(ROOT / "scripts" / "check_v9_study_demo_live_lineage.py"),
+      "--plan",
+      "--scope",
+      "live-cloud",
+    ],
+    cwd=ROOT,
+    capture_output=True,
+    text=True,
+    env=env,
+  )
+  sys.stdout.write(result.stdout)
+  if result.returncode != 0 and result.stderr:
+    sys.stderr.write(result.stderr)
+  return result.returncode
+
+
+def _emit_legacy() -> int:
+  """Backwards-compatible behavior: full offline suite plus live-cloud lineage."""
+  code, payload = _run_full_readiness(lineage_scope=None)
+  if payload.get("status") == "ok":
+    print("[v9 study demo readiness] OK")
+  print(json.dumps(payload, ensure_ascii=False, indent=2))
+  return code
+
+
+def main(argv: list[str] | None = None) -> int:
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument(
+    "--scope",
+    choices=VALID_SCOPES,
+    default=None,
+    help="offline-ci (deterministic, no ADC) or live-cloud (deploy, requires WIF/ADC).",
+  )
+  args = parser.parse_args(argv)
+  if args.scope == "offline-ci":
+    return _emit_offline_ci()
+  if args.scope == "live-cloud":
+    return _emit_live_cloud()
+  return _emit_legacy()
 
 
 if __name__ == "__main__":

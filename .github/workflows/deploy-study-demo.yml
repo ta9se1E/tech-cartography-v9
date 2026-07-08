@@ -160,6 +160,25 @@ jobs:
             echo "- production_revision: \`${PRODUCTION_REVISION}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+      - name: Pre-deploy live-cloud readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_v9_study_demo_readiness.py --scope live-cloud | tee pre_live_readiness.json
+          python - <<'PY'
+          import json
+
+          payload = json.load(open("pre_live_readiness.json", encoding="utf-8"))
+          if payload.get("status") != "ok":
+              raise SystemExit("pre-deploy live-cloud readiness failed")
+          if payload.get("validation_scope") != "live-cloud":
+              raise SystemExit("pre-deploy readiness scope must be live-cloud")
+          if int(payload.get("cloud_writes", 0) or 0) != 0:
+              raise SystemExit("pre-deploy live-cloud readiness must not write to cloud")
+          if payload.get("production_modifications") is not False:
+              raise SystemExit("pre-deploy live-cloud readiness reported production modification")
+          PY
+
       - name: Deploy plan
         id: plan
         shell: bash
@@ -233,6 +252,27 @@ jobs:
             echo "- V9_UI_MODE: \`simple\`"
             echo "- production_revision_unchanged: \`${PRODUCTION_REVISION_NOW}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Post-deploy live-cloud readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_v9_study_demo_readiness.py --scope live-cloud | tee post_live_readiness.json
+          python - <<'PY' "${{ steps.pre.outputs.production_revision }}"
+          import json
+          import sys
+
+          expected_production = sys.argv[1]
+          payload = json.load(open("post_live_readiness.json", encoding="utf-8"))
+          if payload.get("status") != "ok":
+              raise SystemExit("post-deploy live-cloud readiness failed")
+          if payload.get("validation_scope") != "live-cloud":
+              raise SystemExit("post-deploy readiness scope must be live-cloud")
+          if int(payload.get("cloud_writes", 0) or 0) != 0:
+              raise SystemExit("post-deploy live-cloud readiness must not write to cloud")
+          if payload.get("production_modifications") is not False:
+              raise SystemExit("post-deploy live-cloud readiness reported production modification")
+          PY
 
       - name: Unauthenticated smoke test
         shell: bash
