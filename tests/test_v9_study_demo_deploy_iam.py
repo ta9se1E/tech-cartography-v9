@@ -7,6 +7,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -68,6 +69,7 @@ def _run_check_public_access(tmp_bin: Path, iam_mode: str) -> subprocess.Complet
       "PATH": f"{tmp_bin}:/usr/bin:/bin",
       "HOME": str(tmp_bin),
       "SERVICE": STUDY_SERVICE,
+      "V9_PYTHON_BIN": sys.executable,
     },
   )
 
