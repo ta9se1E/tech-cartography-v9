@@ -12,6 +12,8 @@ export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
 
 if [[ -x "/opt/miniconda3/envs/${CONDA_ENV:-2026hack}/bin/python" ]]; then
   PY=("/opt/miniconda3/envs/${CONDA_ENV:-2026hack}/bin/python")
+elif command -v python >/dev/null 2>&1; then
+  PY=(python)
 elif command -v python3 >/dev/null 2>&1; then
   PY=(python3)
 else

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -151,7 +152,7 @@ def test_cli_plan_and_apply_exit_codes(capsys) -> None:
 def test_cli_enable_without_approval_exits_non_zero() -> None:
   script_path = PROJECT_ROOT / "scripts" / "set_v9_cloud_weekly_enabled.py"
   completed = subprocess.run(
-    ["python", str(script_path), "--enable"],
+    [sys.executable, str(script_path), "--enable"],
     cwd=PROJECT_ROOT,
     check=False,
     capture_output=True,

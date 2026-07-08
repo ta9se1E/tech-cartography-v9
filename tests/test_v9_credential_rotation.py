@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -277,7 +278,7 @@ def test_helper_does_not_define_secret_cli_arguments() -> None:
 def test_helper_apply_without_approval_exits_non_zero() -> None:
   helper_path = PROJECT_ROOT / "scripts" / "rotate_v9_credentials_secure.py"
   completed = subprocess.run(
-    ["python", str(helper_path), "--apply", "--only", "SMTP_PASSWORD"],
+    [sys.executable, str(helper_path), "--apply", "--only", "SMTP_PASSWORD"],
     cwd=PROJECT_ROOT,
     check=False,
     capture_output=True,
