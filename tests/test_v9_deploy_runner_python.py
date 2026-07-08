@@ -56,6 +56,9 @@ if [[ "${{1:-}}" == "run" && "${{2:-}}" == "-n" ]]; then
   env_name="${{3:-}}"
   if [[ "${{env_name}}" == "2026hack" && "{str(env_available).lower()}" == "true" ]]; then
     shift 3
+    if [[ "${{1:-}}" == "python" ]]; then
+      shift
+    fi
     exec "{python_exec}" "$@"
   fi
   echo "EnvironmentLocationNotFound: Not a conda environment: /usr/share/miniconda/envs/${{env_name}}" >&2
