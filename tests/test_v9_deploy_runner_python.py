@@ -113,9 +113,14 @@ def test_conda_env_used_when_probe_succeeds(tmp_path: Path) -> None:
   fake_bin = tmp_path / "bin"
   fake_bin.mkdir()
   _write_fake_conda(fake_bin, env_available=True)
+  for name in ("python", "python3"):
+    broken = fake_bin / name
+    broken.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    broken.chmod(broken.stat().st_mode | stat.S_IXUSR)
   run_env = os.environ.copy()
   run_env["PATH"] = str(fake_bin)
   run_env.pop("V9_PYTHON_BIN", None)
+  run_env["CONDA_ENV"] = "2026hack"
   completed = subprocess.run(
     [BASH_BIN, str(DEPLOY_SCRIPT), "--print-python-selector"],
     cwd=ROOT,
@@ -196,7 +201,7 @@ exit 1
 def test_deploy_script_uses_py_array_not_hardcoded_conda_run() -> None:
   text = DEPLOY_SCRIPT.read_text(encoding="utf-8")
   assert '"${PY[@]}"' in text
-  assert text.count('conda run -n "${CONDA_ENV_NAME}" python') == 1
+  assert text.count('conda run -n "${CONDA_ENV_NAME}" python') == 2
   assert "command -v conda" in text
   assert "_conda_env_available" in text
   assert "select_deploy_python" in text

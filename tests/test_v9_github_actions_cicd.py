@@ -68,7 +68,7 @@ def test_deploy_script_prefers_system_python_over_conda_probe() -> None:
   assert "select_deploy_python" in text
   assert "_conda_env_available" in text
   assert "V9_PYTHON_BIN" in text
-  assert 'PY=(conda run -n "${CONDA_ENV_NAME}" python)' in text
+  assert "_python_candidate_usable" in text
   assert 'elif command -v conda >/dev/null 2>&1; then\n  PY=(conda run' not in text
   assert "--print-python-selector" in text
 

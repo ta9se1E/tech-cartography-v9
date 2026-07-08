@@ -49,16 +49,22 @@ _conda_env_available() {
   return 1
 }
 
+_python_candidate_usable() {
+  "${@}" -c 'import sys; assert sys.version_info[:2] == (3, 11); import json, pathlib, zoneinfo' >/dev/null 2>&1
+}
+
 select_deploy_python() {
   local candidate=""
   if [[ -n "${V9_PYTHON_BIN:-}" && -x "${V9_PYTHON_BIN}" ]]; then
-    PY=("${V9_PYTHON_BIN}")
-    PY_SELECTOR_SOURCE="V9_PYTHON_BIN"
-    return 0
+    if _python_candidate_usable "${V9_PYTHON_BIN}"; then
+      PY=("${V9_PYTHON_BIN}")
+      PY_SELECTOR_SOURCE="V9_PYTHON_BIN"
+      return 0
+    fi
   fi
   if command -v python >/dev/null 2>&1; then
     candidate="$(command -v python)"
-    if [[ -n "${candidate}" && -x "${candidate}" ]]; then
+    if [[ -n "${candidate}" && -x "${candidate}" ]] && _python_candidate_usable "${candidate}"; then
       PY=("${candidate}")
       PY_SELECTOR_SOURCE="system-python"
       return 0
@@ -66,22 +72,24 @@ select_deploy_python() {
   fi
   if command -v python3 >/dev/null 2>&1; then
     candidate="$(command -v python3)"
-    if [[ -n "${candidate}" && -x "${candidate}" ]]; then
+    if [[ -n "${candidate}" && -x "${candidate}" ]] && _python_candidate_usable "${candidate}"; then
       PY=("${candidate}")
       PY_SELECTOR_SOURCE="system-python3"
       return 0
     fi
   fi
   candidate="/opt/miniconda3/envs/${CONDA_ENV_NAME}/bin/python"
-  if [[ -x "${candidate}" ]]; then
+  if [[ -x "${candidate}" ]] && _python_candidate_usable "${candidate}"; then
     PY=("${candidate}")
     PY_SELECTOR_SOURCE="conda-env-direct"
     return 0
   fi
   if _conda_env_available "${CONDA_ENV_NAME}"; then
-    PY=(conda run -n "${CONDA_ENV_NAME}" python)
-    PY_SELECTOR_SOURCE="conda-run"
-    return 0
+    if _python_candidate_usable conda run -n "${CONDA_ENV_NAME}" python; then
+      PY=(conda run -n "${CONDA_ENV_NAME}" python)
+      PY_SELECTOR_SOURCE="conda-run"
+      return 0
+    fi
   fi
   log "ERROR: no usable Python interpreter found"
   exit 1
