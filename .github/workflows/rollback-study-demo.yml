@@ -20,7 +20,8 @@ env:
   GCP_REGION: ${{ vars.GCP_REGION }}
   CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
   WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
-  GITHUB_DEPLOYER_SERVICE_ACCOUNT: ${{ vars.GITHUB_DEPLOYER_SERVICE_ACCOUNT }}
+  DEPLOYER_SERVICE_ACCOUNT: ${{ vars.DEPLOYER_SERVICE_ACCOUNT }}
+  RUNTIME_SERVICE_ACCOUNT: ${{ vars.RUNTIME_SERVICE_ACCOUNT }}
   PRODUCTION_SERVICE: tech-cartography-v9-signal-watch
   STUDY_SERVICE: tech-cartography-v9-study-demo
 
@@ -60,11 +61,35 @@ jobs:
           fi
           echo "target_revision=${TARGET}" >> "${GITHUB_OUTPUT}"
 
+      - name: Validate deployer service account
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED="tech-cartography-v9-gh-deploy@devops-ai-agent-hackathon-2026.iam.gserviceaccount.com"
+          DEPLOYER="${{ vars.DEPLOYER_SERVICE_ACCOUNT }}"
+          RUNTIME="${{ vars.RUNTIME_SERVICE_ACCOUNT }}"
+          if [[ -z "${DEPLOYER}" ]]; then
+            echo "DEPLOYER_SERVICE_ACCOUNT is empty" >&2
+            exit 1
+          fi
+          if [[ "${DEPLOYER}" != "${EXPECTED}" ]]; then
+            echo "DEPLOYER_SERVICE_ACCOUNT must exactly match ${EXPECTED}" >&2
+            exit 1
+          fi
+          if [[ "${DEPLOYER}" == "${RUNTIME}" ]]; then
+            echo "deployer service account must not equal runtime service account" >&2
+            exit 1
+          fi
+          if [[ "${DEPLOYER}" != *"@devops-ai-agent-hackathon-2026.iam.gserviceaccount.com" ]]; then
+            echo "deployer service account must belong to devops-ai-agent-hackathon-2026" >&2
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.GITHUB_DEPLOYER_SERVICE_ACCOUNT }}
+          service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2

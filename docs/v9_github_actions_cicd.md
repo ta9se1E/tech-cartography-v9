@@ -87,7 +87,7 @@ Requires Environment approval, WIF auth, revision validation, traffic switch, sm
 Setup script: `scripts/setup_v9_github_cicd.sh`
 
 - No Service Account key JSON
-- Dedicated deployer SA: `tech-cartography-v9-github-deployer`
+- Dedicated deployer SA: `tech-cartography-v9-gh-deploy@devops-ai-agent-hackathon-2026.iam.gserviceaccount.com`
 - Runtime SA remains: `tech-cartography-v9-study-demo@...`
 - Attribute condition: exact repository + `refs/heads/v9-study-demo`
 
@@ -126,7 +126,7 @@ User actions (not executed in C5B-6A):
    - `CLOUD_RUN_SERVICE`
    - `RUNTIME_SERVICE_ACCOUNT`
    - `WIF_PROVIDER`
-   - `GITHUB_DEPLOYER_SERVICE_ACCOUNT`
+   - `DEPLOYER_SERVICE_ACCOUNT` (GitHub rejects variable names starting with `GITHUB_`)
    - `VALIDATED_RELEASE_TAG`
 5. Run `bash scripts/setup_v9_github_cicd.sh --apply` after plan review
 

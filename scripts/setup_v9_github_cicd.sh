@@ -11,7 +11,7 @@ REGION="${REGION:-us-central1}"
 STUDY_SERVICE="${STUDY_SERVICE:-tech-cartography-v9-study-demo}"
 PRODUCTION_SERVICE="${PRODUCTION_SERVICE:-tech-cartography-v9-signal-watch}"
 RUNTIME_SA="${RUNTIME_SA:-tech-cartography-v9-study-demo@${PROJECT_ID}.iam.gserviceaccount.com}"
-DEPLOYER_SA_NAME="${DEPLOYER_SA_NAME:-tech-cartography-v9-github-deployer}"
+DEPLOYER_SA_NAME="${DEPLOYER_SA_NAME:-tech-cartography-v9-gh-deploy}"
 DEPLOYER_SA="${DEPLOYER_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 WIF_POOL="${WIF_POOL:-github-actions}"
 WIF_PROVIDER="${WIF_PROVIDER:-tech-cartography-v9-study-demo}"
@@ -73,6 +73,19 @@ require_apply_guard() {
   fi
 }
 
+validate_deployer_sa_name() {
+  local name="$1"
+  local length="${#name}"
+  if (( length < 6 || length > 30 )); then
+    log "ERROR: deployer SA id must be 6-30 characters (got ${length}: ${name})"
+    exit 1
+  fi
+  if [[ ! "${name}" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ ]]; then
+    log "ERROR: deployer SA id must start with a letter, end with a letter or digit, and use lowercase alnum/hyphen only"
+    exit 1
+  fi
+}
+
 print_plan() {
   local github_repo="${1:-UNRESOLVED}"
   local project_number="${2:-UNRESOLVED}"
@@ -110,7 +123,7 @@ print_plan() {
     "CLOUD_RUN_SERVICE=${STUDY_SERVICE}",
     "RUNTIME_SERVICE_ACCOUNT=${RUNTIME_SA}",
     "WIF_PROVIDER",
-    "GITHUB_DEPLOYER_SERVICE_ACCOUNT=${DEPLOYER_SA}",
+    "DEPLOYER_SERVICE_ACCOUNT=${DEPLOYER_SA}",
     "VALIDATED_RELEASE_TAG=${VALIDATED_RELEASE_TAG}"
   ],
   "github_secrets_required": false,
@@ -132,7 +145,8 @@ print_plan() {
     "attribute.workflow": "assertion.workflow"
   },
   "wif_attribute_condition": "assertion.repository=='${github_repo}' && assertion.ref=='refs/heads/${GITHUB_BRANCH}'",
-  "wif_principal_binding": "principalSet://iam.googleapis.com/projects/${project_number}/locations/global/workloadIdentityPools/${WIF_POOL}/providers/${WIF_PROVIDER}/attribute.repository/${github_repo}",
+  "wif_principal_binding": "principalSet://iam.googleapis.com/projects/${project_number}/locations/global/workloadIdentityPools/${WIF_POOL}/attribute.repository/${github_repo}",
+  "deployer_sa_reuse": "tech-cartography-v9-gh-deploy",
   "production_isolation": {
     "allowed_service": "${STUDY_SERVICE}",
     "denied_service": "${PRODUCTION_SERVICE}",
@@ -153,7 +167,7 @@ EOF
     log "  gh variable set GCP_REGION --env study-demo --body ${REGION}"
     log "  gh variable set CLOUD_RUN_SERVICE --env study-demo --body ${STUDY_SERVICE}"
     log "  gh variable set RUNTIME_SERVICE_ACCOUNT --env study-demo --body ${RUNTIME_SA}"
-    log "  gh variable set GITHUB_DEPLOYER_SERVICE_ACCOUNT --env study-demo --body ${DEPLOYER_SA}"
+    log "  gh variable set DEPLOYER_SERVICE_ACCOUNT --env study-demo --body ${DEPLOYER_SA}"
     log "  gh variable set WIF_PROVIDER --env study-demo --body ${wif_provider_resource}"
     log "  gh variable set VALIDATED_RELEASE_TAG --env study-demo --body ${VALIDATED_RELEASE_TAG}"
 
@@ -208,7 +222,7 @@ apply_setup() {
     --member="serviceAccount:${DEPLOYER_SA}" \
     --role="roles/iam.serviceAccountUser" >/dev/null
 
-  local principal="principalSet://iam.googleapis.com/projects/${project_number}/locations/global/workloadIdentityPools/${WIF_POOL}/providers/${WIF_PROVIDER}/attribute.repository/${github_repo}"
+  local principal="principalSet://iam.googleapis.com/projects/${project_number}/locations/global/workloadIdentityPools/${WIF_POOL}/attribute.repository/${github_repo}"
   gcloud iam service-accounts add-iam-policy-binding "${DEPLOYER_SA}" \
     --project="${PROJECT_ID}" \
     --role="roles/iam.workloadIdentityUser" \
@@ -218,6 +232,7 @@ apply_setup() {
 }
 
 main() {
+  validate_deployer_sa_name "${DEPLOYER_SA_NAME}"
   case "${MODE}" in
     --plan)
       local github_repo="UNRESOLVED"

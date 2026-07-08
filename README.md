@@ -743,6 +743,7 @@ Study Demo uses GitHub Actions for **CI** and **approved Continuous Delivery**:
 - **CD** (`.github/workflows/deploy-study-demo.yml`): `workflow_dispatch` only
   - GitHub Environment `study-demo` approval required
   - Workload Identity Federation (keyless; no Service Account JSON)
+  - dedicated deployer SA `tech-cartography-v9-gh-deploy@...` via Environment Variable `DEPLOYER_SERVICE_ACCOUNT`
   - deploys **validated tag only** (`v9-study-demo-*-validated`)
   - pre/post-deploy live-cloud readiness (`--scope live-cloud`), smoke test, and automatic rollback to previous revision on failure
 - **Rollback** (`.github/workflows/rollback-study-demo.yml`): manual approved traffic switch

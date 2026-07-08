@@ -13,6 +13,20 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
 STUDY_SERVICE = "tech-cartography-v9-study-demo"
 PRODUCTION_SERVICE = "tech-cartography-v9-signal-watch"
+DEPLOYER_SA_NAME = "tech-cartography-v9-gh-deploy"
+DEPLOYER_SA = f"{DEPLOYER_SA_NAME}@devops-ai-agent-hackathon-2026.iam.gserviceaccount.com"
+RUNTIME_SA = "tech-cartography-v9-study-demo@devops-ai-agent-hackathon-2026.iam.gserviceaccount.com"
+OLD_DEPLOYER_SA_NAME = "tech-cartography-v9-github-deployer"
+REQUIRED_GITHUB_VARIABLES = (
+  "GCP_PROJECT_ID",
+  "GCP_PROJECT_NUMBER",
+  "GCP_REGION",
+  "CLOUD_RUN_SERVICE",
+  "RUNTIME_SERVICE_ACCOUNT",
+  "WIF_PROVIDER",
+  "DEPLOYER_SERVICE_ACCOUNT",
+  "VALIDATED_RELEASE_TAG",
+)
 
 
 def _load_workflow(name: str) -> dict:
@@ -73,6 +87,7 @@ def test_deploy_script_bash_syntax() -> None:
 def test_setup_plan_is_json_and_forbids_keys() -> None:
   env = os.environ.copy()
   env["GITHUB_REPOSITORY"] = "example-owner/example-repo"
+  env["VALIDATED_RELEASE_TAG"] = "v9-study-demo-cicd-live-validated"
   completed = subprocess.run(
     ["bash", str(ROOT / "scripts" / "setup_v9_github_cicd.sh"), "--plan"],
     cwd=ROOT,
@@ -88,8 +103,103 @@ def test_setup_plan_is_json_and_forbids_keys() -> None:
   assert payload["cloud_changes_in_plan"] is False
   assert payload["study_service"] == STUDY_SERVICE
   assert payload["production_service"] == PRODUCTION_SERVICE
+  assert payload["deployer_service_account"] == DEPLOYER_SA
+  assert payload["deployer_sa_reuse"] == DEPLOYER_SA_NAME
+  assert payload["blockers"] == []
 
 
 def test_gitignore_blocks_generated_gha_credentials() -> None:
   text = (ROOT / ".gitignore").read_text(encoding="utf-8")
   assert "gha-creds-" in text
+
+
+def test_deployer_sa_id_within_gcp_limit() -> None:
+  assert 6 <= len(DEPLOYER_SA_NAME) <= 30
+  assert DEPLOYER_SA_NAME[0].isalpha()
+  assert DEPLOYER_SA_NAME[-1].isalnum()
+  assert all(ch.islower() or ch.isdigit() or ch == "-" for ch in DEPLOYER_SA_NAME)
+
+
+def test_old_long_deployer_name_not_referenced() -> None:
+  repo_text = "\n".join(
+    path.read_text(encoding="utf-8")
+    for path in (
+      ROOT / "scripts" / "setup_v9_github_cicd.sh",
+      WORKFLOW_DIR / "deploy-study-demo.yml",
+      WORKFLOW_DIR / "rollback-study-demo.yml",
+      ROOT / "docs" / "v9_github_actions_cicd.md",
+    )
+  )
+  assert OLD_DEPLOYER_SA_NAME not in repo_text
+
+
+def test_github_deployer_variable_name_not_used() -> None:
+  repo_text = "\n".join(
+    path.read_text(encoding="utf-8")
+    for path in (
+      ROOT / "scripts" / "setup_v9_github_cicd.sh",
+      WORKFLOW_DIR / "deploy-study-demo.yml",
+      WORKFLOW_DIR / "rollback-study-demo.yml",
+    )
+  )
+  assert "GITHUB_DEPLOYER_SERVICE_ACCOUNT" not in repo_text
+
+
+def test_deployer_service_account_variable_referenced() -> None:
+  deploy_text = (WORKFLOW_DIR / "deploy-study-demo.yml").read_text(encoding="utf-8")
+  rollback_text = (WORKFLOW_DIR / "rollback-study-demo.yml").read_text(encoding="utf-8")
+  setup_text = (ROOT / "scripts" / "setup_v9_github_cicd.sh").read_text(encoding="utf-8")
+  assert "vars.DEPLOYER_SERVICE_ACCOUNT" in deploy_text
+  assert "vars.DEPLOYER_SERVICE_ACCOUNT" in rollback_text
+  assert "DEPLOYER_SERVICE_ACCOUNT=${DEPLOYER_SA}" in setup_text
+
+
+def test_deploy_auth_uses_deployer_service_account() -> None:
+  text = (WORKFLOW_DIR / "deploy-study-demo.yml").read_text(encoding="utf-8")
+  assert "Validate deployer service account" in text
+  assert "service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}" in text
+  assert DEPLOYER_SA in text
+  assert "vars.RUNTIME_SERVICE_ACCOUNT" in text
+
+
+def test_rollback_auth_uses_deployer_service_account() -> None:
+  text = (WORKFLOW_DIR / "rollback-study-demo.yml").read_text(encoding="utf-8")
+  assert "Validate deployer service account" in text
+  assert "service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}" in text
+  assert DEPLOYER_SA in text
+
+
+def test_deployer_sa_guard_separates_runtime_and_production() -> None:
+  deploy_text = (WORKFLOW_DIR / "deploy-study-demo.yml").read_text(encoding="utf-8")
+  rollback_text = (WORKFLOW_DIR / "rollback-study-demo.yml").read_text(encoding="utf-8")
+  for text in (deploy_text, rollback_text):
+    assert "must not equal runtime service account" in text
+    assert "must belong to devops-ai-agent-hackathon-2026" in text
+  assert PRODUCTION_SERVICE in deploy_text
+  assert "production service deploy is forbidden" in deploy_text
+
+
+def test_setup_plan_lists_eight_github_variables() -> None:
+  env = os.environ.copy()
+  env["GITHUB_REPOSITORY"] = "ta9se1E/tech-cartography-v9"
+  env["VALIDATED_RELEASE_TAG"] = "v9-study-demo-cicd-live-validated"
+  completed = subprocess.run(
+    ["bash", str(ROOT / "scripts" / "setup_v9_github_cicd.sh"), "--plan"],
+    cwd=ROOT,
+    check=True,
+    capture_output=True,
+    text=True,
+    env=env,
+  )
+  payload = json.loads(completed.stdout)
+  variable_names = []
+  for item in payload["github_variables"]:
+    variable_names.append(item.split("=", 1)[0])
+  assert variable_names == list(REQUIRED_GITHUB_VARIABLES)
+
+
+def test_workflows_have_no_credentials_json_or_github_secrets() -> None:
+  for name in ("deploy-study-demo.yml", "rollback-study-demo.yml", "ci.yml"):
+    text = (WORKFLOW_DIR / name).read_text(encoding="utf-8")
+    assert "credentials_json" not in text
+    assert "secrets." not in text.lower() or "github_secrets_required" in text
