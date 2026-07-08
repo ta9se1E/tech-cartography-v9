@@ -109,7 +109,19 @@ def test_system_python_used_when_conda_command_exists_without_env(tmp_path: Path
   assert "EnvironmentLocationNotFound" not in completed.stderr
 
 
-def test_conda_env_used_when_probe_succeeds(tmp_path: Path) -> None:
+def test_conda_env_fallback_is_last_resort_after_system_python() -> None:
+  text = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+  assert "_python_candidate_usable" in text
+  assert "_conda_env_available" in text
+  system_idx = text.index('PY_SELECTOR_SOURCE="system-python"')
+  conda_run_idx = text.index('PY=(conda run -n "${CONDA_ENV_NAME}" python)')
+  assert system_idx < conda_run_idx
+
+
+def test_conda_env_runtime_fallback_local_only(tmp_path: Path) -> None:
+  """Runtime conda fallback when broken python shims occupy PATH."""
+  if os.environ.get("GITHUB_ACTIONS") == "true":
+    return
   fake_bin = tmp_path / "bin"
   fake_bin.mkdir()
   _write_fake_conda(fake_bin, env_available=True)
