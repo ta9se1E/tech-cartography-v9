@@ -237,6 +237,13 @@ jobs:
           IAM_POLICY_MUTATIONS=unknown
           STATE_PARSE_STATUS=missing
           RESULT_PARSE_STATUS=missing
+          TRAFFIC_PROMOTION_STARTED=false
+          TRAFFIC_PROMOTED=false
+          NEW_REVISION=
+          TRAFFIC_TARGET_REVISION=
+          PREVIOUS_REVISION=
+          FINAL_SMOKE_STATUS=unknown
+          CANDIDATE_SMOKE_STATUS=unknown
           while IFS='=' read -r key value; do
             case "${key}" in
               mutation_started) MUTATION_STARTED="${value}" ;;
@@ -244,6 +251,13 @@ jobs:
               iam_policy_mutations) IAM_POLICY_MUTATIONS="${value}" ;;
               state_parse_status) STATE_PARSE_STATUS="${value}" ;;
               result_parse_status) RESULT_PARSE_STATUS="${value}" ;;
+              traffic_promotion_started) TRAFFIC_PROMOTION_STARTED="${value}" ;;
+              traffic_promoted) TRAFFIC_PROMOTED="${value}" ;;
+              new_revision) NEW_REVISION="${value}" ;;
+              traffic_target_revision) TRAFFIC_TARGET_REVISION="${value}" ;;
+              previous_revision) PREVIOUS_REVISION="${value}" ;;
+              final_smoke_status) FINAL_SMOKE_STATUS="${value}" ;;
+              candidate_smoke_status) CANDIDATE_SMOKE_STATUS="${value}" ;;
             esac
           done < "${RUNNER_TEMP}/v9-deploy-metadata.txt"
           if [[ "${{ steps.apply.outcome }}" == "success" && "${RESULT_PARSE_STATUS}" != "ok" ]]; then
@@ -252,6 +266,13 @@ jobs:
           {
             echo "## Deploy state"
             echo "- mutation_started: \`${MUTATION_STARTED}\`"
+            echo "- traffic_promotion_started: \`${TRAFFIC_PROMOTION_STARTED}\`"
+            echo "- traffic_promoted: \`${TRAFFIC_PROMOTED}\`"
+            echo "- previous_revision: \`${PREVIOUS_REVISION}\`"
+            echo "- new_revision: \`${NEW_REVISION}\`"
+            echo "- traffic_target_revision: \`${TRAFFIC_TARGET_REVISION}\`"
+            echo "- candidate_smoke_status: \`${CANDIDATE_SMOKE_STATUS}\`"
+            echo "- final_smoke_status: \`${FINAL_SMOKE_STATUS}\`"
             echo "- public_access_verified: \`${PUBLIC_ACCESS_VERIFIED}\`"
             echo "- iam_policy_mutations: \`${IAM_POLICY_MUTATIONS}\`"
             echo "- state_parse_status: \`${STATE_PARSE_STATUS}\`"
@@ -266,24 +287,47 @@ jobs:
         run: |
           set -euo pipefail
           SERVICE="${CLOUD_RUN_SERVICE:-${STUDY_SERVICE}}"
+          PREVIOUS_REVISION="${{ steps.pre.outputs.previous_revision }}"
+          EXPECTED_NEW_REVISION="${{ steps.deploy_state.outputs.new_revision }}"
+          TRAFFIC_PROMOTED="${{ steps.deploy_state.outputs.traffic_promoted }}"
+          if [[ "${TRAFFIC_PROMOTED}" != "true" ]]; then
+            echo "deploy result did not confirm traffic_promoted=true (got '${TRAFFIC_PROMOTED}')" >&2
+            exit 1
+          fi
+          if [[ -z "${EXPECTED_NEW_REVISION}" ]]; then
+            echo "deploy result did not report a new_revision" >&2
+            exit 1
+          fi
           SERVICE_JSON="$(gcloud run services describe "${SERVICE}" \
             --project="${GCP_PROJECT_ID}" \
             --region="${GCP_REGION}" \
             --format=json)"
-          python - <<'PY' "${SERVICE_JSON}" "${{ steps.pre.outputs.production_revision }}"
+          python - <<'PY' "${SERVICE_JSON}" "${EXPECTED_NEW_REVISION}" "${PREVIOUS_REVISION}"
           import json
           import sys
 
           service = json.loads(sys.argv[1])
-          expected_production = sys.argv[2]
+          expected_new = sys.argv[2]
+          previous = sys.argv[3]
           env = service.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [{}])[0].get("env", [])
           ui_mode = next((item.get("value") for item in env if item.get("name") == "V9_UI_MODE"), "")
-          traffic = service.get("status", {}).get("traffic", [])
+          status = service.get("status", {})
+          spec = service.get("spec", {})
+
+          def pct(traffic, name):
+              return sum(t.get("percent", 0) for t in traffic if t.get("revisionName") == name)
+
           if ui_mode != "simple":
               raise SystemExit("V9_UI_MODE must remain simple")
-          if not any(item.get("percent") == 100 for item in traffic):
-              raise SystemExit("traffic is not 100%")
-          print("validation_ok")
+          if expected_new == previous:
+              raise SystemExit("new revision must differ from previous revision")
+          if pct(spec.get("traffic", []), expected_new) != 100:
+              raise SystemExit(f"spec.traffic is not 100% on new revision {expected_new}")
+          if pct(status.get("traffic", []), expected_new) != 100:
+              raise SystemExit(f"status.traffic is not 100% on new revision {expected_new}")
+          if status.get("latestReadyRevisionName") != expected_new:
+              raise SystemExit("latestReadyRevisionName is not the new revision")
+          print("promotion_verified")
           PY
           PRODUCTION_REVISION_NOW="$(gcloud run services describe "${PRODUCTION_SERVICE}" \
             --project="${GCP_PROJECT_ID}" \
@@ -297,6 +341,10 @@ jobs:
             --project="${GCP_PROJECT_ID}" \
             --region="${GCP_REGION}" \
             --format='value(status.latestReadyRevisionName)')"
+          if [[ "${NEW_REVISION}" != "${EXPECTED_NEW_REVISION}" ]]; then
+            echo "live latestReady ${NEW_REVISION} does not match promoted revision ${EXPECTED_NEW_REVISION}" >&2
+            exit 1
+          fi
           RUNTIME_SA="$(gcloud run services describe "${SERVICE}" \
             --project="${GCP_PROJECT_ID}" \
             --region="${GCP_REGION}" \
@@ -313,7 +361,11 @@ jobs:
           echo "new_revision=${NEW_REVISION}" >> "${GITHUB_OUTPUT}"
           {
             echo "## Post-deploy"
+            echo "- previous_revision: \`${PREVIOUS_REVISION}\`"
             echo "- new_revision: \`${NEW_REVISION}\`"
+            echo "- traffic_promoted: \`${TRAFFIC_PROMOTED}\`"
+            echo "- spec_status_traffic_new: \`100\`"
+            echo "- latest_ready: \`${NEW_REVISION}\`"
             echo "- runtime_service_account: \`${RUNTIME_SA}\`"
             echo "- V9_UI_MODE: \`simple\`"
             echo "- production_revision_unchanged: \`${PRODUCTION_REVISION_NOW}\`"
@@ -346,6 +398,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          SERVICE="${CLOUD_RUN_SERVICE:-${STUDY_SERVICE}}"
+          EXPECTED_NEW_REVISION="${{ steps.deploy_state.outputs.new_revision }}"
+          assert_new_traffic() {
+            local phase="$1"
+            local svc_json
+            svc_json="$(gcloud run services describe "${SERVICE}" \
+              --project="${GCP_PROJECT_ID}" \
+              --region="${GCP_REGION}" \
+              --format=json)"
+            python - <<'PY' "${svc_json}" "${EXPECTED_NEW_REVISION}" "${phase}"
+          import json
+          import sys
+
+          service = json.loads(sys.argv[1])
+          expected_new = sys.argv[2]
+          phase = sys.argv[3]
+          status_traffic = service.get("status", {}).get("traffic", [])
+          pct = sum(t.get("percent", 0) for t in status_traffic if t.get("revisionName") == expected_new)
+          if pct != 100:
+              raise SystemExit(f"{phase}: status.traffic is not 100% on new revision {expected_new}")
+          print(f"{phase}: status.traffic 100% on {expected_new}")
+          PY
+          }
+          assert_new_traffic "pre-smoke"
           URL="${{ steps.pre.outputs.service_url }}"
           CODE="$(curl -sS -o /tmp/smoke.html -w '%{http_code}' "${URL}/")"
           if [[ "${CODE}" != "200" ]]; then
@@ -367,6 +443,7 @@ jobs:
           if failed:
               raise SystemExit(f"smoke checks failed: {failed}")
           PY
+          assert_new_traffic "post-smoke"
 
       - name: Report deploy not started
         if: failure() && steps.deploy_state.outputs.mutation_started != 'true'
