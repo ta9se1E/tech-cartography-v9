@@ -4,6 +4,36 @@ Patent Evidence Intelligence scaffold for carbon-fiber technology cartography.
 
 v7 is a fresh project. It does not inherit v6's weekly-watch baseline as a bulk copy.
 
+## Tech Cartography v9 Study Demo (Public Repository)
+
+This repository publishes the **Study Demo** branch (`v9-study-demo`) for Tech Cartography v9 — a carbon-fiber R&D signal watch UI with seeded demo data, password gate, and offline-safe CI.
+
+### Demo URL
+
+- Study Demo (Cloud Run): https://tech-cartography-v9-study-demo-utejl5os5a-uc.a.run.app
+- Current validated revision: `tech-cartography-v9-study-demo-00022-mmv`
+- Access: password gate (credentials are not stored in this repository)
+
+### Status
+
+| Area | State |
+|------|-------|
+| **Implemented** | Study Demo UI (simple mode), seeded search run, Theme/Profile/Signals/Digest tabs, password gate, GitHub Actions CI, approved CD workflow definitions (not yet wired to GCP) |
+| **In development** | GitHub Environment + Workload Identity Federation apply, approved deploy automation |
+| **Limits** | External search APIs disabled on Study Demo; email send disabled; production service is out of scope; browser acceptance is manual |
+
+### Validation and tests
+
+- Offline CI: **1116+** pytest cases (`tests/test_v9_*.py`)
+- Validated release tag: `v9-study-demo-final-acceptance-live-validated` → commit `1085b03`
+- CI/CD foundation tag: `v9-study-demo-cicd-foundation-ready` → commit `1912a6a`
+
+Push alone does **not** deploy to Cloud Run. Deploy requires manual workflow dispatch, GitHub Environment approval, and a validated tag.
+
+### Disclaimer
+
+This project supports research and study demonstrations. Outputs are informational and do not replace legal, patent, or business judgment. Demo data is seeded for presentation; live provider results may differ.
+
 ## Scope
 
 - Carbon Fiber Evidence Map
@@ -708,7 +738,7 @@ Streamlit の **別テーマ検証** トップレベルタブで操作します�
 Study Demo uses GitHub Actions for **CI** and **approved Continuous Delivery**:
 
 - **CI** (`.github/workflows/ci.yml`): runs on push/PR to `v9-study-demo` via `scripts/run_v9_ci_checks.sh`
-  - compileall, pytest (1108+), readiness, build-context safety, final acceptance plan checks
+  - compileall, pytest (1116+), readiness, build-context safety, final acceptance plan checks
   - no Cloud auth, no secrets, no external APIs
 - **CD** (`.github/workflows/deploy-study-demo.yml`): `workflow_dispatch` only
   - GitHub Environment `study-demo` approval required
