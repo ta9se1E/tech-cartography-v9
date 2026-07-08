@@ -86,6 +86,13 @@ if ! env PYTHONPATH="${PYTHONPATH}" "${PY[@]}" -m pytest "${test_files[@]}" -q -
   log "FAIL  pytest"
   log "pytest tail:"
   tail -n 40 "${PYTEST_LOG}" || true
+  log "per-file pytest status:"
+  for test_file in "${test_files[@]}"; do
+    if ! env PYTHONPATH="${PYTHONPATH}" "${PY[@]}" -m pytest "${test_file}" -q --tb=line >/dev/null 2>&1; then
+      log "  FAIL ${test_file}"
+      echo "::error file=${test_file}::pytest failed in ${test_file}" >&2
+    fi
+  done
   exit 1
 fi
 log "OK    pytest"
