@@ -215,6 +215,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "apply_started=true" >> "${GITHUB_OUTPUT}"
           V9_STUDY_DEMO_DEPLOY_APPROVED=true V9_UI_MODE=simple \
             bash scripts/deploy_v9_study_demo.sh --apply | tee deploy_result.json
 
@@ -324,8 +325,23 @@ jobs:
               raise SystemExit(f"smoke checks failed: {failed}")
           PY
 
+      - name: Report deploy not started
+        if: failure() && steps.apply.outputs.apply_started != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          CURRENT="${{ steps.pre.outputs.previous_revision }}"
+          {
+            echo "## Deploy not started"
+            echo "- deploy_not_started: \`true\`"
+            echo "- rollback_skipped: \`true\`"
+            if [[ -n "${CURRENT}" ]]; then
+              echo "- current_revision unchanged: \`${CURRENT}\`"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Rollback to previous revision
-        if: failure() && steps.pre.outputs.previous_revision != ''
+        if: failure() && steps.apply.outputs.apply_started == 'true' && steps.pre.outputs.previous_revision != ''
         shell: bash
         run: |
           set -euo pipefail

@@ -58,6 +58,19 @@ def test_deploy_workflow_is_manual_and_guarded() -> None:
   assert PRODUCTION_SERVICE in text
   assert "credentials_json" not in text
   assert "Rollback to previous revision" in text
+  assert "apply_started=true" in text
+  assert "steps.apply.outputs.apply_started == 'true'" in text
+  assert "Report deploy not started" in text
+
+
+def test_deploy_script_prefers_system_python_over_conda_probe() -> None:
+  text = (ROOT / "scripts" / "deploy_v9_study_demo.sh").read_text(encoding="utf-8")
+  assert "select_deploy_python" in text
+  assert "_conda_env_available" in text
+  assert "V9_PYTHON_BIN" in text
+  assert 'PY=(conda run -n "${CONDA_ENV_NAME}" python)' in text
+  assert 'elif command -v conda >/dev/null 2>&1; then\n  PY=(conda run' not in text
+  assert "--print-python-selector" in text
 
 
 def test_rollback_workflow_is_manual() -> None:

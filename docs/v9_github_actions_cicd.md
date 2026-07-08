@@ -21,7 +21,8 @@ flowchart LR
     WIF --> DeployPlan[deploy_v9_study_demo.sh --plan]
     DeployPlan --> DeployApply[deploy_v9_study_demo.sh --apply]
     DeployApply --> PostChecks[Post-deploy + smoke]
-    PostChecks -->|failure| AutoRollback[update-traffic previous revision]
+    PostChecks -->|failure after apply| AutoRollback[update-traffic previous revision]
+    DeployPlan -->|failure before apply| SkipRollback[rollback skipped]
   end
 
   subgraph Rollback
@@ -66,13 +67,15 @@ Inputs:
 Jobs:
 
 1. **preflight** — tag pattern, service guard, required scripts at tag
-2. **deploy** — GitHub Environment `study-demo` approval, checkout validated tag, shared CI checks, WIF auth, deploy plan/apply, post-deploy validation, smoke test, automatic rollback on failure
+2. **deploy** — GitHub Environment `study-demo` approval, checkout validated tag, shared CI checks, WIF auth, deploy plan/apply, post-deploy validation, smoke test, automatic rollback on failure **after apply starts**
 
 Important:
 
 - Push alone never deploys to Cloud Run
 - Application source deployed is always the validated tag commit, not the workflow branch tip
 - Browser acceptance remains a human step after deploy
+- GitHub-hosted runners use setup-python; deploy script selects conda only when the env exists
+- Rollback runs only after `Deploy apply` starts; pre-apply failures skip traffic rollback
 
 ## Manual rollback
 

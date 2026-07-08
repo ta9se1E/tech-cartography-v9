@@ -28,14 +28,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
 ALLOWED_SERVICES=("tech-cartography-v9-study-demo")
-
-if [[ -x "/opt/miniconda3/envs/${CONDA_ENV:-2026hack}/bin/python" ]]; then
-  PY=("/opt/miniconda3/envs/${CONDA_ENV:-2026hack}/bin/python")
-elif command -v conda >/dev/null 2>&1; then
-  PY=(conda run -n "${CONDA_ENV:-2026hack}" python)
-else
-  PY=(python3)
-fi
+CONDA_ENV_NAME="${CONDA_ENV:-2026hack}"
+PY=()
+PY_SELECTOR_SOURCE=""
 
 export PYTHONPATH="${ROOT}:${ROOT}/src"
 
@@ -43,13 +38,85 @@ log() {
   printf '%s\n' "$*"
 }
 
+_conda_env_available() {
+  local env_name="$1"
+  if ! command -v conda >/dev/null 2>&1; then
+    return 1
+  fi
+  if conda run -n "${env_name}" python -c 'import sys' >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+select_deploy_python() {
+  local candidate=""
+  if [[ -n "${V9_PYTHON_BIN:-}" && -x "${V9_PYTHON_BIN}" ]]; then
+    PY=("${V9_PYTHON_BIN}")
+    PY_SELECTOR_SOURCE="V9_PYTHON_BIN"
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    candidate="$(command -v python)"
+    if [[ -n "${candidate}" && -x "${candidate}" ]]; then
+      PY=("${candidate}")
+      PY_SELECTOR_SOURCE="system-python"
+      return 0
+    fi
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    candidate="$(command -v python3)"
+    if [[ -n "${candidate}" && -x "${candidate}" ]]; then
+      PY=("${candidate}")
+      PY_SELECTOR_SOURCE="system-python3"
+      return 0
+    fi
+  fi
+  candidate="/opt/miniconda3/envs/${CONDA_ENV_NAME}/bin/python"
+  if [[ -x "${candidate}" ]]; then
+    PY=("${candidate}")
+    PY_SELECTOR_SOURCE="conda-env-direct"
+    return 0
+  fi
+  if _conda_env_available "${CONDA_ENV_NAME}"; then
+    PY=(conda run -n "${CONDA_ENV_NAME}" python)
+    PY_SELECTOR_SOURCE="conda-run"
+    return 0
+  fi
+  log "ERROR: no usable Python interpreter found"
+  exit 1
+}
+
+validate_deploy_python() {
+  local version executable
+  version="$("${PY[@]}" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
+  if [[ "${version}" != 3.11* ]]; then
+    log "ERROR: Python 3.11 required, found ${version}"
+    exit 1
+  fi
+  if ! "${PY[@]}" -c 'import json, pathlib, zoneinfo' >/dev/null 2>&1; then
+    log "ERROR: required Python modules unavailable"
+    exit 1
+  fi
+  executable="$("${PY[@]}" -c 'import sys; print(sys.executable)')"
+  log "Python selector:"
+  log "source=${PY_SELECTOR_SOURCE}"
+  log "executable=${executable}"
+  log "version=${version}"
+}
+
+select_deploy_python
+validate_deploy_python
+
 usage() {
   cat <<'EOF'
 Usage:
   scripts/deploy_v9_study_demo.sh --plan
   V9_STUDY_DEMO_DEPLOY_APPROVED=true scripts/deploy_v9_study_demo.sh --apply
+  scripts/deploy_v9_study_demo.sh --print-python-selector
 
 Stage A defaults to --plan only. This script never modifies production resources.
+GitHub Actions uses setup-python; conda is only selected when the env exists.
 EOF
 }
 
@@ -390,6 +457,14 @@ EOF
 }
 
 case "${MODE}" in
+  --print-python-selector)
+    executable="$("${PY[@]}" -c 'import sys; print(sys.executable)')"
+    version="$("${PY[@]}" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
+    PY_SELECTOR_SOURCE="${PY_SELECTOR_SOURCE}" \
+    PY_EXECUTABLE="${executable}" \
+    PY_VERSION="${version}" \
+      "${PY[@]}" -c 'import json, os; print(json.dumps({"source": os.environ["PY_SELECTOR_SOURCE"], "executable": os.environ["PY_EXECUTABLE"], "version": os.environ["PY_VERSION"]}))'
+    ;;
   --plan)
     run_local_checks
     print_plan
