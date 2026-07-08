@@ -50,5 +50,45 @@ jobs:
         with:
           install_only: true
 
-      - name: Run shared CI checks
+      - name: compileall
+        run: python -m compileall services_v9 scripts ui_v9 tests app.py
+
+      - name: pytest
+        run: |
+          python - <<'PY'
+          import glob
+          import os
+          import re
+          import subprocess
+          import sys
+
+          files = sorted(glob.glob("tests/test_v9_*.py"))
+          if len(files) < 59:
+              raise SystemExit(f"expected at least 59 v9 test files, found {len(files)}")
+          env = os.environ.copy()
+          env["PYTHONPATH"] = os.pathsep.join(
+              [p for p in (env.get("PYTHONPATH", ""), ".", "src") if p]
+          )
+          result = subprocess.run(
+              [sys.executable, "-m", "pytest", *files, "-q", "--tb=short", "--maxfail=5"],
+              env=env,
+              capture_output=True,
+              text=True,
+          )
+          print(result.stdout, end="")
+          if result.stderr:
+              print(result.stderr, end="", file=sys.stderr)
+          if result.returncode != 0:
+              raise SystemExit(result.returncode)
+          match = re.search(r"(\d+) passed", result.stdout + result.stderr)
+          if not match or int(match.group(1)) < 1116:
+              raise SystemExit(
+                  f"expected >=1116 passed, got {match.group(1) if match else 'none'}"
+              )
+          PY
+
+      - name: plan checks
+        env:
+          V9_CI_SKIP_COMPILE_PYTEST: "true"
+          V9_CI_TEST_COUNT: "1116"
         run: bash scripts/run_v9_ci_checks.sh
