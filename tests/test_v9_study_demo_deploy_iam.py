@@ -204,8 +204,9 @@ def test_deploy_script_does_not_require_run_admin() -> None:
 
 
 def test_state_file_absence_disables_rollback_in_workflow() -> None:
-  text = DEPLOY_WORKFLOW.read_text(encoding="utf-8")
-  assert "deploy state file missing; rollback disabled" in text
+  reader = (ROOT / "scripts" / "read_v9_deploy_workflow_metadata.py").read_text(encoding="utf-8")
+  assert "deploy state file" in reader
+  assert "mutation_started" in reader
 
 
 def test_fake_gcloud_build_marks_mutation_started(tmp_path: Path) -> None:

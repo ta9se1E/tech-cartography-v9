@@ -214,41 +214,54 @@ jobs:
         id: apply
         env:
           V9_DEPLOY_STATE_FILE: ${{ runner.temp }}/v9-deploy-state.json
+          V9_DEPLOY_RESULT_FILE: ${{ runner.temp }}/v9-deploy-result.json
         shell: bash
         run: |
           set -euo pipefail
+          export V9_DEPLOY_STATE_FILE V9_DEPLOY_RESULT_FILE
+          set -o pipefail
           V9_STUDY_DEMO_DEPLOY_APPROVED=true V9_UI_MODE=simple \
-            bash scripts/deploy_v9_study_demo.sh --apply | tee deploy_result.json
+            bash scripts/deploy_v9_study_demo.sh --apply 2>&1 | tee "${RUNNER_TEMP}/v9-deploy.log"
 
       - name: Read deploy mutation state
         id: deploy_state
         if: always()
         shell: bash
+        env:
+          V9_DEPLOY_STATE_FILE: ${{ runner.temp }}/v9-deploy-state.json
+          V9_DEPLOY_RESULT_FILE: ${{ runner.temp }}/v9-deploy-result.json
         run: |
-          set -euo pipefail
-          STATE_FILE="${RUNNER_TEMP}/v9-deploy-state.json"
+          python scripts/read_v9_deploy_workflow_metadata.py | tee "${RUNNER_TEMP}/v9-deploy-metadata.txt"
           MUTATION_STARTED=false
-          if [[ -f "${STATE_FILE}" ]]; then
-            MUTATION_STARTED="$(python -c 'import json, pathlib, sys; print(str(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")).get("mutation_started", False)).lower())' "${STATE_FILE}")"
-          else
-            echo "::warning::deploy state file missing; rollback disabled"
-          fi
-          echo "mutation_started=${MUTATION_STARTED}" >> "${GITHUB_OUTPUT}"
           PUBLIC_ACCESS_VERIFIED=false
           IAM_POLICY_MUTATIONS=unknown
-          if [[ -f deploy_result.json ]]; then
-            PUBLIC_ACCESS_VERIFIED="$(python -c 'import json; payload=json.load(open("deploy_result.json", encoding="utf-8")); print(str(payload.get("public_access_verified") is True).lower())')"
-            IAM_POLICY_MUTATIONS="$(python -c 'import json; payload=json.load(open("deploy_result.json", encoding="utf-8")); print(payload.get("iam_policy_mutations", "unknown"))')"
+          STATE_PARSE_STATUS=missing
+          RESULT_PARSE_STATUS=missing
+          while IFS='=' read -r key value; do
+            case "${key}" in
+              mutation_started) MUTATION_STARTED="${value}" ;;
+              public_access_verified) PUBLIC_ACCESS_VERIFIED="${value}" ;;
+              iam_policy_mutations) IAM_POLICY_MUTATIONS="${value}" ;;
+              state_parse_status) STATE_PARSE_STATUS="${value}" ;;
+              result_parse_status) RESULT_PARSE_STATUS="${value}" ;;
+            esac
+          done < "${RUNNER_TEMP}/v9-deploy-metadata.txt"
+          if [[ "${{ steps.apply.outcome }}" == "success" && "${RESULT_PARSE_STATUS}" != "ok" ]]; then
+            echo "::warning::deploy apply succeeded but deploy result file is ${RESULT_PARSE_STATUS}"
           fi
           {
             echo "## Deploy state"
             echo "- mutation_started: \`${MUTATION_STARTED}\`"
             echo "- public_access_verified: \`${PUBLIC_ACCESS_VERIFIED}\`"
             echo "- iam_policy_mutations: \`${IAM_POLICY_MUTATIONS}\`"
+            echo "- state_parse_status: \`${STATE_PARSE_STATUS}\`"
+            echo "- result_parse_status: \`${RESULT_PARSE_STATUS}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
+          exit 0
 
       - name: Verify deployed revision
         id: post
+        if: always() && steps.apply.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -307,6 +320,7 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Post-deploy live-cloud readiness
+        if: always() && steps.apply.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -328,6 +342,7 @@ jobs:
           PY
 
       - name: Unauthenticated smoke test
+        if: always() && steps.apply.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail

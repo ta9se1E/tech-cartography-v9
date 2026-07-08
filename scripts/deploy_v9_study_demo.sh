@@ -19,6 +19,7 @@ STUDY_DEMO_EXPIRES_AT="${STUDY_DEMO_EXPIRES_AT:-2026-07-11T19:27:30Z}"
 V9_UI_MODE="${V9_UI_MODE:-simple}"
 V9_PERSIST_ROOT="${V9_PERSIST_ROOT:-/mnt/v9_study_demo/active}"
 DEPLOY_STATE_FILE="${V9_DEPLOY_STATE_FILE:-${RUNNER_TEMP:-/tmp}/v9-deploy-state.json}"
+DEPLOY_RESULT_FILE="${V9_DEPLOY_RESULT_FILE:-${RUNNER_TEMP:-/tmp}/v9-deploy-result.json}"
 BUILD_ID=""
 SOURCE_BUCKET=""
 SOURCE_OBJECT=""
@@ -276,12 +277,61 @@ PY
 write_deploy_state() {
   local mutation_started="$1"
   local state_file="${DEPLOY_STATE_FILE}"
+  local tmp_file="${state_file}.tmp"
   mkdir -p "$(dirname "${state_file}")"
   if [[ "${mutation_started}" == "true" ]]; then
-    printf '{"mutation_started": true}\n' > "${state_file}"
+    printf '{"mutation_started": true}\n' > "${tmp_file}"
   else
-    printf '{"mutation_started": false}\n' > "${state_file}"
+    printf '{"mutation_started": false}\n' > "${tmp_file}"
   fi
+  mv "${tmp_file}" "${state_file}"
+}
+
+write_deploy_result() {
+  local status="$1"
+  local public_access_verified="$2"
+  local mutation_started="$3"
+  local cloud_build_started="$4"
+  local cloud_build_id="$5"
+  local cloud_run_update_started="$6"
+  local new_revision="$7"
+  local result_file="${DEPLOY_RESULT_FILE}"
+  local tmp_file="${result_file}.tmp"
+  mkdir -p "$(dirname "${result_file}")"
+  DEPLOY_RESULT_STATUS="${status}" \
+  DEPLOY_RESULT_PUBLIC_ACCESS_VERIFIED="${public_access_verified}" \
+  DEPLOY_RESULT_MUTATION_STARTED="${mutation_started}" \
+  DEPLOY_RESULT_CLOUD_BUILD_STARTED="${cloud_build_started}" \
+  DEPLOY_RESULT_CLOUD_BUILD_ID="${cloud_build_id}" \
+  DEPLOY_RESULT_CLOUD_RUN_UPDATE_STARTED="${cloud_run_update_started}" \
+  DEPLOY_RESULT_NEW_REVISION="${new_revision}" \
+  DEPLOY_RESULT_SERVICE="${SERVICE}" \
+  DEPLOY_RESULT_FILE="${result_file}" \
+  DEPLOY_RESULT_TMP="${tmp_file}" \
+    "${PY[@]}" - <<'PY'
+import json
+import os
+import pathlib
+
+payload = {
+    "status": os.environ["DEPLOY_RESULT_STATUS"],
+    "public_access_verified": os.environ["DEPLOY_RESULT_PUBLIC_ACCESS_VERIFIED"] == "true",
+    "public_access_changed": False,
+    "iam_policy_mutations": 0,
+    "mutation_started": os.environ["DEPLOY_RESULT_MUTATION_STARTED"] == "true",
+    "cloud_build_started": os.environ["DEPLOY_RESULT_CLOUD_BUILD_STARTED"] == "true",
+    "cloud_build_id": os.environ["DEPLOY_RESULT_CLOUD_BUILD_ID"],
+    "cloud_run_update_started": os.environ["DEPLOY_RESULT_CLOUD_RUN_UPDATE_STARTED"] == "true",
+    "new_revision": os.environ["DEPLOY_RESULT_NEW_REVISION"],
+    "service": os.environ["DEPLOY_RESULT_SERVICE"],
+    "production_modifications": False,
+}
+path = pathlib.Path(os.environ["DEPLOY_RESULT_FILE"])
+tmp = pathlib.Path(os.environ["DEPLOY_RESULT_TMP"])
+tmp.write_text(json.dumps(payload, separators=(",", ":"), sort_keys=True) + "\n", encoding="utf-8")
+tmp.replace(path)
+PY
+  log "deploy result written to ${result_file}"
 }
 
 record_deploy_mutation_started() {
@@ -469,6 +519,28 @@ apply_deploy() {
   assert_tavily_secret_ready
 
   local expiry_utc expiry_jst deploy_time_utc deploy_time_jst service_url revision
+  local public_access_verified=false
+  local mutation_started=false
+  local cloud_build_started=false
+  local cloud_run_update_started=false
+  local deploy_result_written=false
+
+  _write_failed_deploy_result() {
+    if [[ "${deploy_result_written}" == "true" ]]; then
+      return 0
+    fi
+    deploy_result_written=true
+    write_deploy_result \
+      "failed" \
+      "${public_access_verified}" \
+      "${mutation_started}" \
+      "${cloud_build_started}" \
+      "${BUILD_ID}" \
+      "${cloud_run_update_started}" \
+      "${revision:-}"
+  }
+  trap '_write_failed_deploy_result' ERR
+
   expiry_utc="$(compute_expiry_utc)"
   expiry_jst="$(compute_expiry_jst "${expiry_utc}")"
   deploy_time_utc="$("${PY[@]}" - <<'PY'
@@ -479,45 +551,34 @@ PY
   deploy_time_jst="$(compute_expiry_jst "${deploy_time_utc}")"
 
   verify_public_access_readonly
+  public_access_verified=true
   build_study_demo_image
+  mutation_started=true
+  cloud_build_started=true
   cleanup_build_source_archive
   deploy_study_demo_service "${expiry_utc}"
+  cloud_run_update_started=true
 
   service_url="$(gcloud run services describe "${SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.url)')"
   revision="$(gcloud run services describe "${SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.latestReadyRevisionName)')"
   verify_public_password_gate "${service_url}"
   smoke_test_authenticated_optional "${service_url}"
 
-  cat <<EOF
-{
-  "status": "deployed",
-  "service": "${SERVICE}",
-  "service_url": "${service_url}",
-  "revision": "${revision}",
-  "project_id": "${PROJECT_ID}",
-  "region": "${REGION}",
-  "image_uri": "${IMAGE_URI}",
-  "image_digest": "${IMAGE_DIGEST:-}",
-  "build_id": "${BUILD_ID}",
-  "build_source_cleanup": "${CLEANUP_RESULT}",
-  "service_account": "${SERVICE_ACCOUNT}",
-  "bucket": "${BUCKET}",
-  "password_secret": "${PASSWORD_SECRET}:${PASSWORD_SECRET_VERSION}",
-  "openalex_secret": "${OPENALEX_SECRET}:${OPENALEX_SECRET_VERSION}",
-  "tavily_secret": "${TAVILY_SECRET}:${TAVILY_SECRET_VERSION}",
-  "expires_at_utc": "${expiry_utc}",
-  "expires_at_jst": "${expiry_jst}",
-  "deployed_at_utc": "${deploy_time_utc}",
-  "deployed_at_jst": "${deploy_time_jst}",
-  "min_instances": 0,
-  "max_instances": 1,
-  "public_access_verified": true,
-  "public_access_changed": false,
-  "iam_policy_mutations": 0,
-  "public_method": "allUsers roles/run.invoker (read-only, unchanged)",
-  "production_resources_modified": false
-}
-EOF
+  write_deploy_result \
+    "ok" \
+    "${public_access_verified}" \
+    "${mutation_started}" \
+    "${cloud_build_started}" \
+    "${BUILD_ID}" \
+    "${cloud_run_update_started}" \
+    "${revision}"
+  deploy_result_written=true
+  trap - ERR
+
+  log "deploy completed successfully"
+  log "service=${SERVICE} revision=${revision} build_id=${BUILD_ID}"
+  log "service_url=${service_url}"
+  log "deployed_at_utc=${deploy_time_utc}"
 }
 
 case "${MODE}" in
