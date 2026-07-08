@@ -212,12 +212,40 @@ jobs:
 
       - name: Deploy apply
         id: apply
+        env:
+          V9_DEPLOY_STATE_FILE: ${{ runner.temp }}/v9-deploy-state.json
         shell: bash
         run: |
           set -euo pipefail
-          echo "apply_started=true" >> "${GITHUB_OUTPUT}"
           V9_STUDY_DEMO_DEPLOY_APPROVED=true V9_UI_MODE=simple \
             bash scripts/deploy_v9_study_demo.sh --apply | tee deploy_result.json
+
+      - name: Read deploy mutation state
+        id: deploy_state
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATE_FILE="${RUNNER_TEMP}/v9-deploy-state.json"
+          MUTATION_STARTED=false
+          if [[ -f "${STATE_FILE}" ]]; then
+            MUTATION_STARTED="$(python -c 'import json, pathlib, sys; print(str(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")).get("mutation_started", False)).lower())' "${STATE_FILE}")"
+          else
+            echo "::warning::deploy state file missing; rollback disabled"
+          fi
+          echo "mutation_started=${MUTATION_STARTED}" >> "${GITHUB_OUTPUT}"
+          PUBLIC_ACCESS_VERIFIED=false
+          IAM_POLICY_MUTATIONS=unknown
+          if [[ -f deploy_result.json ]]; then
+            PUBLIC_ACCESS_VERIFIED="$(python -c 'import json; payload=json.load(open("deploy_result.json", encoding="utf-8")); print(str(payload.get("public_access_verified") is True).lower())')"
+            IAM_POLICY_MUTATIONS="$(python -c 'import json; payload=json.load(open("deploy_result.json", encoding="utf-8")); print(payload.get("iam_policy_mutations", "unknown"))')"
+          fi
+          {
+            echo "## Deploy state"
+            echo "- mutation_started: \`${MUTATION_STARTED}\`"
+            echo "- public_access_verified: \`${PUBLIC_ACCESS_VERIFIED}\`"
+            echo "- iam_policy_mutations: \`${IAM_POLICY_MUTATIONS}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Verify deployed revision
         id: post
@@ -326,7 +354,7 @@ jobs:
           PY
 
       - name: Report deploy not started
-        if: failure() && steps.apply.outputs.apply_started != 'true'
+        if: failure() && steps.deploy_state.outputs.mutation_started != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -335,13 +363,14 @@ jobs:
             echo "## Deploy not started"
             echo "- deploy_not_started: \`true\`"
             echo "- rollback_skipped: \`true\`"
+            echo "- rollback_executed: \`false\`"
             if [[ -n "${CURRENT}" ]]; then
               echo "- current_revision unchanged: \`${CURRENT}\`"
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Rollback to previous revision
-        if: failure() && steps.apply.outputs.apply_started == 'true' && steps.pre.outputs.previous_revision != ''
+        if: failure() && steps.deploy_state.outputs.mutation_started == 'true' && steps.pre.outputs.previous_revision != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -357,6 +386,7 @@ jobs:
             echo "## Rollback"
             echo "- rolled_back_to: \`${PREVIOUS}\`"
             echo "- smoke_http: \`${CODE}\`"
+            echo "- rollback_executed: \`true\`"
           } >> "${GITHUB_STEP_SUMMARY}"
           if [[ "${CODE}" != "200" ]]; then
             echo "rollback smoke test failed" >&2

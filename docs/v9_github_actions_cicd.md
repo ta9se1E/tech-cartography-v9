@@ -75,7 +75,8 @@ Important:
 - Application source deployed is always the validated tag commit, not the workflow branch tip
 - Browser acceptance remains a human step after deploy
 - GitHub-hosted runners use setup-python; deploy script selects conda only when the env exists
-- Rollback runs only after `Deploy apply` starts; pre-apply failures skip traffic rollback
+- Rollback runs only after `Deploy apply` starts Cloud Build (`mutation_started=true`); pre-apply failures skip traffic rollback
+- Approved deploy preserves existing Cloud Run IAM; public access is verified read-only before build
 
 ## Manual rollback
 

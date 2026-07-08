@@ -58,19 +58,18 @@ def test_deploy_workflow_is_manual_and_guarded() -> None:
   assert PRODUCTION_SERVICE in text
   assert "credentials_json" not in text
   assert "Rollback to previous revision" in text
-  assert "apply_started=true" in text
-  assert "steps.apply.outputs.apply_started == 'true'" in text
+  assert "Read deploy mutation state" in text
+  assert "steps.deploy_state.outputs.mutation_started == 'true'" in text
   assert "Report deploy not started" in text
 
 
-def test_deploy_script_prefers_system_python_over_conda_probe() -> None:
+def test_deploy_script_preserves_cloud_run_iam() -> None:
   text = (ROOT / "scripts" / "deploy_v9_study_demo.sh").read_text(encoding="utf-8")
-  assert "select_deploy_python" in text
-  assert "_conda_env_available" in text
-  assert "V9_PYTHON_BIN" in text
-  assert "_python_candidate_usable" in text
-  assert 'elif command -v conda >/dev/null 2>&1; then\n  PY=(conda run' not in text
-  assert "--print-python-selector" in text
+  assert "verify_public_access_readonly" in text
+  assert "add-iam-policy-binding" not in text
+  assert "--no-allow-unauthenticated" not in text
+  assert "--allow-unauthenticated" not in text
+  assert '"iam_policy_mutations": 0' in text
 
 
 def test_rollback_workflow_is_manual() -> None:

@@ -233,10 +233,11 @@ def test_github_runner_simulation_no_environment_location_not_found(tmp_path: Pa
   assert payload["source"] in {"system-python", "system-python3", "V9_PYTHON_BIN"}
 
 
-def test_deploy_workflow_rollback_requires_apply_started() -> None:
+def test_deploy_workflow_rollback_requires_mutation_started() -> None:
   text = DEPLOY_WORKFLOW.read_text(encoding="utf-8")
-  assert "apply_started=true" in text
-  assert "steps.apply.outputs.apply_started == 'true'" in text
+  assert "apply_started=true" not in text
+  assert "Read deploy mutation state" in text
+  assert "steps.deploy_state.outputs.mutation_started == 'true'" in text
   assert "Report deploy not started" in text
   assert "rollback_skipped: \\`true\\`" in text or "rollback_skipped: `true`" in text
   assert "deploy_not_started: \\`true\\`" in text or "deploy_not_started: `true`" in text
@@ -245,7 +246,7 @@ def test_deploy_workflow_rollback_requires_apply_started() -> None:
 def test_deploy_plan_failure_does_not_match_old_unconditional_rollback() -> None:
   text = DEPLOY_WORKFLOW.read_text(encoding="utf-8")
   assert re.search(
-    r"Rollback to previous revision[\s\S]*?if:\s*failure\(\)\s*&&\s*steps\.apply\.outputs\.apply_started == 'true'",
+    r"Rollback to previous revision[\s\S]*?if:\s*failure\(\)\s*&&\s*steps\.deploy_state\.outputs\.mutation_started == 'true'",
     text,
   )
   assert "if: failure() && steps.pre.outputs.previous_revision != ''" not in text
@@ -256,7 +257,8 @@ def test_rollback_guard_scenarios_documented_in_workflow() -> None:
   deploy_job = workflow["jobs"]["deploy"]
   step_names = [step["name"] for step in deploy_job["steps"]]
   assert step_names.index("Deploy plan") < step_names.index("Deploy apply")
-  assert step_names.index("Deploy apply") < step_names.index("Rollback to previous revision")
+  assert step_names.index("Deploy apply") < step_names.index("Read deploy mutation state")
+  assert step_names.index("Read deploy mutation state") < step_names.index("Rollback to previous revision")
   assert step_names.index("Report deploy not started") < step_names.index("Rollback to previous revision")
   assert deploy_job["concurrency"]["cancel-in-progress"] is False
 

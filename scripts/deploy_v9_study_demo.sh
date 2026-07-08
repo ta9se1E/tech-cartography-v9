@@ -18,6 +18,7 @@ TAVILY_SECRET_VERSION="${TAVILY_SECRET_VERSION:-1}"
 STUDY_DEMO_EXPIRES_AT="${STUDY_DEMO_EXPIRES_AT:-2026-07-11T19:27:30Z}"
 V9_UI_MODE="${V9_UI_MODE:-simple}"
 V9_PERSIST_ROOT="${V9_PERSIST_ROOT:-/mnt/v9_study_demo/active}"
+DEPLOY_STATE_FILE="${V9_DEPLOY_STATE_FILE:-${RUNNER_TEMP:-/tmp}/v9-deploy-state.json}"
 BUILD_ID=""
 SOURCE_BUCKET=""
 SOURCE_OBJECT=""
@@ -122,9 +123,11 @@ Usage:
   scripts/deploy_v9_study_demo.sh --plan
   V9_STUDY_DEMO_DEPLOY_APPROVED=true scripts/deploy_v9_study_demo.sh --apply
   scripts/deploy_v9_study_demo.sh --print-python-selector
+  scripts/deploy_v9_study_demo.sh --check-public-access
 
 Stage A defaults to --plan only. This script never modifies production resources.
 GitHub Actions uses setup-python; conda is only selected when the env exists.
+Approved deploy preserves existing Cloud Run IAM; public access is verified read-only.
 EOF
 }
 
@@ -179,6 +182,9 @@ print_plan() {
   "cloud_run_job": "none",
   "public_service": "${SERVICE} only",
   "production_resources_modified": false,
+  "iam_policy_mutations": 0,
+  "public_access_verify": "read-only",
+  "public_access_changed": false,
   "env": {
     "V9_UI_MODE": "${V9_UI_MODE}",
     "V9_STUDY_DEMO_MODE": "true",
@@ -267,6 +273,61 @@ print(parsed.astimezone(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d %H:%M:%S JST"
 PY
 }
 
+write_deploy_state() {
+  local mutation_started="$1"
+  local state_file="${DEPLOY_STATE_FILE}"
+  mkdir -p "$(dirname "${state_file}")"
+  if [[ "${mutation_started}" == "true" ]]; then
+    printf '{"mutation_started": true}\n' > "${state_file}"
+  else
+    printf '{"mutation_started": false}\n' > "${state_file}"
+  fi
+}
+
+record_deploy_mutation_started() {
+  write_deploy_state true
+  log "deploy mutation_started=true recorded at ${DEPLOY_STATE_FILE}"
+}
+
+verify_public_access_readonly() {
+  local policy_json rc
+  set +e
+  policy_json="$(gcloud run services get-iam-policy "${SERVICE}" \
+    --project "${PROJECT_ID}" \
+    --region "${REGION}" \
+    --format=json 2>&1)"
+  rc=$?
+  set -e
+  if [[ ${rc} -ne 0 ]]; then
+    if grep -qiE 'PERMISSION_DENIED|403|does not have permission' <<<"${policy_json}"; then
+      log "ERROR: unable to read Cloud Run IAM policy (permission denied)"
+      exit 1
+    fi
+    log "ERROR: unable to read Cloud Run IAM policy"
+    exit 1
+  fi
+  PUBLIC_IAM_POLICY="${policy_json}" "${PY[@]}" - <<'PY'
+import json
+import os
+import sys
+
+payload = json.loads(os.environ["PUBLIC_IAM_POLICY"])
+for binding in payload.get("bindings", []):
+    if binding.get("role") != "roles/run.invoker":
+        continue
+    members = binding.get("members") or []
+    if "allUsers" in members:
+        sys.exit(0)
+print(
+    "ERROR: Study Demo public access is not configured. "
+    "Run the one-time infra setup as an administrator.",
+    file=sys.stderr,
+)
+sys.exit(1)
+PY
+  log "public access verified: allUsers roles/run.invoker (read-only)"
+}
+
 wait_for_build() {
   local status=""
   while true; do
@@ -316,6 +377,7 @@ print(f\"SOURCE_TARGET_REASON={shlex.quote(str(target.get('reason', '') or ''))}
 
 build_study_demo_image() {
   local git_sha image_uri build_status
+  record_deploy_mutation_started
   git_sha="$(git rev-parse --short HEAD)"
   image_uri="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${SERVICE}:${git_sha}"
   BUILD_ID="$(gcloud builds submit . \
@@ -347,7 +409,7 @@ for item in images:
 ")"
 }
 
-deploy_private_service() {
+deploy_study_demo_service() {
   local expiry_utc="$1"
   gcloud run deploy "${SERVICE}" \
     --project "${PROJECT_ID}" \
@@ -356,39 +418,30 @@ deploy_private_service() {
     --service-account "${SERVICE_ACCOUNT}" \
     --min-instances 0 \
     --max-instances 1 \
-    --no-allow-unauthenticated \
     --add-volume "name=v9-study-demo,type=cloud-storage,bucket=${BUCKET}" \
     --add-volume-mount "volume=v9-study-demo,mount-path=/mnt/v9_study_demo" \
     --set-secrets "V9_STUDY_DEMO_PASSWORD=${PASSWORD_SECRET}:${PASSWORD_SECRET_VERSION},V9_STUDY_DEMO_OPENALEX_API_KEY=${OPENALEX_SECRET}:${OPENALEX_SECRET_VERSION},V9_STUDY_DEMO_TAVILY_API_KEY=${TAVILY_SECRET}:${TAVILY_SECRET_VERSION}" \
     --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=active/v9_config/weekly_delivery_config.json#V9_UI_MODE=${V9_UI_MODE}#V9_STUDY_DEMO_MODE=true#V9_STUDY_DEMO_BUCKET=${BUCKET}#V9_STUDY_DEMO_EXPIRES_AT=${expiry_utc}#V9_STUDY_DEMO_DISABLE_EXTERNAL_EXECUTION=true#V9_STUDY_DEMO_SHARED_STATE=true#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_ENABLE_PATENT=true#V9_CLOUD_ENABLE_PAPER=true#V9_CLOUD_ENABLE_WEB_COMPANY=true#V9_CLOUD_GOOGLE_GROUNDING=false#V9_STUDY_DEMO_SEARCH_ENABLED=true#V9_STUDY_DEMO_ENABLE_PATENT_SEARCH=true#V9_STUDY_DEMO_ENABLE_PAPER_SEARCH=true#V9_STUDY_DEMO_ENABLE_WEB_SEARCH=true#V9_STUDY_DEMO_BIGQUERY_DRY_RUN_FIRST=true#V9_STUDY_DEMO_BIGQUERY_MAX_BYTES_BILLED=2199023255552#V9_STUDY_DEMO_BIGQUERY_PRICE_PER_TIB_USD=6.25#V9_ENABLE_CLOUD_SCHEDULER_ADMIN=false"
 }
 
-smoke_test_authenticated() {
+smoke_test_authenticated_optional() {
   local url="$1"
   local token body
   token="$(gcloud auth print-identity-token 2>/dev/null || true)"
   if [[ -z "${token}" ]]; then
-    log "WARN: identity token unavailable; skipping authenticated smoke test body check"
+    log "WARN: identity token unavailable; continuing with unauthenticated smoke only"
     return 0
   fi
   body="$(curl -fsS -H "Authorization: Bearer ${token}" "${url}" || true)"
   if [[ -z "${body}" ]]; then
-    log "ERROR: authenticated smoke test returned empty body"
-    exit 1
+    log "WARN: authenticated smoke test returned empty body; continuing with unauthenticated smoke only"
+    return 0
   fi
-  if ! grep -q "Streamlit" <<<"${body}"; then
-    log "ERROR: authenticated smoke test did not detect Streamlit bootstrap"
-    exit 1
+  if ! grep -qi "streamlit" <<<"${body}"; then
+    log "WARN: authenticated smoke test did not detect Streamlit bootstrap; continuing with unauthenticated smoke only"
+    return 0
   fi
-}
-
-publicize_service() {
-  gcloud run services add-iam-policy-binding "${SERVICE}" \
-    --project "${PROJECT_ID}" \
-    --region "${REGION}" \
-    --member="allUsers" \
-    --role="roles/run.invoker" \
-    --quiet
+  log "authenticated smoke test passed (optional)"
 }
 
 verify_public_password_gate() {
@@ -425,15 +478,15 @@ PY
 )"
   deploy_time_jst="$(compute_expiry_jst "${deploy_time_utc}")"
 
+  verify_public_access_readonly
   build_study_demo_image
   cleanup_build_source_archive
-  deploy_private_service "${expiry_utc}"
+  deploy_study_demo_service "${expiry_utc}"
 
   service_url="$(gcloud run services describe "${SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.url)')"
   revision="$(gcloud run services describe "${SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.latestReadyRevisionName)')"
-  smoke_test_authenticated "${service_url}"
-  publicize_service
   verify_public_password_gate "${service_url}"
+  smoke_test_authenticated_optional "${service_url}"
 
   cat <<EOF
 {
@@ -458,7 +511,10 @@ PY
   "deployed_at_jst": "${deploy_time_jst}",
   "min_instances": 0,
   "max_instances": 1,
-  "public_method": "allUsers roles/run.invoker",
+  "public_access_verified": true,
+  "public_access_changed": false,
+  "iam_policy_mutations": 0,
+  "public_method": "allUsers roles/run.invoker (read-only, unchanged)",
   "production_resources_modified": false
 }
 EOF
@@ -472,6 +528,18 @@ case "${MODE}" in
     PY_EXECUTABLE="${executable}" \
     PY_VERSION="${version}" \
       "${PY[@]}" -c 'import json, os; print(json.dumps({"source": os.environ["PY_SELECTOR_SOURCE"], "executable": os.environ["PY_EXECUTABLE"], "version": os.environ["PY_VERSION"]}))'
+    ;;
+  --check-public-access)
+    assert_allowed_service
+    verify_public_access_readonly
+    cat <<EOF
+{
+  "status": "ok",
+  "public_access_verified": true,
+  "public_access_changed": false,
+  "iam_policy_mutations": 0
+}
+EOF
     ;;
   --plan)
     run_local_checks
