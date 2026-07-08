@@ -76,7 +76,13 @@ if [[ "${V9_CI_SKIP_COMPILE_PYTEST:-false}" != "true" ]]; then
 run_step "compileall" "${PY[@]}" -m compileall services_v9 scripts ui_v9 tests app.py
 PYTEST_LOG="${TMP_DIR}/pytest.log"
 log "START pytest"
-if ! env PYTHONPATH="${PYTHONPATH}" "${PY[@]}" -m pytest tests/test_v9_*.py -q --tb=line 2>&1 | tee "${PYTEST_LOG}"; then
+shopt -s nullglob
+test_files=(tests/test_v9_*.py)
+if (( ${#test_files[@]} == 0 )); then
+  log "FAIL  pytest no test files matched tests/test_v9_*.py"
+  exit 1
+fi
+if ! env PYTHONPATH="${PYTHONPATH}" "${PY[@]}" -m pytest "${test_files[@]}" -q --tb=line 2>&1 | tee "${PYTEST_LOG}"; then
   log "FAIL  pytest"
   log "pytest tail:"
   tail -n 40 "${PYTEST_LOG}" || true

@@ -45,5 +45,10 @@ jobs:
           pip install -r requirements.txt
           python -m pip check
 
+      - name: Set up gcloud (upload listing only)
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_only: true
+
       - name: Run shared CI checks
         run: bash scripts/run_v9_ci_checks.sh
