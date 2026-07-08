@@ -117,10 +117,11 @@ def test_conda_env_used_when_probe_succeeds(tmp_path: Path) -> None:
     broken = fake_bin / name
     broken.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
     broken.chmod(broken.stat().st_mode | stat.S_IXUSR)
-  run_env = os.environ.copy()
-  run_env["PATH"] = str(fake_bin)
-  run_env.pop("V9_PYTHON_BIN", None)
-  run_env["CONDA_ENV"] = "2026hack"
+  run_env = {
+    "PATH": str(fake_bin),
+    "HOME": str(tmp_path),
+    "CONDA_ENV": "2026hack",
+  }
   completed = subprocess.run(
     [BASH_BIN, str(DEPLOY_SCRIPT), "--print-python-selector"],
     cwd=ROOT,
