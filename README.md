@@ -702,3 +702,21 @@ Streamlit の **別テーマ検証** トップレベルタブで操作します�
 - Manual Claims テンプレート生成と検証レポート保存
 
 詳細: `docs/phase24_theme_validation_ui.md`
+
+## CI/CD and Deployment Safety
+
+Study Demo uses GitHub Actions for **CI** and **approved Continuous Delivery**:
+
+- **CI** (`.github/workflows/ci.yml`): runs on push/PR to `v9-study-demo` via `scripts/run_v9_ci_checks.sh`
+  - compileall, pytest (1108+), readiness, build-context safety, final acceptance plan checks
+  - no Cloud auth, no secrets, no external APIs
+- **CD** (`.github/workflows/deploy-study-demo.yml`): `workflow_dispatch` only
+  - GitHub Environment `study-demo` approval required
+  - Workload Identity Federation (keyless; no Service Account JSON)
+  - deploys **validated tag only** (`v9-study-demo-*-validated`)
+  - post-deploy smoke test and automatic rollback to previous revision on failure
+- **Rollback** (`.github/workflows/rollback-study-demo.yml`): manual approved traffic switch
+
+Production (`tech-cartography-v9-signal-watch`) is never a deploy target. Browser acceptance remains manual after deploy.
+
+See: `docs/v9_github_actions_cicd.md`

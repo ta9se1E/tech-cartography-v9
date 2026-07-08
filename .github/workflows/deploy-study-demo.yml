@@ -1,0 +1,284 @@
+name: Deploy Study Demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Validated release tag to deploy
+        required: true
+        default: v9-study-demo-final-acceptance-live-validated
+        type: string
+      confirm_service:
+        description: Type the exact Study Demo service name
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  RUNTIME_SERVICE_ACCOUNT: ${{ vars.RUNTIME_SERVICE_ACCOUNT }}
+  WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+  GITHUB_DEPLOYER_SERVICE_ACCOUNT: ${{ vars.GITHUB_DEPLOYER_SERVICE_ACCOUNT }}
+  PRODUCTION_SERVICE: tech-cartography-v9-signal-watch
+  STUDY_SERVICE: tech-cartography-v9-study-demo
+  SEARCH_RUN_ID: study_demo_search_20260705_145711_c06e0a1b
+  PYTHONPATH: .:src
+  V9_UI_MODE: simple
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      release_tag: ${{ steps.validate.outputs.release_tag }}
+      source_sha: ${{ steps.validate.outputs.source_sha }}
+    steps:
+      - name: Checkout workflow branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate deploy inputs and tag
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="${{ inputs.release_tag }}"
+          CONFIRM_SERVICE="${{ inputs.confirm_service }}"
+          if [[ "${CONFIRM_SERVICE}" != "${STUDY_SERVICE}" ]]; then
+            echo "confirm_service must exactly match ${STUDY_SERVICE}" >&2
+            exit 1
+          fi
+          if [[ "${CONFIRM_SERVICE}" == "${PRODUCTION_SERVICE}" ]]; then
+            echo "production service deploy is forbidden" >&2
+            exit 1
+          fi
+          if [[ ! "${RELEASE_TAG}" =~ ^v9-study-demo-.+-validated$ ]]; then
+            echo "release_tag must match v9-study-demo-*-validated" >&2
+            exit 1
+          fi
+          if ! git rev-parse "${RELEASE_TAG}^{commit}" >/dev/null 2>&1; then
+            echo "release_tag not found: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          SOURCE_SHA="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          for required_path in \
+            scripts/deploy_v9_study_demo.sh \
+            scripts/run_v9_ci_checks.sh \
+            scripts/check_v9_study_demo_final_acceptance.py; do
+            if ! git cat-file -e "${RELEASE_TAG}:${required_path}" 2>/dev/null; then
+              echo "required file missing at ${RELEASE_TAG}: ${required_path}" >&2
+              exit 1
+            fi
+          done
+          echo "release_tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "source_sha=${SOURCE_SHA}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Preflight"
+            echo "- release_tag: \`${RELEASE_TAG}\`"
+            echo "- source_sha: \`${SOURCE_SHA}\`"
+            echo "- service: \`${STUDY_SERVICE}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  deploy:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: study-demo
+    concurrency:
+      group: study-demo-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout validated release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.release_tag }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m pip check
+
+      - name: Run shared CI checks
+        run: bash scripts/run_v9_ci_checks.sh
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.GITHUB_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Capture pre-deploy state
+        id: pre
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE="${CLOUD_RUN_SERVICE:-${STUDY_SERVICE}}"
+          if [[ "${SERVICE}" != "${STUDY_SERVICE}" ]]; then
+            echo "CLOUD_RUN_SERVICE must be ${STUDY_SERVICE}" >&2
+            exit 1
+          fi
+          PREVIOUS_REVISION="$(gcloud run services describe "${SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(status.latestReadyRevisionName)')"
+          SERVICE_URL="$(gcloud run services describe "${SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(status.url)')"
+          PRODUCTION_REVISION="$(gcloud run services describe "${PRODUCTION_SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(status.latestReadyRevisionName)')"
+          echo "previous_revision=${PREVIOUS_REVISION}" >> "${GITHUB_OUTPUT}"
+          echo "service_url=${SERVICE_URL}" >> "${GITHUB_OUTPUT}"
+          echo "production_revision=${PRODUCTION_REVISION}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Pre-deploy"
+            echo "- previous_revision: \`${PREVIOUS_REVISION}\`"
+            echo "- service_url: \`${SERVICE_URL}\`"
+            echo "- production_revision: \`${PRODUCTION_REVISION}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Deploy plan
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/deploy_v9_study_demo.sh --plan
+
+      - name: Deploy apply
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          V9_STUDY_DEMO_DEPLOY_APPROVED=true V9_UI_MODE=simple \
+            bash scripts/deploy_v9_study_demo.sh --apply | tee deploy_result.json
+
+      - name: Verify deployed revision
+        id: post
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE="${CLOUD_RUN_SERVICE:-${STUDY_SERVICE}}"
+          SERVICE_JSON="$(gcloud run services describe "${SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format=json)"
+          python - <<'PY' "${SERVICE_JSON}" "${{ steps.pre.outputs.production_revision }}"
+          import json
+          import sys
+
+          service = json.loads(sys.argv[1])
+          expected_production = sys.argv[2]
+          env = service.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [{}])[0].get("env", [])
+          ui_mode = next((item.get("value") for item in env if item.get("name") == "V9_UI_MODE"), "")
+          traffic = service.get("status", {}).get("traffic", [])
+          if ui_mode != "simple":
+              raise SystemExit("V9_UI_MODE must remain simple")
+          if not any(item.get("percent") == 100 for item in traffic):
+              raise SystemExit("traffic is not 100%")
+          print("validation_ok")
+          PY
+          PRODUCTION_REVISION_NOW="$(gcloud run services describe "${PRODUCTION_SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(status.latestReadyRevisionName)')"
+          if [[ "${PRODUCTION_REVISION_NOW}" != "${{ steps.pre.outputs.production_revision }}" ]]; then
+            echo "production revision changed" >&2
+            exit 1
+          fi
+          NEW_REVISION="$(gcloud run services describe "${SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(status.latestReadyRevisionName)')"
+          RUNTIME_SA="$(gcloud run services describe "${SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(spec.template.spec.serviceAccountName)')"
+          python scripts/check_v9_study_demo_final_acceptance.py --plan \
+            --search-run-id "${SEARCH_RUN_ID}" | tee final_acceptance.json
+          python - <<'PY'
+          import json
+
+          payload = json.load(open("final_acceptance.json", encoding="utf-8"))
+          if payload.get("status") != "ok":
+              raise SystemExit("final acceptance failed after deploy")
+          PY
+          echo "new_revision=${NEW_REVISION}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Post-deploy"
+            echo "- new_revision: \`${NEW_REVISION}\`"
+            echo "- runtime_service_account: \`${RUNTIME_SA}\`"
+            echo "- V9_UI_MODE: \`simple\`"
+            echo "- production_revision_unchanged: \`${PRODUCTION_REVISION_NOW}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Unauthenticated smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="${{ steps.pre.outputs.service_url }}"
+          CODE="$(curl -sS -o /tmp/smoke.html -w '%{http_code}' "${URL}/")"
+          if [[ "${CODE}" != "200" ]]; then
+            echo "smoke test HTTP status ${CODE}" >&2
+            exit 1
+          fi
+          python - <<'PY'
+          from pathlib import Path
+
+          html = Path("/tmp/smoke.html").read_text(errors="replace")
+          checks = {
+              "streamlit": "streamlit" in html.lower() or "stApp" in html,
+              "no_run_id": "study_demo_search_20260705_145711_c06e0a1b" not in html,
+              "no_theme_id": "theme_6d2dfb753f7e" not in html,
+              "no_digest": "今週のR&Dシグナル" not in html,
+              "no_secret": not any(token in html for token in ("sk-", "AIza", "BEGIN PRIVATE KEY")),
+          }
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit(f"smoke checks failed: {failed}")
+          PY
+
+      - name: Rollback to previous revision
+        if: failure() && steps.pre.outputs.previous_revision != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE="${CLOUD_RUN_SERVICE:-${STUDY_SERVICE}}"
+          PREVIOUS="${{ steps.pre.outputs.previous_revision }}"
+          gcloud run services update-traffic "${SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --to-revisions="${PREVIOUS}=100"
+          URL="${{ steps.pre.outputs.service_url }}"
+          CODE="$(curl -sS -o /dev/null -w '%{http_code}' "${URL}/")"
+          {
+            echo "## Rollback"
+            echo "- rolled_back_to: \`${PREVIOUS}\`"
+            echo "- smoke_http: \`${CODE}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if [[ "${CODE}" != "200" ]]; then
+            echo "rollback smoke test failed" >&2
+            exit 1
+          fi

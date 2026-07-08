@@ -36,3 +36,4 @@ config/theme_validation_cases.json
 inputs/manual/*
 !inputs/manual/.gitkeep
 .DS_Store
+gha-creds-*.json

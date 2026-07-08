@@ -33,3 +33,4 @@ inputs/manual/*
 outputs
 cases/*/source_candidates_large.csv
 cases/*/source_candidates_large_deduped.csv
+gha-creds-*.json

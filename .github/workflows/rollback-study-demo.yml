@@ -1,0 +1,143 @@
+name: Rollback Study Demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_revision:
+        description: Study Demo revision to route 100% traffic to
+        required: true
+        type: string
+      confirm_service:
+        description: Type the exact Study Demo service name
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+  GITHUB_DEPLOYER_SERVICE_ACCOUNT: ${{ vars.GITHUB_DEPLOYER_SERVICE_ACCOUNT }}
+  PRODUCTION_SERVICE: tech-cartography-v9-signal-watch
+  STUDY_SERVICE: tech-cartography-v9-study-demo
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: study-demo
+    concurrency:
+      group: study-demo-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate rollback inputs
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="${{ inputs.target_revision }}"
+          CONFIRM="${{ inputs.confirm_service }}"
+          if [[ "${CONFIRM}" != "${STUDY_SERVICE}" ]]; then
+            echo "confirm_service must exactly match ${STUDY_SERVICE}" >&2
+            exit 1
+          fi
+          if [[ ! "${TARGET}" =~ ^tech-cartography-v9-study-demo- ]]; then
+            echo "target_revision must belong to Study Demo service" >&2
+            exit 1
+          fi
+          if [[ "${TARGET}" == *"${PRODUCTION_SERVICE}"* ]]; then
+            echo "production revision rollback is forbidden" >&2
+            exit 1
+          fi
+          echo "target_revision=${TARGET}" >> "${GITHUB_OUTPUT}"
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.GITHUB_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Capture current revision
+        id: pre
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE="${CLOUD_RUN_SERVICE:-${STUDY_SERVICE}}"
+          CURRENT="$(gcloud run services describe "${SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(status.latestReadyRevisionName)')"
+          SERVICE_URL="$(gcloud run services describe "${SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(status.url)')"
+          echo "current_revision=${CURRENT}" >> "${GITHUB_OUTPUT}"
+          echo "service_url=${SERVICE_URL}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify target revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE="${CLOUD_RUN_SERVICE:-${STUDY_SERVICE}}"
+          TARGET="${{ steps.validate.outputs.target_revision }}"
+          READY="$(gcloud run revisions describe "${TARGET}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='json(status.conditions)')"
+          python - <<'PY' "${READY}"
+          import json
+          import sys
+
+          conditions = json.loads(sys.argv[1])
+          ready = next((item for item in conditions if item.get("type") == "Ready"), {})
+          if ready.get("status") != "True":
+              raise SystemExit("target revision is not Ready")
+          PY
+          OWNER="$(gcloud run revisions describe "${TARGET}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(metadata.labels.serving\\.knative\\.dev/service)')"
+          if [[ "${OWNER}" != "${SERVICE}" ]]; then
+            echo "target revision does not belong to ${SERVICE}" >&2
+            exit 1
+          fi
+
+      - name: Switch traffic
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE="${CLOUD_RUN_SERVICE:-${STUDY_SERVICE}}"
+          TARGET="${{ steps.validate.outputs.target_revision }}"
+          gcloud run services update-traffic "${SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --to-revisions="${TARGET}=100"
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="${{ steps.pre.outputs.service_url }}"
+          CODE="$(curl -sS -o /dev/null -w '%{http_code}' "${URL}/")"
+          if [[ "${CODE}" != "200" ]]; then
+            echo "rollback smoke test HTTP ${CODE}" >&2
+            exit 1
+          fi
+          {
+            echo "## Rollback complete"
+            echo "- from: \`${{ steps.pre.outputs.current_revision }}\`"
+            echo "- to: \`${{ steps.validate.outputs.target_revision }}\`"
+            echo "- smoke_http: \`${CODE}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
