@@ -21,6 +21,8 @@ env:
   V9_UI_MODE: simple
   PYTHONDONTWRITEBYTECODE: "1"
   V9_STUDY_DEMO_SEARCH_RUN_ID: study_demo_search_20260705_145711_c06e0a1b
+  STREAMLIT_SERVER_HEADLESS: "true"
+  DISABLE_EXTERNAL_API: "true"
 
 jobs:
   ci:
@@ -43,19 +45,5 @@ jobs:
           pip install -r requirements.txt
           python -m pip check
 
-      - name: compileall
-        run: python -m compileall services_v9 scripts ui_v9 tests app.py
-
-      - name: pytest
-        run: |
-          set -euo pipefail
-          output="$(python -m pytest tests/test_v9_*.py -q --tb=line 2>&1)"
-          printf '%s\n' "$output"
-          count="$(printf '%s\n' "$output" | sed -n 's/.* \([0-9][0-9]*\) passed.*/\1/p' | tail -1)"
-          test "${count:-0}" -ge 1116
-
-      - name: Run plan checks
-        env:
-          V9_CI_SKIP_COMPILE_PYTEST: "true"
-          V9_CI_TEST_COUNT: "1116"
+      - name: Run shared CI checks
         run: bash scripts/run_v9_ci_checks.sh

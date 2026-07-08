@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -70,13 +71,15 @@ def test_deploy_script_bash_syntax() -> None:
 
 
 def test_setup_plan_is_json_and_forbids_keys() -> None:
+  env = os.environ.copy()
+  env["GITHUB_REPOSITORY"] = "example-owner/example-repo"
   completed = subprocess.run(
     ["bash", str(ROOT / "scripts" / "setup_v9_github_cicd.sh"), "--plan"],
     cwd=ROOT,
     check=True,
     capture_output=True,
     text=True,
-    env={"GITHUB_REPOSITORY": "example-owner/example-repo"},
+    env=env,
   )
   payload = json.loads(completed.stdout)
   assert payload["status"] == "plan"

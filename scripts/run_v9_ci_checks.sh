@@ -76,8 +76,17 @@ if [[ "${V9_CI_SKIP_COMPILE_PYTEST:-false}" != "true" ]]; then
 run_step "compileall" "${PY[@]}" -m compileall services_v9 scripts ui_v9 tests app.py
 PYTEST_LOG="${TMP_DIR}/pytest.log"
 log "START pytest"
-if ! env PYTHONPATH="${PYTHONPATH}" "${PY[@]}" -m pytest tests/test_v9_*.py -q | tee "${PYTEST_LOG}"; then
+TEST_FILE_LIST="${TMP_DIR}/test_v9_files.txt"
+"${PY[@]}" - <<'PY' > "${TEST_FILE_LIST}"
+from pathlib import Path
+
+for path in sorted(Path("tests").glob("test_v9_*.py")):
+    print(path)
+PY
+if ! env PYTHONPATH="${PYTHONPATH}" "${PY[@]}" -m pytest @"${TEST_FILE_LIST}" -q --tb=line 2>&1 | tee "${PYTEST_LOG}"; then
   log "FAIL  pytest"
+  log "pytest tail:"
+  tail -n 40 "${PYTEST_LOG}" || true
   exit 1
 fi
 log "OK    pytest"
