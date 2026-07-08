@@ -6,11 +6,13 @@ import json
 import os
 import subprocess
 import sys
+from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
 import pytest
 
 import scripts.set_v9_cloud_weekly_enabled as toggle_script
+import services_v9.cloud_weekly_settings as cloud_weekly_settings
 from services_v9.cloud_weekly_settings import load_weekly_delivery_settings, save_weekly_delivery_settings
 from tests.test_v9_cloud_runtime_and_settings import _FakeStorageClient
 
@@ -19,6 +21,37 @@ PROJECT_ROOT = toggle_script.PROJECT_ROOT
 
 def _cloud_env() -> dict[str, str]:
   return toggle_script.build_cloud_environ()
+
+
+@contextmanager
+def _no_adc_or_cloud_client_guard():
+  """Fail the test if ADC resolution or a real Cloud Storage client is used.
+
+  Keeps the weekly toggle CLI unit test fully offline: any attempt to reach
+  google.auth.default() or construct a real google.cloud.storage.Client raises
+  immediately, so a regression that drops dependency injection is caught here
+  instead of failing on GitHub-hosted runners without ADC.
+  """
+
+  def _fail_build_client(*_args, **_kwargs):
+    raise AssertionError("real Cloud Storage client must not be built in this unit test")
+
+  def _fail_auth_default(*_args, **_kwargs):
+    raise AssertionError("google.auth.default() must not be called in this unit test")
+
+  with ExitStack() as stack:
+    stack.enter_context(
+      patch.object(cloud_weekly_settings, "_build_storage_client", _fail_build_client)
+    )
+    try:
+      import google.auth  # noqa: WPS433 (optional dependency)
+    except Exception:  # noqa: BLE001
+      google_auth = None
+    else:
+      google_auth = google.auth
+    if google_auth is not None:
+      stack.enter_context(patch.object(google_auth, "default", _fail_auth_default))
+    yield
 
 
 def _seed_settings(storage_client: _FakeStorageClient) -> None:
@@ -138,15 +171,31 @@ def test_refuses_local_mode_mis_save(tmp_path) -> None:
 def test_cli_plan_and_apply_exit_codes(capsys) -> None:
   storage_client = _FakeStorageClient()
   _seed_settings(storage_client)
-  with patch.object(toggle_script, "load_weekly_delivery_settings", wraps=toggle_script.load_weekly_delivery_settings), patch.object(
-    toggle_script,
-    "apply_enabled_toggle",
-    wraps=toggle_script.apply_enabled_toggle,
-  ):
-    assert toggle_script.main(["--plan"]) == 0
-  captured = capsys.readouterr().out
-  assert '"status": "plan"' in captured
-  assert "owner@example.com" not in captured
+  with _no_adc_or_cloud_client_guard():
+    with patch.object(toggle_script, "load_weekly_delivery_settings", wraps=toggle_script.load_weekly_delivery_settings), patch.object(
+      toggle_script,
+      "apply_enabled_toggle",
+      wraps=toggle_script.apply_enabled_toggle,
+    ):
+      with patch.dict(os.environ, {"V9_CLOUD_CHANGE_APPROVED": "false"}, clear=False):
+        assert toggle_script.main(["--plan"], storage_client=storage_client) == 0
+        plan_out = capsys.readouterr().out
+        assert '"status": "plan"' in plan_out
+        assert "owner@example.com" not in plan_out
+        # Apply without approval must fail before any Cloud client is built.
+        assert toggle_script.main(["--enable"], storage_client=storage_client) == 1
+        guard_out = capsys.readouterr().out
+        assert "V9_CLOUD_CHANGE_APPROVED=true" in guard_out
+
+      with patch.dict(os.environ, {"V9_CLOUD_CHANGE_APPROVED": "true"}, clear=False):
+        # Approved apply exercises the real apply code path against the fake backend only.
+        assert toggle_script.main(["--enable"], storage_client=storage_client) == 0
+        applied_out = capsys.readouterr().out
+        assert '"status": "applied"' in applied_out
+        assert "owner@example.com" not in applied_out
+
+  reloaded = toggle_script.load_weekly_delivery_settings(environ=_cloud_env(), storage_client=storage_client)
+  assert reloaded["enabled"] is True
 
 
 def test_cli_enable_without_approval_exits_non_zero() -> None:

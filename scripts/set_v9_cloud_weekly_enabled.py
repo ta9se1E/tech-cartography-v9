@@ -162,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
   return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, storage_client: Any | None = None) -> int:
   args = build_parser().parse_args(argv)
   environ = build_cloud_environ(
     project_id=str(args.project_id),
@@ -176,13 +176,13 @@ def main(argv: list[str] | None = None) -> int:
 
   try:
     if args.enable:
-      payload = apply_enabled_toggle(target_enabled=True, updated_by="set-v9-cloud-weekly-enabled", environ=environ)
+      payload = apply_enabled_toggle(target_enabled=True, updated_by="set-v9-cloud-weekly-enabled", environ=environ, storage_client=storage_client)
     elif args.disable:
-      payload = apply_enabled_toggle(target_enabled=False, updated_by="set-v9-cloud-weekly-enabled", environ=environ)
+      payload = apply_enabled_toggle(target_enabled=False, updated_by="set-v9-cloud-weekly-enabled", environ=environ, storage_client=storage_client)
     else:
-      current = load_weekly_delivery_settings(environ=environ)
+      current = load_weekly_delivery_settings(environ=environ, storage_client=storage_client)
       target_enabled = not bool(current.get("enabled", False))
-      payload = plan_enabled_toggle(target_enabled=target_enabled, environ=environ)
+      payload = plan_enabled_toggle(target_enabled=target_enabled, environ=environ, storage_client=storage_client)
   except RuntimeError as exc:
     print(json.dumps({"status": "failed", "error": str(exc)}, ensure_ascii=False, indent=2))
     return 1
