@@ -18,6 +18,18 @@ DEPLOY_WORKFLOW = ROOT / ".github" / "workflows" / "deploy-study-demo.yml"
 STUDY_SERVICE = "tech-cartography-v9-study-demo"
 PRODUCTION_SERVICE = "tech-cartography-v9-signal-watch"
 BASH_BIN = os.environ.get("BASH", "/bin/bash")
+VALID_DIGEST_A = "sha256:4c9f8fae6563408b00f34d1a4b4b262d641db06fda6ee6a7e2cc09df9b85bc8f"
+VALID_DIGEST_B = "sha256:56bdaa06db7f365246db658f9b769b260e52c844566f493aa02019fc04a9ce9e"
+IMAGE_REPO = (
+  "us-central1-docker.pkg.dev/devops-ai-agent-hackathon-2026/"
+  "cloud-run-source-deploy/tech-cartography-v9-study-demo"
+)
+_READINESS_FUNCS = [
+  "log_image_digest_diagnostics",
+  "fail_image_digest_verification",
+  "cleanup_candidate_tag",
+  "verify_candidate_readiness",
+]
 
 
 def _deploy_script_text() -> str:
@@ -168,6 +180,11 @@ CANDIDATE_URL=""
 CANDIDATE_SMOKE_HTTP=""
 CANDIDATE_CLEANUP="skipped"
 NEW_REVISION=""
+BUILD_ID="fake-build-1"
+IMAGE_REPOSITORY="{IMAGE_REPO}"
+IMAGE_TAG="09167a4"
+IMAGE_DIGEST="{VALID_DIGEST_A}"
+CANDIDATE_TAG="c-test"
 log() {{ printf '%s\\n' "$*"; }}
 """
   script = preamble + _extract_bash_functions(*funcs) + "\n" + body
@@ -192,6 +209,12 @@ def _write_json(path: Path, payload: dict) -> Path:
 # ---------------------------------------------------------------------------
 # Static deploy-script contract
 # ---------------------------------------------------------------------------
+
+
+def test_deploy_uses_digest_pinned_image_reference() -> None:
+  body = _deploy_script_text().split("deploy_study_demo_service() {", 1)[1].split("\n}\n", 1)[0]
+  assert '--image "${IMAGE_BY_DIGEST}"' in body
+  assert "digest-pinned image reference is required" in body
 
 
 def test_deploy_creates_revision_with_no_traffic() -> None:
@@ -335,13 +358,18 @@ def _revision_json(
   container_ready: str = "True",
   active: str = "False",
   ready_reason: str = "Retired",
-  image_digest: str = "sha256:abc123",
+  image_digest: str = VALID_DIGEST_A,
+  spec_image: str | None = None,
+  status_digest: str | None = None,
 ) -> dict:
+  digest_ref = image_digest if image_digest.startswith("sha256:") else f"sha256:{image_digest}"
+  full_status_digest = status_digest or f"{IMAGE_REPO}@{digest_ref}"
+  container_image = spec_image or f"{IMAGE_REPO}:{VALID_DIGEST_A.split(':')[-1][:7]}"
   return {
     "metadata": {"name": name},
-    "spec": {"containers": [{"image": f"us-docker.pkg.dev/x/y@{image_digest}"}]},
+    "spec": {"containers": [{"image": container_image}]},
     "status": {
-      "imageDigest": image_digest,
+      "imageDigest": full_status_digest,
       "conditions": [
         {"type": "Ready", "status": ready, "reason": ready_reason},
         {"type": "ContainerReady", "status": container_ready},
@@ -355,8 +383,8 @@ def test_candidate_readiness_ready_true_passes(tmp_path: Path) -> None:
   rev = _write_json(tmp_path / "rev.json", _revision_json())
   result = _run_functions(
     tmp_path,
-    ["verify_candidate_readiness"],
-    f'verify_candidate_readiness "{STUDY_SERVICE}-00025-kct" "sha256:abc123"',
+    _READINESS_FUNCS,
+    f'verify_candidate_readiness "{STUDY_SERVICE}-00025-kct" "{VALID_DIGEST_A}"',
     extra_env={"FAKE_REVISION_JSON": str(rev)},
   )
   assert result.returncode == 0, result.stderr + result.stdout
@@ -370,8 +398,8 @@ def test_candidate_readiness_retired_zero_traffic_not_failure(tmp_path: Path) ->
   )
   result = _run_functions(
     tmp_path,
-    ["verify_candidate_readiness"],
-    f'verify_candidate_readiness "{STUDY_SERVICE}-00025-kct" "sha256:abc123"',
+    _READINESS_FUNCS,
+    f'verify_candidate_readiness "{STUDY_SERVICE}-00025-kct" "{VALID_DIGEST_A}"',
     extra_env={"FAKE_REVISION_JSON": str(rev)},
   )
   assert result.returncode == 0, result.stderr + result.stdout
@@ -381,8 +409,8 @@ def test_candidate_readiness_container_not_ready_fails(tmp_path: Path) -> None:
   rev = _write_json(tmp_path / "rev.json", _revision_json(container_ready="False"))
   result = _run_functions(
     tmp_path,
-    ["verify_candidate_readiness"],
-    f'verify_candidate_readiness "{STUDY_SERVICE}-00025-kct" "sha256:abc123"',
+    _READINESS_FUNCS,
+    f'verify_candidate_readiness "{STUDY_SERVICE}-00025-kct" "{VALID_DIGEST_A}"',
     extra_env={
       "FAKE_REVISION_JSON": str(rev),
       "V9_CANDIDATE_READY_MAX_ATTEMPTS": "1",
@@ -393,12 +421,33 @@ def test_candidate_readiness_container_not_ready_fails(tmp_path: Path) -> None:
   assert "container failed to start" in (result.stdout + result.stderr)
 
 
-def test_candidate_readiness_digest_mismatch_fails(tmp_path: Path) -> None:
-  rev = _write_json(tmp_path / "rev.json", _revision_json(image_digest="sha256:aaaa"))
+def test_candidate_readiness_spec_tag_with_status_digest_passes(tmp_path: Path) -> None:
+  rev = _write_json(
+    tmp_path / "rev.json",
+    _revision_json(
+      spec_image=f"{IMAGE_REPO}:09167a4",
+      status_digest=f"{IMAGE_REPO}@{VALID_DIGEST_A}",
+    ),
+  )
   result = _run_functions(
     tmp_path,
-    ["verify_candidate_readiness"],
-    f'verify_candidate_readiness "{STUDY_SERVICE}-00025-kct" "sha256:bbbb"',
+    _READINESS_FUNCS,
+    f'verify_candidate_readiness "{STUDY_SERVICE}-00025-kct" "{VALID_DIGEST_A}"',
+    extra_env={"FAKE_REVISION_JSON": str(rev)},
+  )
+  assert result.returncode == 0, result.stderr + result.stdout
+  assert "digest_match=true" in result.stdout
+
+
+def test_candidate_readiness_digest_mismatch_fails(tmp_path: Path) -> None:
+  rev = _write_json(
+    tmp_path / "rev.json",
+    _revision_json(image_digest=VALID_DIGEST_B),
+  )
+  result = _run_functions(
+    tmp_path,
+    _READINESS_FUNCS,
+    f'verify_candidate_readiness "{STUDY_SERVICE}-00025-kct" "{VALID_DIGEST_A}"',
     extra_env={
       "FAKE_REVISION_JSON": str(rev),
       "V9_CANDIDATE_READY_MAX_ATTEMPTS": "1",
@@ -407,6 +456,7 @@ def test_candidate_readiness_digest_mismatch_fails(tmp_path: Path) -> None:
   )
   assert result.returncode != 0
   assert "image digest mismatch" in (result.stdout + result.stderr)
+  assert "normalized_expected_digest" in (result.stdout + result.stderr)
 
 
 # ---------------------------------------------------------------------------

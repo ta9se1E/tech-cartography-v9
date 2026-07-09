@@ -26,6 +26,9 @@ SOURCE_OBJECT=""
 CLEANUP_RESULT="not_started"
 IMAGE_URI=""
 IMAGE_DIGEST=""
+IMAGE_REPOSITORY=""
+IMAGE_TAG=""
+IMAGE_BY_DIGEST=""
 CANDIDATE_READY_MAX_ATTEMPTS="${V9_CANDIDATE_READY_MAX_ATTEMPTS:-60}"
 CANDIDATE_READY_INTERVAL="${V9_CANDIDATE_READY_INTERVAL:-5}"
 TRAFFIC_CONVERGE_MAX_ATTEMPTS="${V9_TRAFFIC_CONVERGE_MAX_ATTEMPTS:-60}"
@@ -56,6 +59,12 @@ RESULT_TRAFFIC_TARGET_REVISION=""
 RESULT_TRAFFIC_PERCENT="0"
 RESULT_FINAL_SMOKE_STATUS="skipped"
 RESULT_IMAGE_DIGEST=""
+RESULT_IMAGE_REPOSITORY=""
+RESULT_IMAGE_REFERENCE_MODE="digest-pinned"
+RESULT_EXPECTED_IMAGE_DIGEST=""
+RESULT_REVISION_IMAGE_DIGEST=""
+RESULT_IMAGE_DIGEST_MATCH="false"
+RESULT_ERROR_STAGE=""
 RESULT_CANDIDATE_CLEANUP="skipped"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
@@ -366,6 +375,12 @@ write_deploy_result() {
   DEPLOY_RESULT_TRAFFIC_PERCENT="${RESULT_TRAFFIC_PERCENT:-0}" \
   DEPLOY_RESULT_FINAL_SMOKE_STATUS="${RESULT_FINAL_SMOKE_STATUS:-skipped}" \
   DEPLOY_RESULT_IMAGE_DIGEST="${RESULT_IMAGE_DIGEST:-}" \
+  DEPLOY_RESULT_IMAGE_REPOSITORY="${RESULT_IMAGE_REPOSITORY:-}" \
+  DEPLOY_RESULT_IMAGE_REFERENCE_MODE="${RESULT_IMAGE_REFERENCE_MODE:-digest-pinned}" \
+  DEPLOY_RESULT_EXPECTED_IMAGE_DIGEST="${RESULT_EXPECTED_IMAGE_DIGEST:-}" \
+  DEPLOY_RESULT_REVISION_IMAGE_DIGEST="${RESULT_REVISION_IMAGE_DIGEST:-}" \
+  DEPLOY_RESULT_IMAGE_DIGEST_MATCH="${RESULT_IMAGE_DIGEST_MATCH:-false}" \
+  DEPLOY_RESULT_ERROR_STAGE="${RESULT_ERROR_STAGE:-}" \
   DEPLOY_RESULT_CANDIDATE_CLEANUP="${RESULT_CANDIDATE_CLEANUP:-skipped}" \
   DEPLOY_RESULT_FILE="${result_file}" \
   DEPLOY_RESULT_TMP="${tmp_file}" \
@@ -407,6 +422,12 @@ payload = {
     "traffic_percent": as_int("DEPLOY_RESULT_TRAFFIC_PERCENT"),
     "final_smoke_status": os.environ["DEPLOY_RESULT_FINAL_SMOKE_STATUS"],
     "image_digest": os.environ["DEPLOY_RESULT_IMAGE_DIGEST"],
+    "image_repository": os.environ["DEPLOY_RESULT_IMAGE_REPOSITORY"],
+    "image_reference_mode": os.environ["DEPLOY_RESULT_IMAGE_REFERENCE_MODE"],
+    "expected_image_digest": os.environ["DEPLOY_RESULT_EXPECTED_IMAGE_DIGEST"],
+    "revision_image_digest": os.environ["DEPLOY_RESULT_REVISION_IMAGE_DIGEST"],
+    "image_digest_match": as_bool("DEPLOY_RESULT_IMAGE_DIGEST_MATCH"),
+    "error_stage": os.environ["DEPLOY_RESULT_ERROR_STAGE"],
     "candidate_cleanup": os.environ["DEPLOY_RESULT_CANDIDATE_CLEANUP"],
     "service": os.environ["DEPLOY_RESULT_SERVICE"],
     "production_modifications": False,
@@ -512,10 +533,12 @@ print(f\"SOURCE_TARGET_REASON={shlex.quote(str(target.get('reason', '') or ''))}
 }
 
 build_study_demo_image() {
-  local git_sha image_uri build_status
+  local git_sha image_uri build_status build_json fallback_digest
   record_deploy_mutation_started
   git_sha="$(git rev-parse --short HEAD)"
   image_uri="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${SERVICE}:${git_sha}"
+  IMAGE_REPOSITORY="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}/${SERVICE}"
+  IMAGE_TAG="${git_sha}"
   BUILD_ID="$(gcloud builds submit . \
     --async \
     --project "${PROJECT_ID}" \
@@ -534,23 +557,45 @@ build_study_demo_image() {
     exit 1
   fi
   IMAGE_URI="${image_uri}"
-  IMAGE_DIGEST="$(gcloud builds describe "${BUILD_ID}" --project "${PROJECT_ID}" --region "${REGION}" --format=json | "${PY[@]}" -c "
-import json, sys
-payload = json.load(sys.stdin)
-images = payload.get('results', {}).get('images', []) or []
-for item in images:
-  if isinstance(item, dict) and item.get('digest'):
-    print(item['digest'])
-    break
-")"
+  build_json="$(gcloud builds describe "${BUILD_ID}" --project "${PROJECT_ID}" --region "${REGION}" --format=json)"
+  IMAGE_DIGEST="$(printf '%s' "${build_json}" | "${PY[@]}" -c "
+import json
+import sys
+from scripts.v9_image_digest import extract_build_image_digest
+print(extract_build_image_digest(json.load(sys.stdin)))
+" 2>/dev/null || true)"
+  if [[ -z "${IMAGE_DIGEST}" ]]; then
+    fallback_digest="$(gcloud artifacts docker images describe "${image_uri}" \
+      --project "${PROJECT_ID}" \
+      --format='value(image_summary.digest)' 2>/dev/null || true)"
+    if [[ -n "${fallback_digest}" ]]; then
+      IMAGE_DIGEST="$("${PY[@]}" scripts/v9_image_digest.py normalize "${fallback_digest}")" || IMAGE_DIGEST=""
+    fi
+  fi
+  if [[ -z "${IMAGE_DIGEST}" ]]; then
+    log "ERROR: unable to resolve image digest from Cloud Build ${BUILD_ID}"
+    exit 1
+  fi
+  IMAGE_BY_DIGEST="${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+  RESULT_IMAGE_REPOSITORY="${IMAGE_REPOSITORY}"
+  RESULT_EXPECTED_IMAGE_DIGEST="${IMAGE_DIGEST}"
+  RESULT_IMAGE_DIGEST="${IMAGE_DIGEST}"
+  log "image digest resolved from build ${BUILD_ID}: ${IMAGE_DIGEST}"
+  log "deploy image reference mode: digest-pinned"
+  log "image_repository=${IMAGE_REPOSITORY}"
+  log "image_tag=${IMAGE_TAG}"
 }
 
 deploy_study_demo_service() {
   local expiry_utc="$1"
+  if [[ -z "${IMAGE_BY_DIGEST}" ]]; then
+    log "ERROR: digest-pinned image reference is required before deploy"
+    exit 1
+  fi
   gcloud run deploy "${SERVICE}" \
     --project "${PROJECT_ID}" \
     --region "${REGION}" \
-    --image "${IMAGE_URI}" \
+    --image "${IMAGE_BY_DIGEST}" \
     --service-account "${SERVICE_ACCOUNT}" \
     --no-traffic \
     --tag "${CANDIDATE_TAG}" \
@@ -751,11 +796,50 @@ PY
   log "candidate url resolved from service describe (tag=${tag})"
 }
 
+log_image_digest_diagnostics() {
+  local revision="$1"
+  local revision_spec_image="${2:-}"
+  local revision_status_digest="${3:-}"
+  local normalized_expected="${4:-}"
+  local normalized_actual="${5:-}"
+  local digest_match="${6:-false}"
+  log "image digest verification:"
+  log "build_id=${BUILD_ID}"
+  log "image_repository=${IMAGE_REPOSITORY}"
+  log "image_tag=${IMAGE_TAG}"
+  log "expected_digest=${IMAGE_DIGEST}"
+  log "deployed_image_reference_is_digest_pinned=true"
+  log "revision_name=${revision}"
+  log "revision_spec_image=${revision_spec_image}"
+  log "revision_status_image_digest=${revision_status_digest}"
+  log "normalized_expected_digest=${normalized_expected}"
+  log "normalized_actual_digest=${normalized_actual}"
+  log "digest_match=${digest_match}"
+}
+
+fail_image_digest_verification() {
+  local revision="$1"
+  local revision_spec_image="$2"
+  local revision_status_digest="$3"
+  local normalized_expected="$4"
+  local normalized_actual="$5"
+  RESULT_ERROR_STAGE="image_digest_verification"
+  RESULT_EXPECTED_IMAGE_DIGEST="${normalized_expected}"
+  RESULT_REVISION_IMAGE_DIGEST="${normalized_actual}"
+  RESULT_IMAGE_DIGEST_MATCH="false"
+  log_image_digest_diagnostics "${revision}" "${revision_spec_image}" "${revision_status_digest}" \
+    "${normalized_expected}" "${normalized_actual}" "false"
+  cleanup_candidate_tag "${CANDIDATE_TAG}" || true
+  RESULT_CANDIDATE_CLEANUP="${CANDIDATE_CLEANUP}"
+  log "ERROR: candidate revision ${revision} image digest mismatch"
+  exit 1
+}
+
 verify_candidate_readiness() {
   local revision="$1"
   local expected_digest="$2"
   local attempt=0
-  local rev_json rc
+  local rev_json rc diag_json
   while true; do
     rev_json="$(gcloud run revisions describe "${revision}" \
       --project "${PROJECT_ID}" \
@@ -763,33 +847,74 @@ verify_candidate_readiness() {
       --format=json 2>/dev/null || true)"
     if [[ -n "${rev_json}" ]]; then
       set +e
-      REV_JSON="${rev_json}" EXPECT_NAME="${revision}" EXPECT_DIGEST="${expected_digest}" "${PY[@]}" - <<'PY'
+      diag_json="$(REV_JSON="${rev_json}" EXPECT_NAME="${revision}" EXPECT_DIGEST="${expected_digest}" "${PY[@]}" - <<'PY'
 import json
 import os
 import sys
 
+from scripts.v9_image_digest import normalize_digest
+
 rev = json.loads(os.environ["REV_JSON"])
 if rev.get("metadata", {}).get("name", "") != os.environ["EXPECT_NAME"]:
     sys.exit(2)
+
 conds = {c.get("type"): c.get("status") for c in rev.get("status", {}).get("conditions", [])}
+spec_image = rev.get("spec", {}).get("containers", [{}])[0].get("image", "")
+rev_digest_raw = rev.get("status", {}).get("imageDigest", "")
+
+if not rev_digest_raw:
+    print(json.dumps({
+        "revision_spec_image": spec_image,
+        "revision_status_image_digest": "",
+        "normalized_expected_digest": "",
+        "normalized_actual_digest": "",
+    }))
+    sys.exit(6)
+
+try:
+    normalized_expected = normalize_digest(os.environ.get("EXPECT_DIGEST", ""))
+    normalized_actual = normalize_digest(rev_digest_raw)
+except ValueError as exc:
+    print(json.dumps({
+        "revision_spec_image": spec_image,
+        "revision_status_image_digest": rev_digest_raw,
+        "normalized_expected_digest": "",
+        "normalized_actual_digest": "",
+        "error": str(exc),
+    }))
+    sys.exit(5)
+
+print(json.dumps({
+    "revision_spec_image": spec_image,
+    "revision_status_image_digest": rev_digest_raw,
+    "normalized_expected_digest": normalized_expected,
+    "normalized_actual_digest": normalized_actual,
+}))
+
+if normalized_expected != normalized_actual:
+    sys.exit(5)
+
 if conds.get("ContainerReady") != "True":
     sys.exit(3)
-expected = os.environ.get("EXPECT_DIGEST", "")
-rev_digest = rev.get("status", {}).get("imageDigest", "")
-image = rev.get("spec", {}).get("containers", [{}])[0].get("image", "")
-if "@sha256:" in image and not rev_digest:
-    rev_digest = image.split("@", 1)[1]
-if expected and rev_digest and expected != rev_digest:
-    sys.exit(5)
 if conds.get("Ready") != "True":
     sys.exit(4)
 sys.exit(0)
 PY
+)"
       rc=$?
       set -e
       case "${rc}" in
         0)
-          log "candidate revision ${revision} ready (ContainerReady=True, Ready=True)"
+          RESULT_EXPECTED_IMAGE_DIGEST="$(printf '%s' "${diag_json}" | "${PY[@]}" -c 'import json,sys; print(json.load(sys.stdin)["normalized_expected_digest"])')"
+          RESULT_REVISION_IMAGE_DIGEST="$(printf '%s' "${diag_json}" | "${PY[@]}" -c 'import json,sys; print(json.load(sys.stdin)["normalized_actual_digest"])')"
+          RESULT_IMAGE_DIGEST_MATCH="true"
+          log_image_digest_diagnostics "${revision}" \
+            "$(printf '%s' "${diag_json}" | "${PY[@]}" -c 'import json,sys; print(json.load(sys.stdin)["revision_spec_image"])')" \
+            "$(printf '%s' "${diag_json}" | "${PY[@]}" -c 'import json,sys; print(json.load(sys.stdin)["revision_status_image_digest"])')" \
+            "${RESULT_EXPECTED_IMAGE_DIGEST}" \
+            "${RESULT_REVISION_IMAGE_DIGEST}" \
+            "true"
+          log "candidate revision ${revision} ready (ContainerReady=True, Ready=True, digest verified)"
           return 0
           ;;
         2)
@@ -801,17 +926,26 @@ PY
           exit 1
           ;;
         5)
-          log "ERROR: candidate revision ${revision} image digest mismatch"
-          exit 1
+          fail_image_digest_verification "${revision}" \
+            "$(printf '%s' "${diag_json}" | "${PY[@]}" -c 'import json,sys; print(json.load(sys.stdin).get("revision_spec_image",""))')" \
+            "$(printf '%s' "${diag_json}" | "${PY[@]}" -c 'import json,sys; print(json.load(sys.stdin).get("revision_status_image_digest",""))')" \
+            "$(printf '%s' "${diag_json}" | "${PY[@]}" -c 'import json,sys; print(json.load(sys.stdin).get("normalized_expected_digest",""))')" \
+            "$(printf '%s' "${diag_json}" | "${PY[@]}" -c 'import json,sys; print(json.load(sys.stdin).get("normalized_actual_digest",""))')"
+          ;;
+        6)
+          : # status.imageDigest not populated yet, retry
           ;;
         4)
-          : # not ready yet, retry
+          : # Ready not true yet, retry
           ;;
       esac
     fi
     attempt=$((attempt + 1))
     if [[ ${attempt} -ge ${CANDIDATE_READY_MAX_ATTEMPTS} ]]; then
       log "ERROR: candidate revision ${revision} not ready within timeout"
+      RESULT_ERROR_STAGE="image_digest_verification"
+      cleanup_candidate_tag "${CANDIDATE_TAG}" || true
+      RESULT_CANDIDATE_CLEANUP="${CANDIDATE_CLEANUP}"
       exit 1
     fi
     sleep "${CANDIDATE_READY_INTERVAL}"
