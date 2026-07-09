@@ -600,20 +600,99 @@ verify_public_password_gate() {
 
 resolve_candidate_tag() {
   local run_id="${V9_DEPLOY_RUN_ID:-${GITHUB_RUN_ID:-local}}"
-  CANDIDATE_TAG="$(RAW_TAG="candidate-${run_id}" "${PY[@]}" - <<'PY'
+  local rc=0
+  CANDIDATE_TAG="$(SERVICE_NAME="${SERVICE}" RUN_ID="${run_id}" RAW_TAG="c-${run_id}" "${PY[@]}" - <<'PY'
+import hashlib
 import os
 import re
+import sys
 
-raw = os.environ["RAW_TAG"].lower()
-raw = re.sub(r"[^a-z0-9-]", "-", raw)
-raw = re.sub(r"-+", "-", raw).strip("-")
-if not raw:
-    raw = "candidate"
-print(raw[:63].rstrip("-"))
+MAX_COMBINED = 46
+service = os.environ["SERVICE_NAME"]
+run_id = os.environ.get("RUN_ID", "local")
+raw = os.environ.get("RAW_TAG", f"c-{run_id}").lower()
+
+max_tag_len = MAX_COMBINED - len(service)
+if max_tag_len <= 0:
+    sys.exit(2)
+
+
+def sanitize(tag: str) -> str:
+    tag = re.sub(r"[^a-z0-9-]", "-", tag)
+    tag = re.sub(r"-+", "-", tag).strip("-")
+    if tag and not tag[0].isalpha():
+        tag = f"c-{tag.lstrip('-')}"
+    return tag
+
+
+def stable_short(tag_seed: str) -> str:
+    digest = hashlib.sha256(tag_seed.encode("utf-8")).hexdigest()
+    run_suffix = re.sub(r"[^a-z0-9]", "", run_id.lower())[-6:]
+    if run_suffix:
+        base = f"c-{run_suffix}"
+        if len(base) <= max_tag_len:
+            room = max_tag_len - len(base)
+            if room > 0:
+                return (base + digest[:room])[:max_tag_len].rstrip("-")
+            return base[:max_tag_len].rstrip("-")
+    return (f"c-{digest}")[:max_tag_len].rstrip("-")
+
+
+tag = sanitize(raw)
+if not tag:
+    tag = stable_short(f"c-local-{run_id}")
+
+if len(tag) > max_tag_len:
+    tag = stable_short(tag)
+
+tag = tag[:max_tag_len].rstrip("-")
+if not tag or not tag[0].isalpha():
+    tag = stable_short(f"c-fallback-{run_id}")
+
+if not tag or len(service) + len(tag) > MAX_COMBINED:
+    sys.exit(3)
+
+print(tag)
 PY
-)"
-  if [[ -z "${CANDIDATE_TAG}" ]]; then
-    log "ERROR: unable to derive candidate tag"
+)" || rc=$?
+  if [[ ${rc} -eq 2 ]]; then
+    log "ERROR: service name '${SERVICE}' is too long for Cloud Run traffic tags (max combined length 46)"
+    exit 1
+  fi
+  if [[ ${rc} -eq 3 || -z "${CANDIDATE_TAG}" ]]; then
+    log "ERROR: unable to derive a valid candidate tag within Cloud Run length limits"
+    exit 1
+  fi
+}
+
+assert_candidate_tag_within_limit() {
+  local max_combined=46
+  local service_len="${#SERVICE}"
+  local tag_len="${#CANDIDATE_TAG}"
+  local combined_len=$((service_len + tag_len))
+  local max_tag_len=$((max_combined - service_len))
+  log "candidate tag length check:"
+  log "service_name=${SERVICE}"
+  log "service_name_length=${service_len}"
+  log "candidate_tag=${CANDIDATE_TAG}"
+  log "candidate_tag_length=${tag_len}"
+  log "combined_length=${combined_len}"
+  log "max_combined_length=${max_combined}"
+  log "max_candidate_tag_length=${max_tag_len}"
+  if [[ ${max_tag_len} -le 0 ]]; then
+    log "ERROR: service name length ${service_len} leaves no room for a traffic tag"
+    exit 1
+  fi
+  if [[ ${combined_len} -gt ${max_combined} ]]; then
+    log "ERROR: candidate tag '${CANDIDATE_TAG}' and service '${SERVICE}' exceed combined length ${max_combined}"
+    exit 1
+  fi
+  if [[ ! "${CANDIDATE_TAG}" =~ ^[a-z] ]]; then
+    log "ERROR: candidate tag must start with a letter"
+    exit 1
+  fi
+  if [[ "${CANDIDATE_TAG}" == *- ]]; then
+    log "ERROR: candidate tag must not end with a hyphen"
     exit 1
   fi
 }
@@ -962,6 +1041,7 @@ PY
   STATE_PREVIOUS_REVISION="${PREVIOUS_REVISION}"
 
   resolve_candidate_tag
+  assert_candidate_tag_within_limit
   RESULT_CANDIDATE_TAG="${CANDIDATE_TAG}"
 
   verify_public_access_readonly
