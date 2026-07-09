@@ -4,6 +4,16 @@ from __future__ import annotations
 
 import streamlit as st
 
+from services_v9.study_demo_access import (
+  DEMO_ACTIVE_RUN_ID,
+  DEMO_SOURCE_COUNTS,
+  DEMO_THEME_NAME,
+  DEMO_TIER_COUNTS,
+  PUBLIC_DEMO_BADGE,
+  PUBLIC_DEMO_LEGAL_CAVEAT,
+  PUBLIC_DEMO_SEEDED_NOTICE,
+  is_public_demo,
+)
 from services_v9.study_demo_auth import (
   EXPIRED_MESSAGE,
   FAILURE_MESSAGE,
@@ -40,6 +50,9 @@ def render_study_demo_login_screen(*, environ: dict[str, str] | None = None) -> 
     clear_authentication(st.session_state)
     return False
 
+  if is_public_demo(environ):
+    return True
+
   if is_authenticated(st.session_state, environ=environ):
     return True
 
@@ -63,7 +76,44 @@ def render_study_demo_login_screen(*, environ: dict[str, str] | None = None) -> 
   return False
 
 
+def render_public_demo_banner(*, environ: dict[str, str] | None = None) -> None:
+  if not is_public_demo(environ):
+    return
+  st.caption(PUBLIC_DEMO_BADGE)
+  st.info(
+    "\n".join(
+      [
+        f"**{PUBLIC_DEMO_BADGE}**",
+        "",
+        PUBLIC_DEMO_SEEDED_NOTICE,
+        "",
+        f"**Theme:** {DEMO_THEME_NAME}",
+        f"**Active run:** seeded validated study data ({DEMO_ACTIVE_RUN_ID[:8]}…)",
+        (
+          "**Sources:** "
+          f"Patent {DEMO_SOURCE_COUNTS['patent']} / "
+          f"Paper {DEMO_SOURCE_COUNTS['paper']} / "
+          f"Web {DEMO_SOURCE_COUNTS['web']} "
+          f"(integrated {DEMO_SOURCE_COUNTS['integrated']})"
+        ),
+        (
+          "**Tier mix:** "
+          f"A {DEMO_TIER_COUNTS['A']} / "
+          f"B {DEMO_TIER_COUNTS['B']} / "
+          f"C {DEMO_TIER_COUNTS['C']} / "
+          f"D {DEMO_TIER_COUNTS['D']}"
+        ),
+        "",
+        PUBLIC_DEMO_LEGAL_CAVEAT,
+      ]
+    )
+  )
+
+
 def render_study_demo_banner(*, environ: dict[str, str] | None = None) -> None:
+  if is_public_demo(environ):
+    render_public_demo_banner(environ=environ)
+    return
   if not is_study_demo_mode(environ):
     return
   expiry_text = format_expiry_jst(environ=environ)
@@ -90,6 +140,7 @@ def render_study_demo_banner(*, environ: dict[str, str] | None = None) -> None:
 
 
 __all__ = [
+  "render_public_demo_banner",
   "render_study_demo_banner",
   "render_study_demo_login_screen",
 ]

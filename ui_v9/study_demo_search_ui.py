@@ -100,6 +100,11 @@ def _apply_filters(signals: list[dict[str, Any]], filters: dict[str, Any]) -> li
 
 def render_study_demo_keyword_search_section(*, authenticated: bool = True) -> dict[str, Any]:
   events: dict[str, Any] = {}
+  from services_v9.study_demo_access import PUBLIC_DEMO_BADGE, is_public_demo
+
+  if is_public_demo():
+    st.caption(f"{PUBLIC_DEMO_BADGE}: keyword search and shared updates are disabled.")
+    return events
   st.markdown("### 一時キーワード検索")
   if not authenticated:
     st.info("認証後に検索フォームが表示されます。")
@@ -260,6 +265,20 @@ def render_active_run_selector(
   from services_v9.study_demo_config import get_study_demo_bucket
 
   events: dict[str, Any] = {}
+  from services_v9.study_demo_access import PUBLIC_DEMO_BADGE, is_public_demo
+
+  if is_public_demo():
+    st.caption(f"{PUBLIC_DEMO_BADGE}: active analysis target changes are disabled.")
+    active = dict(st.session_state.get(STATE_ACTIVE_CONTEXT, {}) or {})
+    active_run_id = str(active.get("active_search_run_id", "") or st.session_state.get(STATE_ACTIVE_CONTEXT_RUN_ID, "") or "")
+    if active_run_id:
+      st.success(f"現在の分析対象: seeded demo run ({active_run_id[:8]}…)")
+    if st.button("現在の分析対象を再読み込み", key=KEY_RELOAD_ACTIVE_CONTEXT_BUTTON):
+      events.update(_reload_active_context_from_storage())
+      st.rerun()
+    _render_active_context_message()
+    return events
+
   st.markdown("#### 分析対象として使用")
   if not authenticated:
     st.info("認証後に分析対象を設定できます。")

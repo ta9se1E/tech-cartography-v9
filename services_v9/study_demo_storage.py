@@ -95,6 +95,9 @@ def reject_production_bucket(bucket_name: str) -> None:
 
 def validate_study_demo_write_target(bucket_name: str, *, environ: Mapping[str, str] | None = None) -> None:
   if is_study_demo_mode(environ):
+    from services_v9.study_demo_guard import assert_write_allowed
+
+    assert_write_allowed("gcs_write", environ=environ)
     assert_study_demo_bucket_allowed(bucket_name, environ=environ)
   reject_production_bucket(bucket_name)
 

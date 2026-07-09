@@ -184,8 +184,9 @@ BUILD_ID="fake-build-1"
 IMAGE_REPOSITORY="{IMAGE_REPO}"
 IMAGE_TAG="09167a4"
 IMAGE_DIGEST="{VALID_DIGEST_A}"
-CANDIDATE_TAG="c-test"
-log() {{ printf '%s\\n' "$*"; }}
+    CANDIDATE_TAG="c-test"
+    V9_ACCESS_MODE="${{V9_ACCESS_MODE:-password}}"
+    log() {{ printf '%s\\n' "$*"; }}
 """
   script = preamble + _extract_bash_functions(*funcs) + "\n" + body
   env = os.environ.copy()
@@ -464,16 +465,31 @@ def test_candidate_readiness_digest_mismatch_fails(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _revision_env_json(access_mode: str = "password") -> dict:
+  return {
+    "spec": {
+      "containers": [
+        {
+          "env": [{"name": "V9_ACCESS_MODE", "value": access_mode}],
+        }
+      ]
+    }
+  }
+
+
 def test_candidate_smoke_http_200_uses_candidate_url(tmp_path: Path) -> None:
+  rev_path = _write_json(tmp_path / "rev.json", _revision_env_json("password"))
   url_log = tmp_path / "curl_urls.txt"
   result = _run_functions(
     tmp_path,
-    ["smoke_test_candidate"],
+    ["smoke_test_candidate", "verify_revision_access_mode_env"],
     'smoke_test_candidate "https://candidate---abc.a.run.app" "rev-00025"',
     extra_env={
       "FAKE_CURL_CODE": "200",
       "FAKE_CURL_BODY": "<html><div class='stApp'>streamlit</div></html>",
       "FAKE_CURL_URL_LOG": str(url_log),
+      "FAKE_REVISION_JSON": str(rev_path),
+      "V9_ACCESS_MODE": "password",
     },
   )
   assert result.returncode == 0, result.stderr + result.stdout
@@ -483,17 +499,20 @@ def test_candidate_smoke_http_200_uses_candidate_url(tmp_path: Path) -> None:
 
 
 def test_candidate_smoke_does_not_use_service_url(tmp_path: Path) -> None:
+  rev_path = _write_json(tmp_path / "rev.json", _revision_env_json("password"))
   url_log = tmp_path / "curl_urls.txt"
   service_url = "https://tech-cartography-v9-study-demo-xyz.a.run.app"
   candidate_url = "https://candidate---abc.a.run.app"
   result = _run_functions(
     tmp_path,
-    ["smoke_test_candidate"],
+    ["smoke_test_candidate", "verify_revision_access_mode_env"],
     f'smoke_test_candidate "{candidate_url}" "rev-00025"',
     extra_env={
       "FAKE_CURL_CODE": "200",
       "FAKE_CURL_BODY": "<div class='stApp'>streamlit</div>",
       "FAKE_CURL_URL_LOG": str(url_log),
+      "FAKE_REVISION_JSON": str(rev_path),
+      "V9_ACCESS_MODE": "password",
     },
   )
   assert result.returncode == 0
@@ -503,14 +522,17 @@ def test_candidate_smoke_does_not_use_service_url(tmp_path: Path) -> None:
 
 
 def test_candidate_smoke_private_data_exposed_fails(tmp_path: Path) -> None:
+  rev_path = _write_json(tmp_path / "rev.json", _revision_env_json("password"))
   result = _run_functions(
     tmp_path,
-    ["smoke_test_candidate"],
+    ["smoke_test_candidate", "verify_revision_access_mode_env"],
     'smoke_test_candidate "https://candidate---abc.a.run.app" "rev-00025"',
     extra_env={
       "FAKE_CURL_CODE": "200",
       "FAKE_CURL_BODY": "<div class='stApp'>streamlit study_demo_search_20260705_145711_c06e0a1b</div>",
       "FAKE_CURL_URL_LOG": str(tmp_path / "u.txt"),
+      "FAKE_REVISION_JSON": str(rev_path),
+      "V9_ACCESS_MODE": "password",
     },
   )
   assert result.returncode != 0
@@ -518,14 +540,17 @@ def test_candidate_smoke_private_data_exposed_fails(tmp_path: Path) -> None:
 
 
 def test_candidate_smoke_http_500_fails(tmp_path: Path) -> None:
+  rev_path = _write_json(tmp_path / "rev.json", _revision_env_json("password"))
   result = _run_functions(
     tmp_path,
-    ["smoke_test_candidate"],
+    ["smoke_test_candidate", "verify_revision_access_mode_env"],
     'smoke_test_candidate "https://candidate---abc.a.run.app" "rev-00025"',
     extra_env={
       "FAKE_CURL_CODE": "500",
       "FAKE_CURL_BODY": "error",
       "FAKE_CURL_URL_LOG": str(tmp_path / "u.txt"),
+      "FAKE_REVISION_JSON": str(rev_path),
+      "V9_ACCESS_MODE": "password",
     },
   )
   assert result.returncode != 0
@@ -730,6 +755,7 @@ def test_result_includes_traffic_promotion_fields(tmp_path: Path) -> None:
     'RESULT_FINAL_SMOKE_STATUS=ok\n'
     'RESULT_IMAGE_DIGEST=sha256:abc\n'
     'RESULT_CANDIDATE_CLEANUP=removed\n'
+    'V9_ACCESS_MODE=password\n'
     'write_deploy_result "ok" true true true build-1 true rev-00025'
   )
   extra_env = {"TMPDIR": str(tmp_path)}

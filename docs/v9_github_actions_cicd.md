@@ -132,11 +132,27 @@ User actions (not executed in C5B-6A):
    - `WIF_PROVIDER`
    - `DEPLOYER_SERVICE_ACCOUNT` (GitHub rejects variable names starting with `GITHUB_`)
    - `VALIDATED_RELEASE_TAG`
+   - `V9_ACCESS_MODE` (`public_demo` for judge-facing Study Demo)
 5. Run `bash scripts/setup_v9_github_cicd.sh --apply` after plan review
 
 ## Browser acceptance
 
 Automated deploy verifies technical safety (revision, smoke, fixture checks). Final browser acceptance for demo recording remains manual.
+
+### Public demo (`V9_ACCESS_MODE=public_demo`)
+
+1. Open the Study Demo URL — no password screen
+2. Simple Mode starts directly; Advanced Mode is not exposed
+3. Confirm **Public Demo — read-only** badge at the top
+4. Confirm seeded demo notice and legal caveat (no legal/FTO/infringement advice)
+5. Confirm theme **PAN系炭素繊維用サイジング剤の組成・付与・乾燥条件**
+6. Confirm Patent/Paper/Web = 5/5/5 (integrated 15)
+7. Confirm Top3 research value cards
+8. Browse Weekly/Digest tabs read-only
+9. Attempt write operations — they must not persist after refresh
+10. Confirm no external API calls during browsing
+11. Refresh and confirm shared demo data is unchanged
+12. Confirm secret/internal tokens are not displayed
 
 ## Video Scene 7 wording
 

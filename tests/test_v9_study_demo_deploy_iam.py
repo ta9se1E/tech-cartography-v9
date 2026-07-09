@@ -141,7 +141,12 @@ def test_public_policy_check_permission_denied_fails(tmp_path: Path) -> None:
 
 def test_deploy_script_does_not_reference_production_service() -> None:
   text = _deploy_script_text()
-  assert PRODUCTION_SERVICE not in text
+  allowlist = text.split("ALLOWED_SERVICES=(", 1)[1].split(")", 1)[0]
+  assert PRODUCTION_SERVICE not in allowlist
+  deploy_body = text.split("deploy_study_demo_service() {", 1)[1].split("\n}\n", 1)[0]
+  assert PRODUCTION_SERVICE not in deploy_body
+  guard_body = text.split("validate_access_mode() {", 1)[1].split("\n}\n", 1)[0]
+  assert "public_demo is forbidden on production service" in guard_body
 
 
 def test_primary_smoke_is_unauthenticated() -> None:

@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Mapping
 from zoneinfo import ZoneInfo
 
+from .study_demo_access import is_public_demo
 from .study_demo_config import (
   get_study_demo_expires_at,
   get_study_demo_password,
@@ -74,6 +75,8 @@ def ensure_study_demo_access_allowed(
     return
   if is_study_demo_expired(environ=environ, now=now):
     raise StudyDemoExpiredError(EXPIRED_MESSAGE)
+  if is_public_demo(environ):
+    return
   if not is_study_demo_password_configured(environ):
     raise StudyDemoNotConfiguredError(NOT_CONFIGURED_MESSAGE)
 
@@ -115,6 +118,8 @@ def is_authenticated(session_state: Mapping[str, object], *, environ: Mapping[st
   if is_study_demo_expired(environ=environ):
     clear_authentication(dict(session_state))
     return False
+  if is_public_demo(environ):
+    return True
   return bool(session_state.get(SESSION_AUTHENTICATED_KEY, False))
 
 

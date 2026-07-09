@@ -1366,6 +1366,14 @@ def _resolve_selected_snapshot(snapshot_map: dict[str, Path]) -> tuple[Path | No
 
 
 def _save_profile_and_rerun(profile_dict: dict[str, object]) -> None:
+  from services_v9.study_demo_guard import StudyDemoWriteBlocked, assert_write_allowed
+
+  try:
+    assert_write_allowed("watch_profile")
+  except StudyDemoWriteBlocked as exc:
+    st.session_state[STATE_PROFILE_MESSAGE] = str(exc)
+    st.rerun()
+    return
   path = save_watch_profile(profile_dict)
   st.session_state[STATE_PROFILE_MESSAGE] = f"監視プロファイルを保存しました: {path}"
   _refresh_search_plan_state(profile_dict, status_message="監視プロファイル保存に合わせて検索計画を再生成しました。")
@@ -1398,10 +1406,16 @@ def run_app() -> None:
   if is_study_demo_mode():
     if not render_study_demo_login_screen():
       return
-    from services_v9.study_demo_ui_mode import is_study_demo_simple_ui
+    from services_v9.study_demo_access import is_public_demo
+    from ui_v9.study_demo_gate import render_public_demo_banner, render_study_demo_banner
 
-    if not is_study_demo_simple_ui():
-      render_study_demo_banner()
+    if is_public_demo():
+      render_public_demo_banner()
+    else:
+      from services_v9.study_demo_ui_mode import is_study_demo_simple_ui
+
+      if not is_study_demo_simple_ui():
+        render_study_demo_banner()
     _sync_study_demo_active_context()
 
   ensure_v9_run_dirs()
@@ -1630,6 +1644,13 @@ def run_app() -> None:
     st.rerun()
 
   if weekly_events.get("save_study_demo_baseline"):
+    from services_v9.study_demo_guard import StudyDemoWriteBlocked, assert_write_allowed
+
+    try:
+      assert_write_allowed("weekly_baseline")
+    except StudyDemoWriteBlocked as exc:
+      st.session_state[STATE_SNAPSHOT_MESSAGE] = str(exc)
+      st.rerun()
     active_context = dict(st.session_state.get(STATE_ACTIVE_CONTEXT, {}) or {})
     bundle = dict(source_info.get("study_demo_downstream", {}) or {})
     if active_context and bundle:
@@ -1652,11 +1673,23 @@ def run_app() -> None:
     _load_profile_into_widgets(raw_profile)
 
   if profile_events["apply_suggestions"]:
+    from services_v9.study_demo_guard import StudyDemoWriteBlocked, assert_write_allowed
+
+    try:
+      assert_write_allowed("watch_profile_suggestions")
+    except StudyDemoWriteBlocked as exc:
+      st.session_state[STATE_PROFILE_MESSAGE] = str(exc)
+      st.rerun()
     _apply_suggestions_and_rerun(watch_profile_dict, suggestions)
 
   if profile_events.get("save_weekly_delivery_settings"):
+    from services_v9.study_demo_guard import StudyDemoWriteBlocked, assert_write_allowed
+
     try:
+      assert_write_allowed("weekly_delivery_settings")
       save_result = save_weekly_delivery_settings(_build_weekly_delivery_settings_from_session(), updated_by="streamlit")
+    except StudyDemoWriteBlocked as exc:
+      st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = str(exc)
     except RuntimeError as exc:
       st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = str(exc)
     else:
@@ -1687,21 +1720,27 @@ def run_app() -> None:
     st.rerun()
 
   if profile_events.get("apply_scheduler"):
+    from services_v9.study_demo_guard import StudyDemoWriteBlocked, assert_write_allowed
+
     if not is_cloud_scheduler_admin_enabled():
       st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = "クラウド管理機能が無効です。"
       st.session_state[STATE_WEEKLY_SCHEDULER_STATUS] = {"status": "blocked", "message": "cloud scheduler admin disabled"}
     else:
-      current_result = save_weekly_delivery_settings(_build_weekly_delivery_settings_from_session(), updated_by="streamlit")
-      current_settings = dict(current_result.get("settings", {}) or {})
-      scheduler_result = apply_scheduler_settings(current_settings)
-      current_settings["scheduler_applied_revision"] = int(current_settings.get("revision", 0) or 0)
-      current_settings["last_scheduler_apply_status"] = str(scheduler_result.get("status", "") or "")
-      current_settings["last_scheduler_apply_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
-      current_settings["last_scheduler_known_state"] = str(scheduler_result.get("state", "") or "")
-      saved_result = save_weekly_delivery_settings(current_settings, updated_by="streamlit", increment_revision=False)
-      st.session_state[STATE_WEEKLY_DELIVERY_SETTINGS] = dict(saved_result.get("settings", {}) or {})
-      st.session_state[STATE_WEEKLY_SCHEDULER_STATUS] = scheduler_result
-      st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = "Cloud Schedulerへ設定を反映しました。"
+      try:
+        assert_write_allowed("cloud_scheduler")
+        current_result = save_weekly_delivery_settings(_build_weekly_delivery_settings_from_session(), updated_by="streamlit")
+        current_settings = dict(current_result.get("settings", {}) or {})
+        scheduler_result = apply_scheduler_settings(current_settings)
+        current_settings["scheduler_applied_revision"] = int(current_settings.get("revision", 0) or 0)
+        current_settings["last_scheduler_apply_status"] = str(scheduler_result.get("status", "") or "")
+        current_settings["last_scheduler_apply_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        current_settings["last_scheduler_known_state"] = str(scheduler_result.get("state", "") or "")
+        saved_result = save_weekly_delivery_settings(current_settings, updated_by="streamlit", increment_revision=False)
+        st.session_state[STATE_WEEKLY_DELIVERY_SETTINGS] = dict(saved_result.get("settings", {}) or {})
+        st.session_state[STATE_WEEKLY_SCHEDULER_STATUS] = scheduler_result
+        st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = "Cloud Schedulerへ設定を反映しました。"
+      except StudyDemoWriteBlocked as exc:
+        st.session_state[STATE_WEEKLY_DELIVERY_MESSAGE] = str(exc)
     st.rerun()
 
   if theme_events.get("regenerate_search_plan") or source_events.get("regenerate_search_plan"):
@@ -1880,11 +1919,18 @@ def run_app() -> None:
     st.rerun()
 
   if signal_events["save_snapshot"]:
-    path = save_snapshot(
-      signals=latest_reviewed_signals,
-      watch_profile=watch_profile_dict,
-      run_note=str(st.session_state.get(UI_SNAPSHOT_NOTE_KEY, "")).strip(),
-    )
+    from services_v9.study_demo_guard import StudyDemoWriteBlocked, assert_write_allowed
+
+    try:
+      assert_write_allowed("snapshot")
+      path = save_snapshot(
+        signals=latest_reviewed_signals,
+        watch_profile=watch_profile_dict,
+        run_note=str(st.session_state.get(UI_SNAPSHOT_NOTE_KEY, "")).strip(),
+      )
+    except StudyDemoWriteBlocked as exc:
+      st.session_state[STATE_SNAPSHOT_MESSAGE] = str(exc)
+      st.rerun()
     payload = load_snapshot(path)
     st.session_state[STATE_LAST_SNAPSHOT_PATH] = str(path)
     st.session_state[STATE_LAST_SNAPSHOT_ID] = str(payload.get("snapshot_id", path.stem))
@@ -1905,6 +1951,13 @@ def run_app() -> None:
     st.rerun()
 
   if digest_events.get("save_digest_files", False):
+    from services_v9.study_demo_guard import StudyDemoWriteBlocked, assert_write_allowed
+
+    try:
+      assert_write_allowed("digest")
+    except StudyDemoWriteBlocked as exc:
+      st.session_state[STATE_DIGEST_MESSAGE] = str(exc)
+      st.rerun()
     snapshot_id = str(st.session_state.get(STATE_LAST_SNAPSHOT_ID, "")).strip()
     auto_snapshot_note = str(st.session_state.get(UI_SNAPSHOT_NOTE_KEY, "")).strip()
     auto_snapshot_path = None

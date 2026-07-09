@@ -28,6 +28,7 @@ env:
   SEARCH_RUN_ID: study_demo_search_20260705_145711_c06e0a1b
   PYTHONPATH: .:src
   V9_UI_MODE: simple
+  V9_ACCESS_MODE: ${{ vars.V9_ACCESS_MODE }}
   PYTHONDONTWRITEBYTECODE: "1"
 
 jobs:
@@ -152,6 +153,29 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Validate access mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_MODE="${V9_ACCESS_MODE:-password}"
+          case "${ACCESS_MODE}" in
+            password|public_demo) ;;
+            *)
+              echo "V9_ACCESS_MODE must be password or public_demo (got '${ACCESS_MODE}')" >&2
+              exit 1
+              ;;
+          esac
+          SERVICE="${CLOUD_RUN_SERVICE:-${STUDY_SERVICE}}"
+          if [[ "${SERVICE}" == "${PRODUCTION_SERVICE}" && "${ACCESS_MODE}" == "public_demo" ]]; then
+            echo "public_demo is forbidden on production service" >&2
+            exit 1
+          fi
+          echo "V9_ACCESS_MODE=${ACCESS_MODE}" >> "${GITHUB_ENV}"
+          {
+            echo "## Access mode"
+            echo "- V9_ACCESS_MODE: \`${ACCESS_MODE}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Capture pre-deploy state
         id: pre
         shell: bash
@@ -220,7 +244,7 @@ jobs:
           set -euo pipefail
           export V9_DEPLOY_STATE_FILE V9_DEPLOY_RESULT_FILE
           set -o pipefail
-          V9_STUDY_DEMO_DEPLOY_APPROVED=true V9_UI_MODE=simple \
+          V9_STUDY_DEMO_DEPLOY_APPROVED=true V9_UI_MODE=simple V9_ACCESS_MODE="${V9_ACCESS_MODE}" \
             bash scripts/deploy_v9_study_demo.sh --apply 2>&1 | tee "${RUNNER_TEMP}/v9-deploy.log"
 
       - name: Read deploy mutation state
@@ -302,23 +326,29 @@ jobs:
             --project="${GCP_PROJECT_ID}" \
             --region="${GCP_REGION}" \
             --format=json)"
-          python - <<'PY' "${SERVICE_JSON}" "${EXPECTED_NEW_REVISION}" "${PREVIOUS_REVISION}"
+          python - <<'PY' "${SERVICE_JSON}" "${EXPECTED_NEW_REVISION}" "${PREVIOUS_REVISION}" "${V9_ACCESS_MODE}"
           import json
+          import os
           import sys
 
+          os.environ["EXPECTED_ACCESS_MODE"] = sys.argv[4]
           service = json.loads(sys.argv[1])
           expected_new = sys.argv[2]
           previous = sys.argv[3]
           env = service.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [{}])[0].get("env", [])
           ui_mode = next((item.get("value") for item in env if item.get("name") == "V9_UI_MODE"), "")
+          access_mode = next((item.get("value") for item in env if item.get("name") == "V9_ACCESS_MODE"), "")
           status = service.get("status", {})
           spec = service.get("spec", {})
+          expected_access_mode = os.environ.get("EXPECTED_ACCESS_MODE", "password")
 
           def pct(traffic, name):
               return sum(t.get("percent", 0) for t in traffic if t.get("revisionName") == name)
 
           if ui_mode != "simple":
               raise SystemExit("V9_UI_MODE must remain simple")
+          if access_mode != expected_access_mode:
+              raise SystemExit(f"V9_ACCESS_MODE must be {expected_access_mode} (got {access_mode})")
           if expected_new == previous:
               raise SystemExit("new revision must differ from previous revision")
           if pct(spec.get("traffic", []), expected_new) != 100:
@@ -368,6 +398,7 @@ jobs:
             echo "- latest_ready: \`${NEW_REVISION}\`"
             echo "- runtime_service_account: \`${RUNTIME_SA}\`"
             echo "- V9_UI_MODE: \`simple\`"
+            echo "- V9_ACCESS_MODE: \`${{ env.V9_ACCESS_MODE }}\`"
             echo "- production_revision_unchanged: \`${PRODUCTION_REVISION_NOW}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -423,22 +454,36 @@ jobs:
           }
           assert_new_traffic "pre-smoke"
           URL="${{ steps.pre.outputs.service_url }}"
+          ACCESS_MODE="${V9_ACCESS_MODE:-password}"
           CODE="$(curl -sS -o /tmp/smoke.html -w '%{http_code}' "${URL}/")"
           if [[ "${CODE}" != "200" ]]; then
             echo "smoke test HTTP status ${CODE}" >&2
             exit 1
           fi
-          python - <<'PY'
+          HEALTH_CODE="$(curl -sS -o /dev/null -w '%{http_code}' "${URL}/_stcore/health")"
+          if [[ "${HEALTH_CODE}" != "200" ]]; then
+            echo "smoke health HTTP status ${HEALTH_CODE}" >&2
+            exit 1
+          fi
+          python - <<'PY' "${ACCESS_MODE}"
+          import os
+          import sys
           from pathlib import Path
 
+          access_mode = sys.argv[1]
           html = Path("/tmp/smoke.html").read_text(errors="replace")
           checks = {
               "streamlit": "streamlit" in html.lower() or "stApp" in html,
-              "no_run_id": "study_demo_search_20260705_145711_c06e0a1b" not in html,
-              "no_theme_id": "theme_6d2dfb753f7e" not in html,
-              "no_digest": "今週のR&Dシグナル" not in html,
               "no_secret": not any(token in html for token in ("sk-", "AIza", "BEGIN PRIVATE KEY")),
           }
+          if access_mode == "password":
+              checks.update(
+                  {
+                      "no_run_id": "study_demo_search_20260705_145711_c06e0a1b" not in html,
+                      "no_theme_id": "theme_6d2dfb753f7e" not in html,
+                      "no_digest": "今週のR&Dシグナル" not in html,
+                  }
+              )
           failed = [name for name, ok in checks.items() if not ok]
           if failed:
               raise SystemExit(f"smoke checks failed: {failed}")

@@ -126,6 +126,19 @@ def run_plan(*, search_run_id: str) -> dict[str, Any]:
     "cloud_writes": 0,
     "production_modifications": False,
     "forbidden_path_count": 0,
+    "browser_acceptance": [
+      "Open Study Demo URL without password screen (public_demo)",
+      "Confirm Public Demo — read-only badge is visible",
+      "Confirm seeded demo notice and legal caveat are visible",
+      "Confirm Theme PAN系炭素繊維用サイジング剤の組成・付与・乾燥条件 is shown",
+      "Confirm Patent/Paper/Web counts are 5/5/5 and integrated=15",
+      "Confirm Top3 research value cards render",
+      "Browse Weekly/Digest tabs read-only",
+      "Attempt write operations and confirm they are not persistently saved",
+      "Confirm no external API calls are triggered during browsing",
+      "Refresh page and confirm shared demo data remains unchanged",
+      "Confirm secret/internal tokens are not displayed",
+    ],
   }
 
   blockers: list[str] = []

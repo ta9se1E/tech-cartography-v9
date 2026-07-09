@@ -112,6 +112,7 @@ def _run_write_deploy_result(tmp_path: Path, *, status: str = "ok") -> Path:
 set -euo pipefail
 export TMPDIR="{tmp_path}"
 SERVICE="{STUDY_SERVICE}"
+V9_ACCESS_MODE="password"
 DEPLOY_RESULT_FILE="{result_file}"
 PY=({sys.executable})
 {_extract_bash_functions("log", "write_deploy_result")}

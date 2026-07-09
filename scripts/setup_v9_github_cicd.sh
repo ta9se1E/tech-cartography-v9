@@ -124,7 +124,8 @@ print_plan() {
     "RUNTIME_SERVICE_ACCOUNT=${RUNTIME_SA}",
     "WIF_PROVIDER",
     "DEPLOYER_SERVICE_ACCOUNT=${DEPLOYER_SA}",
-    "VALIDATED_RELEASE_TAG=${VALIDATED_RELEASE_TAG}"
+    "VALIDATED_RELEASE_TAG=${VALIDATED_RELEASE_TAG}",
+    "V9_ACCESS_MODE=public_demo"
   ],
   "github_secrets_required": false,
   "deployer_roles_project": [
@@ -170,6 +171,7 @@ EOF
     log "  gh variable set DEPLOYER_SERVICE_ACCOUNT --env study-demo --body ${DEPLOYER_SA}"
     log "  gh variable set WIF_PROVIDER --env study-demo --body ${wif_provider_resource}"
     log "  gh variable set VALIDATED_RELEASE_TAG --env study-demo --body ${VALIDATED_RELEASE_TAG}"
+    log "  gh variable set V9_ACCESS_MODE --env study-demo --body public_demo"
 
     if [[ "${visibility}" == "UNVERIFIED" ]]; then
       log ""

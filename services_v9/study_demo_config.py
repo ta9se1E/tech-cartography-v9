@@ -68,6 +68,10 @@ def get_study_demo_bucket(environ: Mapping[str, str] | None = None) -> str:
 
 
 def get_study_demo_password(environ: Mapping[str, str] | None = None) -> str:
+  from .study_demo_access import is_public_demo
+
+  if is_public_demo(environ):
+    return ""
   env = environ if environ is not None else os.environ
   return str(env.get("V9_STUDY_DEMO_PASSWORD", "") or "").strip()
 

@@ -17,7 +17,9 @@ TAVILY_SECRET="${TAVILY_SECRET:-tech-cartography-v9-study-demo-tavily-api-key}"
 TAVILY_SECRET_VERSION="${TAVILY_SECRET_VERSION:-1}"
 STUDY_DEMO_EXPIRES_AT="${STUDY_DEMO_EXPIRES_AT:-2026-07-11T19:27:30Z}"
 V9_UI_MODE="${V9_UI_MODE:-simple}"
+V9_ACCESS_MODE="${V9_ACCESS_MODE:-password}"
 V9_PERSIST_ROOT="${V9_PERSIST_ROOT:-/mnt/v9_study_demo/active}"
+PRODUCTION_SERVICE="${PRODUCTION_SERVICE:-tech-cartography-v9-signal-watch}"
 DEPLOY_STATE_FILE="${V9_DEPLOY_STATE_FILE:-${RUNNER_TEMP:-/tmp}/v9-deploy-state.json}"
 DEPLOY_RESULT_FILE="${V9_DEPLOY_RESULT_FILE:-${RUNNER_TEMP:-/tmp}/v9-deploy-result.json}"
 BUILD_ID=""
@@ -185,6 +187,22 @@ assert_allowed_service() {
     log "ERROR: SERVICE must be one of: ${ALLOWED_SERVICES[*]}"
     exit 1
   fi
+  validate_access_mode
+}
+
+validate_access_mode() {
+  case "${V9_ACCESS_MODE}" in
+    password|public_demo)
+      ;;
+    *)
+      log "ERROR: V9_ACCESS_MODE must be password or public_demo (got '${V9_ACCESS_MODE}')"
+      exit 1
+      ;;
+  esac
+  if [[ "${SERVICE}" == "${PRODUCTION_SERVICE}" && "${V9_ACCESS_MODE}" == "public_demo" ]]; then
+    log "ERROR: V9_ACCESS_MODE=public_demo is forbidden on production service ${SERVICE}"
+    exit 1
+  fi
 }
 
 require_apply_guard() {
@@ -228,6 +246,7 @@ print_plan() {
   "public_access_changed": false,
   "env": {
     "V9_UI_MODE": "${V9_UI_MODE}",
+    "V9_ACCESS_MODE": "${V9_ACCESS_MODE}",
     "V9_STUDY_DEMO_MODE": "true",
     "V9_STUDY_DEMO_BUCKET": "${BUCKET}",
     "V9_STUDY_DEMO_DISABLE_EXTERNAL_EXECUTION": "true",
@@ -382,6 +401,7 @@ write_deploy_result() {
   DEPLOY_RESULT_IMAGE_DIGEST_MATCH="${RESULT_IMAGE_DIGEST_MATCH:-false}" \
   DEPLOY_RESULT_ERROR_STAGE="${RESULT_ERROR_STAGE:-}" \
   DEPLOY_RESULT_CANDIDATE_CLEANUP="${RESULT_CANDIDATE_CLEANUP:-skipped}" \
+  DEPLOY_RESULT_ACCESS_MODE="${V9_ACCESS_MODE}" \
   DEPLOY_RESULT_FILE="${result_file}" \
   DEPLOY_RESULT_TMP="${tmp_file}" \
     "${PY[@]}" - <<'PY'
@@ -429,6 +449,7 @@ payload = {
     "image_digest_match": as_bool("DEPLOY_RESULT_IMAGE_DIGEST_MATCH"),
     "error_stage": os.environ["DEPLOY_RESULT_ERROR_STAGE"],
     "candidate_cleanup": os.environ["DEPLOY_RESULT_CANDIDATE_CLEANUP"],
+    "access_mode": os.environ["DEPLOY_RESULT_ACCESS_MODE"],
     "service": os.environ["DEPLOY_RESULT_SERVICE"],
     "production_modifications": False,
 }
@@ -604,7 +625,7 @@ deploy_study_demo_service() {
     --add-volume "name=v9-study-demo,type=cloud-storage,bucket=${BUCKET}" \
     --add-volume-mount "volume=v9-study-demo,mount-path=/mnt/v9_study_demo" \
     --set-secrets "V9_STUDY_DEMO_PASSWORD=${PASSWORD_SECRET}:${PASSWORD_SECRET_VERSION},V9_STUDY_DEMO_OPENALEX_API_KEY=${OPENALEX_SECRET}:${OPENALEX_SECRET_VERSION},V9_STUDY_DEMO_TAVILY_API_KEY=${TAVILY_SECRET}:${TAVILY_SECRET_VERSION}" \
-    --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=active/v9_config/weekly_delivery_config.json#V9_UI_MODE=${V9_UI_MODE}#V9_STUDY_DEMO_MODE=true#V9_STUDY_DEMO_BUCKET=${BUCKET}#V9_STUDY_DEMO_EXPIRES_AT=${expiry_utc}#V9_STUDY_DEMO_DISABLE_EXTERNAL_EXECUTION=true#V9_STUDY_DEMO_SHARED_STATE=true#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_ENABLE_PATENT=true#V9_CLOUD_ENABLE_PAPER=true#V9_CLOUD_ENABLE_WEB_COMPANY=true#V9_CLOUD_GOOGLE_GROUNDING=false#V9_STUDY_DEMO_SEARCH_ENABLED=true#V9_STUDY_DEMO_ENABLE_PATENT_SEARCH=true#V9_STUDY_DEMO_ENABLE_PAPER_SEARCH=true#V9_STUDY_DEMO_ENABLE_WEB_SEARCH=true#V9_STUDY_DEMO_BIGQUERY_DRY_RUN_FIRST=true#V9_STUDY_DEMO_BIGQUERY_MAX_BYTES_BILLED=2199023255552#V9_STUDY_DEMO_BIGQUERY_PRICE_PER_TIB_USD=6.25#V9_ENABLE_CLOUD_SCHEDULER_ADMIN=false"
+    --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=active/v9_config/weekly_delivery_config.json#V9_UI_MODE=${V9_UI_MODE}#V9_ACCESS_MODE=${V9_ACCESS_MODE}#V9_STUDY_DEMO_MODE=true#V9_STUDY_DEMO_BUCKET=${BUCKET}#V9_STUDY_DEMO_EXPIRES_AT=${expiry_utc}#V9_STUDY_DEMO_DISABLE_EXTERNAL_EXECUTION=true#V9_STUDY_DEMO_SHARED_STATE=true#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_ENABLE_PATENT=true#V9_CLOUD_ENABLE_PAPER=true#V9_CLOUD_ENABLE_WEB_COMPANY=true#V9_CLOUD_GOOGLE_GROUNDING=false#V9_STUDY_DEMO_SEARCH_ENABLED=true#V9_STUDY_DEMO_ENABLE_PATENT_SEARCH=true#V9_STUDY_DEMO_ENABLE_PAPER_SEARCH=true#V9_STUDY_DEMO_ENABLE_WEB_SEARCH=true#V9_STUDY_DEMO_BIGQUERY_DRY_RUN_FIRST=true#V9_STUDY_DEMO_BIGQUERY_MAX_BYTES_BILLED=2199023255552#V9_STUDY_DEMO_BIGQUERY_PRICE_PER_TIB_USD=6.25#V9_ENABLE_CLOUD_SCHEDULER_ADMIN=false"
 }
 
 smoke_test_authenticated_optional() {
@@ -629,7 +650,7 @@ smoke_test_authenticated_optional() {
 
 verify_public_password_gate() {
   local url="$1"
-  local code body
+  local code body health_code
   code="$(curl -sS -o /tmp/v9_study_demo_public.html -w '%{http_code}' "${url}" || true)"
   body="$(cat /tmp/v9_study_demo_public.html 2>/dev/null || true)"
   rm -f /tmp/v9_study_demo_public.html
@@ -641,6 +662,70 @@ verify_public_password_gate() {
     log "ERROR: public smoke test did not detect Streamlit bootstrap"
     exit 1
   fi
+  health_code="$(curl -sS -o /dev/null -w '%{http_code}' "${url}/_stcore/health" || true)"
+  if [[ "${health_code}" != "200" ]]; then
+    log "ERROR: public smoke health check HTTP ${health_code}"
+    exit 1
+  fi
+  set +e
+  SMOKE_BODY="${body}" "${PY[@]}" - <<'PY'
+import os
+import sys
+
+html = os.environ["SMOKE_BODY"]
+for token in ("sk-", "AIza", "BEGIN PRIVATE KEY"):
+    if token in html:
+        sys.exit(1)
+sys.exit(0)
+PY
+  local rc=$?
+  set -e
+  if [[ ${rc} -ne 0 ]]; then
+    log "ERROR: public smoke exposed secret material"
+    exit 1
+  fi
+  if [[ "${V9_ACCESS_MODE}" == "password" ]]; then
+    set +e
+    SMOKE_BODY="${body}" "${PY[@]}" - <<'PY'
+import os
+import sys
+
+html = os.environ["SMOKE_BODY"]
+forbidden = [
+    "study_demo_search_20260705_145711_c06e0a1b",
+    "theme_6d2dfb753f7e",
+    "\u4eca\u9031\u306eR&D\u30b7\u30b0\u30ca\u30eb",
+]
+for token in forbidden:
+    if token in html:
+        sys.exit(1)
+sys.exit(0)
+PY
+    rc=$?
+    set -e
+    if [[ ${rc} -ne 0 ]]; then
+      log "ERROR: password-mode public smoke exposed private study data before authentication"
+      exit 1
+    fi
+    log "password-mode public smoke passed (gate enforced pre-auth)"
+  else
+    log "public_demo final smoke passed (no password gate required)"
+  fi
+}
+
+verify_revision_access_mode_env() {
+  local revision="$1"
+  local rev_json actual
+  rev_json="$(gcloud run revisions describe "${revision}" \
+    --project "${PROJECT_ID}" \
+    --region "${REGION}" \
+    --format=json)"
+  actual="$(printf '%s' "${rev_json}" | "${PY[@]}" -c 'import json,sys; rev=json.load(sys.stdin); env=rev.get("spec",{}).get("containers",[{}])[0].get("env",[]); print(next((item.get("value","") for item in env if item.get("name")=="V9_ACCESS_MODE"), ""))')"
+  if [[ "${actual}" != "${V9_ACCESS_MODE}" ]]; then
+    log "ERROR: revision ${revision} V9_ACCESS_MODE=${actual} expected ${V9_ACCESS_MODE}"
+    exit 1
+  fi
+  log "revision ${revision} V9_ACCESS_MODE=${actual} confirmed"
 }
 
 resolve_candidate_tag() {
@@ -964,24 +1049,30 @@ smoke_test_candidate() {
     log "ERROR: candidate smoke test HTTP ${code} for ${revision}"
     exit 1
   fi
+  health_code="$(curl -sS -o /dev/null -w '%{http_code}' "${url}/_stcore/health" || true)"
+  if [[ "${health_code}" != "200" ]]; then
+    log "ERROR: candidate smoke health check HTTP ${health_code} for ${revision}"
+    exit 1
+  fi
   set +e
-  CAND_BODY="${body}" "${PY[@]}" - <<'PY'
+  CAND_BODY="${body}" ACCESS_MODE="${V9_ACCESS_MODE}" "${PY[@]}" - <<'PY'
 import os
 import sys
 
 html = os.environ["CAND_BODY"]
+access_mode = os.environ.get("ACCESS_MODE", "password")
 low = html.lower()
 if "streamlit" not in low and "stapp" not in low:
     sys.exit(1)
-# Password gate is enforced when private study data is NOT exposed pre-auth.
-forbidden = [
-    "study_demo_search_20260705_145711_c06e0a1b",
-    "theme_6d2dfb753f7e",
-    "\u4eca\u9031\u306eR&D\u30b7\u30b0\u30ca\u30eb",
-]
-for token in forbidden:
-    if token in html:
-        sys.exit(2)
+if access_mode == "password":
+    forbidden = [
+        "study_demo_search_20260705_145711_c06e0a1b",
+        "theme_6d2dfb753f7e",
+        "\u4eca\u9031\u306eR&D\u30b7\u30b0\u30ca\u30eb",
+    ]
+    for token in forbidden:
+        if token in html:
+            sys.exit(2)
 for token in ("sk-", "AIza", "BEGIN PRIVATE KEY"):
     if token in html:
         sys.exit(3)
@@ -991,10 +1082,10 @@ PY
   set -e
   case "${rc}" in
     0)
-      log "candidate smoke passed on candidate url (revision=${revision}, http=${code})"
+      log "candidate smoke passed on candidate url (revision=${revision}, http=${code}, access_mode=${V9_ACCESS_MODE})"
       ;;
     1)
-      log "ERROR: candidate smoke did not detect Streamlit shell / password gate"
+      log "ERROR: candidate smoke did not detect Streamlit shell"
       exit 1
       ;;
     2)
@@ -1006,6 +1097,7 @@ PY
       exit 1
       ;;
   esac
+  verify_revision_access_mode_env "${revision}"
 }
 
 promote_traffic() {
@@ -1222,6 +1314,7 @@ PY
   service_url="$(gcloud run services describe "${SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.url)')"
 
   assert_status_traffic_target "${NEW_REVISION}"
+  verify_revision_access_mode_env "${NEW_REVISION}"
   verify_public_password_gate "${service_url}"
   assert_status_traffic_target "${NEW_REVISION}"
   RESULT_FINAL_SMOKE_STATUS="ok"

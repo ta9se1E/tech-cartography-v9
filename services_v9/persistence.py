@@ -70,7 +70,16 @@ def _build_next_snapshot_id(base_dir: Path | None = None) -> str:
   return f"{prefix}_{next_index:03d}"
 
 
+def _assert_study_demo_persist_write_allowed(operation: str) -> None:
+  from .study_demo_config import is_study_demo_mode
+  from .study_demo_guard import assert_write_allowed
+
+  if is_study_demo_mode():
+    assert_write_allowed(operation)
+
+
 def save_watch_profile(profile: dict[str, Any], base_dir: Path | None = None) -> Path:
+  _assert_study_demo_persist_write_allowed("watch_profile")
   dirs = ensure_v9_run_dirs(base_dir)
   path = dirs["watch_profile"]
   _json_dump(path, migrate_watch_profile(profile))
@@ -94,6 +103,7 @@ def save_snapshot(
   run_note: str = "",
   base_dir: Path | None = None,
 ) -> Path:
+  _assert_study_demo_persist_write_allowed("snapshot")
   dirs = ensure_v9_run_dirs(base_dir)
   snapshot_id = _build_next_snapshot_id(base_dir)
   path = dirs["snapshots"] / f"{snapshot_id}_snapshot.json"
@@ -127,6 +137,7 @@ def save_digest_files(
   snapshot_id: str,
   base_dir: Path | None = None,
 ) -> dict[str, Path]:
+  _assert_study_demo_persist_write_allowed("digest")
   dirs = ensure_v9_run_dirs(base_dir)
   digest_id = snapshot_id.strip() or _build_next_snapshot_id(base_dir)
   markdown_path = dirs["digests"] / f"{digest_id}_digest.md"

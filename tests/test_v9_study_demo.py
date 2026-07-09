@@ -291,7 +291,8 @@ def test_reset_plan_targets_active_only() -> None:
 def test_deploy_script_service_allowlist() -> None:
   text = Path(ROOT / "scripts/deploy_v9_study_demo.sh").read_text(encoding="utf-8")
   assert "tech-cartography-v9-study-demo" in text
-  assert "tech-cartography-v9-signal-watch" not in text.split("ALLOWED_SERVICES")[0]
+  allowlist_section = text.split("ALLOWED_SERVICES=(", 1)[1].split(")", 1)[0]
+  assert "tech-cartography-v9-signal-watch" not in allowlist_section
 
 
 def test_cleanup_script_production_denylist() -> None:

@@ -206,6 +206,11 @@ def save_weekly_delivery_settings(
   storage_client: Any | None = None,
 ) -> dict[str, Any]:
   env = environ if environ is not None else os.environ
+  from services_v9.study_demo_config import is_study_demo_mode
+  from services_v9.study_demo_guard import assert_write_allowed
+
+  if is_study_demo_mode(env):
+    assert_write_allowed("weekly_delivery_settings", environ=env)
   document = _read_settings_document(base_dir=base_dir, environ=env, storage_client=storage_client)
   current_settings = dict(document.get("payload", {}) or {})
   merged = _merge_settings(current_settings or default_weekly_delivery_settings(), dict(settings or {}))
