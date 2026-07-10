@@ -93,6 +93,16 @@ def reject_production_bucket(bucket_name: str) -> None:
     raise ValueError("production persist bucket access is forbidden")
 
 
+def validate_study_demo_read_target(bucket_name: str, *, environ: Mapping[str, str] | None = None) -> None:
+  """Allow Study Demo GCS reads, including public_demo. Never calls write guards."""
+  normalized = str(bucket_name or "").strip()
+  if not normalized:
+    raise ValueError("study demo bucket name is required")
+  reject_production_bucket(normalized)
+  if is_study_demo_mode(environ):
+    assert_study_demo_bucket_allowed(normalized, environ=environ)
+
+
 def validate_study_demo_write_target(bucket_name: str, *, environ: Mapping[str, str] | None = None) -> None:
   if is_study_demo_mode(environ):
     from services_v9.study_demo_guard import assert_write_allowed
@@ -182,5 +192,6 @@ __all__ = [
   "sanitize_weekly_delivery_settings",
   "sanitize_weekly_run_status",
   "seed_object_path",
+  "validate_study_demo_read_target",
   "validate_study_demo_write_target",
 ]

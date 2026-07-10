@@ -12,7 +12,6 @@ from services_v9.study_demo_analysis_context import (
 from services_v9.study_demo_config import get_study_demo_bucket
 from services_v9.study_demo_search.relevance_ranking import enrich_integrated_signals
 from services_v9.study_demo_search.storage import build_search_result_from_artifacts, load_search_run
-from services_v9.study_demo_storage import validate_study_demo_write_target
 
 SOURCE_TYPE_TO_SIGNAL_TYPE = {
   "patent": "patent",

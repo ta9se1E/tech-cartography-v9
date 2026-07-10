@@ -12,7 +12,7 @@ from services_v9.study_demo_lineage_storage import (
   theme_latest_path,
   watch_profile_latest_path,
 )
-from services_v9.study_demo_storage import validate_study_demo_write_target
+from services_v9.study_demo_storage import validate_study_demo_read_target
 from services_v9.study_demo_theme_lineage import (
   compute_search_plan_signature,
   compute_theme_signature,
@@ -45,7 +45,7 @@ def list_saved_themes_from_storage(
   storage_client: Any | None = None,
 ) -> list[dict[str, Any]]:
   bucket_name = get_study_demo_bucket(environ)
-  validate_study_demo_write_target(bucket_name, environ=environ)
+  validate_study_demo_read_target(bucket_name, environ=environ)
   client = storage_client if storage_client is not None else _build_client()
   themes: list[dict[str, Any]] = []
   seen: set[str] = set()
@@ -83,6 +83,7 @@ def load_theme_by_id(
   if not str(theme_id or "").strip():
     return None
   bucket_name = get_study_demo_bucket(environ)
+  validate_study_demo_read_target(bucket_name, environ=environ)
   try:
     payload = load_json_object(theme_latest_path(theme_id), bucket_name=bucket_name, storage_client=storage_client)
   except FileNotFoundError:
@@ -101,6 +102,7 @@ def load_watch_profile_by_id(
   if not str(watch_profile_id or "").strip():
     return None
   bucket_name = get_study_demo_bucket(environ)
+  validate_study_demo_read_target(bucket_name, environ=environ)
   try:
     payload = load_json_object(
       watch_profile_latest_path(watch_profile_id),
@@ -124,6 +126,7 @@ def load_search_plan_by_id(
   if not str(search_plan_id or "").strip():
     return None
   bucket_name = get_study_demo_bucket(environ)
+  validate_study_demo_read_target(bucket_name, environ=environ)
   try:
     payload = load_json_object(
       search_plan_latest_path(search_plan_id),

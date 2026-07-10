@@ -187,6 +187,88 @@ def test_public_demo_gcs_write_guard() -> None:
     validate_study_demo_write_target(STUDY_ENV["V9_STUDY_DEMO_BUCKET"], environ=PUBLIC_DEMO_ENV)
 
 
+def test_public_demo_gcs_read_target_allowed() -> None:
+  from services_v9.study_demo_storage import validate_study_demo_read_target
+
+  validate_study_demo_read_target(STUDY_ENV["V9_STUDY_DEMO_BUCKET"], environ=PUBLIC_DEMO_ENV)
+
+
+def test_public_demo_production_bucket_read_rejected() -> None:
+  from services_v9.study_demo_config import PRODUCTION_PERSIST_BUCKET
+  from services_v9.study_demo_storage import validate_study_demo_read_target
+
+  with pytest.raises(ValueError):
+    validate_study_demo_read_target(PRODUCTION_PERSIST_BUCKET, environ=PUBLIC_DEMO_ENV)
+
+
+def test_public_demo_production_bucket_write_rejected() -> None:
+  from services_v9.study_demo_config import PRODUCTION_PERSIST_BUCKET
+  from services_v9.study_demo_guard import StudyDemoWriteBlocked
+  from services_v9.study_demo_storage import validate_study_demo_write_target
+
+  with pytest.raises((StudyDemoWriteBlocked, ValueError)):
+    validate_study_demo_write_target(PRODUCTION_PERSIST_BUCKET, environ=PUBLIC_DEMO_ENV)
+
+
+def test_load_active_context_uses_read_validation() -> None:
+  import inspect
+
+  from services_v9 import study_demo_analysis_context as mod
+
+  source = inspect.getsource(mod.load_active_context_from_storage)
+  assert "validate_study_demo_read_target" in source
+  assert "validate_study_demo_write_target" not in source
+
+
+def test_load_active_context_public_demo_does_not_call_gcs_write() -> None:
+  from services_v9.study_demo_analysis_context import load_active_context_from_storage
+
+  class _Blob:
+    def exists(self) -> bool:
+      return False
+
+  class _Bucket:
+    def blob(self, _name: str) -> _Blob:
+      return _Blob()
+
+  class _Client:
+    def bucket(self, _name: str) -> _Bucket:
+      return _Bucket()
+
+  result = load_active_context_from_storage(environ=PUBLIC_DEMO_ENV, storage_client=_Client())
+  assert result["status"] == "missing"
+
+
+def test_sync_active_context_public_demo_does_not_write_on_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+  import ui_v9.signal_watch_app as app
+
+  for key, value in PUBLIC_DEMO_ENV.items():
+    monkeypatch.setenv(key, value)
+
+  class _Session(dict):
+    def pop(self, key, default=None):  # noqa: ANN001
+      return super().pop(key, default)
+
+  key = app.STATE_ACTIVE_CONTEXT
+  session = _Session({key: {"active_search_run_id": "old"}})
+  monkeypatch.setattr(app.st, "session_state", session)
+  monkeypatch.setattr(
+    app,
+    "load_active_analysis_context",
+    lambda **_kwargs: {"status": "missing", "context": None, "generation": None},
+  )
+  app._sync_study_demo_active_context()
+  assert key not in session
+
+
+def test_save_active_context_still_blocked_in_public_demo() -> None:
+  from services_v9.study_demo_analysis_context import save_active_context_to_storage
+  from services_v9.study_demo_guard import StudyDemoWriteBlocked
+
+  with pytest.raises(StudyDemoWriteBlocked):
+    save_active_context_to_storage({"active_search_run_id": "run"}, environ=PUBLIC_DEMO_ENV, storage_client=MagicMock())
+
+
 def test_public_demo_allows_session_navigation_helpers() -> None:
   from services_v9.study_demo_access import is_public_demo
 

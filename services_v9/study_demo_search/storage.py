@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from services_v9.study_demo_config import get_study_demo_bucket
-from services_v9.study_demo_storage import validate_study_demo_write_target
+from services_v9.study_demo_storage import validate_study_demo_read_target, validate_study_demo_write_target
 
 from .constants import SEARCH_RUN_PREFIX, SEARCH_USAGE_OBJECT
 from .export import build_export_bundle
@@ -84,7 +84,7 @@ def load_search_run(
   storage_client: Any | None = None,
 ) -> dict[str, Any]:
   bucket_name = get_study_demo_bucket(environ)
-  validate_study_demo_write_target(bucket_name, environ=environ)
+  validate_study_demo_read_target(bucket_name, environ=environ)
   client = storage_client if storage_client is not None else _build_client()
   bucket = client.bucket(bucket_name)
   prefix = f"{SEARCH_RUN_PREFIX}{search_run_id}/"
@@ -138,6 +138,7 @@ def list_search_history(
   limit: int = 20,
 ) -> list[dict[str, Any]]:
   bucket_name = get_study_demo_bucket(environ)
+  validate_study_demo_read_target(bucket_name, environ=environ)
   client = storage_client if storage_client is not None else _build_client()
   bucket = client.bucket(bucket_name)
   runs: dict[str, dict[str, Any]] = {}

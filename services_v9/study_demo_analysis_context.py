@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from services_v9.study_demo_config import PRODUCTION_PERSIST_BUCKET, get_study_demo_bucket
-from services_v9.study_demo_storage import validate_study_demo_write_target
+from services_v9.study_demo_storage import validate_study_demo_read_target, validate_study_demo_write_target
 
 ACTIVE_CONTEXT_SCHEMA_VERSION = 1
 ACTIVE_CONTEXT_OBJECT = "analysis_context/active_context.json"
@@ -65,7 +65,7 @@ def build_active_context_from_run(
   selected_by: str = "shared_study_demo_user",
 ) -> dict[str, Any]:
   bucket = str(bucket_name or get_study_demo_bucket()).strip()
-  validate_study_demo_write_target(bucket)
+  validate_study_demo_read_target(bucket)
   reject_production_bucket_path(bucket)
 
   summary = dict(artifacts.get("search_request.json", {}) or {})
@@ -206,7 +206,7 @@ def load_active_context_from_storage(
   storage_client: Any | None = None,
 ) -> dict[str, Any]:
   bucket_name = get_study_demo_bucket(environ)
-  validate_study_demo_write_target(bucket_name, environ=environ)
+  validate_study_demo_read_target(bucket_name, environ=environ)
   client = storage_client if storage_client is not None else _build_client()
   blob = client.bucket(bucket_name).blob(ACTIVE_CONTEXT_OBJECT)
   if not blob.exists():

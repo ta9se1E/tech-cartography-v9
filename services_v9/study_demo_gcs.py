@@ -28,6 +28,7 @@ from .study_demo_storage import (
   sanitize_weekly_delivery_settings,
   sanitize_weekly_run_status,
   seed_object_path,
+  validate_study_demo_read_target,
   validate_study_demo_write_target,
 )
 
@@ -121,7 +122,7 @@ def validate_sanitized_text(text: str, *, object_name: str = "") -> list[str]:
 
 
 def validate_seed_objects(client: StorageClientProtocol, *, demo_bucket: str) -> dict[str, Any]:
-  validate_study_demo_write_target(demo_bucket)
+  validate_study_demo_read_target(demo_bucket)
   bucket = client.bucket(demo_bucket)
   checked: list[str] = []
   issues: list[dict[str, str]] = []

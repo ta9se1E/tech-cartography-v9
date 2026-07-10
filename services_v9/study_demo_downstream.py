@@ -11,7 +11,7 @@ from typing import Any, Mapping, Sequence
 from urllib.parse import urlparse
 
 from services_v9.study_demo_config import get_study_demo_bucket
-from services_v9.study_demo_storage import validate_study_demo_write_target
+from services_v9.study_demo_storage import validate_study_demo_read_target, validate_study_demo_write_target
 
 REVIEWS_PREFIX = "analysis_context/reviews/"
 PROFILE_DRAFTS_PREFIX = "analysis_context/profile_drafts/"
@@ -100,7 +100,7 @@ def load_run_reviews(
   environ: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
   bucket_name = get_study_demo_bucket(environ)
-  validate_study_demo_write_target(bucket_name, environ=environ)
+  validate_study_demo_read_target(bucket_name, environ=environ)
   client = storage_client if storage_client is not None else _build_client()
   blob = client.bucket(bucket_name).blob(_review_object_path(search_run_id))
   if not blob.exists():
@@ -190,6 +190,7 @@ def list_run_snapshots(
   environ: Mapping[str, str] | None = None,
 ) -> list[dict[str, Any]]:
   bucket_name = get_study_demo_bucket(environ)
+  validate_study_demo_read_target(bucket_name, environ=environ)
   client = storage_client if storage_client is not None else _build_client()
   prefix = f"{SNAPSHOTS_PREFIX}{profile_signature}/"
   items: list[dict[str, Any]] = []
@@ -440,6 +441,7 @@ def load_profile_draft(
   environ: Mapping[str, str] | None = None,
 ) -> dict[str, Any] | None:
   bucket_name = get_study_demo_bucket(environ)
+  validate_study_demo_read_target(bucket_name, environ=environ)
   client = storage_client if storage_client is not None else _build_client()
   blob = client.bucket(bucket_name).blob(f"{PROFILE_DRAFTS_PREFIX}{search_run_id}.json")
   if not blob.exists():
