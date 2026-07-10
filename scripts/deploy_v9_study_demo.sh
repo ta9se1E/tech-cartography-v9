@@ -17,11 +17,19 @@ TAVILY_SECRET="${TAVILY_SECRET:-tech-cartography-v9-study-demo-tavily-api-key}"
 TAVILY_SECRET_VERSION="${TAVILY_SECRET_VERSION:-1}"
 STUDY_DEMO_EXPIRES_AT="${STUDY_DEMO_EXPIRES_AT:-2026-07-11T19:27:30Z}"
 V9_UI_MODE="${V9_UI_MODE:-simple}"
-V9_ACCESS_MODE="${V9_ACCESS_MODE:-password}"
+V9_ACCESS_MODE_RAW="${V9_ACCESS_MODE:-}"
 V9_PERSIST_ROOT="${V9_PERSIST_ROOT:-/mnt/v9_study_demo/active}"
 PRODUCTION_SERVICE="${PRODUCTION_SERVICE:-tech-cartography-v9-signal-watch}"
 DEPLOY_STATE_FILE="${V9_DEPLOY_STATE_FILE:-${RUNNER_TEMP:-/tmp}/v9-deploy-state.json}"
 DEPLOY_RESULT_FILE="${V9_DEPLOY_RESULT_FILE:-${RUNNER_TEMP:-/tmp}/v9-deploy-result.json}"
+DEPLOY_ACCESS_MODE=""
+V9_ACCESS_MODE=""
+RESULT_ACCESS_MODE=""
+RESULT_EXPECTED_ACCESS_MODE=""
+RESULT_REVISION_ACCESS_MODE=""
+RESULT_ACCESS_MODE_MATCH="false"
+RESULT_UI_MODE=""
+RESULT_REVISION_UI_MODE=""
 BUILD_ID=""
 SOURCE_BUCKET=""
 SOURCE_OBJECT=""
@@ -187,22 +195,36 @@ assert_allowed_service() {
     log "ERROR: SERVICE must be one of: ${ALLOWED_SERVICES[*]}"
     exit 1
   fi
-  validate_access_mode
+  resolve_deploy_access_mode
 }
 
-validate_access_mode() {
-  case "${V9_ACCESS_MODE}" in
+resolve_deploy_access_mode() {
+  local raw="${V9_ACCESS_MODE_RAW:-}"
+  if [[ -z "${raw}" ]]; then
+    raw="${V9_ACCESS_MODE:-password}"
+  fi
+  raw="$(printf '%s' "${raw}" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  case "${raw}" in
+    "" )
+      raw="password"
+      ;;
     password|public_demo)
       ;;
     *)
-      log "ERROR: V9_ACCESS_MODE must be password or public_demo (got '${V9_ACCESS_MODE}')"
+      log "ERROR: invalid V9_ACCESS_MODE: ${raw}"
       exit 1
       ;;
   esac
-  if [[ "${SERVICE}" == "${PRODUCTION_SERVICE}" && "${V9_ACCESS_MODE}" == "public_demo" ]]; then
+  if [[ "${SERVICE}" == "${PRODUCTION_SERVICE}" && "${raw}" == "public_demo" ]]; then
     log "ERROR: V9_ACCESS_MODE=public_demo is forbidden on production service ${SERVICE}"
     exit 1
   fi
+  DEPLOY_ACCESS_MODE="${raw}"
+  V9_ACCESS_MODE="${raw}"
+  RESULT_ACCESS_MODE="${raw}"
+  RESULT_EXPECTED_ACCESS_MODE="${raw}"
+  RESULT_UI_MODE="${V9_UI_MODE}"
+  log "resolved deploy access_mode=${DEPLOY_ACCESS_MODE} ui_mode=${V9_UI_MODE}"
 }
 
 require_apply_guard() {
@@ -216,8 +238,9 @@ run_local_checks() {
   "${PY[@]}" -m compileall services_v9 scripts ui_v9 tests app.py
   shopt -s nullglob
   local test_files=(tests/test_v9_*.py)
-  PYTHONPATH=.:src "${PY[@]}" -m pytest "${test_files[@]}" -q
-  "${PY[@]}" scripts/check_v9_study_demo_readiness.py --scope offline-ci
+  # Local regression must not inherit deploy-time public_demo.
+  V9_ACCESS_MODE=password PYTHONPATH=.:src "${PY[@]}" -m pytest "${test_files[@]}" -q
+  V9_ACCESS_MODE=password "${PY[@]}" scripts/check_v9_study_demo_readiness.py --scope offline-ci
   "${PY[@]}" scripts/check_v9_build_context.py --ignore-file .gcloudignore
 }
 
@@ -235,6 +258,8 @@ print_plan() {
   "openalex_secret": "${OPENALEX_SECRET}:${OPENALEX_SECRET_VERSION}",
   "tavily_secret": "${TAVILY_SECRET}:${TAVILY_SECRET_VERSION}",
   "expires_at_utc": "${STUDY_DEMO_EXPIRES_AT}",
+  "access_mode": "${DEPLOY_ACCESS_MODE}",
+  "ui_mode": "${V9_UI_MODE}",
   "min_instances": 0,
   "max_instances": 1,
   "scheduler": "none",
@@ -246,7 +271,7 @@ print_plan() {
   "public_access_changed": false,
   "env": {
     "V9_UI_MODE": "${V9_UI_MODE}",
-    "V9_ACCESS_MODE": "${V9_ACCESS_MODE}",
+    "V9_ACCESS_MODE": "${DEPLOY_ACCESS_MODE}",
     "V9_STUDY_DEMO_MODE": "true",
     "V9_STUDY_DEMO_BUCKET": "${BUCKET}",
     "V9_STUDY_DEMO_DISABLE_EXTERNAL_EXECUTION": "true",
@@ -401,7 +426,12 @@ write_deploy_result() {
   DEPLOY_RESULT_IMAGE_DIGEST_MATCH="${RESULT_IMAGE_DIGEST_MATCH:-false}" \
   DEPLOY_RESULT_ERROR_STAGE="${RESULT_ERROR_STAGE:-}" \
   DEPLOY_RESULT_CANDIDATE_CLEANUP="${RESULT_CANDIDATE_CLEANUP:-skipped}" \
-  DEPLOY_RESULT_ACCESS_MODE="${V9_ACCESS_MODE}" \
+  DEPLOY_RESULT_ACCESS_MODE="${RESULT_ACCESS_MODE:-${DEPLOY_ACCESS_MODE:-${V9_ACCESS_MODE}}}" \
+  DEPLOY_RESULT_EXPECTED_ACCESS_MODE="${RESULT_EXPECTED_ACCESS_MODE:-${DEPLOY_ACCESS_MODE:-${V9_ACCESS_MODE}}}" \
+  DEPLOY_RESULT_REVISION_ACCESS_MODE="${RESULT_REVISION_ACCESS_MODE:-}" \
+  DEPLOY_RESULT_ACCESS_MODE_MATCH="${RESULT_ACCESS_MODE_MATCH:-false}" \
+  DEPLOY_RESULT_UI_MODE="${RESULT_UI_MODE:-${V9_UI_MODE}}" \
+  DEPLOY_RESULT_REVISION_UI_MODE="${RESULT_REVISION_UI_MODE:-}" \
   DEPLOY_RESULT_FILE="${result_file}" \
   DEPLOY_RESULT_TMP="${tmp_file}" \
     "${PY[@]}" - <<'PY'
@@ -450,6 +480,11 @@ payload = {
     "error_stage": os.environ["DEPLOY_RESULT_ERROR_STAGE"],
     "candidate_cleanup": os.environ["DEPLOY_RESULT_CANDIDATE_CLEANUP"],
     "access_mode": os.environ["DEPLOY_RESULT_ACCESS_MODE"],
+    "expected_access_mode": os.environ["DEPLOY_RESULT_EXPECTED_ACCESS_MODE"],
+    "revision_access_mode": os.environ["DEPLOY_RESULT_REVISION_ACCESS_MODE"],
+    "access_mode_match": as_bool("DEPLOY_RESULT_ACCESS_MODE_MATCH"),
+    "ui_mode": os.environ["DEPLOY_RESULT_UI_MODE"],
+    "revision_ui_mode": os.environ["DEPLOY_RESULT_REVISION_UI_MODE"],
     "service": os.environ["DEPLOY_RESULT_SERVICE"],
     "production_modifications": False,
 }
@@ -613,6 +648,14 @@ deploy_study_demo_service() {
     log "ERROR: digest-pinned image reference is required before deploy"
     exit 1
   fi
+  if [[ -z "${DEPLOY_ACCESS_MODE}" ]]; then
+    resolve_deploy_access_mode
+  fi
+  if [[ -z "${DEPLOY_ACCESS_MODE}" ]]; then
+    log "ERROR: DEPLOY_ACCESS_MODE is empty; refusing to deploy without V9_ACCESS_MODE"
+    exit 1
+  fi
+  log "deploying with V9_ACCESS_MODE=${DEPLOY_ACCESS_MODE} V9_UI_MODE=${V9_UI_MODE}"
   gcloud run deploy "${SERVICE}" \
     --project "${PROJECT_ID}" \
     --region "${REGION}" \
@@ -625,7 +668,7 @@ deploy_study_demo_service() {
     --add-volume "name=v9-study-demo,type=cloud-storage,bucket=${BUCKET}" \
     --add-volume-mount "volume=v9-study-demo,mount-path=/mnt/v9_study_demo" \
     --set-secrets "V9_STUDY_DEMO_PASSWORD=${PASSWORD_SECRET}:${PASSWORD_SECRET_VERSION},V9_STUDY_DEMO_OPENALEX_API_KEY=${OPENALEX_SECRET}:${OPENALEX_SECRET_VERSION},V9_STUDY_DEMO_TAVILY_API_KEY=${TAVILY_SECRET}:${TAVILY_SECRET_VERSION}" \
-    --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=active/v9_config/weekly_delivery_config.json#V9_UI_MODE=${V9_UI_MODE}#V9_ACCESS_MODE=${V9_ACCESS_MODE}#V9_STUDY_DEMO_MODE=true#V9_STUDY_DEMO_BUCKET=${BUCKET}#V9_STUDY_DEMO_EXPIRES_AT=${expiry_utc}#V9_STUDY_DEMO_DISABLE_EXTERNAL_EXECUTION=true#V9_STUDY_DEMO_SHARED_STATE=true#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_ENABLE_PATENT=true#V9_CLOUD_ENABLE_PAPER=true#V9_CLOUD_ENABLE_WEB_COMPANY=true#V9_CLOUD_GOOGLE_GROUNDING=false#V9_STUDY_DEMO_SEARCH_ENABLED=true#V9_STUDY_DEMO_ENABLE_PATENT_SEARCH=true#V9_STUDY_DEMO_ENABLE_PAPER_SEARCH=true#V9_STUDY_DEMO_ENABLE_WEB_SEARCH=true#V9_STUDY_DEMO_BIGQUERY_DRY_RUN_FIRST=true#V9_STUDY_DEMO_BIGQUERY_MAX_BYTES_BILLED=2199023255552#V9_STUDY_DEMO_BIGQUERY_PRICE_PER_TIB_USD=6.25#V9_ENABLE_CLOUD_SCHEDULER_ADMIN=false"
+    --set-env-vars "^#^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}#V9_RUNTIME_MODE=cloud#V9_CLOUD_REGION=${REGION}#V9_PERSIST_BUCKET=${BUCKET}#V9_PERSIST_ROOT=${V9_PERSIST_ROOT}#V9_WEEKLY_CONFIG_OBJECT=active/v9_config/weekly_delivery_config.json#V9_UI_MODE=${V9_UI_MODE}#V9_ACCESS_MODE=${DEPLOY_ACCESS_MODE}#V9_STUDY_DEMO_MODE=true#V9_STUDY_DEMO_BUCKET=${BUCKET}#V9_STUDY_DEMO_EXPIRES_AT=${expiry_utc}#V9_STUDY_DEMO_DISABLE_EXTERNAL_EXECUTION=true#V9_STUDY_DEMO_SHARED_STATE=true#V9_ENABLE_EMAIL_SEND=false#DISABLE_EMAIL_SEND=true#EMAIL_SEND_MODE=preview#V9_CLOUD_ENABLE_PATENT=true#V9_CLOUD_ENABLE_PAPER=true#V9_CLOUD_ENABLE_WEB_COMPANY=true#V9_CLOUD_GOOGLE_GROUNDING=false#V9_STUDY_DEMO_SEARCH_ENABLED=true#V9_STUDY_DEMO_ENABLE_PATENT_SEARCH=true#V9_STUDY_DEMO_ENABLE_PAPER_SEARCH=true#V9_STUDY_DEMO_ENABLE_WEB_SEARCH=true#V9_STUDY_DEMO_BIGQUERY_DRY_RUN_FIRST=true#V9_STUDY_DEMO_BIGQUERY_MAX_BYTES_BILLED=2199023255552#V9_STUDY_DEMO_BIGQUERY_PRICE_PER_TIB_USD=6.25#V9_ENABLE_CLOUD_SCHEDULER_ADMIN=false"
 }
 
 smoke_test_authenticated_optional() {
@@ -684,7 +727,7 @@ PY
     log "ERROR: public smoke exposed secret material"
     exit 1
   fi
-  if [[ "${V9_ACCESS_MODE}" == "password" ]]; then
+  if [[ "${DEPLOY_ACCESS_MODE:-${V9_ACCESS_MODE}}" == "password" ]]; then
     set +e
     SMOKE_BODY="${body}" "${PY[@]}" - <<'PY'
 import os
@@ -715,17 +758,41 @@ PY
 
 verify_revision_access_mode_env() {
   local revision="$1"
-  local rev_json actual
+  local rev_json actual ui_actual
+  if [[ -z "${DEPLOY_ACCESS_MODE}" ]]; then
+    resolve_deploy_access_mode
+  fi
   rev_json="$(gcloud run revisions describe "${revision}" \
     --project "${PROJECT_ID}" \
     --region "${REGION}" \
     --format=json)"
   actual="$(printf '%s' "${rev_json}" | "${PY[@]}" -c 'import json,sys; rev=json.load(sys.stdin); env=rev.get("spec",{}).get("containers",[{}])[0].get("env",[]); print(next((item.get("value","") for item in env if item.get("name")=="V9_ACCESS_MODE"), ""))')"
-  if [[ "${actual}" != "${V9_ACCESS_MODE}" ]]; then
-    log "ERROR: revision ${revision} V9_ACCESS_MODE=${actual} expected ${V9_ACCESS_MODE}"
+  ui_actual="$(printf '%s' "${rev_json}" | "${PY[@]}" -c 'import json,sys; rev=json.load(sys.stdin); env=rev.get("spec",{}).get("containers",[{}])[0].get("env",[]); print(next((item.get("value","") for item in env if item.get("name")=="V9_UI_MODE"), ""))')"
+  RESULT_REVISION_ACCESS_MODE="${actual}"
+  RESULT_REVISION_UI_MODE="${ui_actual}"
+  RESULT_EXPECTED_ACCESS_MODE="${DEPLOY_ACCESS_MODE}"
+  RESULT_ACCESS_MODE="${DEPLOY_ACCESS_MODE}"
+  RESULT_UI_MODE="${V9_UI_MODE}"
+  if [[ -z "${actual}" ]]; then
+    RESULT_ACCESS_MODE_MATCH="false"
+    RESULT_ERROR_STAGE="access_mode_verification"
+    log "ERROR: revision ${revision} is missing V9_ACCESS_MODE (expected ${DEPLOY_ACCESS_MODE})"
     exit 1
   fi
-  log "revision ${revision} V9_ACCESS_MODE=${actual} confirmed"
+  if [[ "${actual}" != "${DEPLOY_ACCESS_MODE}" ]]; then
+    RESULT_ACCESS_MODE_MATCH="false"
+    RESULT_ERROR_STAGE="access_mode_verification"
+    log "ERROR: revision ${revision} V9_ACCESS_MODE=${actual} expected ${DEPLOY_ACCESS_MODE}"
+    exit 1
+  fi
+  if [[ "${ui_actual}" != "${V9_UI_MODE}" ]]; then
+    RESULT_ACCESS_MODE_MATCH="false"
+    RESULT_ERROR_STAGE="access_mode_verification"
+    log "ERROR: revision ${revision} V9_UI_MODE=${ui_actual} expected ${V9_UI_MODE}"
+    exit 1
+  fi
+  RESULT_ACCESS_MODE_MATCH="true"
+  log "revision ${revision} V9_ACCESS_MODE=${actual} V9_UI_MODE=${ui_actual} confirmed"
 }
 
 resolve_candidate_tag() {
@@ -1055,7 +1122,7 @@ smoke_test_candidate() {
     exit 1
   fi
   set +e
-  CAND_BODY="${body}" ACCESS_MODE="${V9_ACCESS_MODE}" "${PY[@]}" - <<'PY'
+  CAND_BODY="${body}" ACCESS_MODE="${DEPLOY_ACCESS_MODE:-${V9_ACCESS_MODE}}" "${PY[@]}" - <<'PY'
 import os
 import sys
 
@@ -1082,7 +1149,7 @@ PY
   set -e
   case "${rc}" in
     0)
-      log "candidate smoke passed on candidate url (revision=${revision}, http=${code}, access_mode=${V9_ACCESS_MODE})"
+      log "candidate smoke passed on candidate url (revision=${revision}, http=${code}, access_mode=${DEPLOY_ACCESS_MODE:-${V9_ACCESS_MODE}})"
       ;;
     1)
       log "ERROR: candidate smoke did not detect Streamlit shell"

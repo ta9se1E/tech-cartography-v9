@@ -201,9 +201,9 @@ def test_password_mode_still_requires_auth_without_session() -> None:
 
 def test_deploy_script_access_mode_allowlist() -> None:
   text = (ROOT / "scripts" / "deploy_v9_study_demo.sh").read_text(encoding="utf-8")
-  assert "validate_access_mode" in text
+  assert "resolve_deploy_access_mode" in text
   assert "password|public_demo" in text
-  assert "V9_ACCESS_MODE=${V9_ACCESS_MODE}" in text
+  assert "V9_ACCESS_MODE=${DEPLOY_ACCESS_MODE}" in text
 
 
 def test_deploy_script_forbids_public_demo_on_production() -> None:
@@ -213,7 +213,8 @@ def test_deploy_script_forbids_public_demo_on_production() -> None:
 
 def test_candidate_smoke_is_access_mode_aware() -> None:
   text = (ROOT / "scripts" / "deploy_v9_study_demo.sh").read_text(encoding="utf-8")
-  assert 'ACCESS_MODE="${V9_ACCESS_MODE}"' in text or "ACCESS_MODE" in text.split("smoke_test_candidate", 1)[1][:800]
+  smoke = text.split("smoke_test_candidate", 1)[1][:1200]
+  assert "ACCESS_MODE" in smoke
 
 
 def test_final_smoke_is_access_mode_aware() -> None:
@@ -224,7 +225,7 @@ def test_final_smoke_is_access_mode_aware() -> None:
 
 def test_deploy_workflow_validates_access_mode() -> None:
   text = (ROOT / ".github/workflows/deploy-study-demo.yml").read_text(encoding="utf-8")
-  assert "Validate access mode" in text
+  assert "Resolve deploy access mode" in text
   assert "V9_ACCESS_MODE must be password or public_demo" in text
 
 
@@ -236,7 +237,119 @@ def test_deploy_workflow_smoke_respects_access_mode() -> None:
 def test_deploy_result_includes_access_mode() -> None:
   text = (ROOT / "scripts" / "deploy_v9_study_demo.sh").read_text(encoding="utf-8")
   assert '"access_mode"' in text
+  assert '"expected_access_mode"' in text
+  assert '"revision_access_mode"' in text
+  assert '"access_mode_match"' in text
 
+
+def test_shared_ci_step_forces_password_access_mode() -> None:
+  text = (ROOT / ".github/workflows/deploy-study-demo.yml").read_text(encoding="utf-8")
+  assert "Run shared CI checks" in text
+  shared = text.split("- name: Run shared CI checks", 1)[1].split("- name:", 1)[0]
+  assert "V9_ACCESS_MODE: password" in shared
+  assert "vars.V9_ACCESS_MODE" not in shared
+
+
+def test_workflow_job_global_env_does_not_set_access_mode() -> None:
+  text = (ROOT / ".github/workflows/deploy-study-demo.yml").read_text(encoding="utf-8")
+  header = text.split("jobs:", 1)[0]
+  assert "V9_ACCESS_MODE:" not in header
+  assert "V9_UI_MODE: simple" in header
+
+
+def test_deploy_plan_apply_receive_vars_access_mode() -> None:
+  text = (ROOT / ".github/workflows/deploy-study-demo.yml").read_text(encoding="utf-8")
+  assert "V9_ACCESS_MODE: ${{ vars.V9_ACCESS_MODE }}" in text.split("Resolve deploy access mode", 1)[1].split(
+    "Capture pre-deploy state", 1
+  )[0]
+  plan = text.split("- name: Deploy plan", 1)[1].split("- name: Deploy apply", 1)[0]
+  apply = text.split("- name: Deploy apply", 1)[1].split("- name: Read deploy mutation state", 1)[0]
+  assert "steps.access.outputs.access_mode" in plan
+  assert "steps.access.outputs.access_mode" in apply
+
+
+def test_deploy_script_local_checks_force_password() -> None:
+  text = (ROOT / "scripts" / "deploy_v9_study_demo.sh").read_text(encoding="utf-8")
+  body = text.split("run_local_checks() {", 1)[1].split("\n}\n", 1)[0]
+  assert "V9_ACCESS_MODE=password" in body
+
+
+def test_shared_ci_script_forces_password() -> None:
+  text = (ROOT / "scripts" / "run_v9_ci_checks.sh").read_text(encoding="utf-8")
+  assert "export V9_ACCESS_MODE=password" in text
+
+
+def test_revision_env_missing_access_mode_fails(tmp_path: Path) -> None:
+  from tests.test_v9_deploy_traffic_promotion import _run_functions, _write_json
+
+  rev = _write_json(
+    tmp_path / "rev.json",
+    {"spec": {"containers": [{"env": [{"name": "V9_UI_MODE", "value": "simple"}]}]}},
+  )
+  result = _run_functions(
+    tmp_path,
+    ["verify_revision_access_mode_env", "resolve_deploy_access_mode", "log"],
+    'DEPLOY_ACCESS_MODE=public_demo V9_UI_MODE=simple verify_revision_access_mode_env "rev-00032"',
+    extra_env={"FAKE_REVISION_JSON": str(rev), "V9_ACCESS_MODE": "public_demo"},
+  )
+  assert result.returncode != 0
+  assert "missing V9_ACCESS_MODE" in (result.stdout + result.stderr)
+
+
+def test_revision_env_password_when_public_demo_expected_fails(tmp_path: Path) -> None:
+  from tests.test_v9_deploy_traffic_promotion import _run_functions, _write_json
+
+  rev = _write_json(
+    tmp_path / "rev.json",
+    {
+      "spec": {
+        "containers": [
+          {
+            "env": [
+              {"name": "V9_ACCESS_MODE", "value": "password"},
+              {"name": "V9_UI_MODE", "value": "simple"},
+            ]
+          }
+        ]
+      }
+    },
+  )
+  result = _run_functions(
+    tmp_path,
+    ["verify_revision_access_mode_env", "resolve_deploy_access_mode", "log"],
+    'DEPLOY_ACCESS_MODE=public_demo V9_UI_MODE=simple verify_revision_access_mode_env "rev-00032"',
+    extra_env={"FAKE_REVISION_JSON": str(rev), "V9_ACCESS_MODE": "public_demo"},
+  )
+  assert result.returncode != 0
+  assert "expected public_demo" in (result.stdout + result.stderr)
+
+
+def test_revision_env_public_demo_match_passes(tmp_path: Path) -> None:
+  from tests.test_v9_deploy_traffic_promotion import _run_functions, _write_json
+
+  rev = _write_json(
+    tmp_path / "rev.json",
+    {
+      "spec": {
+        "containers": [
+          {
+            "env": [
+              {"name": "V9_ACCESS_MODE", "value": "public_demo"},
+              {"name": "V9_UI_MODE", "value": "simple"},
+            ]
+          }
+        ]
+      }
+    },
+  )
+  result = _run_functions(
+    tmp_path,
+    ["verify_revision_access_mode_env", "resolve_deploy_access_mode", "log"],
+    'DEPLOY_ACCESS_MODE=public_demo V9_UI_MODE=simple verify_revision_access_mode_env "rev-00032"',
+    extra_env={"FAKE_REVISION_JSON": str(rev), "V9_ACCESS_MODE": "public_demo"},
+  )
+  assert result.returncode == 0, result.stderr + result.stdout
+  assert "confirmed" in result.stdout
 
 def test_public_demo_does_not_read_password_secret() -> None:
   from services_v9.study_demo_config import get_study_demo_password

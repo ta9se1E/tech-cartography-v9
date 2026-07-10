@@ -8,6 +8,8 @@ cd "${ROOT}"
 SEARCH_RUN_ID="${V9_STUDY_DEMO_SEARCH_RUN_ID:-study_demo_search_20260705_145711_c06e0a1b}"
 export PYTHONPATH="${ROOT}:${ROOT}/src"
 export V9_UI_MODE="${V9_UI_MODE:-simple}"
+# Shared CI must never inherit study-demo Environment public_demo.
+export V9_ACCESS_MODE=password
 export PYTHONDONTWRITEBYTECODE="${PYTHONDONTWRITEBYTECODE:-1}"
 
 if [[ -x "/opt/miniconda3/envs/${CONDA_ENV:-2026hack}/bin/python" ]]; then

@@ -113,6 +113,14 @@ set -euo pipefail
 export TMPDIR="{tmp_path}"
 SERVICE="{STUDY_SERVICE}"
 V9_ACCESS_MODE="password"
+DEPLOY_ACCESS_MODE="password"
+V9_UI_MODE="simple"
+RESULT_ACCESS_MODE="password"
+RESULT_EXPECTED_ACCESS_MODE="password"
+RESULT_REVISION_ACCESS_MODE="password"
+RESULT_ACCESS_MODE_MATCH="true"
+RESULT_UI_MODE="simple"
+RESULT_REVISION_UI_MODE="simple"
 DEPLOY_RESULT_FILE="{result_file}"
 PY=({sys.executable})
 {_extract_bash_functions("log", "write_deploy_result")}

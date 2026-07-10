@@ -28,7 +28,6 @@ env:
   SEARCH_RUN_ID: study_demo_search_20260705_145711_c06e0a1b
   PYTHONPATH: .:src
   V9_UI_MODE: simple
-  V9_ACCESS_MODE: ${{ vars.V9_ACCESS_MODE }}
   PYTHONDONTWRITEBYTECODE: "1"
 
 jobs:
@@ -118,6 +117,9 @@ jobs:
           python -m pip check
 
       - name: Run shared CI checks
+        env:
+          # Isolate shared regression from study-demo Environment public_demo.
+          V9_ACCESS_MODE: password
         run: bash scripts/run_v9_ci_checks.sh
 
       - name: Validate deployer service account
@@ -153,8 +155,11 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Validate access mode
+      - name: Resolve deploy access mode
+        id: access
         shell: bash
+        env:
+          V9_ACCESS_MODE: ${{ vars.V9_ACCESS_MODE }}
         run: |
           set -euo pipefail
           ACCESS_MODE="${V9_ACCESS_MODE:-password}"
@@ -170,10 +175,11 @@ jobs:
             echo "public_demo is forbidden on production service" >&2
             exit 1
           fi
-          echo "V9_ACCESS_MODE=${ACCESS_MODE}" >> "${GITHUB_ENV}"
+          echo "access_mode=${ACCESS_MODE}" >> "${GITHUB_OUTPUT}"
           {
             echo "## Access mode"
-            echo "- V9_ACCESS_MODE: \`${ACCESS_MODE}\`"
+            echo "- deploy V9_ACCESS_MODE: \`${ACCESS_MODE}\`"
+            echo "- shared CI V9_ACCESS_MODE: \`password\` (isolated)"
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Capture pre-deploy state
@@ -229,6 +235,9 @@ jobs:
 
       - name: Deploy plan
         id: plan
+        env:
+          V9_ACCESS_MODE: ${{ steps.access.outputs.access_mode }}
+          V9_UI_MODE: simple
         shell: bash
         run: |
           set -euo pipefail
@@ -239,12 +248,14 @@ jobs:
         env:
           V9_DEPLOY_STATE_FILE: ${{ runner.temp }}/v9-deploy-state.json
           V9_DEPLOY_RESULT_FILE: ${{ runner.temp }}/v9-deploy-result.json
+          V9_ACCESS_MODE: ${{ steps.access.outputs.access_mode }}
+          V9_UI_MODE: simple
         shell: bash
         run: |
           set -euo pipefail
-          export V9_DEPLOY_STATE_FILE V9_DEPLOY_RESULT_FILE
+          export V9_DEPLOY_STATE_FILE V9_DEPLOY_RESULT_FILE V9_ACCESS_MODE V9_UI_MODE
           set -o pipefail
-          V9_STUDY_DEMO_DEPLOY_APPROVED=true V9_UI_MODE=simple V9_ACCESS_MODE="${V9_ACCESS_MODE}" \
+          V9_STUDY_DEMO_DEPLOY_APPROVED=true \
             bash scripts/deploy_v9_study_demo.sh --apply 2>&1 | tee "${RUNNER_TEMP}/v9-deploy.log"
 
       - name: Read deploy mutation state
@@ -307,6 +318,8 @@ jobs:
       - name: Verify deployed revision
         id: post
         if: always() && steps.apply.outcome == 'success'
+        env:
+          V9_ACCESS_MODE: ${{ steps.access.outputs.access_mode }}
         shell: bash
         run: |
           set -euo pipefail
@@ -314,6 +327,7 @@ jobs:
           PREVIOUS_REVISION="${{ steps.pre.outputs.previous_revision }}"
           EXPECTED_NEW_REVISION="${{ steps.deploy_state.outputs.new_revision }}"
           TRAFFIC_PROMOTED="${{ steps.deploy_state.outputs.traffic_promoted }}"
+          EXPECTED_ACCESS_MODE="${{ steps.access.outputs.access_mode }}"
           if [[ "${TRAFFIC_PROMOTED}" != "true" ]]; then
             echo "deploy result did not confirm traffic_promoted=true (got '${TRAFFIC_PROMOTED}')" >&2
             exit 1
@@ -326,29 +340,40 @@ jobs:
             --project="${GCP_PROJECT_ID}" \
             --region="${GCP_REGION}" \
             --format=json)"
-          python - <<'PY' "${SERVICE_JSON}" "${EXPECTED_NEW_REVISION}" "${PREVIOUS_REVISION}" "${V9_ACCESS_MODE}"
+          REV_JSON="$(gcloud run revisions describe "${EXPECTED_NEW_REVISION}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format=json)"
+          python - <<'PY' "${SERVICE_JSON}" "${EXPECTED_NEW_REVISION}" "${PREVIOUS_REVISION}" "${EXPECTED_ACCESS_MODE}" "${REV_JSON}"
           import json
-          import os
           import sys
 
-          os.environ["EXPECTED_ACCESS_MODE"] = sys.argv[4]
           service = json.loads(sys.argv[1])
           expected_new = sys.argv[2]
           previous = sys.argv[3]
-          env = service.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [{}])[0].get("env", [])
-          ui_mode = next((item.get("value") for item in env if item.get("name") == "V9_UI_MODE"), "")
-          access_mode = next((item.get("value") for item in env if item.get("name") == "V9_ACCESS_MODE"), "")
+          expected_access_mode = sys.argv[4]
+          revision = json.loads(sys.argv[5])
+          service_env = service.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [{}])[0].get("env", [])
+          revision_env = revision.get("spec", {}).get("containers", [{}])[0].get("env", [])
+          ui_mode = next((item.get("value") for item in service_env if item.get("name") == "V9_UI_MODE"), "")
+          access_mode = next((item.get("value") for item in service_env if item.get("name") == "V9_ACCESS_MODE"), "")
+          revision_access_mode = next((item.get("value") for item in revision_env if item.get("name") == "V9_ACCESS_MODE"), "")
+          revision_ui_mode = next((item.get("value") for item in revision_env if item.get("name") == "V9_UI_MODE"), "")
           status = service.get("status", {})
           spec = service.get("spec", {})
-          expected_access_mode = os.environ.get("EXPECTED_ACCESS_MODE", "password")
 
           def pct(traffic, name):
               return sum(t.get("percent", 0) for t in traffic if t.get("revisionName") == name)
 
-          if ui_mode != "simple":
+          if ui_mode != "simple" or revision_ui_mode != "simple":
               raise SystemExit("V9_UI_MODE must remain simple")
           if access_mode != expected_access_mode:
-              raise SystemExit(f"V9_ACCESS_MODE must be {expected_access_mode} (got {access_mode})")
+              raise SystemExit(f"service template V9_ACCESS_MODE must be {expected_access_mode} (got {access_mode!r})")
+          if revision_access_mode != expected_access_mode:
+              raise SystemExit(
+                  f"revision {expected_new} V9_ACCESS_MODE must be {expected_access_mode} "
+                  f"(got {revision_access_mode!r})"
+              )
           if expected_new == previous:
               raise SystemExit("new revision must differ from previous revision")
           if pct(spec.get("traffic", []), expected_new) != 100:
@@ -398,7 +423,7 @@ jobs:
             echo "- latest_ready: \`${NEW_REVISION}\`"
             echo "- runtime_service_account: \`${RUNTIME_SA}\`"
             echo "- V9_UI_MODE: \`simple\`"
-            echo "- V9_ACCESS_MODE: \`${{ env.V9_ACCESS_MODE }}\`"
+            echo "- V9_ACCESS_MODE: \`${EXPECTED_ACCESS_MODE}\`"
             echo "- production_revision_unchanged: \`${PRODUCTION_REVISION_NOW}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -426,6 +451,8 @@ jobs:
 
       - name: Unauthenticated smoke test
         if: always() && steps.apply.outcome == 'success'
+        env:
+          V9_ACCESS_MODE: ${{ steps.access.outputs.access_mode }}
         shell: bash
         run: |
           set -euo pipefail
@@ -466,7 +493,6 @@ jobs:
             exit 1
           fi
           python - <<'PY' "${ACCESS_MODE}"
-          import os
           import sys
           from pathlib import Path
 

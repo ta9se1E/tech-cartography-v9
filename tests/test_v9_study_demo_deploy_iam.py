@@ -145,7 +145,7 @@ def test_deploy_script_does_not_reference_production_service() -> None:
   assert PRODUCTION_SERVICE not in allowlist
   deploy_body = text.split("deploy_study_demo_service() {", 1)[1].split("\n}\n", 1)[0]
   assert PRODUCTION_SERVICE not in deploy_body
-  guard_body = text.split("validate_access_mode() {", 1)[1].split("\n}\n", 1)[0]
+  guard_body = text.split("resolve_deploy_access_mode() {", 1)[1].split("\n}\n", 1)[0]
   assert "public_demo is forbidden on production service" in guard_body
 
 

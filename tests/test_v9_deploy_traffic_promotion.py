@@ -184,9 +184,11 @@ BUILD_ID="fake-build-1"
 IMAGE_REPOSITORY="{IMAGE_REPO}"
 IMAGE_TAG="09167a4"
 IMAGE_DIGEST="{VALID_DIGEST_A}"
-    CANDIDATE_TAG="c-test"
-    V9_ACCESS_MODE="${{V9_ACCESS_MODE:-password}}"
-    log() {{ printf '%s\\n' "$*"; }}
+CANDIDATE_TAG="c-test"
+V9_ACCESS_MODE="${{V9_ACCESS_MODE:-password}}"
+DEPLOY_ACCESS_MODE="${{V9_ACCESS_MODE:-password}}"
+V9_UI_MODE=simple
+log() {{ printf '%s\\n' "$*"; }}
 """
   script = preamble + _extract_bash_functions(*funcs) + "\n" + body
   env = os.environ.copy()
@@ -470,7 +472,10 @@ def _revision_env_json(access_mode: str = "password") -> dict:
     "spec": {
       "containers": [
         {
-          "env": [{"name": "V9_ACCESS_MODE", "value": access_mode}],
+          "env": [
+            {"name": "V9_ACCESS_MODE", "value": access_mode},
+            {"name": "V9_UI_MODE", "value": "simple"},
+          ],
         }
       ]
     }
@@ -756,6 +761,13 @@ def test_result_includes_traffic_promotion_fields(tmp_path: Path) -> None:
     'RESULT_IMAGE_DIGEST=sha256:abc\n'
     'RESULT_CANDIDATE_CLEANUP=removed\n'
     'V9_ACCESS_MODE=password\n'
+    'DEPLOY_ACCESS_MODE=password\n'
+    'RESULT_ACCESS_MODE=password\n'
+    'RESULT_EXPECTED_ACCESS_MODE=password\n'
+    'RESULT_REVISION_ACCESS_MODE=password\n'
+    'RESULT_ACCESS_MODE_MATCH=true\n'
+    'RESULT_UI_MODE=simple\n'
+    'RESULT_REVISION_UI_MODE=simple\n'
     'write_deploy_result "ok" true true true build-1 true rev-00025'
   )
   extra_env = {"TMPDIR": str(tmp_path)}
