@@ -73,10 +73,11 @@ def ensure_study_demo_access_allowed(
 ) -> None:
   if not is_study_demo_mode(environ):
     return
-  if is_study_demo_expired(environ=environ, now=now):
-    raise StudyDemoExpiredError(EXPIRED_MESSAGE)
+  # Public demo remains browsable after the study window ends (read-only).
   if is_public_demo(environ):
     return
+  if is_study_demo_expired(environ=environ, now=now):
+    raise StudyDemoExpiredError(EXPIRED_MESSAGE)
   if not is_study_demo_password_configured(environ):
     raise StudyDemoNotConfiguredError(NOT_CONFIGURED_MESSAGE)
 
@@ -115,11 +116,12 @@ def clear_authentication(session_state: dict[str, object]) -> None:
 def is_authenticated(session_state: Mapping[str, object], *, environ: Mapping[str, str] | None = None) -> bool:
   if not is_study_demo_mode(environ):
     return True
+  # Public demo skips login and expiry gate; write guards remain elsewhere.
+  if is_public_demo(environ):
+    return True
   if is_study_demo_expired(environ=environ):
     clear_authentication(dict(session_state))
     return False
-  if is_public_demo(environ):
-    return True
   return bool(session_state.get(SESSION_AUTHENTICATED_KEY, False))
 
 

@@ -102,6 +102,51 @@ def test_expiry_message_constant() -> None:
   assert "公開期間は終了" in EXPIRED_MESSAGE
 
 
+def test_public_demo_expired_still_allows_access() -> None:
+  from services_v9.study_demo_auth import ensure_study_demo_access_allowed, is_authenticated
+
+  expired_public_demo_env = {
+    "V9_STUDY_DEMO_MODE": "true",
+    "V9_ACCESS_MODE": "public_demo",
+    "V9_STUDY_DEMO_EXPIRES_AT": "2020-01-01T00:00:00Z",
+  }
+  ensure_study_demo_access_allowed(environ=expired_public_demo_env)
+  assert is_authenticated({}, environ=expired_public_demo_env) is True
+
+
+def test_password_mode_expired_still_blocks_access() -> None:
+  from services_v9.study_demo_auth import (
+    StudyDemoExpiredError,
+    ensure_study_demo_access_allowed,
+    is_authenticated,
+    register_successful_login,
+  )
+
+  expired_password_env = {
+    "V9_STUDY_DEMO_MODE": "true",
+    "V9_ACCESS_MODE": "password",
+    "V9_STUDY_DEMO_PASSWORD": "x" * 16,
+    "V9_STUDY_DEMO_EXPIRES_AT": "2020-01-01T00:00:00Z",
+  }
+  with pytest.raises(StudyDemoExpiredError):
+    ensure_study_demo_access_allowed(environ=expired_password_env)
+  session: dict[str, object] = {}
+  register_successful_login(session)
+  assert is_authenticated(session, environ=expired_password_env) is False
+
+
+def test_public_demo_read_only_guard_remains_active_when_expired() -> None:
+  from services_v9.study_demo_guard import StudyDemoWriteBlocked, assert_write_allowed
+
+  expired_public_demo_env = {
+    "V9_STUDY_DEMO_MODE": "true",
+    "V9_ACCESS_MODE": "public_demo",
+    "V9_STUDY_DEMO_EXPIRES_AT": "2020-01-01T00:00:00Z",
+  }
+  with pytest.raises(StudyDemoWriteBlocked):
+    assert_write_allowed("theme_lineage", environ=expired_public_demo_env)
+
+
 def test_secret_missing_fail_closed() -> None:
   from services_v9.study_demo_auth import StudyDemoNotConfiguredError, ensure_study_demo_access_allowed
 
