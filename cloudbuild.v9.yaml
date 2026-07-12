@@ -28,6 +28,19 @@ steps:
         docker export "${container_id}" | tar -tf - > "${file_list}"
         docker image inspect "${image_uri}" --format='{{range .Config.Env}}{{println .}}{{end}}' > "${env_list}"
 
+        # Fail closed if v9 runtime packages are missing from the image.
+        missing_required_count=0
+        for required in app/app.py app/ui_v9 app/services_v9; do
+          if ! grep -E -q "^(\./)?${required}(/|$)" "${file_list}"; then
+            printf 'MISSING_REQUIRED_PATH %s\n' "${required}" >&2
+            missing_required_count=$((missing_required_count + 1))
+          fi
+        done
+        if [[ "${missing_required_count}" -gt 0 ]]; then
+          printf 'IMAGE_SCAN FAIL missing required v9 runtime paths in %s\n' "${image_uri}" >&2
+          exit 1
+        fi
+
         forbidden_file_count=0
         is_excluded_image_pem() {
           local candidate="$1"

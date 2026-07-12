@@ -1,28 +1,28 @@
-# v8 Cloud Run — minimal Dockerfile (Phase27N prepare only — do not build in this phase)
 FROM python:3.11-slim
 
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    APP_UI_VERSION=v8 \
+    PORT=8080 \
+    V9_RUNTIME_MODE=local \
+    V9_PERSIST_ROOT=/app/data/v9_runs \
+    V9_ENABLE_CLOUD_SCHEDULER_ADMIN=false \
     DISABLE_EMAIL_SEND=true \
-    DISABLE_SCHEDULER=true \
-    LIVE_OUTPUTS_ROOT=/tmp/tech_cartography_outputs
+    EMAIL_SEND_MODE=preview
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# v9 runtime packages (required by app.py → ui_v9.signal_watch_app)
 COPY app.py .
-COPY Procfile .
+COPY services_v9/ services_v9/
+COPY ui_v9/ ui_v9/
+COPY scripts/ scripts/
 COPY src/ src/
-COPY cases/ cases/
+COPY config/ config/
+COPY data/ data/
 
 EXPOSE 8080
 
-CMD streamlit run app.py \
-  --server.address=0.0.0.0 \
-  --server.port=${PORT:-8080} \
-  --server.headless=true \
-  --server.fileWatcherType=none \
-  --browser.gatherUsageStats=false
+CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8080", "--server.headless=true", "--server.fileWatcherType=none", "--browser.gatherUsageStats=false"]

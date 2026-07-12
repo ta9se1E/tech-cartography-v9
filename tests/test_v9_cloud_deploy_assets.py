@@ -14,12 +14,35 @@ def test_dockerfile_v9_uses_streamlit_service_command() -> None:
   assert "DISABLE_EMAIL_SEND=true" in text
 
 
+def test_dockerfiles_copy_ui_v9_and_services_v9() -> None:
+  for name in ("Dockerfile", "Dockerfile.v9"):
+    text = (PROJECT_ROOT / name).read_text(encoding="utf-8")
+    assert "COPY app.py ." in text
+    assert "COPY services_v9/ services_v9/" in text
+    assert "COPY ui_v9/ ui_v9/" in text
+    assert "from ui_v9" not in text  # runtime import lives in app.py, not Dockerfile
+
+
+def test_dockerignore_and_gcloudignore_do_not_exclude_runtime_packages() -> None:
+  for name in (".dockerignore", ".gcloudignore"):
+    text = (PROJECT_ROOT / name).read_text(encoding="utf-8")
+    for blocked in ("ui_v9", "services_v9", "app.py"):
+      assert blocked not in {
+        line.strip().rstrip("/")
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+      }
+
+
 def test_cloudbuild_v9_uses_dockerfile_v9_and_pushes_image() -> None:
   text = (PROJECT_ROOT / "cloudbuild.v9.yaml").read_text(encoding="utf-8")
   assert "Dockerfile.v9" in text
   assert "docker" in text
   assert "${_IMAGE_URI}" in text
   assert "image-prepush-scan" in text
+  assert "MISSING_REQUIRED_PATH" in text
+  assert "app/ui_v9" in text
+  assert "app/services_v9" in text
   assert text.index("image-prepush-scan") < text.index("docker-push")
   assert "docker export" in text
   assert "docker image inspect" in text
